@@ -1,0 +1,17 @@
+{
+    "short_name": "MNTv",
+    "name": "MNTv",
+    "description": "bleh",
+    "display": "fullscreen",
+    "orientation": "natural",
+    "background_color": "ffffff",
+    "theme_color": "#000000",
+    "scope": "/",
+    "icons": [
+          {
+               "src": "/app/favicon.ico",
+               "type": "image/ico",
+               "size": "32x32"
+          }
+    ]
+}
