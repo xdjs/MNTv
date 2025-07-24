@@ -40,4 +40,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# plans
 plan.txt
+authplan.txt   
+learningplan.txt
+
+/src/generated/prisma
