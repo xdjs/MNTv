@@ -3,9 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 // Dynamic route to handle different social media types and pass the type to the proper route
 export async function GET(
   request: NextRequest,
-  { params }: { params: { platform: string } }
+  context: { params: Promise<{ platform: string }> }
 ) {
-  const { platform } = params;
+  const { platform } = await context.params;
   
   // TODO: Implement platform-specific logic
   return NextResponse.json({ 
@@ -16,9 +16,9 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { platform: string } }
+  context: { params: Promise<{ platform: string }> }
 ) {
-  const { platform } = params;
+  const { platform } = await context.params;
   
   // TODO: Implement platform-specific post creation
   return NextResponse.json({ 
