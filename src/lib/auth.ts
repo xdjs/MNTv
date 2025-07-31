@@ -35,7 +35,17 @@ export const providerMap = providers
 export default NextAuth({
      adapter: PrismaAdapter(prisma),
      providers: providers,
+     secret: process.env.NEXTAUTH_SECRET,
      pages: {
           signIn: "/sign-in"
+     },
+     callbacks: {
+          session: ({ session, token }) => ({
+               ...session,
+               user: {
+                    ...session.user,
+                    id: token.sub,
+               },
+          }),
      },
 })
