@@ -28,12 +28,17 @@ export default NextAuth({
           signIn: "/sign-in"
      },
      callbacks: {
-          session: ({ session, token }) => ({
-               ...session,
-               user: {
-                    ...session.user,
-                    id: token.sub,
-               },
-          }),
+          session: ({ session, token }) => {
+               if (token?.sub) {
+                    return {
+                         ...session,
+                         user: {
+                              ...session.user,
+                              id: token.sub,
+                         },
+                    };
+               }
+               return session;
+          },
      },
 })
