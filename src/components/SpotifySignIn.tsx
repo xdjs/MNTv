@@ -5,14 +5,28 @@ import { signIn } from "next-auth/react";
 export default function SpotifySignIn() {
      const handleSignIn = async () => {
           try {
-               console.log("Attempting to sign in with Spotify...");
+               console.log("=== Starting Spotify Sign In ===");
+               console.log("Environment check:");
+               console.log("- NextAuth URL should be ngrok URL");
+               console.log("- Attempting signIn with explicit settings...");
+               
                const result = await signIn("spotify", { 
-                    callbackUrl: "/",
+                    callbackUrl: window.location.origin,
                     redirect: true 
                });
+               
                console.log("SignIn result:", result);
+               
+               if (result?.error) {
+                    console.error("SignIn error:", result.error);
+               }
+               
+               if (result?.url) {
+                    console.log("Redirecting to:", result.url);
+               }
+               
           } catch (error) {
-               console.error("SignIn error:", error);
+               console.error("SignIn exception:", error);
           }
      };
 
