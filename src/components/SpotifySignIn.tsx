@@ -3,9 +3,22 @@
 import { signIn } from "next-auth/react";
 
 export default function SpotifySignIn() {
+     const handleSignIn = async () => {
+          try {
+               console.log("Attempting to sign in with Spotify...");
+               const result = await signIn("spotify", { 
+                    callbackUrl: "/",
+                    redirect: true 
+               });
+               console.log("SignIn result:", result);
+          } catch (error) {
+               console.error("SignIn error:", error);
+          }
+     };
+
      return (
           <button 
-               onClick={() => signIn("spotify")}
+               onClick={handleSignIn}
                className="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
           >
                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
