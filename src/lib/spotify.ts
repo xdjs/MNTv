@@ -1,0 +1,1 @@
+import Spotify from "next-auth/providers/spotify";
