@@ -21,7 +21,9 @@ export default function MainMenu() {
 
                {isOpen && (
                     <div className="absolute right-0 top-0 h-full w-48 bg-blue-700 text-white shadow-md overflow-hidden z-60">
-                         <Link className="fixed pl-2 pt-8 text-xl" href="/sign-in">Manage Account</Link>
+                         <div className="flex w-full py-12">
+                              <Link className="absolute w-full px-2 text-xl border-4 border-white-500 rounded-md bg-blue-400" href="/sign-in">Manage Account</Link>
+                         </div>
                     </div>
                )}
           </>
