@@ -3,7 +3,6 @@
 import { useState } from "react"
 import Link from "next/link";
 import { signOut, useSession } from "next-auth/react";
-import { userAgent } from "next/server";
 
 export default function MainMenu() {
      const [isOpen, setisOpen] = useState(false);
