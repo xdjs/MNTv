@@ -1,7 +1,7 @@
 'use client'
 
 import Link from "next/link"
-import MainMenu from "@/components/MainMenuButton";
+import MainMenu from "@/components/MainMenu";
 
 export default function HomeScreen() {
 
