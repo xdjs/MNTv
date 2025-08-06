@@ -9,7 +9,7 @@ interface Props {
      onSongChange?: (track: any) => void;
 }
 
-export default function currentTrackInfo({ onSongChange }: Props) {
+export default function useCurrentTrack({ onSongChange }: Props) {
      const { data: session } = useSession();
      const [currentTrack, setCurrentTrack] = useState({
           songName: null,

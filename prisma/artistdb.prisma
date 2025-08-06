@@ -1,0 +1,30 @@
+datasource artist_db {
+  provider = "postgresql"
+  url      = env("ARTIST_DATABASE_URL")
+}
+ 
+generator artist_client {
+  provider = "prisma-client-js"
+}
+
+model artists {
+     id   String     @id @unique
+     bandcamp  String
+     facebook  String
+     x    String
+     soundcloud     String
+     name      String
+     instagram      String
+     youtube   String
+     youtubeChannel      String   @map("youtubechannel")
+     lcname    String
+     spotify   String
+     twitch    String 
+     facebookID     String
+     discogs   String
+     tiktok    String 
+     bandsInTown    String    @map("bandsintown")
+     linktree   String
+     wikipedia     String
+     
+}
