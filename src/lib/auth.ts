@@ -28,6 +28,14 @@ export default NextAuth({
           signIn: "/sign-in"
      },
      callbacks: {
+
+          async jwt({ token, account }) {
+               if (account) {
+                    token.accessToken = account.access_token;
+               }
+               return token;
+          },
+
           session: ({ session, token }) => {
                if (token?.sub) {
                     return {
@@ -36,6 +44,7 @@ export default NextAuth({
                               ...session.user,
                               id: token.sub,
                          },
+                         accessToken: token.accessToken,
                     };
                }
                return session;
