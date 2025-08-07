@@ -16,13 +16,15 @@ export default function Listening() {
      return (
           <div className="w-full h-full">
                <div className="justify-center items-center">
-                    {currentTrack && (
+                    {currentTrack ? (
                          <>
                               <img src={currentTrack.coverUrl!} alt="" />
                               <h1>{currentTrack.songName}</h1>
                               <p>{currentTrack.artistName}</p>
                               <p>{currentTrack.albumName}</p>
                          </>
+                    ) : (
+                         <p className="text-black-500 font-semibold">No song</p>
                     )}
                </div>
           </div>
