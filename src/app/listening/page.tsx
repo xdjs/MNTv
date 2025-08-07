@@ -5,13 +5,16 @@ import { ParsedData } from "@/lib/spotify";
 
 
 export default function Listening() {
+     console.log("=== LISTENING COMPONENT RENDERED ===");
 
      //for future use; can be used to notify other components that the song changed (such as slide components)
      const handleSongChange = (track: ParsedData) => {
-          // Future: notify other components about song changes
+          console.log("Song changed:", track);
      }
 
+     console.log("About to call useCurrentTrack...");
      const currentTrack = useCurrentTrack({ onSongChange: handleSongChange });
+     console.log("Current track state:", currentTrack);
 
      return (
           <div className="w-full h-full">

@@ -10,7 +10,9 @@ interface Props {
 }
 
 export default function useCurrentTrack({ onSongChange }: Props) {
+     console.log("=== useCurrentTrack HOOK CALLED ===");
      const { data: session } = useSession();
+     console.log("Session in hook:", session);
      const [currentTrack, setCurrentTrack] = useState<ParsedData>({
           songName: null,
           artistName: null,
@@ -23,9 +25,12 @@ export default function useCurrentTrack({ onSongChange }: Props) {
      })
 
      useEffect(() => {
+          console.log("useEffect triggered, session:", session);
           const fetchTrack = async () => {
             if (session?.accessToken) {
+               console.log("Making API call with access token");
                const trackInfo = await getCurrentTrack(session.accessToken); //this is the actual api call, should be obvious but im retarded and will forget
+               console.log("API response:", trackInfo);
                if (trackInfo) {
                   setCurrentTrack(trackInfo)
                   console.log("Current Track:", trackInfo.songName, " by ", trackInfo.artistName)
