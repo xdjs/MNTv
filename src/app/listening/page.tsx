@@ -1,14 +1,11 @@
-"use client"
-
 import useCurrentTrack from "@/hooks/useCurrentTrack"
-
-
+import { ParsedData } from "@/lib/spotify";
 
 
 export default function Listening() {
 
      //for future use; can be used to notify other components that the song changed (such as slide components)
-     const handleSongChange = (track: { songName: string | null; artistName: string | null }) => {
+     const handleSongChange = (track: ParsedData) => {
           // Future: notify other components about song changes
      }
 
