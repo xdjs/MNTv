@@ -2,10 +2,16 @@
 
 import useCurrentTrack from "@/hooks/useCurrentTrack"
 import { ParsedData } from "@/lib/spotify";
+import { useSession } from "next-auth/react";
 
 
 export default function Listening() {
      console.log("=== LISTENING COMPONENT RENDERED ===");
+     
+     const { data: session, status } = useSession();
+     console.log("Session status:", status);
+     console.log("Full session object:", session);
+     console.log("Access token:", session?.accessToken);
 
      //for future use; can be used to notify other components that the song changed (such as slide components)
      const handleSongChange = (track: ParsedData) => {
