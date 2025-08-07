@@ -1,3 +1,8 @@
 
 
-import { useState } from "react"
+
+export default function Preferences() {
+     return (
+          <div></div>
+     )
+}
