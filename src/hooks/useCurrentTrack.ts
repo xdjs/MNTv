@@ -28,11 +28,17 @@ export default function useCurrentTrack({ onSongChange }: Props) {
                const trackInfo = await getCurrentTrack(session.accessToken); //this is the actual api call, should be obvious but im retarded and will forget
                if (trackInfo) {
                   setCurrentTrack(trackInfo)
+                  console.log("Current Track:", trackInfo.songName, " by ", trackInfo.artistName)
                   onSongChange?.(trackInfo)
+                  console.log("Song changed")
               }
           }
         }; 
         fetchTrack();
+
+        const interval = setInterval(fetchTrack, 1000);
+        return () => clearInterval(interval);
+        
      }, [session, onSongChange]); 
      // - This array at the end is called a dependency array and tells the code when to run useEffect
      // - In this case, whenever user signs in or out or currentTrack changes

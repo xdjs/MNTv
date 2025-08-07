@@ -14,11 +14,11 @@ export default function Listening() {
      const currentTrack = useCurrentTrack({ onSongChange: handleSongChange });
 
      return (
-          <div>
+          <div className="w-full h-full">
                <div className="justify-center items-center">
                     {currentTrack && (
                          <>
-                              <img src={currentTrack.coverUrl!} alt="ya mum" />
+                              <img src={currentTrack.coverUrl!} alt="" />
                               <h1>{currentTrack.songName}</h1>
                               <p>{currentTrack.artistName}</p>
                               <p>{currentTrack.albumName}</p>
