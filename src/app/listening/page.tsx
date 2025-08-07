@@ -1,3 +1,5 @@
+"use client"
+
 import useCurrentTrack from "@/hooks/useCurrentTrack"
 import { ParsedData } from "@/lib/spotify";
 
