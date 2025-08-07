@@ -18,10 +18,14 @@ export default function Listening() {
      return (
           <div>
                <div className="justify-center items-center">
-                    <img src={currentTrack.coverUrl!} alt="ya mum" />
-                    <h1>{currentTrack.songName}</h1>
-                    <p>{currentTrack.artistName}</p>
-                    <p>{currentTrack.albumName}</p>
+                    {currentTrack && (
+                         <>
+                              <img src={currentTrack.coverUrl!} alt="ya mum" />
+                              <h1>{currentTrack.songName}</h1>
+                              <p>{currentTrack.artistName}</p>
+                              <p>{currentTrack.albumName}</p>
+                         </>
+                    )}
                </div>
           </div>
      )
