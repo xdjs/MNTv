@@ -2,16 +2,16 @@
 
 import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
-import { getCurrentTrack, getTimestamp } from "@/lib/spotify";
+import { getCurrentTrack, ParsedData } from "@/lib/spotify";
 
 
 interface Props {
-     onSongChange?: (track: any) => void;
+     onSongChange?: (track: ParsedData) => void;
 }
 
 export default function useCurrentTrack({ onSongChange }: Props) {
      const { data: session } = useSession();
-     const [currentTrack, setCurrentTrack] = useState({
+     const [currentTrack, setCurrentTrack] = useState<ParsedData>({
           songName: null,
           artistName: null,
           artistId: null,
@@ -19,6 +19,7 @@ export default function useCurrentTrack({ onSongChange }: Props) {
           albumId: null,
           coverUrl: null,
           isPlaying: null,
+          progressMs: null,
      })
 
      useEffect(() => {
@@ -32,7 +33,7 @@ export default function useCurrentTrack({ onSongChange }: Props) {
           }
         }; 
         fetchTrack();
-     }, [session]); 
+     }, [session, onSongChange]); 
      // - This array at the end is called a dependency array and tells the code when to run useEffect
      // - In this case, whenever user signs in or out or currentTrack changes
 

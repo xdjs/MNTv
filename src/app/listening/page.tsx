@@ -1,7 +1,6 @@
 "use client"
 
 import useCurrentTrack from "@/hooks/useCurrentTrack"
-import { useSession } from "next-auth/react"
 
 
 
@@ -9,8 +8,8 @@ import { useSession } from "next-auth/react"
 export default function Listening() {
 
      //for future use; can be used to notify other components that the song changed (such as slide components)
-     const handleSongChange = (track: any) => {
-          
+     const handleSongChange = (track: { songName: string | null; artistName: string | null }) => {
+          // Future: notify other components about song changes
      }
 
      const currentTrack = useCurrentTrack({ onSongChange: handleSongChange });
