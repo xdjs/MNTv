@@ -24,7 +24,10 @@ export default function useCurrentTrack({ onSongChange }: Props) {
       useEffect(() => {
            const fetchTrack = async () => {
                 try {
-                     const res = await fetch("/api/spotify/current-track", { cache: "no-store" });
+                     const res = await fetch("/api/spotify/current-track", {
+                          cache: "no-store",
+                          credentials: "include",
+                     });
                      if (!res.ok) return;
                      const trackInfo: ParsedData | null = await res.json();
                      if (trackInfo) {

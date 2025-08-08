@@ -1,19 +1,28 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
+import { getToken } from "next-auth/jwt";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { SimplifiedArtist } from "@spotify/web-api-ts-sdk";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
+    let userId = session?.user?.id;
+
+    if (!userId) {
+      // Fallback: read JWT directly (helps when session parsing fails)
+      const token = await getToken({ req, secret: authOptions.secret });
+      if (token?.sub) userId = token.sub;
+    }
+
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const account = await prisma.account.findFirst({
       where: {
-        userId: session.user.id,
+        userId,
         provider: "spotify",
       },
       select: {
