@@ -14,6 +14,7 @@ const providers: Provider[] = [
                params: {
                     // Needed for currently playing endpoints
                     scope: "user-read-currently-playing user-read-playback-state",
+                    show_dialog: "true",
                },
           },
      }),
