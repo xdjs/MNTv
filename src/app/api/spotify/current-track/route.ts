@@ -1,0 +1,65 @@
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+
+export async function GET() {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const account = await prisma.account.findFirst({
+      where: {
+        userId: session.user.id,
+        provider: "spotify",
+      },
+      select: {
+        access_token: true,
+      },
+    });
+
+    if (!account?.access_token) {
+      return NextResponse.json({ error: "Spotify account not linked" }, { status: 404 });
+    }
+
+    const resp = await fetch("https://api.spotify.com/v1/me/player/currently-playing", {
+      headers: { Authorization: `Bearer ${account.access_token}` },
+      cache: "no-store",
+    });
+
+    if (resp.status === 204) {
+      // No content: nothing is currently playing
+      return NextResponse.json(null, { status: 200 });
+    }
+
+    if (!resp.ok) {
+      return NextResponse.json({ error: `Spotify error ${resp.status}` }, { status: resp.status });
+    }
+
+    const data = await resp.json();
+    const track = data?.item;
+
+    const parsed = track
+      ? {
+          songName: track?.name ?? null,
+          artistName: track?.artists?.[0]?.name ?? null,
+          artistId: track?.artists?.[0]?.id ?? null,
+          albumName: track?.album?.name ?? null,
+          albumId: track?.album?.id ?? null,
+          allArtists: (track?.artists ?? []).map((a: any) => ({ name: a?.name, id: a?.id })),
+          coverUrl: track?.album?.images?.[0]?.url ?? null,
+          isPlaying: data?.is_playing ?? null,
+          progressMs: data?.progress_ms ?? null,
+        }
+      : null;
+
+    return NextResponse.json(parsed, { status: 200 });
+  } catch (err) {
+    console.error("/api/spotify/current-track error", err);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+
+

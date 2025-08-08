@@ -7,7 +7,6 @@ export default function SpotifySignIn() {
           try {
                console.log("=== Starting Spotify Sign In ===");
                console.log("Environment check:");
-               console.log("- NextAuth URL should be ngrok URL");
                console.log("- Attempting signIn with explicit settings...");
                
                const result = await signIn("spotify", { 

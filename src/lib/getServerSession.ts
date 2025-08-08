@@ -1,14 +1,14 @@
 import { getServerSession } from "next-auth/next";
-import authConfig from "./auth";
+import { authOptions } from "./auth";
 import type { Session } from "next-auth";
 
 export async function getCurrentUser() {
-  const session = await getServerSession(authConfig) as Session | null;
+  const session = await getServerSession(authOptions) as Session | null;
   return session?.user || null;
 }
 
 export async function requireAuth() {
-  const session = await getServerSession(authConfig) as Session | null;
+  const session = await getServerSession(authOptions) as Session | null;
   
   if (!session?.user) {
     throw new Error("Authentication required");
