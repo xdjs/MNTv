@@ -29,7 +29,7 @@ export default function useCurrentTrack({ onSongChange }: Props) {
                           credentials: "include",
                      });
                      if (!res.ok) return;
-                     const trackInfo: ParsedData | null = await res.json();
+                     const trackInfo: ParsedData = await res.json();
                      if (trackInfo) {
                           setCurrentTrack(trackInfo);
                           onSongChange?.(trackInfo);
@@ -44,7 +44,7 @@ export default function useCurrentTrack({ onSongChange }: Props) {
            return () => clearInterval(interval);
       }, [onSongChange]); 
      // - This array at the end is called a dependency array and tells the code when to run useEffect
-     // - In this case, whenever user signs in or out or currentTrack changes
+     // - In this case, whenever currentTrack changes
 
       return currentTrack;
 }

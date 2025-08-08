@@ -6,68 +6,69 @@ import { prisma } from "@/lib/prisma";
 import { SimplifiedArtist } from "@spotify/web-api-ts-sdk";
 
 export async function GET(req: NextRequest) {
-  try {
-    const session = await getServerSession(authOptions);
-    let userId = session?.user?.id;
+     try {
+          const session = await getServerSession(authOptions);
+          let userId = session?.user?.id;
 
     if (!userId) {
-      // Fallback: read JWT directly (helps when session parsing fails)
-      const token = await getToken({ req, secret: authOptions.secret });
-      if (token?.sub) userId = token.sub;
+          // Fallback: read JWT directly (helps when session parsing fails)
+          const token = await getToken({ req, secret: authOptions.secret });
+          if (token?.sub) userId = token.sub;
     }
 
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+          return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const account = await prisma.account.findFirst({
-      where: {
-        userId,
-        provider: "spotify",
-      },
-      select: {
-        access_token: true,
-      },
-    });
+          where: {
+            userId,
+            provider: "spotify",
+          },
+          select: {
+            access_token: true,
+          },
+     });
 
     if (!account?.access_token) {
-      return NextResponse.json({ error: "Spotify account not linked" }, { status: 404 });
+          return NextResponse.json({ error: "Spotify account not linked" }, { status: 404 });
     }
 
     const resp = await fetch("https://api.spotify.com/v1/me/player/currently-playing", {
-      headers: { Authorization: `Bearer ${account.access_token}` },
-      cache: "no-store",
+          headers: { Authorization: `Bearer ${account.access_token}` },
+          cache: "no-store",
     });
 
     if (resp.status === 204) {
-      // No content: nothing is currently playing
-      return NextResponse.json(null, { status: 200 });
+          // No content: nothing is currently playing
+          return NextResponse.json(null, { status: 200 });
     }
 
     if (!resp.ok) {
-      return NextResponse.json({ error: `Spotify error ${resp.status}` }, { status: resp.status });
+          return NextResponse.json({ error: `Spotify error ${resp.status}` }, { status: resp.status });
     }
 
     const data = await resp.json();
     const track = data?.item;
 
     const parsed = track
-      ? {
-          songName: track?.name ?? null,
-          artistName: track?.artists?.[0]?.name ?? null,
-          artistId: track?.artists?.[0]?.id ?? null,
-          albumName: track?.album?.name ?? null,
-          albumId: track?.album?.id ?? null,
-          allArtists: (track?.artists ?? []).map((a: SimplifiedArtist) => ({ name: a?.name, id: a?.id })),
-          coverUrl: track?.album?.images?.[0]?.url ?? null,
-          isPlaying: data?.is_playing ?? null,
-          progressMs: data?.progress_ms ?? null,
-        }
-      : null;
+          ? {
+               songName: track?.name ?? null,
+               artistName: track?.artists?.[0]?.name ?? null,
+               artistId: track?.artists?.[0]?.id ?? null,
+               albumName: track?.album?.name ?? null,
+               albumId: track?.album?.id ?? null,
+               allArtists: (track?.artists ?? []).map((a: SimplifiedArtist) => ({ name: a?.name, id: a?.id })),
+               coverUrl: track?.album?.images?.[0]?.url ?? null,
+               isPlaying: data?.is_playing ?? null,
+               progressMs: data?.progress_ms ?? null,
+         }
+          : null;
 
-    return NextResponse.json(parsed, { status: 200 });
-  } catch (err) {
-    console.error("/api/spotify/current-track error", err);
+     return NextResponse.json(parsed, { status: 200 });
+    } catch (err) {
+          console.error("/api/spotify/current-track error", err);
+
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
