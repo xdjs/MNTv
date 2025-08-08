@@ -4,6 +4,7 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "./prisma";
 import Spotify from "next-auth/providers/spotify";
 import type { Provider } from "next-auth/providers/index"; 
+import { JWT } from "next-auth/jwt";
 
 const providers: Provider[] = [
      Spotify({
@@ -54,14 +55,14 @@ export const authOptions: NextAuthOptions = {
           },
           session: ({ session, token }) => {
                console.log("Session callback - token:", token);
-               console.log("Session callback - token.accessToken:", (token as any).accessToken);
+               console.log("Session callback - token.accessToken:", (token as JWT).accessToken);
                return {
                     ...session,
                     user: {
                          ...session.user,
                          id: token.sub,
                     },
-                    accessToken: (token as any).accessToken as string | undefined,
+                    accessToken: (token as JWT).accessToken as string | undefined,
                };
           },
      },

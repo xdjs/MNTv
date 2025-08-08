@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { SimplifiedArtist } from "@spotify/web-api-ts-sdk";
 
 export async function GET() {
   try {
@@ -48,7 +49,7 @@ export async function GET() {
           artistId: track?.artists?.[0]?.id ?? null,
           albumName: track?.album?.name ?? null,
           albumId: track?.album?.id ?? null,
-          allArtists: (track?.artists ?? []).map((a: any) => ({ name: a?.name, id: a?.id })),
+          allArtists: (track?.artists ?? []).map((a: SimplifiedArtist) => ({ name: a?.name, id: a?.id })),
           coverUrl: track?.album?.images?.[0]?.url ?? null,
           isPlaying: data?.is_playing ?? null,
           progressMs: data?.progress_ms ?? null,
