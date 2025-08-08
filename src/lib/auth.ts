@@ -34,10 +34,25 @@ export const authOptions: NextAuthOptions = {
      // Use JWT strategy so the access token is available on the client session
      session: { strategy: "jwt" },
      debug: process.env.NODE_ENV === "development",
+     logger: {
+          error(code, metadata) {
+               console.error(`[next-auth] error: ${code}`, metadata);
+          },
+          warn(code) {
+               console.warn(`[next-auth] warn: ${code}`);
+          },
+          debug(code, metadata) {
+               console.debug(`[next-auth] debug: ${code}`, metadata);
+          },
+     },
      pages: {
           signIn: "/sign-in",
      },
      callbacks: {
+          async signIn({ user, account, profile }) {
+               console.log("[callbacks.signIn]", { hasUser: !!user, provider: account?.provider });
+               return true;
+          },
           async jwt({ token, account }) {
                console.log("JWT callback - account:", account);
                console.log("JWT callback - token before:", token);
@@ -64,6 +79,17 @@ export const authOptions: NextAuthOptions = {
                     },
                     accessToken: (token as JWT).accessToken as string | undefined,
                };
+          },
+     },
+     events: {
+          async signIn(message) {
+               console.log("[events.signIn]", { provider: message?.account?.provider, userId: message?.user?.id });
+          },
+          async session(message) {
+               console.log("[events.session]", { userId: message?.session?.user?.id });
+          },
+          async linkAccount(message) {
+               console.log("[events.linkAccount]", { provider: message?.account?.provider, userId: message?.user?.id });
           },
      },
 };

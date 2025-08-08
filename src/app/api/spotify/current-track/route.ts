@@ -7,16 +7,20 @@ import { SimplifiedArtist } from "@spotify/web-api-ts-sdk";
 
 export async function GET(req: NextRequest) {
      try {
+          console.log("[current-track] start");
           const session = await getServerSession(authOptions);
           let userId = session?.user?.id;
+          console.log("[current-track] session userId:", userId);
 
     if (!userId) {
           // Fallback: read JWT directly (helps when session parsing fails)
-          const token = await getToken({ req, secret: authOptions.secret });
+           const token = await getToken({ req, secret: authOptions.secret });
+           console.log("[current-track] getToken sub:", token?.sub);
           if (token?.sub) userId = token.sub;
     }
 
     if (!userId) {
+               console.warn("[current-track] unauthorized: no userId");
           return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -29,8 +33,10 @@ export async function GET(req: NextRequest) {
             access_token: true,
           },
      });
+     console.log("[current-track] found account token?", !!account?.access_token);
 
     if (!account?.access_token) {
+          console.warn("[current-track] spotify account not linked");
           return NextResponse.json({ error: "Spotify account not linked" }, { status: 404 });
     }
 
@@ -38,6 +44,7 @@ export async function GET(req: NextRequest) {
           headers: { Authorization: `Bearer ${account.access_token}` },
           cache: "no-store",
     });
+     console.log("[current-track] spotify status:", resp.status);
 
     if (resp.status === 204) {
           // No content: nothing is currently playing
@@ -45,6 +52,7 @@ export async function GET(req: NextRequest) {
     }
 
     if (!resp.ok) {
+           console.error("[current-track] spotify error", resp.status, await resp.text());
           return NextResponse.json({ error: `Spotify error ${resp.status}` }, { status: resp.status });
     }
 
