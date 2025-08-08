@@ -43,7 +43,7 @@ model Account {
 model Session {
   id           String   @id @default(cuid())
   sessionToken String   @unique @map("session_token")
-  userId        String
+  userId        String @map("user_id")
   expires      DateTime @db.Timestamptz
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
