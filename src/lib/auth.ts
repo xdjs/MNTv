@@ -30,24 +30,27 @@ export default NextAuth({
      callbacks: {
 
           async jwt({ token, account }) {
+               console.log("JWT callback - account:", account);
+               console.log("JWT callback - token before:", token);
                if (account) {
                     token.accessToken = account.access_token;
+                    console.log("JWT callback - access_token from account:", account.access_token);
                }
+               console.log("JWT callback - token after:", token);
                return token;
           },
 
-          session: ({ session, token }) => {
-               if (token?.sub) {
-                    return {
-                         ...session,
-                         user: {
-                              ...session.user,
-                              id: token.sub,
-                         },
-                         accessToken: token.accessToken,
-                    };
-               }
-               return session;
-          },
+               session: ({ session, token }) => {
+          console.log("Session callback - token:", token);
+          console.log("Session callback - token.accessToken:", token.accessToken);
+          return {
+               ...session,
+               user: {
+                    ...session.user,
+                    id: token.sub,
+               },
+               accessToken: token.accessToken,
+          };
+     },
      },
 })
