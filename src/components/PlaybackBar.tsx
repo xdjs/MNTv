@@ -24,13 +24,13 @@ export default function PlaybackBar({
       <div className={`flex items-center gap-4 transition-opacity duration-1000 ${fadingIn ? "opacity-60" : "opacity-100"}`}>
         <button
           onClick={onToggle}
-          className="flex h-12 w-12 items-center justify-center rounded-full bg-foreground/10 text-foreground backdrop-blur-sm transition-colors hover:bg-foreground/20 tv-focus-visible"
+          className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/20 text-primary backdrop-blur-sm transition-colors hover:bg-primary/30 tv-focus-visible"
         >
           {isPlaying ? <Pause size={20} /> : <Play size={20} className="ml-0.5" />}
         </button>
-        <span className="w-14 text-right text-sm text-muted-foreground tabular-nums">{currentTimeFormatted}</span>
+        <span className="w-14 text-right text-sm text-foreground/70 tabular-nums">{currentTimeFormatted}</span>
         <div
-          className="relative flex-1 h-1.5 rounded-full bg-foreground/10 cursor-pointer group"
+          className="relative flex-1 h-1.5 rounded-full bg-primary/20 cursor-pointer group"
           onClick={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
             const pct = (e.clientX - rect.left) / rect.width;
@@ -46,7 +46,7 @@ export default function PlaybackBar({
             style={{ left: `${progress}%`, transform: `translateX(-50%) translateY(-50%)` }}
           />
         </div>
-        <span className="w-14 text-sm text-muted-foreground tabular-nums">{durationFormatted}</span>
+        <span className="w-14 text-sm text-foreground/70 tabular-nums">{durationFormatted}</span>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { AnimatePresence } from "framer-motion";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
@@ -117,15 +118,22 @@ export default function Listen() {
           <img
             src={track.coverArtUrl}
             alt=""
-            className="h-full w-full object-cover blur-[40px] scale-125 brightness-[0.35]"
+            className="h-full w-full object-cover blur-[12px] scale-110 brightness-[0.45]"
             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
         </div>
         <div className="vignette absolute inset-0" />
         <div className="noise-overlay absolute inset-0" />
 
-        {/* Logo — top left */}
-        <div className="relative z-10 px-10 pt-8">
+        {/* Top bar: back button + logo */}
+        <div className="relative z-10 flex items-center gap-4 px-10 pt-8">
+          <button
+            onClick={() => navigate(-1)}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground backdrop-blur-sm transition-colors hover:bg-foreground/20 tv-focus-visible"
+            aria-label="Go back"
+          >
+            <ArrowLeft size={20} />
+          </button>
           <MusicNerdLogo size={36} glow className="opacity-80" />
         </div>
 
