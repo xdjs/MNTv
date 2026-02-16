@@ -198,3 +198,11 @@ export function getNuggetsForTrack(trackId: string): Nugget[] {
 export function getSourceById(id: string): Source | undefined {
   return sources.find((s) => s.id === id);
 }
+
+export function getAdjacentTrackIds(currentId: string): { prev: string | null; next: string | null } {
+  const idx = tracks.findIndex((t) => t.id === currentId);
+  return {
+    prev: idx > 0 ? tracks[idx - 1].id : null,
+    next: idx < tracks.length - 1 ? tracks[idx + 1].id : null,
+  };
+}
