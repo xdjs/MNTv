@@ -1,23 +1,26 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { AnimatePresence } from "framer-motion";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import NuggetCard from "@/components/NuggetCard";
 import MediaOverlay from "@/components/overlays/MediaOverlay";
 import ReadingOverlay from "@/components/overlays/ReadingOverlay";
 import DevPanel from "@/components/DevPanel";
 import PlaybackBar from "@/components/PlaybackBar";
-import { getTrackById, getNuggetsForTrack, getSourceById } from "@/mock/tracks";
+import { getTrackById, getNuggetsForTrack, getSourceById, getAdjacentTrackIds } from "@/mock/tracks";
 import { usePlayback } from "@/hooks/usePlayback";
 import PageTransition from "@/components/PageTransition";
 import type { Nugget, Source, AnimationStyle } from "@/mock/types";
+
+const HIDE_DELAY = 3000; // ms before bar auto-hides
 
 export default function Listen() {
   const { trackId } = useParams<{ trackId: string }>();
   const navigate = useNavigate();
   const track = getTrackById(trackId || "");
   const trackNuggets = useMemo(() => getNuggetsForTrack(trackId || ""), [trackId]);
+  const { prev, next } = useMemo(() => getAdjacentTrackIds(trackId || ""), [trackId]);
 
   const { isPlaying, currentTime, fadingIn, play, pause, seek, toggle, pauseForOverlay, resumeWithFade } =
     usePlayback(track?.durationSec || 300);
@@ -29,6 +32,53 @@ export default function Listen() {
   const [mediaOverlay, setMediaOverlay] = useState<Source | null>(null);
   const [readingOverlay, setReadingOverlay] = useState<Source | null>(null);
   const [devOpen, setDevOpen] = useState(false);
+
+  // --- Auto-hide bar logic ---
+  const [barVisible, setBarVisible] = useState(true);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showBar = useCallback(() => {
+    setBarVisible(true);
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => setBarVisible(false), HIDE_DELAY);
+  }, []);
+
+  // Show bar initially then auto-hide
+  useEffect(() => {
+    hideTimerRef.current = setTimeout(() => setBarVisible(false), HIDE_DELAY);
+    return () => { if (hideTimerRef.current) clearTimeout(hideTimerRef.current); };
+  }, []);
+
+  // Mouse move at bottom 15% of screen shows bar
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (e.clientY > window.innerHeight * 0.85) {
+        showBar();
+      }
+    };
+    window.addEventListener("mousemove", onMouseMove);
+    return () => window.removeEventListener("mousemove", onMouseMove);
+  }, [showBar]);
+
+  // ArrowUp / any key activity shows bar
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        showBar();
+      } else if (e.key === " ") {
+        e.preventDefault();
+        showBar();
+        toggle();
+      } else if (e.key === "ArrowRight" && next) {
+        navigate(`/listen/${next}`);
+      } else if (e.key === "ArrowLeft" && prev) {
+        navigate(`/listen/${prev}`);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showBar, toggle, navigate, prev, next]);
 
   // Auto-play on mount
   useEffect(() => { play(); }, [play]);
@@ -113,7 +163,7 @@ export default function Listen() {
   return (
     <PageTransition>
       <div className="relative flex h-screen flex-col overflow-hidden">
-        {/* Background: full-bleed cover art with heavy blur */}
+        {/* Background: full-bleed cover art */}
         <div className="absolute inset-0">
           <img
             src={track.coverArtUrl}
@@ -139,8 +189,12 @@ export default function Listen() {
 
         {/* Main layout: artist info bottom-left, nugget right-center */}
         <div className="relative z-10 flex flex-1 items-end px-10 pb-28">
-          {/* Bottom-left: Artist / Track / Album — large cinematic type */}
-          <div className="flex-1 max-w-2xl">
+          {/* Bottom-left: Artist / Track / Album — slides up when bar hides */}
+          <motion.div
+            className="flex-1 max-w-2xl"
+            animate={{ y: barVisible ? 0 : 24 }}
+            transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+          >
             <h1 className="text-6xl font-bold text-foreground leading-none tracking-tight md:text-7xl lg:text-8xl" style={{ fontFamily: "'Georgia', 'Times New Roman', serif" }}>
               {track.artist}
             </h1>
@@ -148,7 +202,7 @@ export default function Listen() {
             {track.album && (
               <p className="mt-1 text-lg text-foreground/40">{track.album}</p>
             )}
-          </div>
+          </motion.div>
 
           {/* Right side: Nugget display area */}
           <div className="w-[380px] shrink-0 ml-8">
@@ -166,15 +220,20 @@ export default function Listen() {
           </div>
         </div>
 
-        {/* Playback controls */}
+        {/* Playback controls — auto-hiding */}
         <PlaybackBar
           isPlaying={isPlaying}
           fadingIn={fadingIn}
           progress={progress}
           currentTimeFormatted={formatTime(currentTime)}
           durationFormatted={formatTime(track.durationSec)}
-          onToggle={toggle}
-          onSeek={(pct) => seek(pct * track.durationSec)}
+          visible={barVisible}
+          hasPrev={!!prev}
+          hasNext={!!next}
+          onToggle={() => { showBar(); toggle(); }}
+          onSeek={(pct) => { showBar(); seek(pct * track.durationSec); }}
+          onPrev={() => prev && navigate(`/listen/${prev}`)}
+          onNext={() => next && navigate(`/listen/${next}`)}
         />
 
         {/* Dev panel toggle */}
