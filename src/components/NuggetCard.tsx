@@ -1,5 +1,4 @@
 import { motion } from "framer-motion";
-import { useMemo } from "react";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import { getSourceById } from "@/mock/tracks";
 import type { Nugget, AnimationStyle, Source } from "@/mock/types";
@@ -12,6 +11,7 @@ interface Props {
   sourceOverride?: Source | null;
 }
 
+// Kind labels for the nugget header
 const kindLabels: Record<string, string> = {
   process: "Behind the Scenes",
   constraint: "Creative Constraint",
@@ -20,185 +20,158 @@ const kindLabels: Record<string, string> = {
   influence: "Influence",
 };
 
-// Pre-defined scatter positions (VH1 Pop Up style) — avoiding edges and bottom playback area
-const positions = [
-  { top: 25, left: 8 },
-  { top: 18, left: 55 },
-  { top: 45, left: 12 },
-  { top: 35, left: 60 },
-  { top: 55, left: 40 },
-  { top: 20, left: 30 },
-  { top: 50, left: 65 },
-  { top: 30, left: 5 },
-  { top: 40, left: 45 },
-  { top: 15, left: 70 },
-  { top: 60, left: 15 },
-  { top: 28, left: 48 },
-];
-
-/* ── Style A — Glass Slide + Focus Bloom ── */
-const styleAOuter = {
-  initial: { opacity: 0, x: -30 },
-  animate: { opacity: 1, x: 0, transition: { duration: 0.35, ease: [0.4, 0, 0.2, 1] as const } },
-  exit: { opacity: 0, x: 30, transition: { duration: 0.25, ease: "easeIn" as const } },
+// Style A — Glass Slide + Focus Bloom
+const cardA = {
+  initial: { opacity: 0, y: 30, filter: "blur(12px)" },
+  animate: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.45, delay: 0.35, ease: [0.22, 1, 0.36, 1] as const } },
+  exit: { opacity: 0, y: -16, scale: 0.92, filter: "blur(6px)", transition: { duration: 0.3 } },
 };
-const styleALogo = {
-  initial: { opacity: 0, scale: 0 },
-  animate: { opacity: 1, scale: 1, transition: { duration: 0.25, ease: [0.34, 1.56, 0.64, 1] as const } },
-  exit: { opacity: 0, scale: 0, transition: { duration: 0.15 } },
-};
-const styleACard = {
-  initial: { opacity: 0, x: -20, filter: "blur(6px)" },
-  animate: { opacity: 1, x: 0, filter: "blur(0px)", transition: { duration: 0.35, delay: 0.1, ease: [0.4, 0, 0.2, 1] as const } },
-  exit: { opacity: 0, x: 20, filter: "blur(4px)", transition: { duration: 0.2 } },
+const logoA = {
+  initial: { opacity: 0, scale: 0, rotate: -90 },
+  animate: { opacity: 1, scale: 1, rotate: 0, transition: { duration: 0.4, ease: [0.34, 1.56, 0.64, 1] as const } },
+  exit: { opacity: 0, scale: 0, rotate: 90, transition: { duration: 0.2 } },
 };
 
-/* ── Style B — Border Sweep + Text Mask ── */
-const styleBOuter = {
-  initial: { opacity: 0 },
-  animate: { opacity: 1, transition: { duration: 0.3 } },
-  exit: { opacity: 0, transition: { duration: 0.25 } },
+// Style B — Border Sweep + Text Mask Reveal
+const cardB = {
+  initial: { opacity: 0, clipPath: "inset(0 100% 0 0)" },
+  animate: { opacity: 1, clipPath: "inset(0 0% 0 0)", transition: { duration: 0.5, delay: 0.3, ease: [0.25, 1, 0.5, 1] as const } },
+  exit: { opacity: 0, clipPath: "inset(0 0 0 100%)", transition: { duration: 0.35 } },
 };
-const styleBLogo = {
-  initial: { opacity: 0, x: -10 },
-  animate: { opacity: 1, x: 0, transition: { duration: 0.2 } },
-  exit: { opacity: 0, transition: { duration: 0.15 } },
-};
-const styleBCard = {
-  initial: { opacity: 0, scaleX: 0.3, originX: 0 },
-  animate: { opacity: 1, scaleX: 1, transition: { duration: 0.4, ease: [0.34, 1.56, 0.64, 1] as const } },
-  exit: { opacity: 0, scaleX: 0.3, transition: { duration: 0.2 } },
+const logoB = {
+  initial: { opacity: 0, x: -20, scale: 0.5 },
+  animate: { opacity: 1, x: 0, scale: 1, transition: { duration: 0.3, ease: "easeOut" as const } },
+  exit: { opacity: 0, x: -10, transition: { duration: 0.2 } },
 };
 
-/* ── Style C — Anchor Dot Expand ── */
-const styleCOuter = {
-  initial: { opacity: 0 },
-  animate: { opacity: 1, transition: { duration: 0.3 } },
-  exit: { opacity: 0, transition: { duration: 0.25 } },
+// Style C — Anchor Dot Expand
+const cardC = {
+  initial: { opacity: 0, scale: 0.1, originX: 0, originY: 1 },
+  animate: { opacity: 1, scale: 1, transition: { duration: 0.4, delay: 0.45, ease: [0.34, 1.56, 0.64, 1] as const } },
+  exit: { opacity: 0, scale: 0.1, transition: { duration: 0.3, ease: "easeIn" as const } },
 };
-const styleCLogo = {
-  initial: { opacity: 0, scale: 0 },
-  animate: { opacity: 1, scale: 1, transition: { duration: 0.3, ease: [0.34, 1.56, 0.64, 1] as const } },
-  exit: { opacity: 0, scale: 0, transition: { duration: 0.15 } },
-};
-const styleCCard = {
-  initial: { opacity: 0, scale: 0, originX: 0, originY: "50%" },
-  animate: { opacity: 1, scale: 1, transition: { duration: 0.35, delay: 0.15, ease: [0.34, 1.56, 0.64, 1] as const } },
-  exit: { opacity: 0, scale: 0, transition: { duration: 0.2 } },
+const logoC = {
+  initial: { opacity: 0, scale: 0, rotate: -180 },
+  animate: {
+    opacity: 1,
+    scale: [0, 1.3, 1],
+    rotate: 0,
+    transition: { duration: 0.45, ease: [0.34, 1.56, 0.64, 1] as const },
+  },
+  exit: { opacity: 0, scale: 0, rotate: 180, transition: { duration: 0.25 } },
 };
 
-const variants = {
-  A: { outer: styleAOuter, logo: styleALogo, card: styleACard },
-  B: { outer: styleBOuter, logo: styleBLogo, card: styleBCard },
-  C: { outer: styleCOuter, logo: styleCLogo, card: styleCCard },
+const styleMap = {
+  A: { card: cardA, logo: logoA },
+  B: { card: cardB, logo: logoB },
+  C: { card: cardC, logo: logoC },
 };
 
 export default function NuggetCard({ nugget, animationStyle, onSourceClick, currentTime, sourceOverride }: Props) {
   const source = sourceOverride !== undefined ? sourceOverride : getSourceById(nugget.sourceId);
-  const v = variants[animationStyle];
-
-  // Pick a pseudo-random position based on nugget id hash
-  const pos = useMemo(() => {
-    let hash = 0;
-    for (let i = 0; i < nugget.id.length; i++) {
-      hash = ((hash << 5) - hash + nugget.id.charCodeAt(i)) | 0;
-    }
-    return positions[Math.abs(hash) % positions.length];
-  }, [nugget.id]);
-
-  const isStyleC = animationStyle === "C";
+  const { card: cardVariants, logo: logoVariants } = styleMap[animationStyle];
 
   return (
-    <motion.div
-      className="absolute z-20 flex items-start gap-2"
-      style={{ top: `${pos.top}%`, left: `${pos.left}%` }}
-      initial="initial"
-      animate="animate"
-      exit="exit"
-      variants={v.outer}
-    >
-      {/* Logo pip */}
-      <motion.div variants={v.logo} className="flex-shrink-0 mt-1.5 relative">
-        <MusicNerdLogo size={24} glow={isStyleC} />
-        {isStyleC && (
-          <div
-            className="absolute inset-0 rounded-full"
-            style={{
-              boxShadow: "0 0 12px 4px hsl(330 90% 60% / 0.5), 0 0 24px 8px hsl(330 90% 60% / 0.2)",
-              pointerEvents: "none",
-            }}
-          />
-        )}
+    <motion.div className="relative" initial="initial" animate="animate" exit="exit">
+      {/* Logo — left side, appears FIRST */}
+      <motion.div
+        variants={logoVariants}
+        className={`absolute -left-3 z-10 ${animationStyle === "C" ? "-bottom-3" : "-top-3"}`}
+      >
+        <MusicNerdLogo size={animationStyle === "C" ? 32 : 22} glow />
       </motion.div>
 
       {/* Card */}
       <motion.div
-        variants={v.card}
-        className="relative max-w-[300px] rounded-xl px-4 py-3 cursor-pointer backdrop-blur-md border border-foreground/10"
-        style={{
-          background: "hsl(0 0% 8% / 0.75)",
-          boxShadow: isStyleC
-            ? "0 4px 24px hsl(330 90% 60% / 0.15), 0 1px 3px hsl(0 0% 0% / 0.4)"
-            : animationStyle === "A"
-            ? "0 0 20px hsl(330 90% 60% / 0.08), 0 4px 16px hsl(0 0% 0% / 0.5)"
-            : "0 4px 20px hsl(0 0% 0% / 0.5)",
-        }}
-        onClick={onSourceClick}
+        variants={cardVariants}
+        className="apple-glass relative rounded-2xl p-6 ml-2"
       >
-        {/* Kind label + timestamp */}
-        <div className="mb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-primary/70">
-          <span>{kindLabels[nugget.kind] || nugget.kind}</span>
-          {currentTime && (
-            <>
-              <span className="text-foreground/30">•</span>
-              <span className="tabular-nums text-foreground/40">{currentTime}</span>
-            </>
-          )}
-        </div>
-
-        {/* Listen-for badge */}
-        {nugget.listenFor && (
-          <div className="mb-1 flex items-center gap-1">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-            <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
-              Listen for this
-            </span>
-          </div>
-        )}
-
-        {/* Nugget text */}
-        <p className="text-sm font-semibold leading-snug text-foreground/90">
-          {nugget.text}
-        </p>
-
-        {/* Source chip */}
-        {source && (
-          <div className="mt-1.5 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-foreground/30">
-            <span>
-              {source.type === "youtube" ? "▶" : source.type === "article" ? "📄" : "🎙"}
-            </span>
-            <span className="truncate max-w-[180px]">{source.publisher}</span>
-          </div>
-        )}
-
-        {/* Style A focus bloom glow */}
+        {/* Style A bloom */}
         {animationStyle === "A" && (
-          <div
-            className="absolute inset-0 rounded-xl pointer-events-none"
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 0.2, scale: 1.2 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="absolute inset-0 rounded-2xl bg-primary blur-2xl -z-10"
+          />
+        )}
+
+        {/* Style B border sweep */}
+        {animationStyle === "B" && (
+          <motion.div
+            initial={{ backgroundSize: "0% 2px, 2px 0%, 0% 2px, 2px 0%" }}
+            animate={{ backgroundSize: "100% 2px, 2px 100%, 100% 2px, 2px 100%" }}
+            transition={{ duration: 0.7, delay: 0.3, ease: "easeOut" }}
+            className="pointer-events-none absolute inset-0 rounded-2xl"
             style={{
-              boxShadow: "inset 0 0 20px hsl(330 90% 60% / 0.06)",
+              backgroundImage: `linear-gradient(hsl(var(--primary)), hsl(var(--primary))), linear-gradient(hsl(var(--primary)), hsl(var(--primary))), linear-gradient(hsl(var(--primary)), hsl(var(--primary))), linear-gradient(hsl(var(--primary)), hsl(var(--primary)))`,
+              backgroundPosition: "0 0, 100% 0, 100% 100%, 0 100%",
+              backgroundRepeat: "no-repeat",
             }}
           />
         )}
 
-        {/* Style B top border sweep accent */}
-        {animationStyle === "B" && (
+        {/* Style C bloom (same as A) */}
+        {animationStyle === "C" && (
           <motion.div
-            className="absolute top-0 left-0 h-[2px] rounded-full bg-primary"
-            initial={{ width: "0%" }}
-            animate={{ width: "100%", transition: { duration: 0.5, delay: 0.2, ease: "easeOut" } }}
-            exit={{ width: "0%", transition: { duration: 0.15 } }}
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 0.2, scale: 1.2 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="absolute inset-0 rounded-2xl bg-primary blur-2xl -z-10"
           />
+        )}
+
+        {/* Header: kind label + timestamp */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1, transition: { delay: 0.35, duration: 0.3 } }}
+          className="mb-3 flex items-center gap-2 text-xs text-muted-foreground"
+        >
+          <span className="uppercase tracking-wider">{kindLabels[nugget.kind] || nugget.kind}</span>
+          {currentTime && (
+            <>
+              <span className="text-foreground/20">•</span>
+              <span className="tabular-nums">{currentTime}</span>
+            </>
+          )}
+        </motion.div>
+
+        {/* Listen-for badge */}
+        {nugget.listenFor && (
+          <motion.div
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0, transition: { delay: 0.5 } }}
+            className="mb-2 flex items-center gap-1.5"
+          >
+            <span className="inline-block h-2 w-2 rounded-full bg-primary animate-pulse" />
+            <span className="text-xs font-medium uppercase tracking-wider text-primary">Listen for this</span>
+          </motion.div>
+        )}
+
+        {/* Nugget text */}
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1, transition: { delay: animationStyle === "B" ? 0.5 : 0.4, duration: 0.3 } }}
+          className="text-base leading-7 text-foreground/90 md:text-lg"
+        >
+          {nugget.text}
+        </motion.p>
+
+        {/* Source chip */}
+        {source && (
+          <motion.button
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0, transition: { delay: 0.6 } }}
+            onClick={onSourceClick}
+            className="mt-3 flex items-center gap-2 rounded-lg bg-foreground/5 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground tv-focus-visible"
+          >
+            <span className="uppercase tracking-wider font-medium">
+              {source.type === "youtube" ? "▶ Watch" : source.type === "article" ? "📄 Read" : "🎙 Interview"}
+            </span>
+            <span className="truncate max-w-[180px]">{source.publisher}</span>
+          </motion.button>
         )}
       </motion.div>
     </motion.div>
