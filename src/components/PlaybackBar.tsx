@@ -40,57 +40,57 @@ export default function PlaybackBar({
       {/* Gradient scrim behind bar */}
       <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-background/80 to-transparent pointer-events-none" />
 
-      <div className={`relative flex items-center gap-4 transition-opacity duration-1000 ${fadingIn ? "opacity-60" : "opacity-100"}`}>
-        {/* Skip back */}
-        <button
-          onClick={onPrev}
-          disabled={!hasPrev}
-          className="flex h-10 w-10 items-center justify-center rounded-full text-foreground/70 transition-colors hover:text-foreground disabled:opacity-30 disabled:cursor-default tv-focus-visible"
-          aria-label="Previous track"
-        >
-          <SkipBack size={18} />
-        </button>
-
-        {/* Play / Pause */}
-        <button
-          onClick={onToggle}
-          className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/20 text-primary backdrop-blur-sm transition-colors hover:bg-primary/30 tv-focus-visible"
-        >
-          {isPlaying ? <Pause size={20} /> : <Play size={20} className="ml-0.5" />}
-        </button>
-
-        {/* Skip forward */}
-        <button
-          onClick={onNext}
-          disabled={!hasNext}
-          className="flex h-10 w-10 items-center justify-center rounded-full text-foreground/70 transition-colors hover:text-foreground disabled:opacity-30 disabled:cursor-default tv-focus-visible"
-          aria-label="Next track"
-        >
-          <SkipForward size={18} />
-        </button>
-
-        <span className="w-14 text-right text-sm text-foreground/70 tabular-nums">{currentTimeFormatted}</span>
-
-        {/* Progress bar */}
-        <div
-          className="relative flex-1 h-1.5 rounded-full bg-primary/20 cursor-pointer group"
-          onClick={(e) => {
-            const rect = e.currentTarget.getBoundingClientRect();
-            const pct = (e.clientX - rect.left) / rect.width;
-            onSeek(pct);
-          }}
-        >
+      <div className={`relative flex flex-col gap-3 transition-opacity duration-1000 ${fadingIn ? "opacity-60" : "opacity-100"}`}>
+        {/* Progress bar row with timestamps */}
+        <div className="flex items-center gap-4">
+          <span className="w-14 text-right text-sm text-foreground/70 tabular-nums">{currentTimeFormatted}</span>
           <div
-            className="absolute left-0 top-0 h-full rounded-full bg-primary transition-all"
-            style={{ width: `${progress}%` }}
-          />
-          <div
-            className="absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-primary shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
-            style={{ left: `${progress}%`, transform: `translateX(-50%) translateY(-50%)` }}
-          />
+            className="relative flex-1 h-1.5 rounded-full bg-primary/20 cursor-pointer group"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const pct = (e.clientX - rect.left) / rect.width;
+              onSeek(pct);
+            }}
+          >
+            <div
+              className="absolute left-0 top-0 h-full rounded-full bg-primary transition-all"
+              style={{ width: `${progress}%` }}
+            />
+            <div
+              className="absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-primary shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+              style={{ left: `${progress}%`, transform: `translateX(-50%) translateY(-50%)` }}
+            />
+          </div>
+          <span className="w-14 text-sm text-foreground/70 tabular-nums">{durationFormatted}</span>
         </div>
 
-        <span className="w-14 text-sm text-foreground/70 tabular-nums">{durationFormatted}</span>
+        {/* Transport controls row — centered below */}
+        <div className="flex items-center justify-center gap-6">
+          <button
+            onClick={onPrev}
+            disabled={!hasPrev}
+            className="flex h-10 w-10 items-center justify-center rounded-full text-foreground/70 transition-colors hover:text-foreground disabled:opacity-30 disabled:cursor-default tv-focus-visible"
+            aria-label="Previous track"
+          >
+            <SkipBack size={20} />
+          </button>
+
+          <button
+            onClick={onToggle}
+            className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/20 text-primary backdrop-blur-sm transition-colors hover:bg-primary/30 tv-focus-visible"
+          >
+            {isPlaying ? <Pause size={24} /> : <Play size={24} className="ml-0.5" />}
+          </button>
+
+          <button
+            onClick={onNext}
+            disabled={!hasNext}
+            className="flex h-10 w-10 items-center justify-center rounded-full text-foreground/70 transition-colors hover:text-foreground disabled:opacity-30 disabled:cursor-default tv-focus-visible"
+            aria-label="Next track"
+          >
+            <SkipForward size={20} />
+          </button>
+        </div>
       </div>
     </motion.div>
   );
