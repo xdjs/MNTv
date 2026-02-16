@@ -10,7 +10,7 @@ interface AINuggetData {
     type: "youtube" | "article" | "interview";
     title: string;
     publisher: string;
-    url: string;
+    url?: string;
     embedId?: string;
     quoteSnippet?: string;
     locator?: string;
@@ -62,14 +62,18 @@ export function useAINuggets(
         const sourceId = `ai-src-${trackId}-${i}`;
         const nuggetId = `ai-nug-${trackId}-${i}`;
 
-        // Create source
+        // Create source with a reliable Google Search link instead of potentially hallucinated URLs
+        const searchQuery = n.source.type === "youtube"
+          ? `${n.source.title} ${n.source.publisher} site:youtube.com`
+          : `${n.source.title} ${n.source.publisher}`;
+        const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
+
         const source: Source = {
           id: sourceId,
           type: n.source.type,
           title: n.source.title,
           publisher: n.source.publisher,
-          url: n.source.url,
-          embedId: n.source.embedId,
+          url: n.source.url || googleSearchUrl,
           quoteSnippet: n.source.quoteSnippet,
           locator: n.source.locator,
         };
