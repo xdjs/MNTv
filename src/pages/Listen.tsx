@@ -262,15 +262,6 @@ export default function Listen() {
 
           {/* Right side: Nugget display area */}
           <div className="w-[380px] shrink-0 ml-8">
-            {aiLoading && nerdActive && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="apple-glass rounded-2xl p-5 ml-2 text-center"
-              >
-                <p className="text-xs text-muted-foreground animate-pulse">Generating trivia…</p>
-              </motion.div>
-            )}
             <AnimatePresence mode="wait">
               {activeNugget && (
                 <NuggetCard
