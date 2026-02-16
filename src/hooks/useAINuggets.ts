@@ -74,6 +74,7 @@ export function useAINuggets(
           title: n.source.title,
           publisher: n.source.publisher,
           url: n.source.url || googleSearchUrl,
+          embedId: n.source.embedId,
           quoteSnippet: n.source.quoteSnippet,
           locator: n.source.locator,
         };
