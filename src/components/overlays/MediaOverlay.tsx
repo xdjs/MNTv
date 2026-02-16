@@ -7,6 +7,13 @@ interface Props {
   onClose: () => void;
 }
 
+function locatorToSeconds(locator: string): number {
+  const parts = locator.replace(/[^0-9:]/g, "").split(":");
+  if (parts.length === 2) return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+  if (parts.length === 3) return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+  return 0;
+}
+
 export default function MediaOverlay({ source, onClose }: Props) {
   return (
     <motion.div
@@ -41,7 +48,7 @@ export default function MediaOverlay({ source, onClose }: Props) {
         {source.embedId ? (
           <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-black">
             <iframe
-              src={`https://www.youtube.com/embed/${source.embedId}?autoplay=0`}
+              src={`https://www.youtube.com/embed/${source.embedId}?autoplay=0${source.locator ? `&start=${locatorToSeconds(source.locator)}` : ""}`}
               title={source.title}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
@@ -91,7 +98,7 @@ export default function MediaOverlay({ source, onClose }: Props) {
               className="flex items-center gap-2 rounded-xl bg-foreground/5 px-6 py-3 text-sm text-muted-foreground transition-colors hover:text-foreground tv-focus-visible"
             >
               <ExternalLink size={14} />
-              Search for source
+              {source.embedId ? "Watch on YouTube" : "View Source"}
             </a>
           )}
         </div>

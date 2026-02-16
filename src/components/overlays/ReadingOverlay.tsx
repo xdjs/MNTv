@@ -79,7 +79,7 @@ export default function ReadingOverlay({ source, onClose }: Props) {
               className="flex items-center gap-2 rounded-xl bg-foreground/5 px-6 py-3 text-sm text-muted-foreground transition-colors hover:text-foreground tv-focus-visible"
             >
               <ExternalLink size={14} />
-              Search for source
+              {isInterview ? "Read Interview" : "Read Article"}
             </a>
           )}
         </div>
