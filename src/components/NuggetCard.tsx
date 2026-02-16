@@ -1,13 +1,14 @@
 import { motion } from "framer-motion";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import { getSourceById } from "@/mock/tracks";
-import type { Nugget, AnimationStyle } from "@/mock/types";
+import type { Nugget, AnimationStyle, Source } from "@/mock/types";
 
 interface Props {
   nugget: Nugget;
   animationStyle: AnimationStyle;
   onSourceClick: () => void;
   currentTime?: string;
+  sourceOverride?: Source | null;
 }
 
 // Kind labels for the nugget header
@@ -66,8 +67,8 @@ const styleMap = {
   C: { card: cardC, logo: logoC },
 };
 
-export default function NuggetCard({ nugget, animationStyle, onSourceClick, currentTime }: Props) {
-  const source = getSourceById(nugget.sourceId);
+export default function NuggetCard({ nugget, animationStyle, onSourceClick, currentTime, sourceOverride }: Props) {
+  const source = sourceOverride !== undefined ? sourceOverride : getSourceById(nugget.sourceId);
   const { card: cardVariants, logo: logoVariants } = styleMap[animationStyle];
 
   return (
