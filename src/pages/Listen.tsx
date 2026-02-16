@@ -188,19 +188,23 @@ export default function Listen() {
         </div>
 
         {/* Main layout: artist info bottom-left, nugget right-center */}
-        <div className="relative z-10 flex flex-1 items-end px-10 pb-28">
-          {/* Bottom-left: Artist / Track / Album — slides up when bar hides */}
+        <div className="relative z-10 flex flex-1 items-end px-10 pb-44">
+          {/* Bottom-left: Title > Artist > Album hierarchy */}
           <motion.div
             className="flex-1 max-w-2xl"
-            animate={{ y: barVisible ? 0 : 24 }}
+            animate={{ y: barVisible ? 0 : 32 }}
             transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
           >
-            <h1 className="text-6xl font-bold text-foreground leading-none tracking-tight md:text-7xl lg:text-8xl" style={{ fontFamily: "'Georgia', 'Times New Roman', serif" }}>
-              {track.artist}
+            <h1 className="text-6xl font-black text-foreground leading-[0.95] tracking-tight md:text-7xl lg:text-8xl" style={{ fontFamily: "'Nunito Sans', sans-serif" }}>
+              {track.title}
             </h1>
-            <p className="mt-3 text-2xl text-foreground/80 md:text-3xl">{track.title}</p>
+            <p className="mt-3 text-2xl font-bold text-foreground/70 md:text-3xl" style={{ fontFamily: "'Nunito Sans', sans-serif" }}>
+              {track.artist}
+            </p>
             {track.album && (
-              <p className="mt-1 text-lg text-foreground/40">{track.album}</p>
+              <p className="mt-1 text-base text-foreground/35 font-medium" style={{ fontFamily: "'Nunito Sans', sans-serif" }}>
+                {track.album}
+              </p>
             )}
           </motion.div>
 
