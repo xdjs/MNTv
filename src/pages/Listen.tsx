@@ -125,8 +125,8 @@ export default function Listen() {
         <div className="vignette absolute inset-0" />
         <div className="noise-overlay absolute inset-0" />
 
-        {/* Top bar: back button + logo */}
-        <div className="relative z-10 flex items-center gap-4 px-10 pt-8">
+        {/* Top bar: back button left, logo right */}
+        <div className="relative z-10 flex items-center justify-between px-10 pt-8">
           <button
             onClick={() => navigate(-1)}
             className="flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground backdrop-blur-sm transition-colors hover:bg-foreground/20 tv-focus-visible"
