@@ -85,66 +85,69 @@ export const artists: Artist[] = [
 ];
 
 // ==================== ALBUMS ====================
+// Cover art from the Cover Art Archive (coverartarchive.org)
+const CAA = (rgid: string) => `https://coverartarchive.org/release-group/${rgid}/front-500`;
+
 export const albums: Album[] = [
   // Daft Punk
-  { id: "alb-dp-homework", artistId: "daft-punk", title: "Homework", year: 1997, coverArtUrl: "https://picsum.photos/seed/daftpunk/400/400", genre: "French House" },
-  { id: "alb-dp-discovery", artistId: "daft-punk", title: "Discovery", year: 2001, coverArtUrl: "https://picsum.photos/seed/daftpunk-discovery/400/400", genre: "French House" },
-  { id: "alb-dp-ram", artistId: "daft-punk", title: "Random Access Memories", year: 2013, coverArtUrl: "https://picsum.photos/seed/daftpunk-ram/400/400", genre: "Disco" },
+  { id: "alb-dp-homework", artistId: "daft-punk", title: "Homework", year: 1997, coverArtUrl: CAA("00054665-89fa-33d5-a8f0-1728ea8c32c3"), genre: "French House" },
+  { id: "alb-dp-discovery", artistId: "daft-punk", title: "Discovery", year: 2001, coverArtUrl: CAA("48117b90-a16e-34ca-a514-19c702df1158"), genre: "French House" },
+  { id: "alb-dp-ram", artistId: "daft-punk", title: "Random Access Memories", year: 2013, coverArtUrl: CAA("aa997ea0-2936-40bd-884d-3af8a0e064dc"), genre: "Disco" },
   // Radiohead
-  { id: "alb-rh-kida", artistId: "radiohead", title: "Kid A", year: 2000, coverArtUrl: "https://picsum.photos/seed/radiohead/400/400", genre: "Art Rock" },
-  { id: "alb-rh-okc", artistId: "radiohead", title: "OK Computer", year: 1997, coverArtUrl: "https://picsum.photos/seed/radiohead-okc/400/400", genre: "Alternative Rock" },
-  { id: "alb-rh-inrainbows", artistId: "radiohead", title: "In Rainbows", year: 2007, coverArtUrl: "https://picsum.photos/seed/radiohead-ir/400/400", genre: "Art Rock" },
+  { id: "alb-rh-kida", artistId: "radiohead", title: "Kid A", year: 2000, coverArtUrl: CAA("e75c0549-ad55-39e3-8025-c72c5d4a3c5d"), genre: "Art Rock" },
+  { id: "alb-rh-okc", artistId: "radiohead", title: "OK Computer", year: 1997, coverArtUrl: CAA("b1392450-e666-3926-a536-22c65f834433"), genre: "Alternative Rock" },
+  { id: "alb-rh-inrainbows", artistId: "radiohead", title: "In Rainbows", year: 2007, coverArtUrl: CAA("6e335887-60ba-38f0-95af-fae7774336bf"), genre: "Art Rock" },
   // Pink Floyd
-  { id: "alb-pf-dsotm", artistId: "pink-floyd", title: "The Dark Side of the Moon", year: 1973, coverArtUrl: "https://picsum.photos/seed/pinkfloyd/400/400", genre: "Progressive Rock" },
-  { id: "alb-pf-wish", artistId: "pink-floyd", title: "Wish You Were Here", year: 1975, coverArtUrl: "https://picsum.photos/seed/pinkfloyd-wish/400/400", genre: "Progressive Rock" },
-  { id: "alb-pf-wall", artistId: "pink-floyd", title: "The Wall", year: 1979, coverArtUrl: "https://picsum.photos/seed/pinkfloyd-wall/400/400", genre: "Progressive Rock" },
+  { id: "alb-pf-dsotm", artistId: "pink-floyd", title: "The Dark Side of the Moon", year: 1973, coverArtUrl: CAA("f5093c06-23e3-404f-aeaa-40f72885ee3a"), genre: "Progressive Rock" },
+  { id: "alb-pf-wish", artistId: "pink-floyd", title: "Wish You Were Here", year: 1975, coverArtUrl: CAA("1a272023-10d3-38ee-bab3-317b55fcc21d"), genre: "Progressive Rock" },
+  { id: "alb-pf-wall", artistId: "pink-floyd", title: "The Wall", year: 1979, coverArtUrl: CAA("f2026101-945b-3d05-9ef4-aa718fc3feef"), genre: "Progressive Rock" },
   // Björk
-  { id: "alb-bj-post", artistId: "bjork", title: "Post", year: 1995, coverArtUrl: "https://picsum.photos/seed/bjork/400/400", genre: "Art Pop" },
-  { id: "alb-bj-homogenic", artistId: "bjork", title: "Homogenic", year: 1997, coverArtUrl: "https://picsum.photos/seed/bjork-homogenic/400/400", genre: "Electronic" },
-  { id: "alb-bj-vespertine", artistId: "bjork", title: "Vespertine", year: 2001, coverArtUrl: "https://picsum.photos/seed/bjork-vespertine/400/400", genre: "Art Pop" },
+  { id: "alb-bj-post", artistId: "bjork", title: "Post", year: 1995, coverArtUrl: CAA("b2a6e057-087d-3ae5-a6e5-7f5fa39808ff"), genre: "Art Pop" },
+  { id: "alb-bj-homogenic", artistId: "bjork", title: "Homogenic", year: 1997, coverArtUrl: CAA("810272e0-aef1-3d85-b2d3-e512e87fc38c"), genre: "Electronic" },
+  { id: "alb-bj-vespertine", artistId: "bjork", title: "Vespertine", year: 2001, coverArtUrl: CAA("271faeb3-fdd1-3ebb-80aa-97b3116e9341"), genre: "Art Pop" },
   // Talking Heads
-  { id: "alb-th-ril", artistId: "talking-heads", title: "Remain in Light", year: 1980, coverArtUrl: "https://picsum.photos/seed/talkingheads/400/400", genre: "New Wave" },
-  { id: "alb-th-sf", artistId: "talking-heads", title: "Speaking in Tongues", year: 1983, coverArtUrl: "https://picsum.photos/seed/talkingheads-sit/400/400", genre: "New Wave" },
+  { id: "alb-th-ril", artistId: "talking-heads", title: "Remain in Light", year: 1980, coverArtUrl: CAA("f6b1b900-6108-32f0-abbd-2855af9151eb"), genre: "New Wave" },
+  { id: "alb-th-sf", artistId: "talking-heads", title: "Speaking in Tongues", year: 1983, coverArtUrl: CAA("8a7a9db3-f87b-37d5-96a6-67485a8792e6"), genre: "New Wave" },
   // Kraftwerk
-  { id: "alb-kw-autobahn", artistId: "kraftwerk", title: "Autobahn", year: 1974, coverArtUrl: "https://picsum.photos/seed/kraftwerk/400/400", genre: "Electronic" },
-  { id: "alb-kw-tee", artistId: "kraftwerk", title: "Trans-Europe Express", year: 1977, coverArtUrl: "https://picsum.photos/seed/kraftwerk-tee/400/400", genre: "Electronic" },
-  { id: "alb-kw-cw", artistId: "kraftwerk", title: "Computer World", year: 1981, coverArtUrl: "https://picsum.photos/seed/kraftwerk-cw/400/400", genre: "Synth-Pop" },
+  { id: "alb-kw-autobahn", artistId: "kraftwerk", title: "Autobahn", year: 1974, coverArtUrl: CAA("f73729e8-4501-3088-aa20-44945296036e"), genre: "Electronic" },
+  { id: "alb-kw-tee", artistId: "kraftwerk", title: "Trans-Europe Express", year: 1977, coverArtUrl: CAA("62900ac2-120a-3fae-90af-1f9fe4372a50"), genre: "Electronic" },
+  { id: "alb-kw-cw", artistId: "kraftwerk", title: "Computer World", year: 1981, coverArtUrl: CAA("d3e06b04-4e60-3a5b-90e3-f2fc4bfa7788"), genre: "Synth-Pop" },
   // Aphex Twin
-  { id: "alb-at-saw", artistId: "aphex-twin", title: "Selected Ambient Works 85–92", year: 1992, coverArtUrl: "https://picsum.photos/seed/aphextwin/400/400", genre: "Ambient" },
-  { id: "alb-at-rdj", artistId: "aphex-twin", title: "Richard D. James Album", year: 1996, coverArtUrl: "https://picsum.photos/seed/aphextwin-rdj/400/400", genre: "IDM" },
+  { id: "alb-at-saw", artistId: "aphex-twin", title: "Selected Ambient Works 85–92", year: 1992, coverArtUrl: CAA("6842c81d-ea77-3dfd-abf7-4323add3f4d4"), genre: "Ambient" },
+  { id: "alb-at-rdj", artistId: "aphex-twin", title: "Richard D. James Album", year: 1996, coverArtUrl: CAA("84d79dbe-7ac1-3ebc-9b36-238ddfb8229c"), genre: "IDM" },
   // David Bowie
-  { id: "alb-db-heroes", artistId: "david-bowie", title: '"Heroes"', year: 1977, coverArtUrl: "https://picsum.photos/seed/davidbowie/400/400", genre: "Art Rock" },
-  { id: "alb-db-ziggy", artistId: "david-bowie", title: "The Rise and Fall of Ziggy Stardust", year: 1972, coverArtUrl: "https://picsum.photos/seed/davidbowie-ziggy/400/400", genre: "Glam Rock" },
-  { id: "alb-db-low", artistId: "david-bowie", title: "Low", year: 1977, coverArtUrl: "https://picsum.photos/seed/davidbowie-low/400/400", genre: "Art Rock" },
+  { id: "alb-db-heroes", artistId: "david-bowie", title: '"Heroes"', year: 1977, coverArtUrl: CAA("1f5ef8d3-10ca-30eb-b41e-85b16987d412"), genre: "Art Rock" },
+  { id: "alb-db-ziggy", artistId: "david-bowie", title: "The Rise and Fall of Ziggy Stardust", year: 1972, coverArtUrl: CAA("6c9ae3dd-32ad-472c-96be-69d0a3536261"), genre: "Glam Rock" },
+  { id: "alb-db-low", artistId: "david-bowie", title: "Low", year: 1977, coverArtUrl: CAA("0c9aab88-e5a1-3bf9-88c2-55527d8fb1f3"), genre: "Art Rock" },
   // Portishead
-  { id: "alb-ph-dummy", artistId: "portishead", title: "Dummy", year: 1994, coverArtUrl: "https://picsum.photos/seed/portishead/400/400", genre: "Trip-Hop" },
-  { id: "alb-ph-third", artistId: "portishead", title: "Third", year: 2008, coverArtUrl: "https://picsum.photos/seed/portishead-third/400/400", genre: "Experimental" },
+  { id: "alb-ph-dummy", artistId: "portishead", title: "Dummy", year: 1994, coverArtUrl: CAA("48140466-cff6-3222-bd55-63c27e43190d"), genre: "Trip-Hop" },
+  { id: "alb-ph-third", artistId: "portishead", title: "Third", year: 2008, coverArtUrl: CAA("2a118b78-8a40-3e13-964f-b1d88a7da5ba"), genre: "Experimental" },
   // Steely Dan
-  { id: "alb-sd-aja", artistId: "steely-dan", title: "Aja", year: 1977, coverArtUrl: "https://picsum.photos/seed/steelydan/400/400", genre: "Jazz Rock" },
-  { id: "alb-sd-gaucho", artistId: "steely-dan", title: "Gaucho", year: 1980, coverArtUrl: "https://picsum.photos/seed/steelydan-gaucho/400/400", genre: "Jazz Rock" },
+  { id: "alb-sd-aja", artistId: "steely-dan", title: "Aja", year: 1977, coverArtUrl: CAA("8588c5a5-b491-37a4-8d51-2227346a072e"), genre: "Jazz Rock" },
+  { id: "alb-sd-gaucho", artistId: "steely-dan", title: "Gaucho", year: 1980, coverArtUrl: CAA("953426ac-0f78-3845-a968-87140cb6db17"), genre: "Jazz Rock" },
 ];
 
 // ==================== TRACKS ====================
 export const tracks: Track[] = [
-  { id: "daft-punk-around-the-world", title: "Around the World", artist: "Daft Punk", artistId: "daft-punk", albumId: "alb-dp-homework", album: "Homework", durationSec: 210, coverArtUrl: "https://picsum.photos/seed/daftpunk/400/400", trackNumber: 1 },
-  { id: "daft-punk-one-more-time", title: "One More Time", artist: "Daft Punk", artistId: "daft-punk", albumId: "alb-dp-discovery", album: "Discovery", durationSec: 320, coverArtUrl: "https://picsum.photos/seed/daftpunk-discovery/400/400", trackNumber: 1 },
-  { id: "daft-punk-get-lucky", title: "Get Lucky", artist: "Daft Punk", artistId: "daft-punk", albumId: "alb-dp-ram", album: "Random Access Memories", durationSec: 369, coverArtUrl: "https://picsum.photos/seed/daftpunk-ram/400/400", trackNumber: 1 },
-  { id: "radiohead-everything", title: "Everything in Its Right Place", artist: "Radiohead", artistId: "radiohead", albumId: "alb-rh-kida", album: "Kid A", durationSec: 252, coverArtUrl: "https://picsum.photos/seed/radiohead/400/400", trackNumber: 1 },
-  { id: "radiohead-paranoid-android", title: "Paranoid Android", artist: "Radiohead", artistId: "radiohead", albumId: "alb-rh-okc", album: "OK Computer", durationSec: 386, coverArtUrl: "https://picsum.photos/seed/radiohead-okc/400/400", trackNumber: 1 },
-  { id: "radiohead-reckoner", title: "Reckoner", artist: "Radiohead", artistId: "radiohead", albumId: "alb-rh-inrainbows", album: "In Rainbows", durationSec: 290, coverArtUrl: "https://picsum.photos/seed/radiohead-ir/400/400", trackNumber: 1 },
-  { id: "pink-floyd-money", title: "Money", artist: "Pink Floyd", artistId: "pink-floyd", albumId: "alb-pf-dsotm", album: "The Dark Side of the Moon", durationSec: 383, coverArtUrl: "https://picsum.photos/seed/pinkfloyd/400/400", trackNumber: 1 },
-  { id: "pink-floyd-shine-on", title: "Shine On You Crazy Diamond", artist: "Pink Floyd", artistId: "pink-floyd", albumId: "alb-pf-wish", album: "Wish You Were Here", durationSec: 516, coverArtUrl: "https://picsum.photos/seed/pinkfloyd-wish/400/400", trackNumber: 1 },
-  { id: "pink-floyd-comfortably-numb", title: "Comfortably Numb", artist: "Pink Floyd", artistId: "pink-floyd", albumId: "alb-pf-wall", album: "The Wall", durationSec: 382, coverArtUrl: "https://picsum.photos/seed/pinkfloyd-wall/400/400", trackNumber: 1 },
-  { id: "bjork-army-of-me", title: "Army of Me", artist: "Björk", artistId: "bjork", albumId: "alb-bj-post", album: "Post", durationSec: 224, coverArtUrl: "https://picsum.photos/seed/bjork/400/400", trackNumber: 1 },
-  { id: "bjork-joga", title: "Jóga", artist: "Björk", artistId: "bjork", albumId: "alb-bj-homogenic", album: "Homogenic", durationSec: 305, coverArtUrl: "https://picsum.photos/seed/bjork-homogenic/400/400", trackNumber: 1 },
-  { id: "talking-heads-once", title: "Once in a Lifetime", artist: "Talking Heads", artistId: "talking-heads", albumId: "alb-th-ril", album: "Remain in Light", durationSec: 264, coverArtUrl: "https://picsum.photos/seed/talkingheads/400/400", trackNumber: 1 },
-  { id: "kraftwerk-autobahn", title: "Autobahn", artist: "Kraftwerk", artistId: "kraftwerk", albumId: "alb-kw-autobahn", album: "Autobahn", durationSec: 270, coverArtUrl: "https://picsum.photos/seed/kraftwerk/400/400", trackNumber: 1 },
-  { id: "kraftwerk-tee", title: "Trans-Europe Express", artist: "Kraftwerk", artistId: "kraftwerk", albumId: "alb-kw-tee", album: "Trans-Europe Express", durationSec: 407, coverArtUrl: "https://picsum.photos/seed/kraftwerk-tee/400/400", trackNumber: 1 },
-  { id: "aphex-twin-xtal", title: "Xtal", artist: "Aphex Twin", artistId: "aphex-twin", albumId: "alb-at-saw", album: "Selected Ambient Works 85–92", durationSec: 290, coverArtUrl: "https://picsum.photos/seed/aphextwin/400/400", trackNumber: 1 },
-  { id: "david-bowie-heroes", title: '"Heroes"', artist: "David Bowie", artistId: "david-bowie", albumId: "alb-db-heroes", album: '"Heroes"', durationSec: 370, coverArtUrl: "https://picsum.photos/seed/davidbowie/400/400", trackNumber: 1 },
-  { id: "david-bowie-ziggy", title: "Ziggy Stardust", artist: "David Bowie", artistId: "david-bowie", albumId: "alb-db-ziggy", album: "The Rise and Fall of Ziggy Stardust", durationSec: 194, coverArtUrl: "https://picsum.photos/seed/davidbowie-ziggy/400/400", trackNumber: 1 },
-  { id: "portishead-wandering", title: "Wandering Star", artist: "Portishead", artistId: "portishead", albumId: "alb-ph-dummy", album: "Dummy", durationSec: 292, coverArtUrl: "https://picsum.photos/seed/portishead/400/400", trackNumber: 1 },
-  { id: "steely-dan-aja", title: "Aja", artist: "Steely Dan", artistId: "steely-dan", albumId: "alb-sd-aja", album: "Aja", durationSec: 476, coverArtUrl: "https://picsum.photos/seed/steelydan/400/400", trackNumber: 1 },
+  { id: "daft-punk-around-the-world", title: "Around the World", artist: "Daft Punk", artistId: "daft-punk", albumId: "alb-dp-homework", album: "Homework", durationSec: 210, coverArtUrl: CAA("00054665-89fa-33d5-a8f0-1728ea8c32c3"), trackNumber: 1 },
+  { id: "daft-punk-one-more-time", title: "One More Time", artist: "Daft Punk", artistId: "daft-punk", albumId: "alb-dp-discovery", album: "Discovery", durationSec: 320, coverArtUrl: CAA("48117b90-a16e-34ca-a514-19c702df1158"), trackNumber: 1 },
+  { id: "daft-punk-get-lucky", title: "Get Lucky", artist: "Daft Punk", artistId: "daft-punk", albumId: "alb-dp-ram", album: "Random Access Memories", durationSec: 369, coverArtUrl: CAA("aa997ea0-2936-40bd-884d-3af8a0e064dc"), trackNumber: 1 },
+  { id: "radiohead-everything", title: "Everything in Its Right Place", artist: "Radiohead", artistId: "radiohead", albumId: "alb-rh-kida", album: "Kid A", durationSec: 252, coverArtUrl: CAA("e75c0549-ad55-39e3-8025-c72c5d4a3c5d"), trackNumber: 1 },
+  { id: "radiohead-paranoid-android", title: "Paranoid Android", artist: "Radiohead", artistId: "radiohead", albumId: "alb-rh-okc", album: "OK Computer", durationSec: 386, coverArtUrl: CAA("b1392450-e666-3926-a536-22c65f834433"), trackNumber: 1 },
+  { id: "radiohead-reckoner", title: "Reckoner", artist: "Radiohead", artistId: "radiohead", albumId: "alb-rh-inrainbows", album: "In Rainbows", durationSec: 290, coverArtUrl: CAA("6e335887-60ba-38f0-95af-fae7774336bf"), trackNumber: 1 },
+  { id: "pink-floyd-money", title: "Money", artist: "Pink Floyd", artistId: "pink-floyd", albumId: "alb-pf-dsotm", album: "The Dark Side of the Moon", durationSec: 383, coverArtUrl: CAA("f5093c06-23e3-404f-aeaa-40f72885ee3a"), trackNumber: 1 },
+  { id: "pink-floyd-shine-on", title: "Shine On You Crazy Diamond", artist: "Pink Floyd", artistId: "pink-floyd", albumId: "alb-pf-wish", album: "Wish You Were Here", durationSec: 516, coverArtUrl: CAA("1a272023-10d3-38ee-bab3-317b55fcc21d"), trackNumber: 1 },
+  { id: "pink-floyd-comfortably-numb", title: "Comfortably Numb", artist: "Pink Floyd", artistId: "pink-floyd", albumId: "alb-pf-wall", album: "The Wall", durationSec: 382, coverArtUrl: CAA("f2026101-945b-3d05-9ef4-aa718fc3feef"), trackNumber: 1 },
+  { id: "bjork-army-of-me", title: "Army of Me", artist: "Björk", artistId: "bjork", albumId: "alb-bj-post", album: "Post", durationSec: 224, coverArtUrl: CAA("b2a6e057-087d-3ae5-a6e5-7f5fa39808ff"), trackNumber: 1 },
+  { id: "bjork-joga", title: "Jóga", artist: "Björk", artistId: "bjork", albumId: "alb-bj-homogenic", album: "Homogenic", durationSec: 305, coverArtUrl: CAA("810272e0-aef1-3d85-b2d3-e512e87fc38c"), trackNumber: 1 },
+  { id: "talking-heads-once", title: "Once in a Lifetime", artist: "Talking Heads", artistId: "talking-heads", albumId: "alb-th-ril", album: "Remain in Light", durationSec: 264, coverArtUrl: CAA("f6b1b900-6108-32f0-abbd-2855af9151eb"), trackNumber: 1 },
+  { id: "kraftwerk-autobahn", title: "Autobahn", artist: "Kraftwerk", artistId: "kraftwerk", albumId: "alb-kw-autobahn", album: "Autobahn", durationSec: 270, coverArtUrl: CAA("f73729e8-4501-3088-aa20-44945296036e"), trackNumber: 1 },
+  { id: "kraftwerk-tee", title: "Trans-Europe Express", artist: "Kraftwerk", artistId: "kraftwerk", albumId: "alb-kw-tee", album: "Trans-Europe Express", durationSec: 407, coverArtUrl: CAA("62900ac2-120a-3fae-90af-1f9fe4372a50"), trackNumber: 1 },
+  { id: "aphex-twin-xtal", title: "Xtal", artist: "Aphex Twin", artistId: "aphex-twin", albumId: "alb-at-saw", album: "Selected Ambient Works 85–92", durationSec: 290, coverArtUrl: CAA("6842c81d-ea77-3dfd-abf7-4323add3f4d4"), trackNumber: 1 },
+  { id: "david-bowie-heroes", title: '"Heroes"', artist: "David Bowie", artistId: "david-bowie", albumId: "alb-db-heroes", album: '"Heroes"', durationSec: 370, coverArtUrl: CAA("1f5ef8d3-10ca-30eb-b41e-85b16987d412"), trackNumber: 1 },
+  { id: "david-bowie-ziggy", title: "Ziggy Stardust", artist: "David Bowie", artistId: "david-bowie", albumId: "alb-db-ziggy", album: "The Rise and Fall of Ziggy Stardust", durationSec: 194, coverArtUrl: CAA("6c9ae3dd-32ad-472c-96be-69d0a3536261"), trackNumber: 1 },
+  { id: "portishead-wandering", title: "Wandering Star", artist: "Portishead", artistId: "portishead", albumId: "alb-ph-dummy", album: "Dummy", durationSec: 292, coverArtUrl: CAA("48140466-cff6-3222-bd55-63c27e43190d"), trackNumber: 1 },
+  { id: "steely-dan-aja", title: "Aja", artist: "Steely Dan", artistId: "steely-dan", albumId: "alb-sd-aja", album: "Aja", durationSec: 476, coverArtUrl: CAA("8588c5a5-b491-37a4-8d51-2227346a072e"), trackNumber: 1 },
 ];
 
 // ==================== SOURCES ====================
