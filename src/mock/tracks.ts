@@ -340,6 +340,15 @@ export function getTracksForArtist(artistId: string): Track[] {
   return tracks.filter((t) => t.artistId === artistId);
 }
 
+export function getYouTubeSourceForTrack(trackId: string): Source | undefined {
+  const trackNuggets = getNuggetsForTrack(trackId);
+  for (const n of trackNuggets) {
+    const src = getSourceById(n.sourceId);
+    if (src?.type === "youtube" && src.embedId) return src;
+  }
+  return undefined;
+}
+
 export function searchCatalog(query: string): { artists: Artist[]; albums: Album[]; tracks: Track[] } {
   const q = query.toLowerCase().trim();
   if (!q) return { artists: [], albums: [], tracks: [] };

@@ -8,7 +8,7 @@ import MediaOverlay from "@/components/overlays/MediaOverlay";
 import ReadingOverlay from "@/components/overlays/ReadingOverlay";
 import DevPanel from "@/components/DevPanel";
 import PlaybackBar from "@/components/PlaybackBar";
-import { getTrackById, getNuggetsForTrack, getSourceById, getAdjacentTrackIds } from "@/mock/tracks";
+import { getTrackById, getNuggetsForTrack, getSourceById, getAdjacentTrackIds, getYouTubeSourceForTrack } from "@/mock/tracks";
 import { usePlayback } from "@/hooks/usePlayback";
 import PageTransition from "@/components/PageTransition";
 import type { Nugget, Source, AnimationStyle } from "@/mock/types";
@@ -33,6 +33,8 @@ export default function Listen() {
   const [readingOverlay, setReadingOverlay] = useState<Source | null>(null);
   const [devOpen, setDevOpen] = useState(false);
   const [nerdActive, setNerdActive] = useState(true);
+  const [backdropMotion, setBackdropMotion] = useState(false);
+  const ytSource = useMemo(() => getYouTubeSourceForTrack(trackId || ""), [trackId]);
 
   // --- Auto-hide bar logic ---
   const [barVisible, setBarVisible] = useState(true);
@@ -164,14 +166,26 @@ export default function Listen() {
   return (
     <PageTransition>
       <div className="relative flex h-screen flex-col overflow-hidden">
-        {/* Background: full-bleed cover art */}
+        {/* Background: YouTube motion or cover art */}
         <div className="absolute inset-0">
-          <img
-            src={track.coverArtUrl}
-            alt=""
-            className="h-full w-full object-cover blur-[12px] scale-110 brightness-[0.45]"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-          />
+          {backdropMotion && ytSource?.embedId ? (
+            <div className="absolute inset-0 overflow-hidden">
+              <iframe
+                src={`https://www.youtube.com/embed/${ytSource.embedId}?autoplay=1&mute=1&loop=1&playlist=${ytSource.embedId}&controls=0&showinfo=0&modestbranding=1&rel=0&disablekb=1`}
+                title="Backdrop motion"
+                allow="autoplay"
+                className="absolute inset-0 w-full h-full pointer-events-none scale-[1.3] brightness-[0.35]"
+                style={{ border: "none" }}
+              />
+            </div>
+          ) : (
+            <img
+              src={track.coverArtUrl}
+              alt=""
+              className="h-full w-full object-cover blur-[12px] scale-110 brightness-[0.45]"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+          )}
         </div>
         <div className="vignette absolute inset-0" />
         <div className="noise-overlay absolute inset-0" />
@@ -268,6 +282,8 @@ export default function Listen() {
               setAnimStyle={setAnimStyle}
               onJumpToNugget={jumpToNugget}
               nuggetCount={trackNuggets.length}
+              backdropMotion={backdropMotion}
+              setBackdropMotion={setBackdropMotion}
             />
           )}
         </AnimatePresence>
