@@ -208,7 +208,12 @@ export default function Listen() {
             <img
               src={track.coverArtUrl}
               alt=""
-              className="h-full w-full object-cover blur-[12px] scale-110 brightness-[0.45]"
+              className="h-full w-full object-cover scale-110 transition-all duration-700 ease-out"
+              style={{
+                filter: barVisible
+                  ? "blur(12px) brightness(0.45)"
+                  : "blur(2px) brightness(0.35)",
+              }}
               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
             />
           )}
