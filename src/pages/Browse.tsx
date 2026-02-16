@@ -5,11 +5,13 @@ import MusicNerdLogo from "@/components/MusicNerdLogo";
 import TileRow from "@/components/TileRow";
 import SearchOverlay from "@/components/SearchOverlay";
 import PageTransition from "@/components/PageTransition";
-import { artists, albums, tracks } from "@/mock/tracks";
+import { artists as rawArtists, albums, tracks } from "@/mock/tracks";
+import { useArtistImages } from "@/hooks/useArtistImages";
 
 export default function Browse() {
   const [searchOpen, setSearchOpen] = useState(false);
   const navigate = useNavigate();
+  const artists = useArtistImages(rawArtists);
 
   // Build tile data
   const artistTiles = artists.map((a) => ({
