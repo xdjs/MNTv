@@ -55,7 +55,7 @@ export default function Connect() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.3 }}
-            onClick={() => navigate("/now-playing")}
+            onClick={() => navigate("/browse")}
             className="rounded-xl bg-primary px-10 py-4 text-lg font-semibold text-primary-foreground neon-button tv-focus-visible transition-transform hover:scale-105"
           >
             Continue
