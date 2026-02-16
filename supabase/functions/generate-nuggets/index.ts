@@ -25,11 +25,13 @@ const nuggetTool = {
               source: {
                 type: "object",
                 properties: {
-                  type: { type: "string", enum: ["article", "interview"] },
-                  title: { type: "string", description: "Real title of the article or interview" },
-                  publisher: { type: "string", description: "Real publisher name (e.g. Pitchfork, Rolling Stone, NME, The Guardian)" },
+                  type: { type: "string", enum: ["youtube", "article", "interview"] },
+                  title: { type: "string", description: "Real title of the video, article, or interview" },
+                  publisher: { type: "string", description: "Real publisher/channel name" },
                   url: { type: "string", description: "A real, working URL to the source" },
+                  embedId: { type: "string", description: "For YouTube only: the real video ID (the 11-char string after v=). Must be a real existing video." },
                   quoteSnippet: { type: "string", description: "A real or closely paraphrased quote from the source" },
+                  locator: { type: "string", description: "Timestamp for videos (e.g. 3:12) or location for articles (e.g. Paragraph 6)" },
                 },
                 required: ["type", "title", "publisher", "url", "quoteSnippet"],
                 additionalProperties: false,
@@ -71,15 +73,17 @@ serve(async (req) => {
 Rules:
 - Each nugget must be factually accurate and verifiable
 - Set exactly ONE nugget's listenFor to true (a "listen for this" audio moment)
-- Sources must be REAL articles or interviews from major publications (Rolling Stone, Pitchfork, NME, The Guardian, Billboard, Stereogum, etc.)
-- URLs must be real, working links to actual published articles
-- DO NOT use YouTube as a source type — only use "article" or "interview"
+- Mix source types: use YouTube interviews/documentaries AND articles/interviews from major publications
+- For YouTube sources: use REAL video IDs from well-known channels (Rick Beato, Middle 8, Polyphonic, Vox, NPR Music, KEXP, official artist channels, classic interview footage). The embedId must be a real 11-character YouTube video ID. The URL must be https://www.youtube.com/watch?v={embedId}. Include a locator timestamp.
+- For article/interview sources: use real URLs from Rolling Stone, Pitchfork, NME, The Guardian, Billboard, etc.
+- If you are not confident a YouTube video ID is real, use an article source instead
 - Quote snippets should be real or closely paraphrased from the actual source
-- Cover diverse kinds across the 3 nuggets`;
+- Cover diverse kinds across the 3 nuggets
+- Aim for at least 1 YouTube source and at least 1 article source across the 3 nuggets`;
 
     const userPrompt = `Song: "${title}" by ${artist}${album ? ` from the album "${album}"` : ""}
 
-Generate 3 pieces of real, verifiable trivia with real article/interview sources from major music publications.`;
+Generate 3 pieces of real, verifiable trivia. Include a mix of YouTube interview/documentary sources and written article sources.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
