@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
+import MusicNerdPill from "@/components/MusicNerdPill";
 import NuggetCard from "@/components/NuggetCard";
 import MediaOverlay from "@/components/overlays/MediaOverlay";
 import ReadingOverlay from "@/components/overlays/ReadingOverlay";
@@ -32,6 +33,7 @@ export default function Listen() {
   const [mediaOverlay, setMediaOverlay] = useState<Source | null>(null);
   const [readingOverlay, setReadingOverlay] = useState<Source | null>(null);
   const [devOpen, setDevOpen] = useState(false);
+  const [nerdActive, setNerdActive] = useState(true);
 
   // --- Auto-hide bar logic ---
   const [barVisible, setBarVisible] = useState(true);
@@ -85,7 +87,7 @@ export default function Listen() {
 
   // Nugget trigger logic
   useEffect(() => {
-    if (!isPlaying) return;
+    if (!isPlaying || !nerdActive) return;
     for (const n of trackNuggets) {
       if (shownNuggetIds.has(n.id)) continue;
       if (currentTime >= n.timestampSec) {
@@ -175,16 +177,19 @@ export default function Listen() {
         <div className="vignette absolute inset-0" />
         <div className="noise-overlay absolute inset-0" />
 
-        {/* Top bar: back button left, logo right */}
+        {/* Top bar: back button left, pill + logo right */}
         <div className="relative z-10 flex items-center justify-between px-10 pt-8">
           <button
-            onClick={() => navigate("/now-playing")}
+            onClick={() => navigate("/browse")}
             className="flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground backdrop-blur-sm transition-colors hover:bg-foreground/20 tv-focus-visible"
             aria-label="Go back"
           >
             <ArrowLeft size={20} />
           </button>
-          <MusicNerdLogo size={36} glow className="opacity-80" />
+          <div className="flex items-center gap-3">
+            <MusicNerdPill active={nerdActive} onToggle={() => setNerdActive((v) => !v)} />
+            <MusicNerdLogo size={36} glow className="opacity-80" />
+          </div>
         </div>
 
         {/* Main layout: artist info bottom-left, nugget right-center */}

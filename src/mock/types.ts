@@ -1,11 +1,32 @@
+export type Artist = {
+  id: string;
+  name: string;
+  imageUrl: string;
+  bio: string;
+  genres: string[];
+  relatedArtistIds: string[];
+};
+
+export type Album = {
+  id: string;
+  artistId: string;
+  title: string;
+  year: number;
+  coverArtUrl: string;
+  genre: string;
+};
+
 export type Track = {
   id: string;
   title: string;
   artist: string;
+  artistId: string;
+  albumId: string;
   album?: string;
   durationSec: number;
   coverArtUrl: string;
   backdropUrl?: string;
+  trackNumber: number;
 };
 
 export type Source = {
