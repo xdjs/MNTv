@@ -1,1 +1,4 @@
 project_id = "htfhnwhtauvflothadlw"
+
+[functions.generate-nuggets]
+verify_jwt = false
