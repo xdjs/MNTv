@@ -84,7 +84,7 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
       {/* Card */}
       <motion.div
         variants={cardVariants}
-        className="apple-glass relative rounded-2xl p-5 ml-2"
+        className="apple-glass relative rounded-2xl p-6 ml-2"
       >
         {/* Style A bloom */}
         {animationStyle === "A" && (
@@ -154,7 +154,7 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1, transition: { delay: animationStyle === "B" ? 0.5 : 0.4, duration: 0.3 } }}
-          className="text-sm leading-relaxed text-foreground/90 md:text-base"
+          className="text-base leading-7 text-foreground/90 md:text-lg"
         >
           {nugget.text}
         </motion.p>
