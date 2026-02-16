@@ -148,13 +148,13 @@ Song: "${title}" by ${artist}${album ? ` from the album "${album}"` : ""}
 Available YouTube videos:
 ${videoListContext}
 
-${transcriptContext ? `Real transcript content from these videos:\n\n${transcriptContext}` : "No transcripts available — use your knowledge and Google Search to find real sources."}
+${transcriptContext ? `Real transcript content from these videos:\n\n${transcriptContext}` : "No transcripts available — use your knowledge to find real sources."}
 
 Rules:
 - Generate exactly 3 nuggets with diverse "kind" values
 - Set exactly ONE nugget's listenFor to true (an audio moment to listen for)
 - For nuggets sourced from the YouTube transcripts above: set source.type to "youtube", reference the real video title and channel, include a real quote from the transcript, and set source.videoIndex to the VIDEO index number
-- For nuggets sourced from articles: set source.type to "article" or "interview", cite a real publication name and article title. Use Google Search to find and verify real articles.
+- For nuggets sourced from articles: set source.type to "article" or "interview", cite a real publication name and article title.
 - Include a locator (timestamp like "3:12" for videos, or "Paragraph 6" for articles) when possible
 - Each nugget must be factually accurate and based on the real content provided
 - Aim for at least 1 YouTube source and at least 1 article source across the 3 nuggets
@@ -181,42 +181,55 @@ Return ONLY a JSON object with this exact structure:
   const body: any = {
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     tools: [{ google_search: {} }],
-    generationConfig: {
-      temperature: 0.7,
-    },
+    generationConfig: { temperature: 0.7 },
   };
 
   const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-  const res = await fetch(geminiUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  // Retry up to 3 times on 429 rate limit
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(geminiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
 
-  if (!res.ok) {
+    if (res.ok) {
+      const data = await res.json();
+      const candidate = data.candidates?.[0];
+      const text = candidate?.content?.parts?.[0]?.text || "";
+      const groundingMeta = candidate?.groundingMetadata;
+      const groundingChunks = groundingMeta?.groundingChunks || [];
+
+      let parsed: { nuggets: GeminiNugget[] };
+      try {
+        const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+        parsed = JSON.parse(cleaned);
+      } catch {
+        console.error("Failed to parse Gemini response:", text);
+        throw new Error("Failed to parse Gemini response");
+      }
+      return { nuggets: parsed.nuggets || [], groundingChunks };
+    }
+
+    if (res.status === 429 && attempt < 2) {
+      // Parse retry delay from error response
+      const errData = await res.json().catch(() => null);
+      const retryInfo = errData?.error?.details?.find((d: any) => d["@type"]?.includes("RetryInfo"));
+      const delaySec = parseInt(retryInfo?.retryDelay || "30", 10);
+      const waitMs = Math.min((delaySec + 5) * 1000, 55000); // cap at 55s to stay in function timeout
+      console.log(`Rate limited, waiting ${waitMs / 1000}s before retry ${attempt + 1}...`);
+      await new Promise((r) => setTimeout(r, waitMs));
+      continue;
+    }
+
     const errText = await res.text();
     console.error("Gemini API error:", res.status, errText);
-    throw new Error(`Gemini API error: ${res.status}`);
+    lastError = new Error(`Gemini API error: ${res.status}`);
   }
 
-  const data = await res.json();
-  const candidate = data.candidates?.[0];
-  const text = candidate?.content?.parts?.[0]?.text || "";
-  const groundingMeta = candidate?.groundingMetadata;
-  const groundingChunks = groundingMeta?.groundingChunks || [];
-
-  // Parse the JSON response
-  let parsed: { nuggets: GeminiNugget[] };
-  try {
-    const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    parsed = JSON.parse(cleaned);
-  } catch {
-    console.error("Failed to parse Gemini response:", text);
-    throw new Error("Failed to parse Gemini response");
-  }
-
-  return { nuggets: parsed.nuggets || [], groundingChunks };
+  throw lastError || new Error("Gemini API failed after retries");
 }
 
 // ── Main handler ─────────────────────────────────────────────────────
@@ -240,9 +253,14 @@ serve(async (req) => {
       throw new Error("GOOGLE_AI_API_KEY is not configured");
     }
 
-    // Step 1: Search YouTube for relevant videos
-    const searchQuery = `${artist} ${title} interview OR breakdown OR behind the scenes OR documentary`;
-    const videos = await searchYouTube(searchQuery, GOOGLE_AI_API_KEY);
+    // Step 1: Search YouTube for relevant videos (optional, needs YouTube Data API enabled)
+    let videos: YTVideo[] = [];
+    try {
+      const searchQuery = `${artist} ${title} interview OR breakdown OR behind the scenes OR documentary`;
+      videos = await searchYouTube(searchQuery, GOOGLE_AI_API_KEY);
+    } catch (e) {
+      console.warn("YouTube search skipped:", e);
+    }
     console.log(`Found ${videos.length} YouTube videos for "${artist} - ${title}"`);
 
     // Step 2: Fetch transcripts in parallel (top 3 videos)
@@ -263,7 +281,7 @@ serve(async (req) => {
     }
     console.log(`Fetched ${transcripts.size} transcripts`);
 
-    // Step 3: Generate nuggets with Gemini + Google Search grounding
+    // Step 3: Generate nuggets with Gemini
     const { nuggets: rawNuggets, groundingChunks } = await generateWithGemini(
       artist,
       title,
