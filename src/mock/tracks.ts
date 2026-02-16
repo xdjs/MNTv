@@ -137,9 +137,9 @@ export const sources: Source[] = [
 
 export const nuggets: Nugget[] = [
   // Daft Punk — Around the World (210s)
-  { id: "n-dp-1", trackId: "daft-punk-around-the-world", timestampSec: 42, durationMs: 6000, text: "The entire track uses only one vocal phrase — repeated 144 times. The repetition is the point.", kind: "pattern", sourceId: "src-dp-art" },
-  { id: "n-dp-2", trackId: "daft-punk-around-the-world", timestampSec: 105, durationMs: 6000, text: "Thomas Bangalter recorded this in his bedroom with a Roland TR-909 — the same drum machine behind most Chicago house.", kind: "process", sourceId: "src-dp-yt" },
-  { id: "n-dp-3", trackId: "daft-punk-around-the-world", timestampSec: 163, durationMs: 5500, text: "🎧 Listen for the bass pattern shifting subtly here — Bangalter wanted 'primal house, nothing more.'", kind: "constraint", listenFor: true, relatedMomentSec: 168, sourceId: "src-dp-int" },
+  { id: "n-dp-1", trackId: "daft-punk-around-the-world", timestampSec: 8, durationMs: 7000, text: "The entire track uses only one vocal phrase — repeated 144 times. The repetition is the point.", kind: "pattern", sourceId: "src-dp-art" },
+  { id: "n-dp-2", trackId: "daft-punk-around-the-world", timestampSec: 45, durationMs: 7000, text: "Thomas Bangalter recorded this in his bedroom with a Roland TR-909 — the same drum machine behind most Chicago house.", kind: "process", sourceId: "src-dp-yt" },
+  { id: "n-dp-3", trackId: "daft-punk-around-the-world", timestampSec: 90, durationMs: 6000, text: "🎧 Listen for the bass pattern shifting subtly here — Bangalter wanted 'primal house, nothing more.'", kind: "constraint", listenFor: true, relatedMomentSec: 95, sourceId: "src-dp-int" },
 
   // Radiohead — Everything in Its Right Place (252s)
   { id: "n-rh-1", trackId: "radiohead-everything", timestampSec: 50, durationMs: 6000, text: "Thom Yorke's vocals are fed through an Ensoniq DP/4 — burying the words was intentional.", kind: "process", sourceId: "src-rh-yt" },
