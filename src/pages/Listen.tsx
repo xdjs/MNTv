@@ -10,6 +10,7 @@ import DevPanel from "@/components/DevPanel";
 import PlaybackBar from "@/components/PlaybackBar";
 import { getTrackById, getNuggetsForTrack, getSourceById, getAdjacentTrackIds, getYouTubeSourceForTrack } from "@/mock/tracks";
 import { usePlayback } from "@/hooks/usePlayback";
+import { useAINuggets } from "@/hooks/useAINuggets";
 import PageTransition from "@/components/PageTransition";
 import type { Nugget, Source, AnimationStyle } from "@/mock/types";
 
@@ -19,11 +20,24 @@ export default function Listen() {
   const { trackId } = useParams<{ trackId: string }>();
   const navigate = useNavigate();
   const track = getTrackById(trackId || "");
-  const trackNuggets = useMemo(() => getNuggetsForTrack(trackId || ""), [trackId]);
   const { prev, next } = useMemo(() => getAdjacentTrackIds(trackId || ""), [trackId]);
 
   const { isPlaying, currentTime, fadingIn, play, pause, seek, toggle, pauseForOverlay, resumeWithFade } =
     usePlayback(track?.durationSec || 300);
+
+  // AI-generated nuggets with real sources
+  const { nuggets: aiNuggets, sources: aiSources, loading: aiLoading } = useAINuggets(
+    trackId || "",
+    track?.artist || "",
+    track?.title || "",
+    track?.album,
+    track?.durationSec || 300
+  );
+
+  // Use AI nuggets when available, fall back to mock
+  const mockNuggets = useMemo(() => getNuggetsForTrack(trackId || ""), [trackId]);
+  const trackNuggets = aiNuggets.length > 0 ? aiNuggets : mockNuggets;
+
 
   const [animStyle, setAnimStyle] = useState<AnimationStyle>("A");
   const [activeNugget, setActiveNugget] = useState<Nugget | null>(null);
@@ -86,6 +100,13 @@ export default function Listen() {
   // Auto-play on mount
   useEffect(() => { play(); }, [play]);
 
+  // Reset nugget state when AI nuggets arrive
+  useEffect(() => {
+    setActiveNugget(null);
+    setNuggetQueue([]);
+    setShownNuggetIds(new Set());
+  }, [aiNuggets]);
+
   // Nugget trigger logic
   useEffect(() => {
     if (!isPlaying || !nerdActive) return;
@@ -119,9 +140,13 @@ export default function Listen() {
     }
   }, [activeNugget, nuggetQueue]);
 
+  const getSource = useCallback((sourceId: string): Source | undefined => {
+    return aiSources.get(sourceId) || getSourceById(sourceId);
+  }, [aiSources]);
+
   const handleSourceClick = useCallback(
     (nugget: Nugget) => {
-      const source = getSourceById(nugget.sourceId);
+      const source = getSource(nugget.sourceId);
       if (!source) return;
       if (source.type === "youtube") {
         pauseForOverlay();
@@ -130,7 +155,7 @@ export default function Listen() {
         setReadingOverlay(source);
       }
     },
-    [pauseForOverlay]
+    [pauseForOverlay, getSource]
   );
 
   const jumpToNugget = useCallback(
@@ -237,6 +262,15 @@ export default function Listen() {
 
           {/* Right side: Nugget display area */}
           <div className="w-[380px] shrink-0 ml-8">
+            {aiLoading && nerdActive && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="apple-glass rounded-2xl p-5 ml-2 text-center"
+              >
+                <p className="text-xs text-muted-foreground animate-pulse">Generating trivia…</p>
+              </motion.div>
+            )}
             <AnimatePresence mode="wait">
               {activeNugget && (
                 <NuggetCard
@@ -245,6 +279,7 @@ export default function Listen() {
                   animationStyle={animStyle}
                   onSourceClick={() => handleSourceClick(activeNugget)}
                   currentTime={formatTime(activeNugget.timestampSec)}
+                  sourceOverride={getSource(activeNugget.sourceId) || null}
                 />
               )}
             </AnimatePresence>
