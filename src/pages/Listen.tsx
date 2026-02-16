@@ -122,7 +122,7 @@ export default function Listen() {
         }
       }
     }
-  }, [currentTime, isPlaying, trackNuggets, activeNugget, shownNuggetIds]);
+  }, [currentTime, isPlaying, nerdActive, trackNuggets, activeNugget, shownNuggetIds]);
 
   // Auto-dismiss nugget
   useEffect(() => {
@@ -289,6 +289,7 @@ export default function Listen() {
           hasPrev={!!prev}
           hasNext={!!next}
           liked={liked}
+          nuggetMarkers={trackNuggets.map((n) => (n.timestampSec / track.durationSec) * 100)}
           onToggle={() => { showBar(); toggle(); }}
           onSeek={(pct) => { showBar(); seek(pct * track.durationSec); }}
           onPrev={() => prev && navigate(`/listen/${prev}`)}

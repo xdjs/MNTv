@@ -75,8 +75,11 @@ export function useAINuggets(
         };
         newSources.set(sourceId, source);
 
-        // Distribute nuggets across the track duration
-        const timestampSec = Math.floor((durationSec / (aiNuggets.length + 1)) * (i + 1));
+        // Distribute nuggets: first one early (8-15s), rest spread across remaining duration
+        const earlyStart = 10;
+        const usableDuration = durationSec - 20; // leave buffer at end
+        const spacing = usableDuration / aiNuggets.length;
+        const timestampSec = Math.floor(earlyStart + spacing * i);
 
         return {
           id: nuggetId,

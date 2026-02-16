@@ -10,7 +10,8 @@ interface Props {
   visible: boolean;
   hasPrev: boolean;
   hasNext: boolean;
-  liked?: boolean | null; // true = liked, false = disliked, null = neither
+  liked?: boolean | null;
+  nuggetMarkers?: number[]; // percentages (0-100) where nuggets appear
   onToggle: () => void;
   onSeek: (pct: number) => void;
   onPrev: () => void;
@@ -29,6 +30,7 @@ export default function PlaybackBar({
   hasPrev,
   hasNext,
   liked = null,
+  nuggetMarkers = [],
   onToggle,
   onSeek,
   onPrev,
@@ -66,6 +68,14 @@ export default function PlaybackBar({
               className="absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-primary shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
               style={{ left: `${progress}%`, transform: `translateX(-50%) translateY(-50%)` }}
             />
+            {/* Nugget markers */}
+            {nuggetMarkers.map((pct, i) => (
+              <div
+                key={i}
+                className="absolute top-1/2 -translate-y-1/2 h-2 w-2 rounded-full bg-foreground/20 transition-opacity"
+                style={{ left: `${pct}%`, transform: `translateX(-50%) translateY(-50%)` }}
+              />
+            ))}
           </div>
           <span className="w-14 text-sm text-foreground/70 tabular-nums">{durationFormatted}</span>
         </div>
