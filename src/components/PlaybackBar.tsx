@@ -1,4 +1,4 @@
-import { Play, Pause, SkipBack, SkipForward } from "lucide-react";
+import { Play, Pause, SkipBack, SkipForward, ThumbsUp, ThumbsDown } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface Props {
@@ -10,10 +10,13 @@ interface Props {
   visible: boolean;
   hasPrev: boolean;
   hasNext: boolean;
+  liked?: boolean | null; // true = liked, false = disliked, null = neither
   onToggle: () => void;
   onSeek: (pct: number) => void;
   onPrev: () => void;
   onNext: () => void;
+  onLike?: () => void;
+  onDislike?: () => void;
 }
 
 export default function PlaybackBar({
@@ -25,10 +28,13 @@ export default function PlaybackBar({
   visible,
   hasPrev,
   hasNext,
+  liked = null,
   onToggle,
   onSeek,
   onPrev,
   onNext,
+  onLike,
+  onDislike,
 }: Props) {
   return (
     <motion.div
@@ -66,6 +72,19 @@ export default function PlaybackBar({
 
         {/* Transport controls row — centered below */}
         <div className="flex items-center justify-center gap-6">
+          {/* Dislike button */}
+          <button
+            onClick={onDislike}
+            className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors tv-focus-visible ${
+              liked === false
+                ? "text-primary bg-primary/20"
+                : "text-foreground/40 hover:text-foreground/70"
+            }`}
+            aria-label="Dislike"
+          >
+            <ThumbsDown size={16} />
+          </button>
+
           <button
             onClick={onPrev}
             disabled={!hasPrev}
@@ -89,6 +108,19 @@ export default function PlaybackBar({
             aria-label="Next track"
           >
             <SkipForward size={20} />
+          </button>
+
+          {/* Like button */}
+          <button
+            onClick={onLike}
+            className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors tv-focus-visible ${
+              liked === true
+                ? "text-primary bg-primary/20"
+                : "text-foreground/40 hover:text-foreground/70"
+            }`}
+            aria-label="Like"
+          >
+            <ThumbsUp size={16} />
           </button>
         </div>
       </div>

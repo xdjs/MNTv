@@ -6,6 +6,46 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const nuggetTool = {
+  type: "function" as const,
+  function: {
+    name: "return_nuggets",
+    description: "Return 3 music trivia nuggets with real sources",
+    parameters: {
+      type: "object",
+      properties: {
+        nuggets: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              text: { type: "string", description: "1-3 sentences of surprising, accurate music trivia" },
+              kind: { type: "string", enum: ["process", "constraint", "pattern", "human", "influence"] },
+              listenFor: { type: "boolean", description: "Set exactly ONE nugget to true" },
+              source: {
+                type: "object",
+                properties: {
+                  type: { type: "string", enum: ["article", "interview"] },
+                  title: { type: "string", description: "Real title of the article or interview" },
+                  publisher: { type: "string", description: "Real publisher name (e.g. Pitchfork, Rolling Stone, NME, The Guardian)" },
+                  url: { type: "string", description: "A real, working URL to the source" },
+                  quoteSnippet: { type: "string", description: "A real or closely paraphrased quote from the source" },
+                },
+                required: ["type", "title", "publisher", "url", "quoteSnippet"],
+                additionalProperties: false,
+              },
+            },
+            required: ["text", "kind", "listenFor", "source"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["nuggets"],
+      additionalProperties: false,
+    },
+  },
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -28,44 +68,18 @@ serve(async (req) => {
 
     const systemPrompt = `You are a music historian and trivia expert. Given a song, generate exactly 3 fascinating, accurate pieces of trivia about the song, artist, or recording process.
 
-For each nugget, provide:
-- "text": 1-3 sentences of surprising, deeply informed trivia
-- "kind": one of "process" (how it was made), "constraint" (creative limitations), "pattern" (musical patterns/stats), "human" (personal stories), "influence" (cultural impact)
-- "listenFor": boolean — set exactly ONE nugget to true (a "listen for this" moment)
-- "source": an object describing the REAL source where this information comes from. This must be a real, verifiable source. Include:
-  - "type": "youtube" | "article" | "interview"
-  - "title": the real title of the video/article/interview
-  - "publisher": the real publisher/channel name
-  - "url": the real URL to the source (must be a real, working URL)
-  - "embedId": for YouTube sources ONLY, the real YouTube video ID (the part after v= in a youtube URL). This MUST be a real video ID for a video that actually exists and is related to the song/artist. Do NOT use placeholder IDs.
-  - "quoteSnippet": a short real or paraphrased quote from the source
-  - "locator": where in the source (e.g. "3:12" for video timestamp, "Paragraph 6" for articles)
-
-CRITICAL: All YouTube video IDs must be REAL IDs from actual existing YouTube videos about this artist/song. Search your knowledge for real documentary, interview, or music analysis videos. If you can't find a real YouTube video ID, use type "article" instead with a real article URL.
-
-Return ONLY valid JSON in this exact format:
-{
-  "nuggets": [
-    {
-      "text": "...",
-      "kind": "process",
-      "listenFor": false,
-      "source": {
-        "type": "youtube",
-        "title": "Real Video Title",
-        "publisher": "Real Channel Name",
-        "url": "https://www.youtube.com/watch?v=REAL_ID",
-        "embedId": "REAL_ID",
-        "quoteSnippet": "...",
-        "locator": "3:12"
-      }
-    }
-  ]
-}`;
+Rules:
+- Each nugget must be factually accurate and verifiable
+- Set exactly ONE nugget's listenFor to true (a "listen for this" audio moment)
+- Sources must be REAL articles or interviews from major publications (Rolling Stone, Pitchfork, NME, The Guardian, Billboard, Stereogum, etc.)
+- URLs must be real, working links to actual published articles
+- DO NOT use YouTube as a source type — only use "article" or "interview"
+- Quote snippets should be real or closely paraphrased from the actual source
+- Cover diverse kinds across the 3 nuggets`;
 
     const userPrompt = `Song: "${title}" by ${artist}${album ? ` from the album "${album}"` : ""}
 
-Remember: Only use REAL YouTube video IDs from actual videos you know exist. For Radiohead, look for real documentary/analysis videos like those from Middle 8, Polyphonic, or classic albums documentaries. If unsure about a video ID, use an article source instead.`;
+Generate 3 pieces of real, verifiable trivia with real article/interview sources from major music publications.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -79,6 +93,8 @@ Remember: Only use REAL YouTube video IDs from actual videos you know exist. For
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
+        tools: [nuggetTool],
+        tool_choice: { type: "function", function: { name: "return_nuggets" } },
         temperature: 0.7,
       }),
     });
@@ -105,18 +121,34 @@ Remember: Only use REAL YouTube video IDs from actual videos you know exist. For
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "";
-
+    
+    // Extract from tool call response
+    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
     let parsed;
-    try {
-      const jsonStr = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-      parsed = JSON.parse(jsonStr);
-    } catch {
-      console.error("Failed to parse AI response:", content);
-      return new Response(
-        JSON.stringify({ error: "Failed to parse AI response", raw: content }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    
+    if (toolCall?.function?.arguments) {
+      try {
+        parsed = JSON.parse(toolCall.function.arguments);
+      } catch {
+        console.error("Failed to parse tool call arguments:", toolCall.function.arguments);
+        return new Response(
+          JSON.stringify({ error: "Failed to parse AI response" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    } else {
+      // Fallback: try parsing content directly
+      const content = data.choices?.[0]?.message?.content || "";
+      try {
+        const jsonStr = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+        parsed = JSON.parse(jsonStr);
+      } catch {
+        console.error("Failed to parse AI response:", content);
+        return new Response(
+          JSON.stringify({ error: "Failed to parse AI response" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     return new Response(JSON.stringify(parsed), {

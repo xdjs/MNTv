@@ -48,6 +48,7 @@ export default function Listen() {
   const [devOpen, setDevOpen] = useState(false);
   const [nerdActive, setNerdActive] = useState(true);
   const [backdropMotion, setBackdropMotion] = useState(false);
+  const [liked, setLiked] = useState<boolean | null>(null);
   const ytSource = useMemo(() => getYouTubeSourceForTrack(trackId || ""), [trackId]);
 
   // --- Auto-hide bar logic ---
@@ -287,10 +288,13 @@ export default function Listen() {
           visible={barVisible}
           hasPrev={!!prev}
           hasNext={!!next}
+          liked={liked}
           onToggle={() => { showBar(); toggle(); }}
           onSeek={(pct) => { showBar(); seek(pct * track.durationSec); }}
           onPrev={() => prev && navigate(`/listen/${prev}`)}
           onNext={() => next && navigate(`/listen/${next}`)}
+          onLike={() => setLiked((v) => v === true ? null : true)}
+          onDislike={() => setLiked((v) => v === false ? null : false)}
         />
 
         {/* Dev panel toggle */}
