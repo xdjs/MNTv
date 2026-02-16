@@ -84,7 +84,7 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
       {/* Card */}
       <motion.div
         variants={cardVariants}
-        className="apple-glass relative rounded-2xl p-6 ml-2"
+        className="apple-glass relative rounded-xl p-4 ml-2"
       >
         {/* Style A bloom */}
         {animationStyle === "A" && (
@@ -127,7 +127,7 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1, transition: { delay: 0.35, duration: 0.3 } }}
-          className="mb-3 flex items-center gap-2 text-xs text-muted-foreground"
+          className="mb-2 flex items-center gap-2 text-[11px] text-muted-foreground"
         >
           <span className="uppercase tracking-wider">{kindLabels[nugget.kind] || nugget.kind}</span>
           {currentTime && (
@@ -154,7 +154,7 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1, transition: { delay: animationStyle === "B" ? 0.5 : 0.4, duration: 0.3 } }}
-          className="text-base leading-7 text-foreground/90 md:text-lg"
+          className="text-sm leading-6 text-foreground/90"
         >
           {nugget.text}
         </motion.p>
@@ -165,7 +165,7 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0, transition: { delay: 0.6 } }}
             onClick={onSourceClick}
-            className="mt-3 flex items-center gap-2 rounded-lg bg-foreground/5 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground tv-focus-visible"
+            className="mt-2 flex items-center gap-2 rounded-lg bg-foreground/5 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground tv-focus-visible"
           >
             <span className="uppercase tracking-wider font-medium">
               {source.type === "youtube" ? "▶ Watch" : source.type === "article" ? "📄 Read" : "🎙 Interview"}

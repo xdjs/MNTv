@@ -256,8 +256,8 @@ export default function Listen() {
         {/* Track info — compact top-left context */}
         <motion.div
           className="relative z-10 px-10 mt-4"
-          animate={{ opacity: barVisible ? 1 : 0.7 }}
-          transition={{ duration: 0.3 }}
+          animate={{ opacity: barVisible ? 1 : 0, y: barVisible ? 0 : -10 }}
+          transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
         >
           <h1 className="text-2xl font-black text-foreground/80 leading-tight tracking-tight md:text-3xl" style={{ fontFamily: "'Nunito Sans', sans-serif" }}>
             {track.title}
@@ -274,7 +274,7 @@ export default function Listen() {
 
         {/* Main content: nugget cards — right-aligned, vertically centered */}
         <div className="relative z-10 flex flex-1 items-center justify-end px-10 pb-24">
-          <div className="w-[440px] shrink-0">
+          <div className="w-[360px] shrink-0">
             <AnimatePresence mode="wait">
               {activeNugget && (
                 <NuggetCard
