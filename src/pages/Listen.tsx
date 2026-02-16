@@ -274,7 +274,7 @@ export default function Listen() {
 
         {/* Main content: nugget cards — right-aligned, vertically centered */}
         <div className="relative z-10 flex flex-1 items-center justify-end px-10 pb-24">
-          <div className="w-[360px] shrink-0">
+          <div className="w-[420px] shrink-0">
             <AnimatePresence mode="wait">
               {activeNugget && (
                 <NuggetCard
