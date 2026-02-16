@@ -6,9 +6,11 @@ interface Props {
   setAnimStyle: (s: AnimationStyle) => void;
   onJumpToNugget: (idx: number) => void;
   nuggetCount: number;
+  backdropMotion: boolean;
+  setBackdropMotion: (v: boolean) => void;
 }
 
-export default function DevPanel({ animStyle, setAnimStyle, onJumpToNugget, nuggetCount }: Props) {
+export default function DevPanel({ animStyle, setAnimStyle, onJumpToNugget, nuggetCount, backdropMotion, setBackdropMotion }: Props) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -39,7 +41,7 @@ export default function DevPanel({ animStyle, setAnimStyle, onJumpToNugget, nugg
 
       <div className="mb-3">
         <p className="text-xs text-muted-foreground mb-1.5">Jump to Nugget</p>
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 flex-wrap">
           {Array.from({ length: nuggetCount }, (_, i) => (
             <button
               key={i}
@@ -53,9 +55,14 @@ export default function DevPanel({ animStyle, setAnimStyle, onJumpToNugget, nugg
       </div>
 
       <div>
-        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          <input type="checkbox" className="rounded" disabled />
-          Backdrop motion (placeholder)
+        <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+          <input
+            type="checkbox"
+            className="rounded accent-primary"
+            checked={backdropMotion}
+            onChange={(e) => setBackdropMotion(e.target.checked)}
+          />
+          Backdrop motion (YouTube)
         </label>
       </div>
     </motion.div>
