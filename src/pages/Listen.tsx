@@ -3,7 +3,6 @@ import { ArrowLeft } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
-import MusicNerdPill from "@/components/MusicNerdPill";
 import NuggetCard from "@/components/NuggetCard";
 import MediaOverlay from "@/components/overlays/MediaOverlay";
 import ReadingOverlay from "@/components/overlays/ReadingOverlay";
@@ -186,10 +185,19 @@ export default function Listen() {
           >
             <ArrowLeft size={20} />
           </button>
-          <div className="flex items-center gap-3">
-            <MusicNerdPill active={nerdActive} onToggle={() => setNerdActive((v) => !v)} />
-            <MusicNerdLogo size={36} glow className="opacity-80" />
-          </div>
+          <button
+            onClick={() => setNerdActive((v) => !v)}
+            className="transition-all duration-300 outline-none rounded-full tv-focus-visible"
+            aria-label={nerdActive ? "Turn off MusicNerd" : "Turn on MusicNerd"}
+            style={{
+              filter: nerdActive
+                ? "drop-shadow(0 0 8px hsl(330 90% 60% / 0.7)) drop-shadow(0 0 24px hsl(330 90% 60% / 0.35))"
+                : "grayscale(1) opacity(0.4)",
+              transition: "filter 0.4s ease",
+            }}
+          >
+            <MusicNerdLogo size={40} glow={false} />
+          </button>
         </div>
 
         {/* Main layout: artist info bottom-left, nugget right-center */}
