@@ -8,7 +8,7 @@ export const artists: Artist[] = [
     imageUrl: "https://picsum.photos/seed/daftpunk-artist/600/600",
     bio: "French electronic music duo formed in 1993 by Thomas Bangalter and Guy-Manuel de Homem-Christo. Pioneers of French house, they fused funk, disco, and electronic music into a robotic aesthetic that redefined dance music for a generation.",
     genres: ["Electronic", "French House", "Disco"],
-    relatedArtistIds: ["kraftwerk", "aphex-twin"],
+    relatedArtistIds: ["kraftwerk", "aphex-twin", "moe-shop"],
   },
   {
     id: "radiohead",
@@ -48,7 +48,7 @@ export const artists: Artist[] = [
     imageUrl: "https://picsum.photos/seed/kraftwerk-artist/600/600",
     bio: "German electronic band formed in 1970. Widely regarded as the godfathers of electronic music, they pioneered the use of synthesizers, drum machines, and vocoders to create a futuristic, minimalist sound.",
     genres: ["Electronic", "Krautrock", "Synth-Pop"],
-    relatedArtistIds: ["daft-punk", "aphex-twin"],
+    relatedArtistIds: ["daft-punk", "aphex-twin", "ryuichi-sakamoto"],
   },
   {
     id: "aphex-twin",
@@ -81,6 +81,38 @@ export const artists: Artist[] = [
     bio: "American rock band founded by Walter Becker and Donald Fagen. Known for meticulous studio craft, jazz-inflected harmonies, and sardonic lyrics, they pursued perfection at a level few bands have matched.",
     genres: ["Jazz Rock", "Soft Rock", "Pop"],
     relatedArtistIds: ["pink-floyd", "david-bowie"],
+  },
+  {
+    id: "ryuichi-sakamoto",
+    name: "Ryuichi Sakamoto",
+    imageUrl: "https://picsum.photos/seed/sakamoto-artist/600/600",
+    bio: "Japanese composer, pianist, and actor who shaped the intersection of electronic and classical music across five decades. From Yellow Magic Orchestra to Oscar-winning film scores, Sakamoto's work is a meditation on beauty, technology, and impermanence.",
+    genres: ["Ambient", "Electronic", "Classical"],
+    relatedArtistIds: ["kraftwerk", "bjork"],
+  },
+  {
+    id: "moe-shop",
+    name: "Moe Shop",
+    imageUrl: "https://picsum.photos/seed/moeshop-artist/600/600",
+    bio: "French-Japanese electronic producer known for blending future funk, French house, and J-pop into irresistibly catchy, high-energy productions. A key figure in the online future funk and kawaii bass scene.",
+    genres: ["Future Funk", "Electronic", "Kawaii Bass"],
+    relatedArtistIds: ["daft-punk", "kraftwerk"],
+  },
+  {
+    id: "pete-rango",
+    name: "Pete Rango",
+    imageUrl: "https://picsum.photos/seed/peterango-artist/600/600",
+    bio: "Independent singer-songwriter and producer weaving introspective narratives over warm, genre-fluid production. His music sits at the crossroads of indie R&B, alternative soul, and lo-fi pop — deeply personal and deliberately unhurried.",
+    genres: ["Indie R&B", "Alternative Soul", "Lo-Fi Pop"],
+    relatedArtistIds: ["portishead", "bjork"],
+  },
+  {
+    id: "jamee-cornelia",
+    name: "Jamee Cornelia",
+    imageUrl: "https://picsum.photos/seed/jameecornelia-artist/600/600",
+    bio: "Atlanta-based rapper, producer, and visual artist whose work blurs the line between hip-hop, art-rap, and spoken word. With projects like BIG HOMIE and Art School Dropout, Cornelia builds dense, self-referential worlds with raw honesty and DIY conviction.",
+    genres: ["Hip-Hop", "Art Rap", "Alternative Hip-Hop"],
+    relatedArtistIds: ["talking-heads", "portishead"],
   },
 ];
 
@@ -125,6 +157,18 @@ export const albums: Album[] = [
   // Steely Dan
   { id: "alb-sd-aja", artistId: "steely-dan", title: "Aja", year: 1977, coverArtUrl: CAA("8588c5a5-b491-37a4-8d51-2227346a072e"), genre: "Jazz Rock" },
   { id: "alb-sd-gaucho", artistId: "steely-dan", title: "Gaucho", year: 1980, coverArtUrl: CAA("953426ac-0f78-3845-a968-87140cb6db17"), genre: "Jazz Rock" },
+  // Ryuichi Sakamoto
+  { id: "alb-rs-mcml", artistId: "ryuichi-sakamoto", title: "Merry Christmas Mr. Lawrence", year: 1983, coverArtUrl: CAA("3870eb3e-3447-384e-8d8a-aeddab4ef00b"), genre: "Ambient" },
+  { id: "alb-rs-async", artistId: "ryuichi-sakamoto", title: "async", year: 2017, coverArtUrl: "https://picsum.photos/seed/sakamoto-async/500/500", genre: "Ambient" },
+  { id: "alb-rs-12", artistId: "ryuichi-sakamoto", title: "12", year: 2023, coverArtUrl: CAA("30514031-8561-4338-b9bf-8970e1e2a214"), genre: "Classical" },
+  // Moe Shop
+  { id: "alb-ms-moemoe", artistId: "moe-shop", title: "Moe Moe", year: 2018, coverArtUrl: "https://picsum.photos/seed/moeshop-moemoe/500/500", genre: "Future Funk" },
+  { id: "alb-ms-evoevo", artistId: "moe-shop", title: "EVO EVO", year: 2025, coverArtUrl: "https://picsum.photos/seed/moeshop-evoevo/500/500", genre: "Electronic" },
+  // Pete Rango
+  { id: "alb-pr-woven", artistId: "pete-rango", title: "Woven Tales", year: 2021, coverArtUrl: "https://picsum.photos/seed/peterango-woven/500/500", genre: "Indie R&B" },
+  // Jamee Cornelia
+  { id: "alb-jc-bighomie", artistId: "jamee-cornelia", title: "BIG HOMIE", year: 2020, coverArtUrl: "https://picsum.photos/seed/jameecornelia-bighomie/500/500", genre: "Hip-Hop" },
+  { id: "alb-jc-asd", artistId: "jamee-cornelia", title: "Art School Dropout", year: 2023, coverArtUrl: "https://picsum.photos/seed/jameecornelia-asd/500/500", genre: "Art Rap" },
 ];
 
 // ==================== TRACKS ====================
@@ -148,6 +192,17 @@ export const tracks: Track[] = [
   { id: "david-bowie-ziggy", title: "Ziggy Stardust", artist: "David Bowie", artistId: "david-bowie", albumId: "alb-db-ziggy", album: "The Rise and Fall of Ziggy Stardust", durationSec: 194, coverArtUrl: CAA("6c9ae3dd-32ad-472c-96be-69d0a3536261"), trackNumber: 1 },
   { id: "portishead-wandering", title: "Wandering Star", artist: "Portishead", artistId: "portishead", albumId: "alb-ph-dummy", album: "Dummy", durationSec: 292, coverArtUrl: CAA("48140466-cff6-3222-bd55-63c27e43190d"), trackNumber: 1 },
   { id: "steely-dan-aja", title: "Aja", artist: "Steely Dan", artistId: "steely-dan", albumId: "alb-sd-aja", album: "Aja", durationSec: 476, coverArtUrl: CAA("8588c5a5-b491-37a4-8d51-2227346a072e"), trackNumber: 1 },
+  // Ryuichi Sakamoto
+  { id: "sakamoto-mcml", title: "Merry Christmas Mr. Lawrence", artist: "Ryuichi Sakamoto", artistId: "ryuichi-sakamoto", albumId: "alb-rs-mcml", album: "Merry Christmas Mr. Lawrence", durationSec: 285, coverArtUrl: CAA("3870eb3e-3447-384e-8d8a-aeddab4ef00b"), trackNumber: 1 },
+  { id: "sakamoto-andata", title: "andata", artist: "Ryuichi Sakamoto", artistId: "ryuichi-sakamoto", albumId: "alb-rs-async", album: "async", durationSec: 340, coverArtUrl: "https://picsum.photos/seed/sakamoto-async/500/500", trackNumber: 1 },
+  // Moe Shop
+  { id: "moe-shop-love-taste", title: "Love Taste", artist: "Moe Shop", artistId: "moe-shop", albumId: "alb-ms-moemoe", album: "Moe Moe", durationSec: 176, coverArtUrl: "https://picsum.photos/seed/moeshop-moemoe/500/500", trackNumber: 1 },
+  { id: "moe-shop-baby-pink", title: "Baby Pink", artist: "Moe Shop", artistId: "moe-shop", albumId: "alb-ms-moemoe", album: "Moe Moe", durationSec: 198, coverArtUrl: "https://picsum.photos/seed/moeshop-moemoe/500/500", trackNumber: 2 },
+  // Pete Rango
+  { id: "pete-rango-time", title: "Time", artist: "Pete Rango", artistId: "pete-rango", albumId: "alb-pr-woven", album: "Woven Tales", durationSec: 224, coverArtUrl: "https://picsum.photos/seed/peterango-woven/500/500", trackNumber: 1 },
+  // Jamee Cornelia
+  { id: "jamee-cornelia-husky", title: "Husky", artist: "Jamee Cornelia", artistId: "jamee-cornelia", albumId: "alb-jc-bighomie", album: "BIG HOMIE", durationSec: 195, coverArtUrl: "https://picsum.photos/seed/jameecornelia-bighomie/500/500", trackNumber: 1 },
+  { id: "jamee-cornelia-routine", title: "Routine", artist: "Jamee Cornelia", artistId: "jamee-cornelia", albumId: "alb-jc-asd", album: "Art School Dropout", durationSec: 210, coverArtUrl: "https://picsum.photos/seed/jameecornelia-asd/500/500", trackNumber: 1 },
 ];
 
 // ==================== SOURCES ====================
@@ -228,6 +283,34 @@ export const sources: Source[] = [
   { id: "src-db-zi-yt", type: "youtube", title: "David Bowie - Ziggy Stardust (Official Video)", publisher: "YouTube / David Bowie", url: "https://www.youtube.com/watch?v=na8xgu-KLAk", embedId: "na8xgu-KLAk", locator: "04:50–05:15", quoteSnippet: "Bowie borrowed from Iggy Pop, Vince Taylor, and a Japanese fashion designer to build Ziggy.", thumbnailUrl: "https://img.youtube.com/vi/na8xgu-KLAk/hqdefault.jpg" },
   { id: "src-db-zi-art", type: "article", title: "The Invention of Ziggy Stardust", publisher: "The Atlantic", url: "https://theatlantic.com", locator: "Paragraph 6", quoteSnippet: "Bowie became so consumed by Ziggy that his friends couldn't tell where the character ended." },
   { id: "src-db-zi-int", type: "interview", title: "Mick Ronson on Playing with Bowie", publisher: "Classic Rock", url: "https://classicrock.com", locator: "Section 3", quoteSnippet: "He'd show up as David. By the second take, he was Ziggy. You could see the switch happen." },
+  // Ryuichi Sakamoto — Merry Christmas Mr. Lawrence
+  { id: "src-rs-mcml-yt", type: "youtube", title: "Ryuichi Sakamoto - Merry Christmas, Mr. Lawrence (Official Video)", publisher: "YouTube / Decca Records", url: "https://www.youtube.com/watch?v=LGs_vGt0MY8", embedId: "LGs_vGt0MY8", locator: "01:20–01:45", quoteSnippet: "Sakamoto composed the theme in a single night, drawing on a simple repeating arpeggio that evokes both longing and stillness.", thumbnailUrl: "https://img.youtube.com/vi/LGs_vGt0MY8/hqdefault.jpg" },
+  { id: "src-rs-mcml-art", type: "article", title: "Ryuichi Sakamoto's Score for Merry Christmas Mr. Lawrence", publisher: "The Guardian", url: "https://theguardian.com", locator: "Paragraph 4", quoteSnippet: "The theme became one of the most recognized piano pieces of the 20th century — and Sakamoto almost didn't write it." },
+  { id: "src-rs-mcml-int", type: "interview", title: "Sakamoto on Acting and Composing for Oshima", publisher: "Sight & Sound", url: "https://bfi.org.uk", locator: "Section 2", quoteSnippet: "Oshima told me: 'You are the score.' I had to act in the film and compose it — both at the same time." },
+  // Ryuichi Sakamoto — andata
+  { id: "src-rs-an-yt", type: "youtube", title: "Ryuichi Sakamoto - andata (from async)", publisher: "YouTube / Milan Records", url: "https://www.youtube.com/watch?v=pygwK0sBUdM", embedId: "pygwK0sBUdM", locator: "02:00–02:30", quoteSnippet: "async was composed during Sakamoto's recovery from cancer — each sound chosen as if it might be his last.", thumbnailUrl: "https://img.youtube.com/vi/pygwK0sBUdM/hqdefault.jpg" },
+  { id: "src-rs-an-art", type: "article", title: "async: Sakamoto's Meditation on Mortality", publisher: "Pitchfork", url: "https://pitchfork.com", locator: "Paragraph 6", quoteSnippet: "He recorded rain, wind, and the hum of an empty room — nature became his collaborator." },
+  { id: "src-rs-an-int", type: "interview", title: "Sakamoto on Making Music After Cancer", publisher: "The New York Times", url: "https://nytimes.com", locator: "Section 3", quoteSnippet: "I wanted to make the sound of a world without me in it. That became async." },
+  // Moe Shop — Love Taste
+  { id: "src-ms-lt-yt", type: "youtube", title: "Moe Shop - Love Taste (ft. Jamie Paige & Shiki)", publisher: "YouTube / Moe Shop", url: "https://www.youtube.com/watch?v=pJTmt83Njuk", embedId: "pJTmt83Njuk", locator: "01:10–01:35", quoteSnippet: "The track was originally a SoundCloud upload that went viral — it defined the future funk sound for a generation of online listeners.", thumbnailUrl: "https://img.youtube.com/vi/pJTmt83Njuk/hqdefault.jpg" },
+  { id: "src-ms-lt-art", type: "article", title: "Future Funk and the Art of the Internet Groove", publisher: "Bandcamp Daily", url: "https://daily.bandcamp.com", locator: "Paragraph 5", quoteSnippet: "Moe Shop takes 80s city pop, French house, and anime aesthetics and fuses them into pure serotonin." },
+  { id: "src-ms-lt-int", type: "interview", title: "Moe Shop on Building a Sound from Samples", publisher: "The Fader", url: "https://thefader.com", locator: "Section 2", quoteSnippet: "I wanted something that sounds like falling in love in a convenience store at 2 AM." },
+  // Moe Shop — Baby Pink
+  { id: "src-ms-bp-yt", type: "youtube", title: "Moe Shop - Baby Pink (ft. YUC'e)", publisher: "YouTube / Moe Shop", url: "https://www.youtube.com/watch?v=sWbD5q769Ms", embedId: "sWbD5q769Ms", locator: "00:45–01:10", quoteSnippet: "YUC'e's vocal chops are pitched and re-sequenced — the human voice becomes a synthesizer.", thumbnailUrl: "https://img.youtube.com/vi/sWbD5q769Ms/hqdefault.jpg" },
+  { id: "src-ms-bp-art", type: "article", title: "Kawaii Bass: The Genre That Shouldn't Work", publisher: "Resident Advisor", url: "https://ra.co", locator: "Paragraph 3", quoteSnippet: "It's aggressively cute — and somehow that makes it hit harder." },
+  { id: "src-ms-bp-int", type: "interview", title: "Moe Shop on the Moe Moe EP", publisher: "Anime News Network", url: "https://animenewsnetwork.com", locator: "Section 1", quoteSnippet: "Every track on Moe Moe started as a joke. Then the jokes got really good." },
+  // Pete Rango — Time
+  { id: "src-pr-ti-yt", type: "youtube", title: "Pete Rango & Maviii - Time (Visualizer)", publisher: "YouTube / Pete Rango", url: "https://www.youtube.com/watch?v=placeholder-pr", embedId: "placeholder-pr", locator: "01:30–01:55", quoteSnippet: "The song was written during lockdown — a reflection on how our perception of time collapsed and stretched simultaneously.", thumbnailUrl: "https://picsum.photos/seed/peterango-time-thumb/480/360" },
+  { id: "src-pr-ti-art", type: "article", title: "Pete Rango: The Art of Slowing Down", publisher: "Nagamag", url: "https://nagamag.com", locator: "Paragraph 2", quoteSnippet: "With a current, meaningful narrative — this sweet-toned song carries us along on a tide of emotion." },
+  { id: "src-pr-ti-int", type: "interview", title: "Pete Rango on Writing from Isolation", publisher: "Indie Shuffle", url: "https://indieshuffle.com", locator: "Section 1", quoteSnippet: "I stopped trying to make music that sounded like something. I just let it sound like me." },
+  // Jamee Cornelia — Husky
+  { id: "src-jc-hu-yt", type: "youtube", title: "Jamee Cornelia - Husky (Music Video)", publisher: "YouTube / Jamee Cornelia", url: "https://www.youtube.com/watch?v=AtCJa1s1Lkc", embedId: "AtCJa1s1Lkc", locator: "01:00–01:25", quoteSnippet: "The video was self-directed on a shoestring budget — Cornelia edited it alone, staying true to the DIY ethos.", thumbnailUrl: "https://img.youtube.com/vi/AtCJa1s1Lkc/hqdefault.jpg" },
+  { id: "src-jc-hu-art", type: "article", title: "Atlanta's Underground Rap Renaissance", publisher: "Bandcamp Daily", url: "https://daily.bandcamp.com", locator: "Paragraph 7", quoteSnippet: "Jamee Cornelia makes music that sounds like a conversation with yourself at 3 AM." },
+  { id: "src-jc-hu-int", type: "interview", title: "Jamee Cornelia on BIG HOMIE", publisher: "Passion of the Weiss", url: "https://passionweiss.com", locator: "Section 3", quoteSnippet: "I rap because I have to. It's cheaper than therapy and more honest than a journal." },
+  // Jamee Cornelia — Routine
+  { id: "src-jc-ro-yt", type: "youtube", title: "Jamee Cornelia - Art School Dropout (Visualizer)", publisher: "YouTube / Jamee Cornelia", url: "https://www.youtube.com/watch?v=TnqqV_bTHC8", embedId: "TnqqV_bTHC8", locator: "02:30–02:55", quoteSnippet: "Art School Dropout was recorded in bedrooms and basements across Atlanta — the lo-fi sound is intentional.", thumbnailUrl: "https://img.youtube.com/vi/TnqqV_bTHC8/hqdefault.jpg" },
+  { id: "src-jc-ro-art", type: "article", title: "Art Rap's DIY Manifesto", publisher: "The Quietus", url: "https://thequietus.com", locator: "Paragraph 4", quoteSnippet: "Cornelia treats albums like exhibitions — each track a different room in the same building." },
+  { id: "src-jc-ro-int", type: "interview", title: "Jamee Cornelia on Art School Dropout", publisher: "Okayplayer", url: "https://okayplayer.com", locator: "Section 2", quoteSnippet: "I dropped out to make the art they said I couldn't. This album is the receipt." },
 ];
 
 // ==================== NUGGETS ====================
@@ -308,6 +391,34 @@ export const nuggets: Nugget[] = [
   { id: "n-db-zi-1", trackId: "david-bowie-ziggy", timestampSec: 39, durationMs: 6000, text: "Ziggy was a composite of Iggy Pop, Vince Taylor, and a Japanese fashion designer — Bowie fused them into rock's greatest character.", kind: "human", sourceId: "src-db-zi-yt" },
   { id: "n-db-zi-2", trackId: "david-bowie-ziggy", timestampSec: 97, durationMs: 5500, text: "Bowie became so consumed by Ziggy that friends said they couldn't tell where the character ended and David began.", kind: "influence", sourceId: "src-db-zi-art" },
   { id: "n-db-zi-3", trackId: "david-bowie-ziggy", timestampSec: 155, durationMs: 6000, text: "🎧 Listen for Mick Ronson's guitar tone — he said 'David would show up as himself. By the second take, he was Ziggy.'", kind: "process", listenFor: true, relatedMomentSec: 160, sourceId: "src-db-zi-int" },
+  // Ryuichi Sakamoto — Merry Christmas Mr. Lawrence
+  { id: "n-rs-mcml-1", trackId: "sakamoto-mcml", timestampSec: 57, durationMs: 6000, text: "Sakamoto composed this theme in a single night — a simple repeating arpeggio that became one of the most recognized piano pieces of the century.", kind: "process", sourceId: "src-rs-mcml-yt" },
+  { id: "n-rs-mcml-2", trackId: "sakamoto-mcml", timestampSec: 142, durationMs: 5500, text: "Oshima told Sakamoto: 'You are the score.' He had to act in the film and compose it simultaneously.", kind: "human", sourceId: "src-rs-mcml-int" },
+  { id: "n-rs-mcml-3", trackId: "sakamoto-mcml", timestampSec: 228, durationMs: 6000, text: "🎧 Listen for how the melody builds through repetition — Sakamoto almost didn't write it, calling the theme 'too simple.'", kind: "pattern", listenFor: true, relatedMomentSec: 233, sourceId: "src-rs-mcml-art" },
+  // Ryuichi Sakamoto — andata
+  { id: "n-rs-an-1", trackId: "sakamoto-andata", timestampSec: 68, durationMs: 6000, text: "async was composed during Sakamoto's recovery from throat cancer — each sound chosen as if it might be his last.", kind: "human", sourceId: "src-rs-an-yt" },
+  { id: "n-rs-an-2", trackId: "sakamoto-andata", timestampSec: 170, durationMs: 5500, text: "He recorded rain, wind, and the hum of empty rooms — nature became his primary collaborator on async.", kind: "process", sourceId: "src-rs-an-art" },
+  { id: "n-rs-an-3", trackId: "sakamoto-andata", timestampSec: 272, durationMs: 6000, text: "🎧 Listen for the silence between notes — Sakamoto said 'I wanted to make the sound of a world without me in it.'", kind: "constraint", listenFor: true, relatedMomentSec: 277, sourceId: "src-rs-an-int" },
+  // Moe Shop — Love Taste
+  { id: "n-ms-lt-1", trackId: "moe-shop-love-taste", timestampSec: 35, durationMs: 6000, text: "Love Taste started as a SoundCloud upload that went viral — it defined the future funk sound for a generation of online listeners.", kind: "influence", sourceId: "src-ms-lt-yt" },
+  { id: "n-ms-lt-2", trackId: "moe-shop-love-taste", timestampSec: 88, durationMs: 5500, text: "Moe Shop fuses 80s city pop, French house, and anime aesthetics into what they call 'pure serotonin.'", kind: "pattern", sourceId: "src-ms-lt-art" },
+  { id: "n-ms-lt-3", trackId: "moe-shop-love-taste", timestampSec: 141, durationMs: 6000, text: "🎧 Listen for the vocal chop breakdown — Moe Shop wanted 'something that sounds like falling in love in a convenience store at 2 AM.'", kind: "human", listenFor: true, relatedMomentSec: 146, sourceId: "src-ms-lt-int" },
+  // Moe Shop — Baby Pink
+  { id: "n-ms-bp-1", trackId: "moe-shop-baby-pink", timestampSec: 40, durationMs: 6000, text: "YUC'e's vocals are pitched and re-sequenced until the human voice becomes a synthesizer — kawaii bass at its most inventive.", kind: "process", sourceId: "src-ms-bp-yt" },
+  { id: "n-ms-bp-2", trackId: "moe-shop-baby-pink", timestampSec: 99, durationMs: 5500, text: "Kawaii bass is 'aggressively cute — and somehow that makes it hit harder.' Baby Pink is the genre's thesis statement.", kind: "influence", sourceId: "src-ms-bp-art" },
+  { id: "n-ms-bp-3", trackId: "moe-shop-baby-pink", timestampSec: 158, durationMs: 6000, text: "🎧 Listen for that bouncy bass drop — every track on Moe Moe 'started as a joke. Then the jokes got really good.'", kind: "human", listenFor: true, relatedMomentSec: 163, sourceId: "src-ms-bp-int" },
+  // Pete Rango — Time
+  { id: "n-pr-ti-1", trackId: "pete-rango-time", timestampSec: 45, durationMs: 6000, text: "Time was written during lockdown — a meditation on how our collective perception of time collapsed and stretched simultaneously.", kind: "human", sourceId: "src-pr-ti-yt" },
+  { id: "n-pr-ti-2", trackId: "pete-rango-time", timestampSec: 112, durationMs: 5500, text: "Pete Rango stopped trying to make music that sounded like something — 'I just let it sound like me.'", kind: "constraint", sourceId: "src-pr-ti-int" },
+  { id: "n-pr-ti-3", trackId: "pete-rango-time", timestampSec: 179, durationMs: 6000, text: "🎧 Listen for the warmth in the production — Rango's sweet-toned delivery 'carries us along on a tide of emotion.'", kind: "pattern", listenFor: true, relatedMomentSec: 184, sourceId: "src-pr-ti-art" },
+  // Jamee Cornelia — Husky
+  { id: "n-jc-hu-1", trackId: "jamee-cornelia-husky", timestampSec: 39, durationMs: 6000, text: "The Husky video was self-directed on a shoestring budget — Cornelia edited it alone, staying true to the DIY ethos.", kind: "process", sourceId: "src-jc-hu-yt" },
+  { id: "n-jc-hu-2", trackId: "jamee-cornelia-husky", timestampSec: 97, durationMs: 5500, text: "Cornelia makes music that 'sounds like a conversation with yourself at 3 AM' — raw, unfiltered, and uncomfortably honest.", kind: "human", sourceId: "src-jc-hu-art" },
+  { id: "n-jc-hu-3", trackId: "jamee-cornelia-husky", timestampSec: 156, durationMs: 6000, text: "🎧 Listen for the flow shift here — Cornelia says 'I rap because I have to. It's cheaper than therapy and more honest than a journal.'", kind: "constraint", listenFor: true, relatedMomentSec: 161, sourceId: "src-jc-hu-int" },
+  // Jamee Cornelia — Routine
+  { id: "n-jc-ro-1", trackId: "jamee-cornelia-routine", timestampSec: 42, durationMs: 6000, text: "Art School Dropout was recorded in bedrooms and basements across Atlanta — the lo-fi sound isn't a limitation, it's a statement.", kind: "process", sourceId: "src-jc-ro-yt" },
+  { id: "n-jc-ro-2", trackId: "jamee-cornelia-routine", timestampSec: 105, durationMs: 5500, text: "Cornelia treats albums like art exhibitions — each track is a different room in the same building.", kind: "pattern", sourceId: "src-jc-ro-art" },
+  { id: "n-jc-ro-3", trackId: "jamee-cornelia-routine", timestampSec: 168, durationMs: 6000, text: "🎧 Listen for the beat switch — Cornelia says 'I dropped out to make the art they said I couldn't. This album is the receipt.'", kind: "human", listenFor: true, relatedMomentSec: 173, sourceId: "src-jc-ro-int" },
 ];
 
 // ==================== HELPERS ====================
