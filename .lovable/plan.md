@@ -1,93 +1,114 @@
 
 
-# MusicNerd TV — R&D Prototype
+# YouTube-Powered Nuggets with Real Sources
 
-## Overview
-A TV-like passive-to-engaged listening experience prototype inspired by VH1's Pop Up Video. All data is mocked — the goal is to validate presentation, motion design, and on-screen timing. The pink glasses logo is used creatively throughout, including as the anchor dot in Animation Style C with a subtle neon glow.
+## What's Changing
 
----
+The current system asks Gemini to "imagine" what sources exist -- it has no internet access, so every URL, quote, and video reference is fabricated. We're going to flip this: **find real YouTube content first, read the actual transcripts, then generate nuggets from that real material.**
 
-## Screen 1: Onboarding (`/`)
-- Dark, cinematic full-screen hero
-- MusicNerd TV pink glasses logo displayed prominently with an animated entrance (subtle neon glow pulse on arrival)
-- Short tagline beneath the logo
-- Large "Get Started" CTA with TV-friendly focus state
-- Smooth cinematic page transition when navigating forward
+## The New Pipeline
 
-## Screen 2: Connect Services (`/connect`)
-- Two large cards: "Connect Spotify" and "Connect YouTube Music" (both mock — no real auth)
-- TV-friendly large hit targets with clear focus/hover states
-- "Continue" button proceeds regardless of selection
-- Smooth layout transition from onboarding
+```text
+Step 1: YouTube Data API  -->  Search for interviews, documentaries, breakdowns
+                               about the artist + song (returns real video IDs)
 
-## Screen 3: Now Playing Harness (`/now-playing`)
-- Immediately presents the "currently playing" track with large album cover art, title, artist, album
-- "Start MusicNerd Layer" primary CTA to enter the listening experience
-- "Switch Track" opens a mock track picker (10 nerd-friendly tracks)
-- Feels like "here's what's playing right now" — auto-starts the vibe without a loading gate
-- Cinematic transition into the listening screen
+Step 2: YouTube Innertube  -->  Fetch actual transcripts from those videos
+        (server-side)           (no OAuth needed, works for any public video)
 
-## Screen 4: Listening Experience (`/listen/:trackId`)
-The core screen — full-screen TV experience.
+Step 3: Gemini API         -->  Generate nuggets FROM the real transcript content
+        + Google Search         + ground article sources with Google Search
+        Grounding               (returns verified article URLs with citations)
 
-**Layout:**
-- Full-bleed blurred cover art background with vignette + subtle noise texture
-- Track title & artist on the left side
-- Minimal simulated playback controls (play/pause, scrubber) — time simulated via interval, no real audio
+Step 4: Return to app      -->  Every nugget has a real YouTube embedId OR
+                                a real article URL -- everything is clickable
+```
 
-**Nuggets (3 per track):**
-- Appear one at a time, bottom-left safe margin (24–40px)
-- 5–7 seconds on screen, timed at roughly 20%, 50%, 80% of track duration
-- Short text (2–3 lines), optional thumbnail tile, and a tappable source chip
-- One nugget per track is a "listen for" type that appears 5 seconds before the relevant musical moment
-- Queue system: if a nugget triggers while another is showing, it waits its turn
+## Why This Works
 
-**3 Switchable Animation Styles (Framer Motion):**
-- **Style A — Glass Slide + Focus Bloom:** Enters from slight y-offset, brief blur bloom behind card, exits with upward drift + scale down
-- **Style B — Border Sweep + Text Mask Reveal:** Border highlight sweeps around card, text reveals via mask wipe, calm exit
-- **Style C — Anchor Dot Expand:** The pink glasses logo appears as the anchor dot with a subtle neon glow, nugget expands outward from it, collapses back toward the glasses on exit
+- YouTube transcripts contain the richest, most specific information about artists -- the exact quotes, stories, and details that make great trivia
+- Gemini with Google Search grounding can find and cite real articles with verified URLs
+- YouTube Data API gives us real video IDs that work for in-app embedding
+- Everything stays server-side in the edge function, so no CORS issues with YouTube's internal API
 
-All entrance animations: 250–400ms. No pulsing or bouncing.
+## What You Need
 
-**Playback Resume Behavior:**
-- When closing a media overlay, the simulated music fades back in over ~1 second rather than snapping back abruptly
+A Google AI API key from https://aistudio.google.com/apikeys -- this single key powers:
+- Gemini API with Google Search grounding (for article sources)
+- YouTube Data API v3 (for video search) -- make sure YouTube Data API v3 is enabled in your Google Cloud console
 
-## Screen 5: Source Overlays (modal on top of listening)
+You mentioned you have the key ready, so we'll store it as `GOOGLE_AI_API_KEY`.
 
-**Media Overlay (YouTube / video sources):**
-- Pauses playback simulation on open
-- Full-screen overlay with embedded YouTube player (mock embedId), title, publisher, timestamp locator, quote snippet
-- "Return to Listening" button — music fades back in on close
+## Detailed Changes
 
-**Reading Overlay (article / interview sources):**
-- Does NOT pause playback — music continues
-- Glass panel overlay preserving the listening context behind it
-- Shows title, publisher, quote snippet, locator
-- Optional "Open externally" secondary action
-- Close returns seamlessly to listening
+### 1. Add Secret: `GOOGLE_AI_API_KEY`
 
-## Page Transitions
-- Smooth, cinematic transitions between all routes (onboarding → connect → now playing → listening)
-- Framer Motion layout animations to make navigation feel like a TV experience, not a web app
+Store your Google API key securely as a backend secret.
 
-## Dev Panel (prototype-only)
-- Discreet toggle in listening screen corner
-- Switch animation style A / B / C
-- Jump to nugget 1 / 2 / 3 for quick testing
-- Toggle "Use backdrop motion" placeholder
+### 2. Rewrite `supabase/functions/generate-nuggets/index.ts`
 
-## Mock Data
-- 10 nerd-friendly tracks (e.g., Daft Punk, Radiohead, Pink Floyd, Björk, Talking Heads, etc.) with cover art, durations, metadata
-- 3 nuggets per track, each referencing a source with authentic-feeling music trivia
-- Sources include YouTube (with embedId + timestamp), articles, and interviews
-- All TypeScript typed (`Track`, `Nugget`, `Source`)
+The edge function becomes a multi-step pipeline:
 
-## Styling
-- Dark theme throughout
-- Large typography for distance/TV viewing
-- Glass panels with strong blur, subtle borders, soft shadows
-- Noise overlay texture on gradients
-- TV-remote-friendly focus states with clear highlights
-- Hot pink neon accent color drawn from the glasses logo
-- Pink glasses logo used as brand element in onboarding, nugget animations (Style C anchor), and subtle watermarks
+**Step 1 -- Find YouTube videos:**
+- Call YouTube Data API: `GET https://www.googleapis.com/youtube/v3/search?q={artist}+{song}+interview+OR+breakdown+OR+documentary&type=video&part=snippet&maxResults=5`
+- Get back real video IDs, titles, and channel names
+
+**Step 2 -- Fetch transcripts:**
+- For each video, call YouTube's internal Innertube API (`POST https://www.youtube.com/youtubei/v1/player`) to get caption track URLs
+- Download and parse the caption XML to get plain text transcripts
+- This works server-side for any public video with captions (auto-generated or manual)
+- If a video has no captions, skip it gracefully
+
+**Step 3 -- Generate nuggets with Gemini:**
+- Call Gemini API directly at `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`
+- Include the `google_search` grounding tool so Gemini can also find real articles
+- Pass the real YouTube transcripts as context in the prompt
+- The prompt tells Gemini: "Here are real transcripts from these YouTube videos about {artist}. Generate 3 trivia nuggets. For YouTube sources, reference the actual video and timestamp. For article sources, use Google Search to find and cite real articles."
+- Gemini returns nuggets with `groundingMetadata.groundingChunks` containing real article URLs
+- For YouTube-sourced nuggets, we already have the real video IDs from Step 1
+
+**Step 4 -- Assemble response:**
+- Each nugget comes back with either:
+  - A real YouTube `embedId` + video title + channel name + timestamp from the transcript
+  - A real article `url` from Google Search grounding citations
+
+### 3. Update `src/hooks/useAINuggets.ts`
+
+- Remove the Google Search URL fallback hack (no more `googleSearchUrl` construction)
+- Pass through the real `url` and `embedId` directly from the API response
+- Sources will now have genuine, clickable data
+
+### 4. Update `src/components/overlays/MediaOverlay.tsx`
+
+- YouTube embeds will work because `embedId` is now a real video ID
+- Change "Search for source" to "Watch on YouTube" with a direct link to the real video
+- If a timestamp locator exists, append `?start=` to the embed URL so it jumps to the relevant moment
+
+### 5. Update `src/components/overlays/ReadingOverlay.tsx`
+
+- Change "Search for source" to "Read Article" since the URL is now a real, verified link
+- For articles with real URLs, add an iframe option to read within the app (TV-optimized)
+- Keep the sidebar panel layout for the TV experience
+
+## Expected Performance
+
+- YouTube search: ~500ms
+- Transcript fetching (up to 3 videos in parallel): ~1-2s
+- Gemini with grounding: ~3-5s
+- **Total: ~5-8 seconds** (acceptable for a "loading nuggets" experience)
+
+## Fallback Behavior
+
+- If YouTube search returns no results: Gemini still generates nuggets using Google Search grounding only (article-heavy)
+- If transcripts are unavailable (no captions): Use video titles/descriptions as context instead
+- If Google Search grounding doesn't return a citation: Fall back to a Google Search link for that specific source
+- If the API key is missing: Return a clear error message
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| `supabase/functions/generate-nuggets/index.ts` | Full rewrite: YouTube search, transcript fetch, Gemini with grounding |
+| `src/hooks/useAINuggets.ts` | Remove URL fallback hack, pass through real URLs and embedIds |
+| `src/components/overlays/MediaOverlay.tsx` | "Watch on YouTube" with real link, timestamp support in embed |
+| `src/components/overlays/ReadingOverlay.tsx` | "Read Article" with real link, optional in-app iframe |
 
