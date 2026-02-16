@@ -1,11 +1,27 @@
 import { Track, Source, Nugget, Artist, Album } from "./types";
 
+// ==================== ARTIST IMAGES ====================
+import daftPunkImg from "@/assets/artists/daft-punk.jpg";
+import radioheadImg from "@/assets/artists/radiohead.jpg";
+import pinkFloydImg from "@/assets/artists/pink-floyd.jpg";
+import bjorkImg from "@/assets/artists/bjork.jpg";
+import talkingHeadsImg from "@/assets/artists/talking-heads.jpg";
+import kraftwerkImg from "@/assets/artists/kraftwerk.jpg";
+import aphexTwinImg from "@/assets/artists/aphex-twin.jpg";
+import davidBowieImg from "@/assets/artists/david-bowie.jpg";
+import portisheadImg from "@/assets/artists/portishead.jpg";
+import steelyDanImg from "@/assets/artists/steely-dan.jpg";
+import ryuichiSakamotoImg from "@/assets/artists/ryuichi-sakamoto.jpg";
+import moeShopImg from "@/assets/artists/moe-shop.jpg";
+import peteRangoImg from "@/assets/artists/pete-rango.jpg";
+import jameeCorneliaImg from "@/assets/artists/jamee-cornelia.jpg";
+
 // ==================== ARTISTS ====================
 export const artists: Artist[] = [
   {
     id: "daft-punk",
     name: "Daft Punk",
-    imageUrl: "https://picsum.photos/seed/daftpunk-artist/600/600",
+    imageUrl: daftPunkImg,
     bio: "French electronic music duo formed in 1993 by Thomas Bangalter and Guy-Manuel de Homem-Christo. Pioneers of French house, they fused funk, disco, and electronic music into a robotic aesthetic that redefined dance music for a generation.",
     genres: ["Electronic", "French House", "Disco"],
     relatedArtistIds: ["kraftwerk", "aphex-twin", "moe-shop"],
@@ -13,7 +29,7 @@ export const artists: Artist[] = [
   {
     id: "radiohead",
     name: "Radiohead",
-    imageUrl: "https://picsum.photos/seed/radiohead-artist/600/600",
+    imageUrl: radioheadImg,
     bio: "English rock band formed in 1985. After the Britpop success of The Bends, they pivoted into experimental electronic territory with Kid A, redefining what a rock band could be in the 21st century.",
     genres: ["Alternative Rock", "Art Rock", "Electronic"],
     relatedArtistIds: ["portishead", "bjork"],
@@ -21,7 +37,7 @@ export const artists: Artist[] = [
   {
     id: "pink-floyd",
     name: "Pink Floyd",
-    imageUrl: "https://picsum.photos/seed/pinkfloyd-artist/600/600",
+    imageUrl: pinkFloydImg,
     bio: "English rock band formed in 1965, known for philosophical lyrics, sonic experimentation, and elaborate live shows. The Dark Side of the Moon remains one of the best-selling albums of all time.",
     genres: ["Progressive Rock", "Psychedelic Rock", "Art Rock"],
     relatedArtistIds: ["david-bowie", "talking-heads"],
@@ -29,7 +45,7 @@ export const artists: Artist[] = [
   {
     id: "bjork",
     name: "Björk",
-    imageUrl: "https://picsum.photos/seed/bjork-artist/600/600",
+    imageUrl: bjorkImg,
     bio: "Icelandic singer, songwriter, and producer known for her eclectic musical style and avant-garde visual artistry. From the Sugarcubes to her solo career, she's consistently pushed the boundaries of pop.",
     genres: ["Art Pop", "Electronic", "Experimental"],
     relatedArtistIds: ["radiohead", "portishead"],
@@ -37,7 +53,7 @@ export const artists: Artist[] = [
   {
     id: "talking-heads",
     name: "Talking Heads",
-    imageUrl: "https://picsum.photos/seed/talkingheads-artist/600/600",
+    imageUrl: talkingHeadsImg,
     bio: "American new wave band formed in 1975. Led by David Byrne, they blended punk energy with African polyrhythms, funk, and art school sensibility into some of the most inventive music of the late 20th century.",
     genres: ["New Wave", "Post-Punk", "Art Rock"],
     relatedArtistIds: ["david-bowie", "kraftwerk"],
@@ -45,7 +61,7 @@ export const artists: Artist[] = [
   {
     id: "kraftwerk",
     name: "Kraftwerk",
-    imageUrl: "https://picsum.photos/seed/kraftwerk-artist/600/600",
+    imageUrl: kraftwerkImg,
     bio: "German electronic band formed in 1970. Widely regarded as the godfathers of electronic music, they pioneered the use of synthesizers, drum machines, and vocoders to create a futuristic, minimalist sound.",
     genres: ["Electronic", "Krautrock", "Synth-Pop"],
     relatedArtistIds: ["daft-punk", "aphex-twin", "ryuichi-sakamoto"],
@@ -53,7 +69,7 @@ export const artists: Artist[] = [
   {
     id: "aphex-twin",
     name: "Aphex Twin",
-    imageUrl: "https://picsum.photos/seed/aphextwin-artist/600/600",
+    imageUrl: aphexTwinImg,
     bio: "Richard D. James, known as Aphex Twin, is an Irish-born English electronic musician. A central figure in IDM, his work ranges from lush ambient soundscapes to frenetic, abrasive drill 'n' bass.",
     genres: ["IDM", "Ambient", "Electronic"],
     relatedArtistIds: ["kraftwerk", "daft-punk"],
@@ -61,7 +77,7 @@ export const artists: Artist[] = [
   {
     id: "david-bowie",
     name: "David Bowie",
-    imageUrl: "https://picsum.photos/seed/davidbowie-artist/600/600",
+    imageUrl: davidBowieImg,
     bio: "English singer-songwriter and actor, one of the most influential musicians of the 20th century. From Ziggy Stardust to the Berlin Trilogy, Bowie reinvented himself relentlessly across five decades.",
     genres: ["Art Rock", "Glam Rock", "Electronic"],
     relatedArtistIds: ["talking-heads", "pink-floyd"],
@@ -69,7 +85,7 @@ export const artists: Artist[] = [
   {
     id: "portishead",
     name: "Portishead",
-    imageUrl: "https://picsum.photos/seed/portishead-artist/600/600",
+    imageUrl: portisheadImg,
     bio: "English band from Bristol, formed in 1991. Alongside Massive Attack, they defined trip-hop — a dark, cinematic fusion of hip-hop beats, jazz samples, and Beth Gibbons' hauntingly fragile vocals.",
     genres: ["Trip-Hop", "Electronic", "Downtempo"],
     relatedArtistIds: ["radiohead", "bjork"],
@@ -77,7 +93,7 @@ export const artists: Artist[] = [
   {
     id: "steely-dan",
     name: "Steely Dan",
-    imageUrl: "https://picsum.photos/seed/steelydan-artist/600/600",
+    imageUrl: steelyDanImg,
     bio: "American rock band founded by Walter Becker and Donald Fagen. Known for meticulous studio craft, jazz-inflected harmonies, and sardonic lyrics, they pursued perfection at a level few bands have matched.",
     genres: ["Jazz Rock", "Soft Rock", "Pop"],
     relatedArtistIds: ["pink-floyd", "david-bowie"],
@@ -85,7 +101,7 @@ export const artists: Artist[] = [
   {
     id: "ryuichi-sakamoto",
     name: "Ryuichi Sakamoto",
-    imageUrl: "https://picsum.photos/seed/sakamoto-artist/600/600",
+    imageUrl: ryuichiSakamotoImg,
     bio: "Japanese composer, pianist, and actor who shaped the intersection of electronic and classical music across five decades. From Yellow Magic Orchestra to Oscar-winning film scores, Sakamoto's work is a meditation on beauty, technology, and impermanence.",
     genres: ["Ambient", "Electronic", "Classical"],
     relatedArtistIds: ["kraftwerk", "bjork"],
@@ -93,7 +109,7 @@ export const artists: Artist[] = [
   {
     id: "moe-shop",
     name: "Moe Shop",
-    imageUrl: "https://picsum.photos/seed/moeshop-artist/600/600",
+    imageUrl: moeShopImg,
     bio: "French-Japanese electronic producer known for blending future funk, French house, and J-pop into irresistibly catchy, high-energy productions. A key figure in the online future funk and kawaii bass scene.",
     genres: ["Future Funk", "Electronic", "Kawaii Bass"],
     relatedArtistIds: ["daft-punk", "kraftwerk"],
@@ -101,7 +117,7 @@ export const artists: Artist[] = [
   {
     id: "pete-rango",
     name: "Pete Rango",
-    imageUrl: "https://picsum.photos/seed/peterango-artist/600/600",
+    imageUrl: peteRangoImg,
     bio: "Independent singer-songwriter and producer weaving introspective narratives over warm, genre-fluid production. His music sits at the crossroads of indie R&B, alternative soul, and lo-fi pop — deeply personal and deliberately unhurried.",
     genres: ["Indie R&B", "Alternative Soul", "Lo-Fi Pop"],
     relatedArtistIds: ["portishead", "bjork"],
@@ -109,7 +125,7 @@ export const artists: Artist[] = [
   {
     id: "jamee-cornelia",
     name: "Jamee Cornelia",
-    imageUrl: "https://picsum.photos/seed/jameecornelia-artist/600/600",
+    imageUrl: jameeCorneliaImg,
     bio: "Atlanta-based rapper, producer, and visual artist whose work blurs the line between hip-hop, art-rap, and spoken word. With projects like BIG HOMIE and Art School Dropout, Cornelia builds dense, self-referential worlds with raw honesty and DIY conviction.",
     genres: ["Hip-Hop", "Art Rap", "Alternative Hip-Hop"],
     relatedArtistIds: ["talking-heads", "portishead"],
