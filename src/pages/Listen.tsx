@@ -108,6 +108,14 @@ export default function Listen() {
     setShownNuggetIds(new Set());
   }, [aiNuggets]);
 
+  // Clear nuggets when nerd mode is turned off
+  useEffect(() => {
+    if (!nerdActive) {
+      setActiveNugget(null);
+      setNuggetQueue([]);
+    }
+  }, [nerdActive]);
+
   // Nugget trigger logic
   useEffect(() => {
     if (!isPlaying || !nerdActive) return;
