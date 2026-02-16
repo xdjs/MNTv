@@ -83,7 +83,7 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
       {/* Card */}
       <motion.div
         variants={cardVariants}
-        className="glass-panel relative rounded-2xl p-5 ml-2"
+        className="apple-glass relative rounded-2xl p-5 ml-2"
       >
         {/* Style A bloom */}
         {animationStyle === "A" && (
@@ -111,14 +111,14 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
           />
         )}
 
-        {/* Style C neon pulse */}
+        {/* Style C bloom (same as A) */}
         {animationStyle === "C" && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: [0, 0.3, 0.15], transition: { duration: 0.6, delay: 0.4 } }}
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 0.2, scale: 1.2 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 rounded-2xl -z-10"
-            style={{ boxShadow: "0 0 40px hsl(var(--primary) / 0.4), 0 0 80px hsl(var(--primary) / 0.15)" }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="absolute inset-0 rounded-2xl bg-primary blur-2xl -z-10"
           />
         )}
 
