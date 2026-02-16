@@ -3,11 +3,13 @@ import { ArrowLeft } from "lucide-react";
 import { getArtistById, getAlbumsForArtist, getTracksForArtist, artists } from "@/mock/tracks";
 import PageTransition from "@/components/PageTransition";
 import TileRow from "@/components/TileRow";
+import { useArtistImage } from "@/hooks/useArtistImage";
 
 export default function ArtistProfile() {
   const { artistId } = useParams<{ artistId: string }>();
   const navigate = useNavigate();
   const artist = getArtistById(artistId || "");
+  const heroImage = useArtistImage(artist?.name || "", artist?.imageUrl || "");
 
   if (!artist) {
     return (
@@ -47,7 +49,7 @@ export default function ArtistProfile() {
         {/* Hero */}
         <div className="relative h-80 overflow-hidden">
           <img
-            src={artist.imageUrl}
+            src={heroImage}
             alt={artist.name}
             className="h-full w-full object-cover blur-[8px] scale-110 brightness-[0.4]"
           />
