@@ -118,9 +118,9 @@ export const artists: Artist[] = [
     id: "pete-rango",
     name: "Pete Rango",
     imageUrl: peteRangoImg,
-    bio: "Independent singer-songwriter and producer weaving introspective narratives over warm, genre-fluid production. His music sits at the crossroads of indie R&B, alternative soul, and lo-fi pop — deeply personal and deliberately unhurried.",
-    genres: ["Indie R&B", "Alternative Soul", "Lo-Fi Pop"],
-    relatedArtistIds: ["portishead", "bjork"],
+    bio: "Colombian-born music producer, creative director, and artist development strategist based in Richmond, Virginia. Co-founder of Life Is Valuable (L.I.V.) and an AI researcher at MUSICNERD, Pete bridges art, technology, and community — producing genre-fluid tracks under XUE Records while empowering underserved youth through creative mentorship.",
+    genres: ["Hip-Hop", "R&B", "Electronic"],
+    relatedArtistIds: ["daft-punk", "jamee-cornelia"],
   },
   {
     id: "jamee-cornelia",
@@ -181,7 +181,7 @@ export const albums: Album[] = [
   { id: "alb-ms-moemoe", artistId: "moe-shop", title: "Moe Moe", year: 2018, coverArtUrl: "https://picsum.photos/seed/moeshop-moemoe/500/500", genre: "Future Funk" },
   { id: "alb-ms-evoevo", artistId: "moe-shop", title: "EVO EVO", year: 2025, coverArtUrl: "https://picsum.photos/seed/moeshop-evoevo/500/500", genre: "Electronic" },
   // Pete Rango
-  { id: "alb-pr-woven", artistId: "pete-rango", title: "Woven Tales", year: 2021, coverArtUrl: "https://picsum.photos/seed/peterango-woven/500/500", genre: "Indie R&B" },
+  { id: "alb-pr-lillil", artistId: "pete-rango", title: "LIL LIL", year: 2024, coverArtUrl: "https://i.ytimg.com/vi/hi0CsuFxrvg/hqdefault.jpg", genre: "Hip-Hop" },
   // Jamee Cornelia
   { id: "alb-jc-bighomie", artistId: "jamee-cornelia", title: "BIG HOMIE", year: 2020, coverArtUrl: "https://picsum.photos/seed/jameecornelia-bighomie/500/500", genre: "Hip-Hop" },
   { id: "alb-jc-asd", artistId: "jamee-cornelia", title: "Art School Dropout", year: 2023, coverArtUrl: "https://picsum.photos/seed/jameecornelia-asd/500/500", genre: "Art Rap" },
@@ -214,8 +214,8 @@ export const tracks: Track[] = [
   // Moe Shop
   { id: "moe-shop-love-taste", title: "Love Taste", artist: "Moe Shop", artistId: "moe-shop", albumId: "alb-ms-moemoe", album: "Moe Moe", durationSec: 176, coverArtUrl: "https://picsum.photos/seed/moeshop-moemoe/500/500", trackNumber: 1 },
   { id: "moe-shop-baby-pink", title: "Baby Pink", artist: "Moe Shop", artistId: "moe-shop", albumId: "alb-ms-moemoe", album: "Moe Moe", durationSec: 198, coverArtUrl: "https://picsum.photos/seed/moeshop-moemoe/500/500", trackNumber: 2 },
-  // Pete Rango
-  { id: "pete-rango-time", title: "Time", artist: "Pete Rango", artistId: "pete-rango", albumId: "alb-pr-woven", album: "Woven Tales", durationSec: 224, coverArtUrl: "https://picsum.photos/seed/peterango-woven/500/500", trackNumber: 1 },
+  // Pete Rango (producer)
+  { id: "pete-rango-off-the-leash", title: "OFF THE LEASH", artist: "LIL LIL & Pete Rango", artistId: "pete-rango", albumId: "alb-pr-lillil", album: "LIL LIL", durationSec: 182, coverArtUrl: "https://i.ytimg.com/vi/hi0CsuFxrvg/hqdefault.jpg", trackNumber: 1 },
   // Jamee Cornelia
   { id: "jamee-cornelia-husky", title: "Husky", artist: "Jamee Cornelia", artistId: "jamee-cornelia", albumId: "alb-jc-bighomie", album: "BIG HOMIE", durationSec: 195, coverArtUrl: "https://picsum.photos/seed/jameecornelia-bighomie/500/500", trackNumber: 1 },
   { id: "jamee-cornelia-routine", title: "Routine", artist: "Jamee Cornelia", artistId: "jamee-cornelia", albumId: "alb-jc-asd", album: "Art School Dropout", durationSec: 210, coverArtUrl: "https://picsum.photos/seed/jameecornelia-asd/500/500", trackNumber: 1 },
@@ -315,10 +315,10 @@ export const sources: Source[] = [
   { id: "src-ms-bp-yt", type: "youtube", title: "Moe Shop - Baby Pink (ft. YUC'e)", publisher: "YouTube / Moe Shop", url: "https://www.youtube.com/watch?v=sWbD5q769Ms", embedId: "sWbD5q769Ms", locator: "00:45–01:10", quoteSnippet: "YUC'e's vocal chops are pitched and re-sequenced — the human voice becomes a synthesizer.", thumbnailUrl: "https://img.youtube.com/vi/sWbD5q769Ms/hqdefault.jpg" },
   { id: "src-ms-bp-art", type: "article", title: "Kawaii Bass: The Genre That Shouldn't Work", publisher: "Resident Advisor", url: "https://ra.co", locator: "Paragraph 3", quoteSnippet: "It's aggressively cute — and somehow that makes it hit harder." },
   { id: "src-ms-bp-int", type: "interview", title: "Moe Shop on the Moe Moe EP", publisher: "Anime News Network", url: "https://animenewsnetwork.com", locator: "Section 1", quoteSnippet: "Every track on Moe Moe started as a joke. Then the jokes got really good." },
-  // Pete Rango — Time
-  { id: "src-pr-ti-yt", type: "youtube", title: "Pete Rango & Maviii - Time (Visualizer)", publisher: "YouTube / Pete Rango", url: "https://www.youtube.com/watch?v=placeholder-pr", embedId: "placeholder-pr", locator: "01:30–01:55", quoteSnippet: "The song was written during lockdown — a reflection on how our perception of time collapsed and stretched simultaneously.", thumbnailUrl: "https://picsum.photos/seed/peterango-time-thumb/480/360" },
-  { id: "src-pr-ti-art", type: "article", title: "Pete Rango: The Art of Slowing Down", publisher: "Nagamag", url: "https://nagamag.com", locator: "Paragraph 2", quoteSnippet: "With a current, meaningful narrative — this sweet-toned song carries us along on a tide of emotion." },
-  { id: "src-pr-ti-int", type: "interview", title: "Pete Rango on Writing from Isolation", publisher: "Indie Shuffle", url: "https://indieshuffle.com", locator: "Section 1", quoteSnippet: "I stopped trying to make music that sounded like something. I just let it sound like me." },
+  // Pete Rango — OFF THE LEASH
+  { id: "src-pr-ot-yt", type: "youtube", title: "LIL LIL & Pete Rango - OFF THE LEASH", publisher: "YouTube / XUE Records", url: "https://www.youtube.com/watch?v=hi0CsuFxrvg", embedId: "hi0CsuFxrvg", locator: "01:00–01:25", quoteSnippet: "Released via XUE Records in late 2024, the track showcases Pete Rango's production chops alongside LIL LIL's raw delivery.", thumbnailUrl: "https://i.ytimg.com/vi/hi0CsuFxrvg/hqdefault.jpg" },
+  { id: "src-pr-ot-art", type: "article", title: "Pete Rango: Producer, Mentor, Community Builder", publisher: "Campfire Music Foundation", url: "https://www.cfmusic.org/pete-arango", locator: "Bio section", quoteSnippet: "With over a decade of experience in the music industry, Pete has collaborated with artists such as DJ Jazzy Jeff, A$AP Ferg, and Kodak Black." },
+  { id: "src-pr-ot-int", type: "article", title: "Life is Valuable: Pete Rango & Gabriel Williams", publisher: "CultureWorks Richmond", url: "https://richmondcultureworks.org/spotlights/spotlight-life-is-valuable-with-pete-rango-amp-gabriel-williams", locator: "Spotlight feature", quoteSnippet: "LIV's undeniable momentum has brought their hands-on Dream Labs to Petersburg schools, pairing mentors with young students." },
   // Jamee Cornelia — Husky
   { id: "src-jc-hu-yt", type: "youtube", title: "Jamee Cornelia - Husky (Music Video)", publisher: "YouTube / Jamee Cornelia", url: "https://www.youtube.com/watch?v=AtCJa1s1Lkc", embedId: "AtCJa1s1Lkc", locator: "01:00–01:25", quoteSnippet: "The video was self-directed on a shoestring budget — Cornelia edited it alone, staying true to the DIY ethos.", thumbnailUrl: "https://img.youtube.com/vi/AtCJa1s1Lkc/hqdefault.jpg" },
   { id: "src-jc-hu-art", type: "article", title: "Atlanta's Underground Rap Renaissance", publisher: "Bandcamp Daily", url: "https://daily.bandcamp.com", locator: "Paragraph 7", quoteSnippet: "Jamee Cornelia makes music that sounds like a conversation with yourself at 3 AM." },
@@ -423,10 +423,10 @@ export const nuggets: Nugget[] = [
   { id: "n-ms-bp-1", trackId: "moe-shop-baby-pink", timestampSec: 40, durationMs: 6000, text: "YUC'e's vocals are pitched and re-sequenced until the human voice becomes a synthesizer — kawaii bass at its most inventive.", kind: "process", sourceId: "src-ms-bp-yt" },
   { id: "n-ms-bp-2", trackId: "moe-shop-baby-pink", timestampSec: 99, durationMs: 5500, text: "Kawaii bass is 'aggressively cute — and somehow that makes it hit harder.' Baby Pink is the genre's thesis statement.", kind: "influence", sourceId: "src-ms-bp-art" },
   { id: "n-ms-bp-3", trackId: "moe-shop-baby-pink", timestampSec: 158, durationMs: 6000, text: "🎧 Listen for that bouncy bass drop — every track on Moe Moe 'started as a joke. Then the jokes got really good.'", kind: "human", listenFor: true, relatedMomentSec: 163, sourceId: "src-ms-bp-int" },
-  // Pete Rango — Time
-  { id: "n-pr-ti-1", trackId: "pete-rango-time", timestampSec: 45, durationMs: 6000, text: "Time was written during lockdown — a meditation on how our collective perception of time collapsed and stretched simultaneously.", kind: "human", sourceId: "src-pr-ti-yt" },
-  { id: "n-pr-ti-2", trackId: "pete-rango-time", timestampSec: 112, durationMs: 5500, text: "Pete Rango stopped trying to make music that sounded like something — 'I just let it sound like me.'", kind: "constraint", sourceId: "src-pr-ti-int" },
-  { id: "n-pr-ti-3", trackId: "pete-rango-time", timestampSec: 179, durationMs: 6000, text: "🎧 Listen for the warmth in the production — Rango's sweet-toned delivery 'carries us along on a tide of emotion.'", kind: "pattern", listenFor: true, relatedMomentSec: 184, sourceId: "src-pr-ti-art" },
+  // Pete Rango — OFF THE LEASH
+  { id: "n-pr-ot-1", trackId: "pete-rango-off-the-leash", timestampSec: 36, durationMs: 6000, text: "Pete Rango produced this track for LIL LIL under XUE Records — his production blends hard-hitting hip-hop with atmospheric textures.", kind: "process", sourceId: "src-pr-ot-yt" },
+  { id: "n-pr-ot-2", trackId: "pete-rango-off-the-leash", timestampSec: 91, durationMs: 5500, text: "Beyond producing, Rango has collaborated with DJ Jazzy Jeff, A$AP Ferg, and Kodak Black over a decade-long career.", kind: "influence", sourceId: "src-pr-ot-art" },
+  { id: "n-pr-ot-3", trackId: "pete-rango-off-the-leash", timestampSec: 146, durationMs: 6000, text: "🎧 Listen for the production layers — Rango also runs Dream Labs, teaching music production to students in Petersburg, VA.", kind: "human", listenFor: true, relatedMomentSec: 151, sourceId: "src-pr-ot-int" },
   // Jamee Cornelia — Husky
   { id: "n-jc-hu-1", trackId: "jamee-cornelia-husky", timestampSec: 39, durationMs: 6000, text: "The Husky video was self-directed on a shoestring budget — Cornelia edited it alone, staying true to the DIY ethos.", kind: "process", sourceId: "src-jc-hu-yt" },
   { id: "n-jc-hu-2", trackId: "jamee-cornelia-husky", timestampSec: 97, durationMs: 5500, text: "Cornelia makes music that 'sounds like a conversation with yourself at 3 AM' — raw, unfiltered, and uncomfortably honest.", kind: "human", sourceId: "src-jc-hu-art" },
