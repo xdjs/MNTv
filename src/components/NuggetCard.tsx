@@ -84,7 +84,7 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
       {/* Card */}
       <motion.div
         variants={cardVariants}
-        className="apple-glass relative rounded-xl p-4 ml-2"
+        className="apple-glass relative rounded-xl px-5 py-3 ml-2"
       >
         {/* Style A bloom */}
         {animationStyle === "A" && (
