@@ -7,6 +7,9 @@ import { AnimatePresence } from "framer-motion";
 import Onboarding from "./pages/Onboarding";
 import Connect from "./pages/Connect";
 import NowPlaying from "./pages/NowPlaying";
+import Browse from "./pages/Browse";
+import ArtistProfile from "./pages/ArtistProfile";
+import AlbumDetail from "./pages/AlbumDetail";
 import Listen from "./pages/Listen";
 import NotFound from "./pages/NotFound";
 
@@ -20,6 +23,9 @@ function AnimatedRoutes() {
         <Route path="/" element={<Onboarding />} />
         <Route path="/connect" element={<Connect />} />
         <Route path="/now-playing" element={<NowPlaying />} />
+        <Route path="/browse" element={<Browse />} />
+        <Route path="/artist/:artistId" element={<ArtistProfile />} />
+        <Route path="/album/:albumId" element={<AlbumDetail />} />
         <Route path="/listen/:trackId" element={<Listen />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
