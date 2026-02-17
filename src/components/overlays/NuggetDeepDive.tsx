@@ -19,6 +19,7 @@ const kindLabels: Record<string, string> = {
   pattern: "Pattern",
   human: "Human Story",
   influence: "Influence",
+  discovery: "Explore Next",
 };
 
 interface DeepDiveEntry {
