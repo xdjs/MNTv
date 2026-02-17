@@ -382,24 +382,52 @@ export default function Listen() {
                 key={activeNugget.id}
                 ref={nuggetRef}
                 tabIndex={0}
-                className="outline-none"
+                className="outline-none relative"
                 onClick={() => !deepDiveNugget && handleNuggetClick(activeNugget)}
                 onFocus={() => setNuggetFocused(true)}
                 onBlur={() => setNuggetFocused(false)}
-                animate={{
-                  width: deepDiveNugget ? 720 : 520,
-                }}
+                animate={{ width: deepDiveNugget ? 720 : 520 }}
                 transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
                 style={{ cursor: deepDiveNugget ? "default" : "pointer" }}
               >
-                <AnimatePresence mode="wait" initial={false}>
-                  {deepDiveNugget ? (
+                {/* Card layer — stays mounted, just fades */}
+                <motion.div
+                  animate={{ opacity: deepDiveNugget ? 0 : 1 }}
+                  transition={{ duration: 0.2 }}
+                  style={{
+                    pointerEvents: deepDiveNugget ? "none" : "auto",
+                    position: deepDiveNugget ? "absolute" : "relative",
+                    inset: 0,
+                  }}
+                >
+                  <NuggetCard
+                    nugget={activeNugget}
+                    animationStyle={animStyle}
+                    onSourceClick={() => handleSourceClick(activeNugget)}
+                    currentTime={formatTime(activeNugget.timestampSec)}
+                    sourceOverride={getSource(activeNugget.sourceId) || null}
+                    focused={nuggetFocused && !deepDiveNugget}
+                  />
+                  {nuggetFocused && !deepDiveNugget && (
+                    <motion.p
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="mt-2 text-center text-xs text-muted-foreground"
+                    >
+                      Press Enter to explore
+                    </motion.p>
+                  )}
+                </motion.div>
+
+                {/* Deep dive layer — mounts on top, fades in */}
+                <AnimatePresence>
+                  {deepDiveNugget && (
                     <motion.div
                       key="deep-dive"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      transition={{ duration: 0.2, delay: 0.1 }}
+                      transition={{ duration: 0.25, delay: 0.1 }}
                     >
                       <NuggetDeepDiveInline
                         nugget={deepDiveNugget}
@@ -408,32 +436,6 @@ export default function Listen() {
                         trackTitle={track.title}
                         onClose={() => setDeepDiveNugget(null)}
                       />
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="card"
-                      initial={false}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.15 }}
-                    >
-                      <NuggetCard
-                        nugget={activeNugget}
-                        animationStyle={animStyle}
-                        onSourceClick={() => handleSourceClick(activeNugget)}
-                        currentTime={formatTime(activeNugget.timestampSec)}
-                        sourceOverride={getSource(activeNugget.sourceId) || null}
-                        focused={nuggetFocused && !deepDiveNugget}
-                      />
-                      {nuggetFocused && (
-                        <motion.p
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          className="mt-2 text-center text-xs text-muted-foreground"
-                        >
-                          Press Enter to explore
-                        </motion.p>
-                      )}
                     </motion.div>
                   )}
                 </AnimatePresence>
