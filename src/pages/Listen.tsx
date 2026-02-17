@@ -363,7 +363,7 @@ export default function Listen() {
 
         {/* Nugget cards — clickable for deep dive */}
         <div className="relative z-10 flex flex-1 items-center justify-end px-10 pb-24">
-          <div className="w-[420px] shrink-0">
+          <div className="w-[520px] shrink-0">
             <AnimatePresence mode="wait">
               {activeNugget && (
                 <div

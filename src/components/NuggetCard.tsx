@@ -89,7 +89,7 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
             ? "0 0 20px 6px hsl(330 90% 60% / 0.5), 0 0 50px 12px hsl(330 90% 60% / 0.2)"
             : "0 0 8px 2px hsl(330 90% 60% / 0.15), 0 0 18px 4px hsl(330 90% 60% / 0.07)",
         }}
-        className={`apple-glass relative rounded-xl px-5 py-3 ml-2 transition-all duration-200 ${
+        className={`apple-glass relative rounded-xl px-5 py-2.5 ml-2 transition-all duration-200 ${
           focused ? "scale-[1.03]" : "hover:scale-[1.02]"
         }`}
       >
@@ -137,11 +137,11 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
           </motion.div>
         )}
 
-        {/* Nugget text */}
+        {/* Nugget text — truncated to 2 lines, full text shown in deep dive */}
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1, transition: { delay: animationStyle === "B" ? 0.5 : 0.4, duration: 0.3 } }}
-          className="text-sm leading-6 text-foreground/90"
+          className="text-sm leading-6 text-foreground/90 line-clamp-2"
         >
           {nugget.text}
         </motion.p>
