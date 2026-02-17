@@ -104,28 +104,42 @@ function ArtistProfileInner({ artist, heroImage, tracksData, albumTiles, related
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "ArrowDown") {
         e.preventDefault();
+        // In the tracks zone, move down within tracks first
+        if (zone === 'tracks' && colIndex < tracksData.length - 1) {
+          setColIndex((c) => c + 1);
+          return;
+        }
         setZone((cur) => {
           const idx = zoneOrder.indexOf(cur);
           const next = Math.min(idx + 1, zoneOrder.length - 1);
           const nextZone = zoneOrder[next];
-          setColIndex((c) => clampCol(nextZone, c));
+          setColIndex(0);
           return nextZone;
         });
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
+        // In the tracks zone, move up within tracks first
+        if (zone === 'tracks' && colIndex > 0) {
+          setColIndex((c) => c - 1);
+          return;
+        }
         setZone((cur) => {
           const idx = zoneOrder.indexOf(cur);
           const next = Math.max(idx - 1, 0);
           const nextZone = zoneOrder[next];
-          setColIndex((c) => clampCol(nextZone, c));
+          if (nextZone === 'tracks') {
+            setColIndex(tracksData.length - 1); // land on last track when coming from below
+          } else {
+            setColIndex(0);
+          }
           return nextZone;
         });
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
-        setColIndex((c) => Math.max(0, c - 1));
+        if (zone !== 'tracks') setColIndex((c) => Math.max(0, c - 1));
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
-        setColIndex((c) => clampCol(zone, c + 1));
+        if (zone !== 'tracks') setColIndex((c) => clampCol(zone, c + 1));
       } else if (e.key === "Enter") {
         e.preventDefault();
         if (zone === 'header') {
@@ -137,6 +151,9 @@ function ArtistProfileInner({ artist, heroImage, tracksData, albumTiles, related
           const item = tileRows[zone]?.items[colIndex];
           if (item) navigate(item.href);
         }
+      } else if (e.key === "Escape" || e.key === "Backspace") {
+        e.preventDefault();
+        navigate("/browse");
       }
     };
 
