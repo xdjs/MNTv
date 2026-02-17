@@ -425,6 +425,7 @@ Return ONLY valid JSON:
     // Step 4: Assemble response with real video IDs and targeted search URLs
     const nuggets = rawNuggets.map((n) => {
       const result: any = {
+        headline: n.headline,
         text: n.text,
         kind: n.kind,
         listenFor: n.listenFor,

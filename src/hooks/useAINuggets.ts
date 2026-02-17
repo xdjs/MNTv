@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Nugget, Source } from "@/mock/types";
 
 interface AINuggetData {
-  headline?: string;
+  headline: string;
   text: string;
   kind: "process" | "constraint" | "pattern" | "human" | "influence" | "discovery";
   listenFor?: boolean;
