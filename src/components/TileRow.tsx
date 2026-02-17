@@ -81,6 +81,8 @@ export default function TileRow({ label, items, tileSize = "md", focusedIndex = 
               <button
                 key={item.id}
                 ref={(el) => { tileRefs.current[i] = el; }}
+                data-tile-row={label}
+                data-tile-col={i}
                 onClick={() => navigate(item.href)}
                 className={`${sizes[tileSize]} shrink-0 group/tile relative rounded-xl transition-all duration-200 outline-none ${
                   isFocused
