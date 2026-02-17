@@ -96,6 +96,10 @@ async function fetchTranscript(videoId: string): Promise<string | null> {
   }
 }
 
+class RecitationError extends Error {
+  constructor() { super("RECITATION"); this.name = "RecitationError"; }
+}
+
 // ── Generate nuggets with Gemini + Google Search grounding ───────────
 interface GeminiNugget {
   text: string;
@@ -199,9 +203,14 @@ Return ONLY valid JSON:
       
       // Check for blocked/empty responses
       const finishReason = candidate?.finishReason;
-      if (finishReason === "SAFETY" || finishReason === "RECITATION") {
-        console.warn("Gemini blocked response due to:", finishReason);
-        throw new Error(`Gemini blocked response: ${finishReason}`);
+      if (finishReason === "SAFETY") {
+        console.warn("Gemini blocked response due to SAFETY");
+        throw new Error("Gemini blocked response: SAFETY");
+      }
+      if (finishReason === "RECITATION") {
+        console.warn("Gemini blocked response due to RECITATION, will retry without transcripts");
+        // Signal caller to retry without transcript context
+        throw new RecitationError();
       }
       
       const text = candidate?.content?.parts?.[0]?.text || "";
@@ -383,9 +392,27 @@ Return ONLY valid JSON:
     console.log(`Fetched ${transcripts.size} transcripts`);
 
     // Step 3: Generate nuggets with Gemini + Google Search grounding
-    const { nuggets: rawNuggets, groundingChunks } = await generateWithGemini(
-      artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY
-    );
+    let rawNuggets: any[];
+    let groundingChunks: any[];
+    try {
+      const result = await generateWithGemini(
+        artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY
+      );
+      rawNuggets = result.nuggets;
+      groundingChunks = result.groundingChunks;
+    } catch (e) {
+      if (e instanceof RecitationError) {
+        // Retry without transcripts — they likely contain copyrighted lyrics
+        console.log("Retrying without transcripts to avoid RECITATION block...");
+        const result = await generateWithGemini(
+          artist, title, album, videos, new Map(), GOOGLE_AI_API_KEY
+        );
+        rawNuggets = result.nuggets;
+        groundingChunks = result.groundingChunks;
+      } else {
+        throw e;
+      }
+    }
 
     // Step 4: Assemble response with real video IDs and targeted search URLs
     const nuggets = rawNuggets.map((n) => {
