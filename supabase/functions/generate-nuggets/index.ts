@@ -6,7 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// ── Step 1: YouTube Data API search ──────────────────────────────────
+// ── YouTube Data API search (optional, requires API enabled) ─────────
 interface YTVideo {
   videoId: string;
   title: string;
@@ -23,63 +23,57 @@ async function searchYouTube(query: string, apiKey: string): Promise<YTVideo[]> 
 
   const res = await fetch(url.toString());
   if (!res.ok) {
-    console.error("YouTube search failed:", res.status, await res.text());
+    const errText = await res.text();
+    console.error("YouTube search failed:", res.status, errText);
     return [];
   }
   const data = await res.json();
-  return (data.items || []).map((item: any) => ({
-    videoId: item.id?.videoId,
-    title: item.snippet?.title,
-    channelTitle: item.snippet?.channelTitle,
-  })).filter((v: YTVideo) => v.videoId);
+  return (data.items || [])
+    .map((item: any) => ({
+      videoId: item.id?.videoId,
+      title: item.snippet?.title,
+      channelTitle: item.snippet?.channelTitle,
+    }))
+    .filter((v: YTVideo) => v.videoId);
 }
 
-// ── Step 2: Fetch transcript via Innertube ───────────────────────────
+// ── Fetch transcript via Innertube ───────────────────────────────────
 async function fetchTranscript(videoId: string): Promise<string | null> {
   try {
-    // Step 2a: Get caption track URLs from Innertube player endpoint
     const playerRes = await fetch(
       "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         },
         body: JSON.stringify({
           videoId,
           context: {
-            client: {
-              clientName: "WEB",
-              clientVersion: "2.20240101.00.00",
-              hl: "en",
-            },
+            client: { clientName: "WEB", clientVersion: "2.20240101.00.00", hl: "en" },
           },
         }),
       }
     );
-
     if (!playerRes.ok) return null;
     const playerData = await playerRes.json();
 
     const captionTracks =
       playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
-    if (!captionTracks || captionTracks.length === 0) return null;
+    if (!captionTracks?.length) return null;
 
-    // Prefer English, fall back to first available
     const enTrack = captionTracks.find(
       (t: any) => t.languageCode === "en" || t.languageCode?.startsWith("en")
     );
     const track = enTrack || captionTracks[0];
-    const captionUrl = track.baseUrl;
-    if (!captionUrl) return null;
+    if (!track.baseUrl) return null;
 
-    // Step 2b: Fetch the caption XML
-    const captionRes = await fetch(captionUrl);
+    const captionRes = await fetch(track.baseUrl);
     if (!captionRes.ok) return null;
     const xml = await captionRes.text();
 
-    // Parse XML to extract plain text (strip tags, decode entities)
     const textSegments = xml
       .match(/<text[^>]*>([\s\S]*?)<\/text>/g)
       ?.map((seg) =>
@@ -93,9 +87,7 @@ async function fetchTranscript(videoId: string): Promise<string | null> {
           .replace(/&apos;/g, "'")
       );
 
-    if (!textSegments || textSegments.length === 0) return null;
-
-    // Limit transcript to ~4000 chars to stay within prompt limits
+    if (!textSegments?.length) return null;
     let transcript = textSegments.join(" ");
     if (transcript.length > 4000) transcript = transcript.slice(0, 4000) + "...";
     return transcript;
@@ -105,8 +97,8 @@ async function fetchTranscript(videoId: string): Promise<string | null> {
   }
 }
 
-// ── Step 3: Gemini with Google Search grounding ──────────────────────
-interface GeminiNugget {
+// ── Generate nuggets via Lovable AI gateway ──────────────────────────
+interface NuggetResult {
   text: string;
   kind: string;
   listenFor: boolean;
@@ -114,26 +106,27 @@ interface GeminiNugget {
     type: "youtube" | "article" | "interview";
     title: string;
     publisher: string;
+    url?: string;
+    embedId?: string;
     quoteSnippet: string;
     locator?: string;
-    videoIndex?: number; // index into the videos array for youtube sources
+    videoIndex?: number;
   };
 }
 
-async function generateWithGemini(
+async function generateNuggets(
   artist: string,
   title: string,
   album: string | undefined,
   videos: YTVideo[],
   transcripts: Map<string, string>,
   apiKey: string
-): Promise<{ nuggets: GeminiNugget[]; groundingChunks: any[] }> {
-  // Build transcript context
+): Promise<NuggetResult[]> {
   const transcriptContext = videos
     .filter((v) => transcripts.has(v.videoId))
     .map((v, i) => {
       const t = transcripts.get(v.videoId)!;
-      return `[VIDEO ${i}] "${v.title}" by ${v.channelTitle} (videoId: ${v.videoId})\nTranscript excerpt:\n${t}`;
+      return `[VIDEO ${i}] "${v.title}" by ${v.channelTitle} (videoId: ${v.videoId})\nTranscript:\n${t}`;
     })
     .join("\n\n---\n\n");
 
@@ -141,95 +134,99 @@ async function generateWithGemini(
     .map((v, i) => `[VIDEO ${i}] "${v.title}" by ${v.channelTitle} (videoId: ${v.videoId})`)
     .join("\n");
 
-  const prompt = `You are a music historian and trivia expert. Given a song and real YouTube transcripts, generate exactly 3 fascinating, accurate pieces of trivia.
+  // Add randomness seed to get different results each time
+  const seed = Math.random().toString(36).slice(2, 8);
+  const angles = [
+    "production techniques", "personal stories", "cultural impact",
+    "musical theory", "recording sessions", "live performances",
+    "collaborations", "lyrical meaning", "instrument choices",
+    "historical context", "critical reception", "fan theories",
+    "samples and influences", "music video creation", "chart performance",
+  ];
+  const pickedAngles = angles.sort(() => Math.random() - 0.5).slice(0, 3);
 
-Song: "${title}" by ${artist}${album ? ` from the album "${album}"` : ""}
+  const prompt = `You are a music historian and trivia expert. Generate exactly 3 fascinating, UNIQUE pieces of trivia about the song "${title}" by ${artist}${album ? ` from "${album}"` : ""}.
 
-Available YouTube videos:
-${videoListContext}
+Focus on these angles for THIS generation: ${pickedAngles.join(", ")}. (Seed: ${seed})
 
-${transcriptContext ? `Real transcript content from these videos:\n\n${transcriptContext}` : "No transcripts available — use your knowledge to find real sources."}
+${videoListContext ? `Available YouTube videos:\n${videoListContext}\n` : ""}
+${transcriptContext ? `Real transcript content:\n\n${transcriptContext}\n` : ""}
 
-Rules:
-- Generate exactly 3 nuggets with diverse "kind" values
-- Set exactly ONE nugget's listenFor to true (an audio moment to listen for)
-- For nuggets sourced from the YouTube transcripts above: set source.type to "youtube", reference the real video title and channel, include a real quote from the transcript, and set source.videoIndex to the VIDEO index number
-- For nuggets sourced from articles: set source.type to "article" or "interview", cite a real publication name and article title.
-- Include a locator (timestamp like "3:12" for videos, or "Paragraph 6" for articles) when possible
-- Each nugget must be factually accurate and based on the real content provided
-- Aim for at least 1 YouTube source and at least 1 article source across the 3 nuggets
+CRITICAL RULES:
+- Generate exactly 3 nuggets with diverse "kind" values from: process, constraint, pattern, human, influence
+- Set exactly ONE nugget's listenFor to true (an audio moment listeners should pay attention to)
+- For each nugget provide a REAL source — a real article, interview, or video that actually exists
+- For YouTube sources from the videos above: set type to "youtube", include videoIndex number, and include a real quote
+- For article/interview sources: cite REAL publications (Pitchfork, Rolling Stone, NME, The Guardian, etc.) with real article titles that actually exist about this artist/song
+- Include a url field with the REAL URL to the source when possible
+- Include a locator (timestamp for videos, section for articles) when possible
+- Be factually accurate — do not fabricate quotes or facts
+- IMPORTANT: Generate DIFFERENT trivia each time — avoid the most obvious facts
 
-Return ONLY a JSON object with this exact structure:
+Return ONLY valid JSON:
 {
   "nuggets": [
     {
-      "text": "1-3 sentences of surprising, accurate music trivia",
+      "text": "1-3 sentences of surprising music trivia",
       "kind": "process|constraint|pattern|human|influence",
       "listenFor": false,
       "source": {
         "type": "youtube|article|interview",
-        "title": "Real title",
-        "publisher": "Real publisher/channel",
-        "quoteSnippet": "Real or closely paraphrased quote",
-        "locator": "3:12",
+        "title": "Real source title",
+        "publisher": "Real publisher/channel name",
+        "url": "https://real-url-to-source",
+        "quoteSnippet": "Real or closely paraphrased quote from the source",
+        "locator": "3:12 or Paragraph 6",
         "videoIndex": 0
       }
     }
   ]
 }`;
 
-  const body: any = {
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    tools: [{ google_search: {} }],
-    generationConfig: { temperature: 0.7 },
-  };
+  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        {
+          role: "system",
+          content: "You are a music historian who provides accurate, well-sourced trivia. Always cite real sources with real URLs. Return only valid JSON.",
+        },
+        { role: "user", content: prompt },
+      ],
+      temperature: 1.0,
+    }),
+  });
 
-  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-
-  // Retry up to 3 times on 429 rate limit
-  let lastError: Error | null = null;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await fetch(geminiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      const candidate = data.candidates?.[0];
-      const text = candidate?.content?.parts?.[0]?.text || "";
-      const groundingMeta = candidate?.groundingMetadata;
-      const groundingChunks = groundingMeta?.groundingChunks || [];
-
-      let parsed: { nuggets: GeminiNugget[] };
-      try {
-        const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-        parsed = JSON.parse(cleaned);
-      } catch {
-        console.error("Failed to parse Gemini response:", text);
-        throw new Error("Failed to parse Gemini response");
-      }
-      return { nuggets: parsed.nuggets || [], groundingChunks };
-    }
-
-    if (res.status === 429 && attempt < 2) {
-      // Parse retry delay from error response
-      const errData = await res.json().catch(() => null);
-      const retryInfo = errData?.error?.details?.find((d: any) => d["@type"]?.includes("RetryInfo"));
-      const delaySec = parseInt(retryInfo?.retryDelay || "30", 10);
-      const waitMs = Math.min((delaySec + 5) * 1000, 55000); // cap at 55s to stay in function timeout
-      console.log(`Rate limited, waiting ${waitMs / 1000}s before retry ${attempt + 1}...`);
-      await new Promise((r) => setTimeout(r, waitMs));
-      continue;
-    }
-
+  if (!res.ok) {
     const errText = await res.text();
-    console.error("Gemini API error:", res.status, errText);
-    lastError = new Error(`Gemini API error: ${res.status}`);
+    console.error("Lovable AI error:", res.status, errText);
+    if (res.status === 429) {
+      throw new Error("Rate limited — please try again in a moment");
+    }
+    if (res.status === 402) {
+      throw new Error("AI credits exhausted — please add credits in workspace settings");
+    }
+    throw new Error(`AI gateway error: ${res.status}`);
   }
 
-  throw lastError || new Error("Gemini API failed after retries");
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content || "";
+
+  let parsed: { nuggets: NuggetResult[] };
+  try {
+    const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    parsed = JSON.parse(cleaned);
+  } catch {
+    console.error("Failed to parse AI response:", content);
+    throw new Error("Failed to parse AI response");
+  }
+
+  return parsed.nuggets || [];
 }
 
 // ── Main handler ─────────────────────────────────────────────────────
@@ -248,50 +245,48 @@ serve(async (req) => {
       );
     }
 
-    const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY");
-    if (!GOOGLE_AI_API_KEY) {
-      throw new Error("GOOGLE_AI_API_KEY is not configured");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    // Step 1: Search YouTube for relevant videos (optional, needs YouTube Data API enabled)
+    const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY");
+
+    // Step 1: Search YouTube (optional — needs YouTube Data API enabled)
     let videos: YTVideo[] = [];
-    try {
-      const searchQuery = `${artist} ${title} interview OR breakdown OR behind the scenes OR documentary`;
-      videos = await searchYouTube(searchQuery, GOOGLE_AI_API_KEY);
-    } catch (e) {
-      console.warn("YouTube search skipped:", e);
+    if (GOOGLE_AI_API_KEY) {
+      try {
+        const searchQuery = `${artist} ${title} interview OR breakdown OR behind the scenes`;
+        videos = await searchYouTube(searchQuery, GOOGLE_AI_API_KEY);
+      } catch (e) {
+        console.warn("YouTube search skipped:", e);
+      }
     }
     console.log(`Found ${videos.length} YouTube videos for "${artist} - ${title}"`);
 
     // Step 2: Fetch transcripts in parallel (top 3 videos)
-    const videosToFetch = videos.slice(0, 3);
     const transcripts = new Map<string, string>();
-
-    const transcriptResults = await Promise.allSettled(
-      videosToFetch.map(async (v) => {
-        const t = await fetchTranscript(v.videoId);
-        return { videoId: v.videoId, transcript: t };
-      })
-    );
-
-    for (const result of transcriptResults) {
-      if (result.status === "fulfilled" && result.value.transcript) {
-        transcripts.set(result.value.videoId, result.value.transcript);
+    if (videos.length > 0) {
+      const results = await Promise.allSettled(
+        videos.slice(0, 3).map(async (v) => {
+          const t = await fetchTranscript(v.videoId);
+          return { videoId: v.videoId, transcript: t };
+        })
+      );
+      for (const r of results) {
+        if (r.status === "fulfilled" && r.value.transcript) {
+          transcripts.set(r.value.videoId, r.value.transcript);
+        }
       }
     }
     console.log(`Fetched ${transcripts.size} transcripts`);
 
-    // Step 3: Generate nuggets with Gemini
-    const { nuggets: rawNuggets, groundingChunks } = await generateWithGemini(
-      artist,
-      title,
-      album,
-      videos,
-      transcripts,
-      GOOGLE_AI_API_KEY
+    // Step 3: Generate nuggets via Lovable AI
+    const rawNuggets = await generateNuggets(
+      artist, title, album, videos, transcripts, LOVABLE_API_KEY
     );
 
-    // Step 4: Assemble response with real video IDs and grounded URLs
+    // Step 4: Assemble response — attach real video IDs where applicable
     const nuggets = rawNuggets.map((n) => {
       const result: any = {
         text: n.text,
@@ -303,9 +298,11 @@ serve(async (req) => {
           publisher: n.source.publisher,
           quoteSnippet: n.source.quoteSnippet,
           locator: n.source.locator,
+          url: n.source.url,
         },
       };
 
+      // Attach real embedId for youtube sources
       if (n.source.type === "youtube" && n.source.videoIndex != null) {
         const video = videos[n.source.videoIndex];
         if (video) {
@@ -314,22 +311,7 @@ serve(async (req) => {
         }
       }
 
-      // For article sources, try to find a matching grounding chunk URL
-      if (
-        (n.source.type === "article" || n.source.type === "interview") &&
-        groundingChunks.length > 0
-      ) {
-        const matchingChunk = groundingChunks.find(
-          (c: any) =>
-            c.web?.title?.toLowerCase().includes(n.source.publisher.toLowerCase()) ||
-            c.web?.title?.toLowerCase().includes(n.source.title.toLowerCase().slice(0, 20))
-        );
-        if (matchingChunk?.web?.uri) {
-          result.source.url = matchingChunk.web.uri;
-        }
-      }
-
-      // Fallback: Google Search link if no real URL found
+      // Fallback: Google Search link if no real URL
       if (!result.source.url) {
         const q = `${n.source.title} ${n.source.publisher} ${artist}`;
         result.source.url = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
