@@ -44,7 +44,7 @@ export default function PlaybackBar({
 }: Props) {
   const isFocused = (idx: number) => focusedIndex === idx;
 
-  const focusRing = "ring-2 ring-primary ring-offset-2 ring-offset-background";
+  const focusGlow = "tv-focus-glow";
 
   return (
     <motion.div
@@ -97,7 +97,7 @@ export default function PlaybackBar({
                 liked === false
                   ? "text-primary bg-primary/20"
                   : "text-foreground/40 hover:text-foreground/70"
-              } ${isFocused(0) ? focusRing + " scale-110" : ""}`}
+              } ${isFocused(0) ? focusGlow + " scale-110" : ""}`}
               aria-label="Dislike"
             >
               <ThumbsDown size={16} />
@@ -108,7 +108,7 @@ export default function PlaybackBar({
               onClick={onPrev}
               disabled={!hasPrev}
               className={`flex h-10 w-10 items-center justify-center rounded-full text-foreground/70 transition-all hover:text-foreground disabled:opacity-30 disabled:cursor-default ${
-                isFocused(1) ? focusRing + " scale-110" : ""
+                isFocused(1) ? focusGlow + " scale-110" : ""
               }`}
               aria-label="Previous track"
             >
@@ -119,7 +119,7 @@ export default function PlaybackBar({
             <button
               onClick={onToggle}
               className={`flex h-14 w-14 items-center justify-center rounded-full bg-primary/20 text-primary backdrop-blur-sm transition-all hover:bg-primary/30 ${
-                isFocused(2) ? focusRing + " scale-110" : ""
+                isFocused(2) ? focusGlow + " scale-110" : ""
               }`}
             >
               {isPlaying ? <Pause size={24} /> : <Play size={24} className="ml-0.5" />}
@@ -130,7 +130,7 @@ export default function PlaybackBar({
               onClick={onNext}
               disabled={!hasNext}
               className={`flex h-10 w-10 items-center justify-center rounded-full text-foreground/70 transition-all hover:text-foreground disabled:opacity-30 disabled:cursor-default ${
-                isFocused(3) ? focusRing + " scale-110" : ""
+                isFocused(3) ? focusGlow + " scale-110" : ""
               }`}
               aria-label="Next track"
             >
@@ -144,7 +144,7 @@ export default function PlaybackBar({
                 liked === true
                   ? "text-primary bg-primary/20"
                   : "text-foreground/40 hover:text-foreground/70"
-              } ${isFocused(4) ? focusRing + " scale-110" : ""}`}
+              } ${isFocused(4) ? focusGlow + " scale-110" : ""}`}
               aria-label="Like"
             >
               <ThumbsUp size={16} />

@@ -75,7 +75,7 @@ export default function TileRow({ label, items, tileSize = "md", focusedIndex = 
               onClick={() => navigate(item.href)}
               className={`${sizes[tileSize]} shrink-0 group/tile relative overflow-hidden rounded-xl transition-all duration-200 hover:scale-105 outline-none ${
                 focusedIndex === i
-                  ? "ring-2 ring-primary ring-offset-2 ring-offset-background scale-105"
+                  ? "tv-focus-glow scale-105"
                   : ""
               }`}
             >

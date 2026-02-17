@@ -299,7 +299,7 @@ export default function Listen() {
           <button
             onClick={() => navigate("/browse")}
             className={`flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground backdrop-blur-sm transition-all hover:bg-foreground/20 ${
-              focusZone === 'top' && topFocusIndex === 0 ? "ring-2 ring-primary ring-offset-2 ring-offset-background scale-110" : ""
+              focusZone === 'top' && topFocusIndex === 0 ? "tv-focus-glow scale-110" : ""
             }`}
             aria-label="Go back"
           >
@@ -318,7 +318,7 @@ export default function Listen() {
           <button
             onClick={() => setNerdActive((v) => !v)}
             className={`transition-all duration-300 outline-none rounded-full ${
-              focusZone === 'top' && topFocusIndex === 1 ? "ring-2 ring-primary ring-offset-2 ring-offset-background scale-110" : ""
+              focusZone === 'top' && topFocusIndex === 1 ? "tv-focus-glow scale-110" : ""
             }`}
             aria-label={nerdActive ? "Turn off MusicNerd" : "Turn on MusicNerd"}
             style={{
@@ -361,7 +361,7 @@ export default function Listen() {
                   tabIndex={0}
                   className={`cursor-pointer transition-all duration-200 hover:scale-[1.02] outline-none rounded-xl ${
                     nuggetFocused
-                      ? "ring-2 ring-primary ring-offset-2 ring-offset-background scale-[1.03]"
+                      ? "tv-focus-glow scale-[1.03]"
                       : ""
                   }`}
                   onClick={() => handleNuggetClick(activeNugget)}

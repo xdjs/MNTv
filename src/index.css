@@ -110,13 +110,19 @@
   filter: drop-shadow(0 0 8px hsl(330 90% 60% / 0.6)) drop-shadow(0 0 20px hsl(330 90% 60% / 0.3));
 }
 
-/* TV focus state */
+/* TV focus state — soft glow */
+.tv-focus-glow {
+  box-shadow: 0 0 16px 4px hsl(330 90% 60% / 0.45), 0 0 40px 8px hsl(330 90% 60% / 0.2);
+}
+
 .tv-focus {
-  @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
+  @apply outline-none;
+  box-shadow: 0 0 16px 4px hsl(330 90% 60% / 0.45), 0 0 40px 8px hsl(330 90% 60% / 0.2);
 }
 
 .tv-focus-visible:focus-visible {
-  @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
+  @apply outline-none;
+  box-shadow: 0 0 16px 4px hsl(330 90% 60% / 0.45), 0 0 40px 8px hsl(330 90% 60% / 0.2);
 }
 
 /* Neon button glow */
