@@ -1,9 +1,15 @@
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Music, Youtube } from "lucide-react";
 import PageTransition from "@/components/PageTransition";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import { useState } from "react";
+import spotifyLogo from "@/assets/spotify-logo.png";
+import youtubeMusicLogo from "@/assets/youtube-music-logo.png";
+
+const services = [
+  { id: "spotify", logo: spotifyLogo, label: "Spotify" },
+  { id: "youtube", logo: youtubeMusicLogo, label: "YouTube Music" },
+];
 
 export default function Connect() {
   const navigate = useNavigate();
@@ -25,24 +31,24 @@ export default function Connect() {
           </div>
 
           <div className="flex flex-col gap-6 sm:flex-row">
-            {[
-              { id: "spotify", icon: Music, label: "Spotify", color: "from-green-600 to-green-800" },
-              { id: "youtube", icon: Youtube, label: "YouTube Music", color: "from-red-600 to-red-800" },
-            ].map(({ id, icon: Icon, label, color }) => (
+            {services.map(({ id, logo, label }) => (
               <motion.button
                 key={id}
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => toggleService(id)}
-                className={`glass-panel flex w-64 flex-col items-center gap-4 rounded-2xl p-8 transition-all tv-focus-visible ${
+                className={`apple-glass flex w-64 flex-col items-center gap-5 rounded-2xl p-8 transition-all tv-focus-visible ${
                   selected.includes(id)
                     ? "ring-2 ring-primary"
                     : "ring-1 ring-transparent hover:ring-muted-foreground/30"
                 }`}
+                style={{
+                  boxShadow: selected.includes(id)
+                    ? "0 0 20px 6px hsl(330 90% 60% / 0.3), 0 0 50px 12px hsl(330 90% 60% / 0.1)"
+                    : undefined,
+                }}
               >
-                <div className={`rounded-xl bg-gradient-to-br ${color} p-4`}>
-                  <Icon size={32} className="text-white" />
-                </div>
+                <img src={logo} alt={label} className="h-16 w-16 rounded-xl object-contain" />
                 <span className="text-lg font-semibold text-foreground">{label}</span>
                 <span className="text-sm text-muted-foreground">
                   {selected.includes(id) ? "Connected ✓" : "Tap to connect"}
