@@ -1,6 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, ChevronRight, Loader2 } from "lucide-react";
+import { ChevronRight, ExternalLink, ArrowLeft, Loader2 } from "lucide-react";
 import type { Nugget, Source } from "@/mock/types";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,7 +13,6 @@ interface Props {
   onClose: () => void;
 }
 
-// Kind labels
 const kindLabels: Record<string, string> = {
   process: "Behind the Scenes",
   constraint: "Creative Constraint",
@@ -24,12 +23,60 @@ const kindLabels: Record<string, string> = {
 
 interface DeepDiveEntry {
   text: string;
-  followUp?: string; // suggestion for next exploration
+  followUp?: string;
 }
 
 export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onClose }: Props) {
   const [entries, setEntries] = useState<DeepDiveEntry[]>([]);
+  const [currentView, setCurrentView] = useState<'original' | number>('original');
   const [loading, setLoading] = useState(false);
+  const [focusIndex, setFocusIndex] = useState(0);
+
+  const buttonRefs = [useRef<HTMLButtonElement>(null), useRef<HTMLAnchorElement>(null), useRef<HTMLButtonElement>(null)];
+  const buttonCount = source?.url ? 3 : 2;
+
+  // Auto-focus first button on mount
+  useEffect(() => {
+    buttonRefs[0].current?.focus();
+  }, []);
+
+  // Re-focus after content swap
+  useEffect(() => {
+    const idx = Math.min(focusIndex, buttonCount - 1);
+    const ref = buttonRefs[source?.url ? idx : (idx === 0 ? 0 : 2)];
+    ref.current?.focus();
+  }, [currentView, loading]);
+
+  // D-pad keyboard navigation
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.key === "Backspace") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setFocusIndex(prev => {
+          const next = Math.max(0, prev - 1);
+          const ref = buttonRefs[source?.url ? next : (next === 0 ? 0 : 2)];
+          ref.current?.focus();
+          return next;
+        });
+      }
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setFocusIndex(prev => {
+          const next = Math.min(buttonCount - 1, prev + 1);
+          const ref = buttonRefs[source?.url ? next : (next === 0 ? 0 : 2)];
+          ref.current?.focus();
+          return next;
+        });
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose, buttonCount, source?.url]);
 
   const explore = useCallback(async () => {
     setLoading(true);
@@ -52,20 +99,34 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
 
       if (error) throw error;
       if (data?.deepDive) {
+        const newIndex = entries.length;
         setEntries((prev) => [...prev, {
           text: data.deepDive.text,
           followUp: data.deepDive.followUp,
         }]);
+        setCurrentView(newIndex);
       }
     } catch (e) {
       console.error("Deep dive failed:", e);
+      const newIndex = entries.length;
       setEntries((prev) => [...prev, {
         text: "Couldn't explore further right now. Try again in a moment.",
       }]);
+      setCurrentView(newIndex);
     } finally {
       setLoading(false);
     }
   }, [nugget, entries, artist, trackTitle, source]);
+
+  // Determine current content to display
+  const currentContent = currentView === 'original'
+    ? { text: nugget.text, followUp: entries.length === 0 ? undefined : undefined }
+    : entries[currentView];
+
+  const totalPages = 1 + entries.length;
+  const currentPage = currentView === 'original' ? 1 : currentView + 2;
+
+  const contentKey = currentView === 'original' ? 'original' : `entry-${currentView}`;
 
   return (
     <motion.div
@@ -75,119 +136,125 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
       transition={{ duration: 0.3 }}
       className="fixed inset-0 z-50 flex items-center justify-center"
     >
-      {/* Backdrop click to close */}
-      <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={onClose} />
+      {/* Backdrop — no click-to-close for TV */}
+      <div className="absolute inset-0 bg-background/85 backdrop-blur-md" />
 
       <motion.div
-        initial={{ opacity: 0, y: 30, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 20, scale: 0.95 }}
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-        className="apple-glass relative z-10 mx-6 w-full max-w-xl max-h-[80vh] flex flex-col rounded-2xl overflow-hidden"
+        className="apple-glass relative z-10 mx-8 w-full max-w-4xl max-h-[70vh] flex flex-col rounded-2xl overflow-hidden"
       >
         {/* Header */}
-        <div className="flex items-start justify-between p-5 pb-0">
-          <div className="flex items-center gap-3">
-            <MusicNerdLogo size={24} glow />
-            <div>
-              <span className="text-[11px] font-medium uppercase tracking-wider text-primary">
-                {kindLabels[nugget.kind] || nugget.kind}
-              </span>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {artist} — {trackTitle}
-              </p>
-            </div>
+        <div className="flex items-center gap-3 px-8 pt-6 pb-2">
+          <MusicNerdLogo size={28} glow />
+          <div className="flex-1">
+            <span className="text-xs font-semibold uppercase tracking-widest text-primary">
+              {kindLabels[nugget.kind] || nugget.kind}
+            </span>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {artist} — {trackTitle}
+            </p>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-full bg-foreground/10 p-2 text-foreground transition-colors hover:bg-foreground/20 tv-focus-visible"
-          >
-            <X size={16} />
-          </button>
+          {totalPages > 1 && (
+            <span className="rounded-full bg-primary/15 px-3 py-1 text-xs font-medium text-primary">
+              {currentPage} / {totalPages}
+            </span>
+          )}
         </div>
 
-        {/* Content — scrollable */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4 scrollbar-thin">
-          {/* Original nugget */}
-          <p className="text-sm leading-relaxed text-foreground/90">{nugget.text}</p>
-
-          {/* Source attribution */}
-          {source && (
-            <div className="flex items-center gap-2 rounded-lg bg-foreground/5 px-3 py-2 text-[11px] text-muted-foreground">
-              <span className="uppercase tracking-wider font-medium">
-                {source.type === "youtube" ? "▶" : source.type === "article" ? "📄" : "🎙"}
-              </span>
-              <span className="truncate">{source.title}</span>
-              <span className="text-foreground/20">·</span>
-              <span>{source.publisher}</span>
-            </div>
-          )}
-
-          {source?.quoteSnippet && (
-            <blockquote className="border-l-2 border-primary pl-3 text-sm text-foreground/70 italic leading-relaxed">
-              "{source.quoteSnippet}"
-            </blockquote>
-          )}
-
-          {/* Deep dive entries */}
-          <AnimatePresence>
-            {entries.map((entry, i) => (
+        {/* Content area — fixed height, no scroll */}
+        <div className="flex-1 flex flex-col justify-center px-8 py-6 min-h-[200px]">
+          <AnimatePresence mode="wait">
+            {loading ? (
               <motion.div
-                key={i}
+                key="loading"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="flex items-center justify-center gap-3 text-muted-foreground"
+              >
+                <Loader2 size={20} className="animate-spin" />
+                <span className="text-lg">Exploring deeper…</span>
+              </motion.div>
+            ) : (
+              <motion.div
+                key={contentKey}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="border-t border-foreground/5 pt-4"
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.25, ease: "easeOut" }}
+                className="space-y-4"
               >
-                <p className="text-sm leading-relaxed text-foreground/90">{entry.text}</p>
-                {entry.followUp && (
-                  <p className="mt-2 text-xs text-primary/70 italic">💡 {entry.followUp}</p>
+                <p className="text-xl md:text-2xl leading-relaxed text-foreground/90">
+                  {currentContent?.text}
+                </p>
+
+                {/* Source attribution — shown only on original view */}
+                {currentView === 'original' && source && (
+                  <div className="flex items-center gap-2 rounded-lg bg-foreground/5 px-4 py-2.5 text-sm text-muted-foreground">
+                    <span>
+                      {source.type === "youtube" ? "▶" : source.type === "article" ? "📄" : "🎙"}
+                    </span>
+                    <span className="truncate">{source.title}</span>
+                    <span className="text-foreground/20">·</span>
+                    <span>{source.publisher}</span>
+                  </div>
+                )}
+
+                {currentView === 'original' && source?.quoteSnippet && (
+                  <blockquote className="border-l-2 border-primary pl-4 text-lg text-foreground/70 italic leading-relaxed">
+                    "{source.quoteSnippet}"
+                  </blockquote>
+                )}
+
+                {/* Follow-up teaser */}
+                {currentContent?.followUp && (
+                  <p className="text-base text-primary/60 italic mt-2">
+                    💡 {currentContent.followUp}
+                  </p>
                 )}
               </motion.div>
-            ))}
+            )}
           </AnimatePresence>
-
-          {/* Loading state */}
-          {loading && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex items-center gap-2 py-3 text-sm text-muted-foreground"
-            >
-              <Loader2 size={14} className="animate-spin" />
-              <span>Exploring deeper…</span>
-            </motion.div>
-          )}
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-3 p-5 pt-3 border-t border-foreground/5">
+        {/* Action buttons — horizontal row, D-pad navigable */}
+        <div className="flex items-center gap-4 px-8 pb-6 pt-2 border-t border-foreground/5">
           <button
+            ref={buttonRefs[0] as React.RefObject<HTMLButtonElement>}
             onClick={explore}
             disabled={loading}
-            className="flex items-center gap-2 rounded-xl bg-primary/10 px-4 py-2.5 text-sm font-medium text-primary transition-all hover:bg-primary/20 disabled:opacity-50 tv-focus-visible"
+            className="flex items-center gap-2 rounded-xl bg-primary/15 px-6 py-3 text-base font-medium text-primary transition-all hover:bg-primary/25 disabled:opacity-50 tv-focus-visible"
           >
-            <ChevronRight size={14} />
+            <ChevronRight size={18} />
             {entries.length === 0 ? "Tell me more" : "Keep exploring"}
           </button>
 
           {source?.url && (
             <a
+              ref={buttonRefs[1] as React.RefObject<HTMLAnchorElement>}
               href={source.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-xl bg-foreground/5 px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground tv-focus-visible"
+              className="flex items-center gap-2 rounded-xl bg-foreground/5 px-6 py-3 text-base text-muted-foreground transition-colors hover:text-foreground tv-focus-visible"
             >
+              <ExternalLink size={16} />
               View Source
             </a>
           )}
 
           <div className="flex-1" />
+
           <button
+            ref={buttonRefs[2] as React.RefObject<HTMLButtonElement>}
             onClick={onClose}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            className="flex items-center gap-2 rounded-xl bg-foreground/5 px-6 py-3 text-base text-muted-foreground transition-colors hover:text-foreground tv-focus-visible"
           >
-            Close
+            <ArrowLeft size={16} />
+            Back
           </button>
         </div>
       </motion.div>
