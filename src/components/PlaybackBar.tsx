@@ -55,7 +55,7 @@ export default function PlaybackBar({
       initial={false}
       animate={{ y: visible ? 0 : 80, opacity: visible ? 1 : 0 }}
       transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
-      className="absolute bottom-0 left-0 right-0 z-20 px-10 pb-8"
+      className="absolute bottom-0 left-0 right-0 z-20 px-4 pb-4 md:px-10 md:pb-8"
     >
       {/* Gradient scrim behind bar */}
       <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-background/80 to-transparent pointer-events-none" />
@@ -65,10 +65,20 @@ export default function PlaybackBar({
         <div className="flex items-center gap-4">
           <span className="w-14 text-right text-sm text-foreground/70 tabular-nums">{currentTimeFormatted}</span>
           <div
-            className="relative flex-1 h-1.5 rounded-full bg-primary/20 cursor-pointer group"
+            className="relative flex-1 h-1.5 rounded-full bg-primary/20 cursor-pointer group touch-none"
             onClick={(e) => {
               const rect = e.currentTarget.getBoundingClientRect();
               const pct = (e.clientX - rect.left) / rect.width;
+              onSeek(pct);
+            }}
+            onTouchStart={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const pct = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
+              onSeek(pct);
+            }}
+            onTouchMove={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const pct = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
               onSeek(pct);
             }}
           >
@@ -93,7 +103,7 @@ export default function PlaybackBar({
 
         {/* Transport controls row */}
         <div className="flex flex-col items-center gap-2">
-          <div className="flex items-center justify-center gap-6">
+          <div className="flex items-center justify-center gap-3 md:gap-6">
             {/* Dislike - index 0 */}
             <button
               onClick={onDislike}
