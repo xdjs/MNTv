@@ -169,10 +169,16 @@ export default function Listen() {
         showBar();
       } else if (e.key === "Enter") {
         e.preventDefault();
-        if (focusZone === 'nugget' && activeNugget) handleNuggetClick(activeNugget);
-        else if (focusZone === 'bar') handleBarAction(barFocusIndex);
-        else if (focusZone === 'top') handleTopAction(topFocusIndex);
-        showBar();
+        if (focusZone === 'nugget' && activeNugget) {
+          handleNuggetClick(activeNugget);
+          // Don't show bar when entering deep dive
+        } else if (focusZone === 'bar') {
+          handleBarAction(barFocusIndex);
+          showBar();
+        } else if (focusZone === 'top') {
+          handleTopAction(topFocusIndex);
+          showBar();
+        }
       } else if (e.key === " ") {
         e.preventDefault();
         showBar();

@@ -156,7 +156,7 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
           <motion.button
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0, transition: { delay: 0.6 } }}
-            onClick={onSourceClick}
+            onClick={(e) => { e.stopPropagation(); onSourceClick(); }}
             className="mt-2 flex items-center gap-2 rounded-lg bg-foreground/5 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground tv-focus-visible"
           >
             <span className="uppercase tracking-wider font-medium">
