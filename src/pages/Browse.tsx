@@ -125,20 +125,20 @@ export default function Browse() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [searchOpen, rowIndex, colIndex, allRows, clampCol, navigate]);
 
-  const focusRing = "ring-2 ring-primary ring-offset-2 ring-offset-background";
+  const focusGlow = "tv-focus-glow";
 
   return (
     <PageTransition>
       <div className="min-h-screen bg-background">
         {/* Header */}
         <header className="flex items-center justify-between px-10 pt-8 pb-6">
-          <div className={`rounded-full transition-all ${rowIndex === -1 && colIndex === 0 ? focusRing + " scale-110" : ""}`}>
+          <div className={`rounded-full transition-all ${rowIndex === -1 && colIndex === 0 ? focusGlow + " scale-110" : ""}`}>
             <MusicNerdLogo size={36} glow className="opacity-80" />
           </div>
           <button
             onClick={() => setSearchOpen(true)}
             className={`flex h-10 items-center gap-2 rounded-full bg-foreground/5 px-5 text-sm text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground ${
-              rowIndex === -1 && colIndex === 1 ? focusRing + " scale-105" : ""
+              rowIndex === -1 && colIndex === 1 ? focusGlow + " scale-105" : ""
             }`}
           >
             <Search size={16} />
