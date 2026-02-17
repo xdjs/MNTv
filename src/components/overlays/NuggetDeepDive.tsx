@@ -192,16 +192,8 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
                   {currentContent?.text}
                 </p>
 
-                {/* Source attribution — only on original view, quote OR source line (not both) */}
-                {currentView === 'original' && source?.quoteSnippet && (
-                  <blockquote className="border-l-2 border-primary/40 pl-4 text-base text-foreground/50 italic leading-relaxed">
-                    "{source.quoteSnippet}"
-                    <span className="block mt-1 text-xs text-muted-foreground not-italic">
-                      — {source.title}, {source.publisher}
-                    </span>
-                  </blockquote>
-                )}
-                {currentView === 'original' && source && !source.quoteSnippet && (
+                {/* Source attribution — compact line only, no redundant quote */}
+                {currentView === 'original' && source && (
                   <div className="flex items-center gap-2 rounded-lg bg-foreground/5 px-4 py-2.5 text-sm text-muted-foreground">
                     <span>
                       {source.type === "youtube" ? "▶" : source.type === "article" ? "📄" : "🎙"}
