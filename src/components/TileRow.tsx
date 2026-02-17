@@ -58,60 +58,64 @@ export default function TileRow({ label, items, tileSize = "md", focusedIndex = 
         {/* Left arrow */}
         <button
           onClick={() => scroll(-1)}
-          className="absolute left-2 top-1/2 -translate-y-1/2 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-background/70 text-foreground/60 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm hover:text-foreground"
+          className="absolute left-2 top-1/2 -translate-y-1/2 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-background/70 text-foreground/60 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm hover:text-foreground"
         >
           <ChevronLeft size={20} />
         </button>
 
-        {/* overflow-visible wrapper so glow isn't clipped; inner div handles horizontal scroll */}
-        <div className="overflow-visible">
-          <div
-            ref={scrollRef}
-            className="flex gap-5 overflow-x-auto scroll-smooth px-10 py-6 scrollbar-hide"
-            style={{ scrollbarWidth: "none" }}
-          >
-            {items.map((item, i) => {
-              const isFocused = focusedIndex === i;
-              return (
-                <button
-                  key={item.id}
-                  ref={(el) => { tileRefs.current[i] = el; }}
-                  onClick={() => navigate(item.href)}
-                  className={`${sizes[tileSize]} shrink-0 group/tile relative rounded-xl transition-all duration-200 outline-none ${
-                    isFocused
-                      ? "scale-110 z-10"
-                      : "hover:scale-110 hover:z-10"
-                  }`}
-                  style={isFocused ? {
-                    boxShadow: "0 0 20px 6px hsl(330 90% 60% / 0.5), 0 0 50px 12px hsl(330 90% 60% / 0.2)",
-                  } : undefined}
-                >
-                  <div className="absolute inset-0 rounded-xl overflow-hidden">
-                    <img
-                      src={item.imageUrl}
-                      alt={item.title}
-                      className="h-full w-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                  </div>
-                  <div className="absolute bottom-0 left-0 right-0 p-3 z-10">
-                    <p className="text-sm font-bold text-white leading-tight line-clamp-2" style={{ fontFamily: "'Nunito Sans', sans-serif" }}>
-                      {item.title}
-                    </p>
-                    {item.subtitle && (
-                      <p className="mt-0.5 text-xs text-white/60 line-clamp-1">{item.subtitle}</p>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+        <div
+          ref={scrollRef}
+          className="flex gap-5 overflow-x-auto scroll-smooth px-10 scrollbar-hide"
+          style={{
+            scrollbarWidth: "none",
+            /* Extra padding so glow + scale aren't clipped by overflow */
+            paddingTop: 24,
+            paddingBottom: 24,
+            marginTop: -12,
+            marginBottom: -12,
+          }}
+        >
+          {items.map((item, i) => {
+            const isFocused = focusedIndex === i;
+            return (
+              <button
+                key={item.id}
+                ref={(el) => { tileRefs.current[i] = el; }}
+                onClick={() => navigate(item.href)}
+                className={`${sizes[tileSize]} shrink-0 group/tile relative rounded-xl transition-all duration-200 outline-none ${
+                  isFocused
+                    ? "scale-110 z-10"
+                    : "hover:scale-110 hover:z-10"
+                }`}
+                style={isFocused ? {
+                  boxShadow: "0 0 20px 6px hsl(330 90% 60% / 0.5), 0 0 50px 12px hsl(330 90% 60% / 0.2)",
+                } : undefined}
+              >
+                <div className="absolute inset-0 rounded-xl overflow-hidden">
+                  <img
+                    src={item.imageUrl}
+                    alt={item.title}
+                    className="h-full w-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                </div>
+                <div className="absolute bottom-0 left-0 right-0 p-3 z-10">
+                  <p className="text-sm font-bold text-white leading-tight line-clamp-2" style={{ fontFamily: "'Nunito Sans', sans-serif" }}>
+                    {item.title}
+                  </p>
+                  {item.subtitle && (
+                    <p className="mt-0.5 text-xs text-white/60 line-clamp-1">{item.subtitle}</p>
+                  )}
+                </div>
+              </button>
+            );
+          })}
         </div>
 
         {/* Right arrow */}
         <button
           onClick={() => scroll(1)}
-          className="absolute right-2 top-1/2 -translate-y-1/2 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-background/70 text-foreground/60 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm hover:text-foreground"
+          className="absolute right-2 top-1/2 -translate-y-1/2 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-background/70 text-foreground/60 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm hover:text-foreground"
         >
           <ChevronRight size={20} />
         </button>
