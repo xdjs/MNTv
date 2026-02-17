@@ -166,7 +166,7 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
 
       {/* Breathing glow — wraps the panel so it's not clipped by overflow-hidden */}
       <motion.div
-        className="relative z-10 mx-8 w-full max-w-3xl"
+        className="relative z-10 mx-3 md:mx-8 w-full max-w-3xl"
         initial={{ opacity: 0 }}
         animate={{
           opacity: 1,
@@ -186,16 +186,16 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
         animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
         exit={{ opacity: 0, scale: 0.7, x: 100, y: 30, transition: { duration: 0.25, ease: [0.4, 0, 1, 1] } }}
         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-        className="apple-glass relative max-h-[65vh] flex flex-col rounded-3xl overflow-hidden shadow-[0_8px_60px_hsl(0_0%_0%/0.35)]"
+        className="apple-glass relative max-h-[80vh] md:max-h-[65vh] flex flex-col rounded-3xl overflow-hidden shadow-[0_8px_60px_hsl(0_0%_0%/0.35)]"
       >
         {/* Header */}
-        <div className="flex items-center gap-3 px-8 pt-6 pb-2">
+        <div className="flex items-center gap-3 px-4 pt-4 pb-2 md:px-8 md:pt-6">
           <MusicNerdLogo size={28} glow />
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <span className="text-xs font-semibold uppercase tracking-widest text-primary">
               {kindLabels[nugget.kind] || nugget.kind}
             </span>
-            <p className="text-sm text-muted-foreground mt-0.5">
+            <p className="text-xs md:text-sm text-muted-foreground mt-0.5 truncate">
               {artist} — {trackTitle}
             </p>
           </div>
@@ -207,7 +207,7 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
         </div>
 
         {/* Content area — fixed height, no scroll */}
-        <div className="flex-1 flex flex-col justify-center px-8 py-6 min-h-[200px]">
+        <div className="flex-1 flex flex-col justify-center px-4 py-4 md:px-8 md:py-6 min-h-[120px] md:min-h-[200px] overflow-y-auto">
           <AnimatePresence mode="wait">
             {loading ? (
               <motion.div
@@ -230,13 +230,13 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
                 transition={{ duration: 0.25, ease: "easeOut" }}
                 className="space-y-4"
               >
-                <p className="text-lg md:text-xl leading-relaxed text-foreground/90">
+                <p className="text-base md:text-xl leading-relaxed text-foreground/90">
                   {currentContent?.text}
                 </p>
 
                 {/* Source attribution — compact line only, no redundant quote */}
                 {currentView === 'original' && source && (
-                  <div className="flex items-center gap-2 rounded-lg bg-foreground/5 px-4 py-2.5 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2 rounded-lg bg-foreground/5 px-3 py-2 md:px-4 md:py-2.5 text-xs md:text-sm text-muted-foreground">
                     <span>
                       {source.type === "youtube" ? "▶" : source.type === "article" ? "📄" : "🎙"}
                     </span>
@@ -258,14 +258,14 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
         </div>
 
         {/* Action buttons — horizontal row, D-pad navigable */}
-        <div className="flex items-center gap-4 px-8 pb-6 pt-2 border-t border-foreground/5">
+        <div className="flex flex-wrap items-center gap-2 md:gap-4 px-4 pb-4 pt-2 md:px-8 md:pb-6 border-t border-foreground/5">
           <button
             ref={buttonRefs[0] as React.RefObject<HTMLButtonElement>}
             onClick={explore}
             disabled={loading}
-            className="flex items-center gap-2 rounded-xl bg-primary/15 px-6 py-3 text-base font-medium text-primary transition-all hover:bg-primary/25 disabled:opacity-50 tv-focus-visible"
+            className="flex items-center gap-1.5 md:gap-2 rounded-xl bg-primary/15 px-4 py-2.5 md:px-6 md:py-3 text-sm md:text-base font-medium text-primary transition-all hover:bg-primary/25 disabled:opacity-50 tv-focus-visible"
           >
-            <ChevronRight size={18} />
+            <ChevronRight size={16} />
             {entries.length === 0 ? "Tell me more" : "Keep exploring"}
           </button>
 
@@ -275,9 +275,9 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
               href={source.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 rounded-xl bg-foreground/5 px-6 py-3 text-base text-muted-foreground transition-colors hover:text-foreground tv-focus-visible"
+              className="flex items-center gap-1.5 md:gap-2 rounded-xl bg-foreground/5 px-4 py-2.5 md:px-6 md:py-3 text-sm md:text-base text-muted-foreground transition-colors hover:text-foreground tv-focus-visible"
             >
-              <ExternalLink size={16} />
+              <ExternalLink size={14} />
               View Source
             </a>
           )}
@@ -287,9 +287,9 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
           <button
             ref={buttonRefs[2] as React.RefObject<HTMLButtonElement>}
             onClick={onClose}
-            className="flex items-center gap-2 rounded-xl bg-foreground/5 px-6 py-3 text-base text-muted-foreground transition-colors hover:text-foreground tv-focus-visible"
+            className="flex items-center gap-1.5 md:gap-2 rounded-xl bg-foreground/5 px-4 py-2.5 md:px-6 md:py-3 text-sm md:text-base text-muted-foreground transition-colors hover:text-foreground tv-focus-visible"
           >
-            <ArrowLeft size={16} />
+            <ArrowLeft size={14} />
             Back
           </button>
         </div>
