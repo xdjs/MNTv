@@ -86,16 +86,6 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
         variants={cardVariants}
         className="apple-glass relative rounded-xl px-5 py-3 ml-2"
       >
-        {/* Style A bloom */}
-        {animationStyle === "A" && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 0.2, scale: 1.2 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.5, delay: 0.3 }}
-            className="absolute inset-0 rounded-2xl bg-primary blur-2xl -z-10"
-          />
-        )}
 
         {/* Style B border sweep */}
         {animationStyle === "B" && (
@@ -112,16 +102,6 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
           />
         )}
 
-        {/* Style C bloom (same as A) */}
-        {animationStyle === "C" && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 0.2, scale: 1.2 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.5, delay: 0.3 }}
-            className="absolute inset-0 rounded-2xl bg-primary blur-2xl -z-10"
-          />
-        )}
 
         {/* Header: kind label + timestamp */}
         <motion.div
