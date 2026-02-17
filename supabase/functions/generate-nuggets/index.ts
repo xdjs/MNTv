@@ -237,7 +237,8 @@ serve(async (req) => {
   }
 
   try {
-    const { artist, title, album } = await req.json();
+    const body = await req.json();
+    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher } = body;
 
     if (!artist || !title) {
       return new Response(
@@ -251,6 +252,58 @@ serve(async (req) => {
       throw new Error("GOOGLE_AI_API_KEY is not configured");
     }
 
+    // ── Deep Dive mode ──────────────────────────────────────────────
+    if (deepDive) {
+      const deepDivePrompt = `You are a music historian having a fascinating conversation about "${title}" by ${artist}.
+
+The user has been reading this trivia and wants to go deeper:
+---
+${context}
+---
+${sourceTitle ? `The original source was: "${sourceTitle}" by ${sourcePublisher}` : ""}
+
+Continue this thread of discovery. Provide ONE more paragraph (3-5 sentences) that goes deeper — reveal connections, context, or implications that make this even more interesting. Think about WHY this matters, HOW it connects to broader music history, or WHAT it reveals about the creative process.
+
+Be conversational but authoritative. Channel the spirit of a music nerd who can't stop sharing fascinating connections.
+
+End with a brief "followUp" — a one-sentence teaser about what could be explored next.
+
+Return ONLY valid JSON:
+{
+  "deepDive": {
+    "text": "Your deeper exploration paragraph here",
+    "followUp": "One-sentence teaser for the next exploration"
+  }
+}`;
+
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GOOGLE_AI_API_KEY}`;
+      const res = await fetch(geminiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: deepDivePrompt }] }],
+          tools: [{ google_search: {} }],
+          generationConfig: { temperature: 1.0 },
+        }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error("Deep dive Gemini error:", res.status, errText);
+        throw new Error(`Gemini API error: ${res.status}`);
+      }
+
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      const parsed = JSON.parse(cleaned);
+
+      return new Response(JSON.stringify(parsed), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── Standard nugget generation ──────────────────────────────────
     // Step 1: Search YouTube (needs YouTube Data API v3 enabled)
     let videos: YTVideo[] = [];
     try {
@@ -308,10 +361,7 @@ serve(async (req) => {
       }
 
       // For article/interview sources, build a targeted Google Search URL
-      // that uses the exact article title in quotes + site: for the publisher
-      // This reliably surfaces the actual article as the top result
       if (!result.source.url) {
-        // Use quoted title for exact match, plus publisher site hint
         const publisherDomains: Record<string, string> = {
           "pitchfork": "site:pitchfork.com",
           "rolling stone": "site:rollingstone.com",
