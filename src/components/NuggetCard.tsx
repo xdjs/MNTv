@@ -96,30 +96,26 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
         }`}
       >
 
-        {/* Style B — rotating glow border */}
+        {/* Style B — glowing border sweep that loops */}
         {animationStyle === "B" && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3, duration: 0.4 }}
-              className="pointer-events-none absolute inset-0 rounded-xl overflow-hidden"
-            >
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
-                className="absolute inset-[-50%]"
-                style={{
-                  background: "conic-gradient(from 0deg, transparent 0%, hsl(330 90% 60% / 0.6) 10%, transparent 20%, transparent 50%, hsl(330 90% 60% / 0.4) 60%, transparent 70%)",
-                }}
-              />
-            </motion.div>
-            {/* Inner mask to keep only the border visible */}
-            <div
-              className="pointer-events-none absolute inset-[2px] rounded-[10px] z-[1]"
-              style={{ background: "inherit", backdropFilter: "inherit" }}
-            />
-          </>
+          <motion.div
+            initial={{ backgroundSize: "0% 3px, 3px 0%, 0% 3px, 3px 0%" }}
+            animate={{
+              backgroundSize: [
+                "0% 3px, 3px 0%, 0% 3px, 3px 0%",
+                "100% 3px, 3px 100%, 100% 3px, 3px 100%",
+                "0% 3px, 3px 0%, 0% 3px, 3px 0%",
+              ],
+            }}
+            transition={{ duration: 3, delay: 0.3, ease: "easeInOut", repeat: Infinity }}
+            className="pointer-events-none absolute inset-0 rounded-xl"
+            style={{
+              backgroundImage: `linear-gradient(hsl(330 90% 60% / 0.8), hsl(330 90% 60% / 0.8)), linear-gradient(hsl(330 90% 60% / 0.8), hsl(330 90% 60% / 0.8)), linear-gradient(hsl(330 90% 60% / 0.8), hsl(330 90% 60% / 0.8)), linear-gradient(hsl(330 90% 60% / 0.8), hsl(330 90% 60% / 0.8))`,
+              backgroundPosition: "0 0, 100% 0, 100% 100%, 0 100%",
+              backgroundRepeat: "no-repeat",
+              filter: "blur(3px)",
+            }}
+          />
         )}
 
 
