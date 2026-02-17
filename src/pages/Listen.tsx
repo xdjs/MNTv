@@ -52,6 +52,7 @@ export default function Listen() {
   const [mediaOverlay, setMediaOverlay] = useState<Source | null>(null);
   const [readingOverlay, setReadingOverlay] = useState<Source | null>(null);
   const [deepDiveNugget, setDeepDiveNugget] = useState<Nugget | null>(null);
+  const [returningFromDeepDive, setReturningFromDeepDive] = useState(false);
   const [devOpen, setDevOpen] = useState(false);
   const [nerdActive, setNerdActive] = useState(true);
   const [backdropMotion, setBackdropMotion] = useState(false);
@@ -388,13 +389,15 @@ export default function Listen() {
                   onBlur={() => setNuggetFocused(false)}
                 >
                   <NuggetCard
-                    key={activeNugget.id}
+                    key={returningFromDeepDive ? `${activeNugget.id}-return` : activeNugget.id}
                     nugget={activeNugget}
                     animationStyle={animStyle}
                     onSourceClick={() => handleSourceClick(activeNugget)}
                     currentTime={formatTime(activeNugget.timestampSec)}
                     sourceOverride={getSource(activeNugget.sourceId) || null}
                     focused={nuggetFocused}
+                    skipAnimation={returningFromDeepDive}
+                    onAnimationComplete={() => { if (returningFromDeepDive) setReturningFromDeepDive(false); }}
                   />
                   {nuggetFocused && (
                     <motion.p
@@ -479,7 +482,7 @@ export default function Listen() {
               source={getSource(deepDiveNugget.sourceId) || null}
               artist={track.artist}
               trackTitle={track.title}
-              onClose={() => setDeepDiveNugget(null)}
+              onClose={() => { setReturningFromDeepDive(true); setDeepDiveNugget(null); }}
             />
           )}
         </AnimatePresence>
