@@ -87,60 +87,76 @@ export default function Listen() {
   const [nuggetFocused, setNuggetFocused] = useState(false);
   const nuggetRef = useRef<HTMLDivElement>(null);
 
-  // Focus zones: 'bar' (playback buttons) or 'nugget'
-  type FocusZone = 'bar' | 'nugget';
+  // Focus zones: top (back=0, nerd=1), nugget, bar (dislike=0..like=4)
+  type FocusZone = 'top' | 'nugget' | 'bar';
   const [focusZone, setFocusZone] = useState<FocusZone>('bar');
-  // Bar buttons: dislike(0), prev(1), play(2), next(3), like(4)
-  const [barFocusIndex, setBarFocusIndex] = useState(2); // start on play
+  const [barFocusIndex, setBarFocusIndex] = useState(2);
+  const [topFocusIndex, setTopFocusIndex] = useState(0); // 0=back, 1=nerd
 
   const BAR_BUTTON_COUNT = 5;
+  const TOP_BUTTON_COUNT = 2;
 
   const handleBarAction = useCallback((index: number) => {
     switch (index) {
-      case 0: setLiked((v) => v === false ? null : false); break; // dislike
-      case 1: if (prev) navigate(`/listen/${prev}`); break; // prev
-      case 2: toggle(); break; // play/pause
-      case 3: if (next) navigate(`/listen/${next}`); break; // next
-      case 4: setLiked((v) => v === true ? null : true); break; // like
+      case 0: setLiked((v) => v === false ? null : false); break;
+      case 1: if (prev) navigate(`/listen/${prev}`); break;
+      case 2: toggle(); break;
+      case 3: if (next) navigate(`/listen/${next}`); break;
+      case 4: setLiked((v) => v === true ? null : true); break;
     }
   }, [prev, next, navigate, toggle]);
+
+  const handleTopAction = useCallback((index: number) => {
+    if (index === 0) navigate("/browse");
+    else setNerdActive((v) => !v);
+  }, [navigate]);
+
+  // Zone ordering for Up/Down navigation
+  const getZonesInOrder = useCallback((): FocusZone[] => {
+    const zones: FocusZone[] = ['top'];
+    if (activeNugget) zones.push('nugget');
+    zones.push('bar');
+    return zones;
+  }, [activeNugget]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "ArrowUp") {
         e.preventDefault();
-        if (focusZone === 'bar' && activeNugget) {
-          setFocusZone('nugget');
-          setNuggetFocused(true);
-          nuggetRef.current?.focus();
+        const zones = getZonesInOrder();
+        const idx = zones.indexOf(focusZone);
+        if (idx > 0) {
+          const newZone = zones[idx - 1];
+          setFocusZone(newZone);
+          setNuggetFocused(newZone === 'nugget');
+          if (newZone === 'nugget') nuggetRef.current?.focus();
         }
         showBar();
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
-        if (focusZone === 'nugget') {
-          setFocusZone('bar');
-          setNuggetFocused(false);
+        const zones = getZonesInOrder();
+        const idx = zones.indexOf(focusZone);
+        if (idx < zones.length - 1) {
+          const newZone = zones[idx + 1];
+          setFocusZone(newZone);
+          setNuggetFocused(newZone === 'nugget');
         }
         showBar();
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
-        if (focusZone === 'bar') {
-          setBarFocusIndex((i) => Math.max(0, i - 1));
-        }
+        if (focusZone === 'bar') setBarFocusIndex((i) => Math.max(0, i - 1));
+        else if (focusZone === 'top') setTopFocusIndex((i) => Math.max(0, i - 1));
         showBar();
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
-        if (focusZone === 'bar') {
-          setBarFocusIndex((i) => Math.min(BAR_BUTTON_COUNT - 1, i + 1));
-        }
+        if (focusZone === 'bar') setBarFocusIndex((i) => Math.min(BAR_BUTTON_COUNT - 1, i + 1));
+        else if (focusZone === 'top') setTopFocusIndex((i) => Math.min(TOP_BUTTON_COUNT - 1, i + 1));
         showBar();
       } else if (e.key === "Enter") {
         e.preventDefault();
-        if (focusZone === 'nugget' && activeNugget) {
-          handleNuggetClick(activeNugget);
-        } else if (focusZone === 'bar') {
-          handleBarAction(barFocusIndex);
-        }
+        if (focusZone === 'nugget' && activeNugget) handleNuggetClick(activeNugget);
+        else if (focusZone === 'bar') handleBarAction(barFocusIndex);
+        else if (focusZone === 'top') handleTopAction(topFocusIndex);
         showBar();
       } else if (e.key === " ") {
         e.preventDefault();
@@ -150,7 +166,7 @@ export default function Listen() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showBar, toggle, focusZone, barFocusIndex, activeNugget, handleNuggetClick, handleBarAction]);
+  }, [showBar, toggle, focusZone, barFocusIndex, topFocusIndex, activeNugget, handleNuggetClick, handleBarAction, handleTopAction, getZonesInOrder]);
 
   useEffect(() => { play(); }, [play]);
 
@@ -282,14 +298,28 @@ export default function Listen() {
         <div className="relative z-10 flex items-center justify-between px-10 pt-8">
           <button
             onClick={() => navigate("/browse")}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground backdrop-blur-sm transition-colors hover:bg-foreground/20 tv-focus-visible"
+            className={`flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground backdrop-blur-sm transition-all hover:bg-foreground/20 ${
+              focusZone === 'top' && topFocusIndex === 0 ? "ring-2 ring-primary ring-offset-2 ring-offset-background scale-110" : ""
+            }`}
             aria-label="Go back"
           >
             <ArrowLeft size={20} />
           </button>
+          {focusZone === 'top' && (
+            <motion.p
+              key={topFocusIndex}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="absolute left-1/2 -translate-x-1/2 top-14 text-xs text-muted-foreground"
+            >
+              {topFocusIndex === 0 ? "Back" : nerdActive ? "Turn off MusicNerd" : "Turn on MusicNerd"}
+            </motion.p>
+          )}
           <button
             onClick={() => setNerdActive((v) => !v)}
-            className="transition-all duration-300 outline-none rounded-full tv-focus-visible"
+            className={`transition-all duration-300 outline-none rounded-full ${
+              focusZone === 'top' && topFocusIndex === 1 ? "ring-2 ring-primary ring-offset-2 ring-offset-background scale-110" : ""
+            }`}
             aria-label={nerdActive ? "Turn off MusicNerd" : "Turn on MusicNerd"}
             style={{
               filter: nerdActive
