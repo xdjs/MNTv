@@ -156,7 +156,7 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
             ],
           }}
           transition={{
-            boxShadow: { repeat: Infinity, repeatType: "reverse", duration: 1, ease: "easeInOut" },
+            boxShadow: { repeat: Infinity, repeatType: "reverse", duration: 2, ease: "easeInOut" },
           }}
         />
         {/* Header */}
