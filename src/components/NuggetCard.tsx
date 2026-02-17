@@ -23,16 +23,21 @@ const kindLabels: Record<string, string> = {
   discovery: "Explore Next",
 };
 
-// Style A — Glass Slide + Focus Bloom
+// Style A — Anchor Dot Expand
 const cardA = {
-  initial: { opacity: 0, y: 30, filter: "blur(12px)" },
-  animate: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.45, delay: 0.35, ease: [0.22, 1, 0.36, 1] as const } },
-  exit: { opacity: 0, y: -16, scale: 0.92, filter: "blur(6px)", transition: { duration: 0.3 } },
+  initial: { opacity: 0, scale: 0.1, originX: 0, originY: 1 },
+  animate: { opacity: 1, scale: 1, transition: { duration: 0.4, delay: 0.45, ease: [0.34, 1.56, 0.64, 1] as const } },
+  exit: { opacity: 0, scale: 0.1, transition: { duration: 0.3, ease: "easeIn" as const } },
 };
 const logoA = {
-  initial: { opacity: 0, scale: 0, rotate: -90 },
-  animate: { opacity: 1, scale: 1, rotate: 0, transition: { duration: 0.4, ease: [0.34, 1.56, 0.64, 1] as const } },
-  exit: { opacity: 0, scale: 0, rotate: 90, transition: { duration: 0.2 } },
+  initial: { opacity: 0, scale: 0, rotate: -180 },
+  animate: {
+    opacity: 1,
+    scale: [0, 1.3, 1],
+    rotate: 0,
+    transition: { duration: 0.45, ease: [0.34, 1.56, 0.64, 1] as const },
+  },
+  exit: { opacity: 0, scale: 0, rotate: 180, transition: { duration: 0.25 } },
 };
 
 // Style B — Border Sweep + Text Mask Reveal
@@ -47,21 +52,16 @@ const logoB = {
   exit: { opacity: 0, x: -10, transition: { duration: 0.2 } },
 };
 
-// Style C — Anchor Dot Expand
+// Style C — Glass Slide + Focus Bloom
 const cardC = {
-  initial: { opacity: 0, scale: 0.1, originX: 0, originY: 1 },
-  animate: { opacity: 1, scale: 1, transition: { duration: 0.4, delay: 0.45, ease: [0.34, 1.56, 0.64, 1] as const } },
-  exit: { opacity: 0, scale: 0.1, transition: { duration: 0.3, ease: "easeIn" as const } },
+  initial: { opacity: 0, y: 30, filter: "blur(12px)" },
+  animate: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.45, delay: 0.35, ease: [0.22, 1, 0.36, 1] as const } },
+  exit: { opacity: 0, y: -16, scale: 0.92, filter: "blur(6px)", transition: { duration: 0.3 } },
 };
 const logoC = {
-  initial: { opacity: 0, scale: 0, rotate: -180 },
-  animate: {
-    opacity: 1,
-    scale: [0, 1.3, 1],
-    rotate: 0,
-    transition: { duration: 0.45, ease: [0.34, 1.56, 0.64, 1] as const },
-  },
-  exit: { opacity: 0, scale: 0, rotate: 180, transition: { duration: 0.25 } },
+  initial: { opacity: 0, scale: 0, rotate: -90 },
+  animate: { opacity: 1, scale: 1, rotate: 0, transition: { duration: 0.4, ease: [0.34, 1.56, 0.64, 1] as const } },
+  exit: { opacity: 0, scale: 0, rotate: 90, transition: { duration: 0.2 } },
 };
 
 const styleMap = {
@@ -79,9 +79,9 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
       {/* Logo — left side, appears FIRST */}
       <motion.div
         variants={logoVariants}
-        className={`absolute -left-3 z-10 ${animationStyle === "C" ? "-bottom-3" : "-top-3"}`}
+        className={`absolute -left-3 z-10 ${animationStyle === "A" ? "-bottom-3" : "-top-3"}`}
       >
-        <MusicNerdLogo size={animationStyle === "C" ? 32 : 22} glow />
+        <MusicNerdLogo size={animationStyle === "A" ? 32 : 22} glow />
       </motion.div>
 
       <motion.div
