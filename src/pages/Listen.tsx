@@ -121,6 +121,8 @@ export default function Listen() {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      // Let overlay handle its own keys when open
+      if (deepDiveNugget || mediaOverlay || readingOverlay) return;
       if (e.key === "ArrowUp") {
         e.preventDefault();
         const zones = getZonesInOrder();
@@ -166,7 +168,7 @@ export default function Listen() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showBar, toggle, focusZone, barFocusIndex, topFocusIndex, activeNugget, handleNuggetClick, handleBarAction, handleTopAction, getZonesInOrder]);
+  }, [showBar, toggle, focusZone, barFocusIndex, topFocusIndex, activeNugget, handleNuggetClick, handleBarAction, handleTopAction, getZonesInOrder, deepDiveNugget, mediaOverlay, readingOverlay]);
 
   useEffect(() => { play(); }, [play]);
 
