@@ -137,13 +137,13 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
           </motion.div>
         )}
 
-        {/* Nugget text — truncated to 2 lines, full text shown in deep dive */}
+        {/* Nugget headline — short complete thought; full text shown in deep dive */}
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1, transition: { delay: animationStyle === "B" ? 0.5 : 0.4, duration: 0.3 } }}
-          className="text-sm leading-6 text-foreground/90 line-clamp-2"
+          className="text-sm leading-6 text-foreground/90"
         >
-          {nugget.text}
+          {nugget.headline || nugget.text}
         </motion.p>
 
         {/* Source chip */}

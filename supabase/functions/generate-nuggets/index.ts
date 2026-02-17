@@ -156,6 +156,9 @@ ${transcriptContext ? `Real transcript content:\n\n${transcriptContext}\n` : "No
 CRITICAL RULES:
 - Exactly 3 nuggets with diverse "kind" values from: process, constraint, pattern, human, influence
 - Set exactly ONE nugget's listenFor to true (an audio moment to listen for)
+- Each nugget MUST have TWO text fields:
+  - "headline": A single punchy sentence (max 15 words) that hooks the reader — a complete thought, no ellipsis
+  - "text": The full 2-3 sentence explanation with detail and context
 - For YouTube sources from videos above: set type "youtube", include videoIndex, include a real quote
 - For article/interview sources: cite REAL publications with real article titles
 - Include locator (timestamp for videos, section for articles) when possible
@@ -166,7 +169,8 @@ Return ONLY valid JSON:
 {
   "nuggets": [
     {
-      "text": "1-3 sentences of surprising music trivia",
+      "headline": "One punchy complete sentence hook",
+      "text": "2-3 sentences of surprising music trivia with full detail",
       "kind": "process|constraint|pattern|human|influence",
       "listenFor": false,
       "source": {
