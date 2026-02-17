@@ -295,7 +295,7 @@ ${context}
 ---
 ${sourceTitle ? `The original source was: "${sourceTitle}" by ${sourcePublisher}` : ""}
 
-Continue this thread of discovery. Provide ONE more paragraph (3-5 sentences) that goes deeper — reveal connections, context, or implications that make this even more interesting. Think about WHY this matters, HOW it connects to broader music history, or WHAT it reveals about the creative process.
+Continue this thread of discovery. Provide ONE more paragraph of 2-3 sentences MAX (under 80 words total) that goes deeper — reveal connections, context, or implications that make this even more interesting. Be concise and punchy — this is for a TV screen. Think about WHY this matters, HOW it connects to broader music history, or WHAT it reveals about the creative process.
 
 Be conversational but authoritative. Channel the spirit of a music nerd who can't stop sharing fascinating connections.
 
