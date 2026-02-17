@@ -249,12 +249,11 @@ export default function Listen() {
     }
   }, [currentTime, isPlaying, nerdActive, trackNuggets, activeNugget, shownNuggetIds]);
 
-  // Auto-dismiss nugget only when another nugget is queued and waiting
-  // Otherwise nuggets stay visible until replaced — no fixed timer disappearance
+  // Auto-dismiss nugget: quick swap if queued, otherwise fade after 8s
   useEffect(() => {
     if (!activeNugget || deepDiveNugget || nuggetFocused) return;
-    if (nuggetQueue.length === 0) return;
-    const timer = setTimeout(() => setActiveNugget(null), 1500);
+    const delay = nuggetQueue.length > 0 ? 1500 : 8000;
+    const timer = setTimeout(() => setActiveNugget(null), delay);
     return () => clearTimeout(timer);
   }, [activeNugget, deepDiveNugget, nuggetFocused, nuggetQueue.length]);
 
@@ -521,7 +520,7 @@ export default function Listen() {
               source={getSource(deepDiveNugget.sourceId) || null}
               artist={track.artist}
               trackTitle={track.title}
-              onClose={() => setDeepDiveNugget(null)}
+              onClose={() => { setDeepDiveNugget(null); setFocusZone('bar'); setNuggetFocused(false); }}
             />
           )}
         </AnimatePresence>
