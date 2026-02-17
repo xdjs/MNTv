@@ -116,7 +116,7 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1, transition: { delay: 0.35, duration: 0.3 } }}
-          className="mb-2 flex items-center gap-2 text-[11px] text-muted-foreground"
+          className="mb-2 flex items-center gap-2 text-xs md:text-sm text-muted-foreground"
         >
           {nugget.kind === "discovery" && <Compass size={12} className="text-primary" />}
           <span className={`uppercase tracking-wider ${nugget.kind === "discovery" ? "text-primary" : ""}`}>
