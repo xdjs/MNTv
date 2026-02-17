@@ -6,15 +6,17 @@ import MusicNerdLogo from "@/components/MusicNerdLogo";
 import NuggetCard from "@/components/NuggetCard";
 import MediaOverlay from "@/components/overlays/MediaOverlay";
 import ReadingOverlay from "@/components/overlays/ReadingOverlay";
+import NuggetDeepDive from "@/components/overlays/NuggetDeepDive";
 import DevPanel from "@/components/DevPanel";
 import PlaybackBar from "@/components/PlaybackBar";
 import { getTrackById, getNuggetsForTrack, getSourceById, getAdjacentTrackIds, getYouTubeSourceForTrack } from "@/mock/tracks";
 import { usePlayback } from "@/hooks/usePlayback";
 import { useAINuggets } from "@/hooks/useAINuggets";
+import { useBackdropSync } from "@/hooks/useBackdropSync";
 import PageTransition from "@/components/PageTransition";
 import type { Nugget, Source, AnimationStyle } from "@/mock/types";
 
-const HIDE_DELAY = 3000; // ms before bar auto-hides
+const HIDE_DELAY = 3000;
 
 export default function Listen() {
   const { trackId } = useParams<{ trackId: string }>();
@@ -34,10 +36,8 @@ export default function Listen() {
     track?.durationSec || 300
   );
 
-  // Use AI nuggets when available, fall back to mock
   const mockNuggets = useMemo(() => getNuggetsForTrack(trackId || ""), [trackId]);
   const trackNuggets = aiNuggets.length > 0 ? aiNuggets : mockNuggets;
-
 
   const [animStyle, setAnimStyle] = useState<AnimationStyle>("A");
   const [activeNugget, setActiveNugget] = useState<Nugget | null>(null);
@@ -45,11 +45,15 @@ export default function Listen() {
   const [shownNuggetIds, setShownNuggetIds] = useState<Set<string>>(new Set());
   const [mediaOverlay, setMediaOverlay] = useState<Source | null>(null);
   const [readingOverlay, setReadingOverlay] = useState<Source | null>(null);
+  const [deepDiveNugget, setDeepDiveNugget] = useState<Nugget | null>(null);
   const [devOpen, setDevOpen] = useState(false);
   const [nerdActive, setNerdActive] = useState(true);
   const [backdropMotion, setBackdropMotion] = useState(false);
   const [liked, setLiked] = useState<boolean | null>(null);
   const ytSource = useMemo(() => getYouTubeSourceForTrack(trackId || ""), [trackId]);
+
+  // Backdrop video sync
+  const { iframeRef } = useBackdropSync(isPlaying, currentTime, backdropMotion, ytSource?.embedId);
 
   // --- Auto-hide bar logic ---
   const [barVisible, setBarVisible] = useState(true);
@@ -61,59 +65,40 @@ export default function Listen() {
     hideTimerRef.current = setTimeout(() => setBarVisible(false), HIDE_DELAY);
   }, []);
 
-  // Show bar initially then auto-hide
   useEffect(() => {
     hideTimerRef.current = setTimeout(() => setBarVisible(false), HIDE_DELAY);
     return () => { if (hideTimerRef.current) clearTimeout(hideTimerRef.current); };
   }, []);
 
-  // Mouse move at bottom 15% of screen shows bar
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
-      if (e.clientY > window.innerHeight * 0.85) {
-        showBar();
-      }
+      if (e.clientY > window.innerHeight * 0.85) showBar();
     };
     window.addEventListener("mousemove", onMouseMove);
     return () => window.removeEventListener("mousemove", onMouseMove);
   }, [showBar]);
 
-  // ArrowUp / any key activity shows bar
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        showBar();
-      } else if (e.key === " ") {
-        e.preventDefault();
-        showBar();
-        toggle();
-      } else if (e.key === "ArrowRight" && next) {
-        navigate(`/listen/${next}`);
-      } else if (e.key === "ArrowLeft" && prev) {
-        navigate(`/listen/${prev}`);
-      }
+      if (e.key === "ArrowUp") { e.preventDefault(); showBar(); }
+      else if (e.key === " ") { e.preventDefault(); showBar(); toggle(); }
+      else if (e.key === "ArrowRight" && next) navigate(`/listen/${next}`);
+      else if (e.key === "ArrowLeft" && prev) navigate(`/listen/${prev}`);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [showBar, toggle, navigate, prev, next]);
 
-  // Auto-play on mount
   useEffect(() => { play(); }, [play]);
 
-  // Reset nugget state when AI nuggets arrive
   useEffect(() => {
     setActiveNugget(null);
     setNuggetQueue([]);
     setShownNuggetIds(new Set());
   }, [aiNuggets]);
 
-  // Clear nuggets when nerd mode is turned off
   useEffect(() => {
-    if (!nerdActive) {
-      setActiveNugget(null);
-      setNuggetQueue([]);
-    }
+    if (!nerdActive) { setActiveNugget(null); setNuggetQueue([]); }
   }, [nerdActive]);
 
   // Nugget trigger logic
@@ -132,14 +117,13 @@ export default function Listen() {
     }
   }, [currentTime, isPlaying, nerdActive, trackNuggets, activeNugget, shownNuggetIds]);
 
-  // Auto-dismiss nugget
+  // Auto-dismiss nugget (but not if deep dive is open)
   useEffect(() => {
-    if (!activeNugget) return;
+    if (!activeNugget || deepDiveNugget) return;
     const timer = setTimeout(() => setActiveNugget(null), activeNugget.durationMs);
     return () => clearTimeout(timer);
-  }, [activeNugget]);
+  }, [activeNugget, deepDiveNugget]);
 
-  // Process queue
   useEffect(() => {
     if (!activeNugget && nuggetQueue.length > 0) {
       const next = nuggetQueue[0];
@@ -166,6 +150,12 @@ export default function Listen() {
     },
     [pauseForOverlay, getSource]
   );
+
+  // Click nugget card to open deep dive
+  const handleNuggetClick = useCallback((nugget: Nugget) => {
+    setDeepDiveNugget(nugget);
+    // Keep the nugget visible while deep dive is open
+  }, []);
 
   const jumpToNugget = useCallback(
     (idx: number) => {
@@ -205,7 +195,8 @@ export default function Listen() {
           {backdropMotion && ytSource?.embedId ? (
             <div className="absolute inset-0 overflow-hidden">
               <iframe
-                src={`https://www.youtube.com/embed/${ytSource.embedId}?autoplay=1&mute=1&loop=1&playlist=${ytSource.embedId}&controls=0&showinfo=0&modestbranding=1&rel=0&disablekb=1`}
+                ref={iframeRef}
+                src={`https://www.youtube.com/embed/${ytSource.embedId}?autoplay=${isPlaying ? 1 : 0}&mute=1&loop=1&playlist=${ytSource.embedId}&controls=0&showinfo=0&modestbranding=1&rel=0&disablekb=1&enablejsapi=1`}
                 title="Backdrop motion"
                 allow="autoplay"
                 className="absolute inset-0 w-full h-full pointer-events-none scale-[1.3] brightness-[0.35]"
@@ -229,7 +220,7 @@ export default function Listen() {
         <div className="vignette absolute inset-0" />
         <div className="noise-overlay absolute inset-0" />
 
-        {/* Top bar: back button left, pill + logo right */}
+        {/* Top bar */}
         <div className="relative z-10 flex items-center justify-between px-10 pt-8">
           <button
             onClick={() => navigate("/browse")}
@@ -253,7 +244,7 @@ export default function Listen() {
           </button>
         </div>
 
-        {/* Track info — compact top-left context */}
+        {/* Track info */}
         <motion.div
           className="relative z-10 px-10 mt-4"
           animate={{ opacity: barVisible ? 1 : 0, y: barVisible ? 0 : -10 }}
@@ -272,25 +263,30 @@ export default function Listen() {
           )}
         </motion.div>
 
-        {/* Main content: nugget cards — right-aligned, vertically centered */}
+        {/* Nugget cards — clickable for deep dive */}
         <div className="relative z-10 flex flex-1 items-center justify-end px-10 pb-24">
           <div className="w-[420px] shrink-0">
             <AnimatePresence mode="wait">
               {activeNugget && (
-                <NuggetCard
-                  key={activeNugget.id}
-                  nugget={activeNugget}
-                  animationStyle={animStyle}
-                  onSourceClick={() => handleSourceClick(activeNugget)}
-                  currentTime={formatTime(activeNugget.timestampSec)}
-                  sourceOverride={getSource(activeNugget.sourceId) || null}
-                />
+                <div
+                  className="cursor-pointer transition-transform hover:scale-[1.02]"
+                  onClick={() => handleNuggetClick(activeNugget)}
+                >
+                  <NuggetCard
+                    key={activeNugget.id}
+                    nugget={activeNugget}
+                    animationStyle={animStyle}
+                    onSourceClick={() => handleSourceClick(activeNugget)}
+                    currentTime={formatTime(activeNugget.timestampSec)}
+                    sourceOverride={getSource(activeNugget.sourceId) || null}
+                  />
+                </div>
               )}
             </AnimatePresence>
           </div>
         </div>
 
-        {/* Playback controls — auto-hiding */}
+        {/* Playback controls */}
         <PlaybackBar
           isPlaying={isPlaying}
           fadingIn={fadingIn}
@@ -310,7 +306,7 @@ export default function Listen() {
           onDislike={() => setLiked((v) => v === false ? null : false)}
         />
 
-        {/* Dev panel toggle */}
+        {/* Dev panel */}
         <button
           onClick={() => setDevOpen((o) => !o)}
           className="fixed bottom-4 right-4 z-50 rounded-lg bg-foreground/5 px-3 py-1.5 text-xs text-muted-foreground hover:bg-foreground/10 transition-colors"
@@ -345,6 +341,17 @@ export default function Listen() {
             <ReadingOverlay
               source={readingOverlay}
               onClose={() => setReadingOverlay(null)}
+            />
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {deepDiveNugget && (
+            <NuggetDeepDive
+              nugget={deepDiveNugget}
+              source={getSource(deepDiveNugget.sourceId) || null}
+              artist={track.artist}
+              trackTitle={track.title}
+              onClose={() => setDeepDiveNugget(null)}
             />
           )}
         </AnimatePresence>
