@@ -68,11 +68,11 @@ export default function TileRow({ label, items, tileSize = "md", focusedIndex = 
           className="flex gap-5 overflow-x-auto scroll-smooth px-10 scrollbar-hide"
           style={{
             scrollbarWidth: "none",
-            /* Extra padding so glow + scale aren't clipped by overflow */
-            paddingTop: 24,
-            paddingBottom: 24,
-            marginTop: -12,
-            marginBottom: -12,
+            /* Extra padding so glow (50px spread) + scale aren't clipped */
+            paddingTop: 64,
+            paddingBottom: 64,
+            marginTop: -52,
+            marginBottom: -52,
           }}
         >
           {items.map((item, i) => {
