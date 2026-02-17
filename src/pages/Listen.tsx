@@ -283,7 +283,7 @@ export default function Listen() {
                 src={`https://www.youtube.com/embed/${ytSource.embedId}?autoplay=${isPlaying ? 1 : 0}&mute=1&loop=1&playlist=${ytSource.embedId}&controls=0&showinfo=0&modestbranding=1&rel=0&disablekb=1&enablejsapi=1`}
                 title="Backdrop motion"
                 allow="autoplay"
-                className="absolute inset-0 w-full h-full pointer-events-none scale-[1.3] brightness-[0.35]"
+                className={`absolute inset-0 w-full h-full pointer-events-none scale-[1.3] transition-all duration-700 ease-out ${barVisible ? 'brightness-[0.35]' : 'brightness-[0.8]'}`}
                 style={{ border: "none" }}
               />
             </div>
@@ -294,8 +294,8 @@ export default function Listen() {
               className="h-full w-full object-cover scale-110 transition-all duration-700 ease-out"
               style={{
                 filter: barVisible
-                  ? "blur(12px) brightness(0.45)"
-                  : "blur(2px) brightness(0.35)",
+                  ? "blur(12px) brightness(0.4)"
+                  : "blur(2px) brightness(0.85)",
               }}
               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
             />
