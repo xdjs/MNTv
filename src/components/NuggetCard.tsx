@@ -84,22 +84,30 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
 
       <motion.div
         variants={cardVariants}
-        animate={focused ? {
-          boxShadow: [
-            "0 0 12px 3px hsl(330 90% 60% / 0.35), 0 0 24px 6px hsl(330 90% 60% / 0.15)",
-            "0 0 22px 8px hsl(330 90% 60% / 0.6), 0 0 55px 14px hsl(330 90% 60% / 0.3)",
-          ],
-        } : undefined}
-        transition={focused ? {
-          boxShadow: { repeat: Infinity, repeatType: "reverse", duration: 1, ease: "easeInOut" },
-        } : undefined}
-        style={!focused ? {
-          boxShadow: "0 0 8px 2px hsl(330 90% 60% / 0.15), 0 0 18px 4px hsl(330 90% 60% / 0.07)",
-        } : undefined}
+        style={{
+          boxShadow: focused
+            ? undefined  // controlled by inner wrapper when focused
+            : "0 0 8px 2px hsl(330 90% 60% / 0.15), 0 0 18px 4px hsl(330 90% 60% / 0.07)",
+        }}
         className={`apple-glass relative rounded-xl px-5 py-3 ml-2 transition-all duration-200 ${
           focused ? "scale-[1.03]" : "hover:scale-[1.02]"
         }`}
       >
+        {/* Breathing glow overlay when focused — separate from variant animation */}
+        {focused && (
+          <motion.div
+            className="absolute inset-0 rounded-xl pointer-events-none"
+            animate={{
+              boxShadow: [
+                "0 0 12px 3px hsl(330 90% 60% / 0.35), 0 0 24px 6px hsl(330 90% 60% / 0.15)",
+                "0 0 22px 8px hsl(330 90% 60% / 0.6), 0 0 55px 14px hsl(330 90% 60% / 0.3)",
+              ],
+            }}
+            transition={{
+              boxShadow: { repeat: Infinity, repeatType: "reverse", duration: 1, ease: "easeInOut" },
+            }}
+          />
+        )}
 
         {/* Style B border sweep */}
         {animationStyle === "B" && (

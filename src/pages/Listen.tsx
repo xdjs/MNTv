@@ -198,12 +198,14 @@ export default function Listen() {
     }
   }, [currentTime, isPlaying, nerdActive, trackNuggets, activeNugget, shownNuggetIds]);
 
-  // Auto-dismiss nugget (but not if deep dive is open, nugget is focused, or user is actively interacting)
+  // Auto-dismiss nugget only when another nugget is queued and waiting
+  // Otherwise nuggets stay visible until replaced — no fixed timer disappearance
   useEffect(() => {
-    if (!activeNugget || deepDiveNugget || nuggetFocused || barVisible) return;
-    const timer = setTimeout(() => setActiveNugget(null), activeNugget.durationMs);
+    if (!activeNugget || deepDiveNugget || nuggetFocused) return;
+    if (nuggetQueue.length === 0) return;
+    const timer = setTimeout(() => setActiveNugget(null), 1500);
     return () => clearTimeout(timer);
-  }, [activeNugget, deepDiveNugget, nuggetFocused, barVisible]);
+  }, [activeNugget, deepDiveNugget, nuggetFocused, nuggetQueue.length]);
 
   useEffect(() => {
     if (!activeNugget && nuggetQueue.length > 0) {
