@@ -378,7 +378,7 @@ export default function Listen() {
         <div className="relative z-10 flex flex-1 items-center justify-end px-10 pb-24">
           <div className="w-[520px] shrink-0">
             <AnimatePresence mode="wait">
-              {activeNugget && (
+              {activeNugget && !deepDiveNugget && (
                 <div
                   ref={nuggetRef}
                   tabIndex={0}
