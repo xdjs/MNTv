@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Nugget, Source } from "@/mock/types";
 
 interface AINuggetData {
+  headline?: string;
   text: string;
   kind: "process" | "constraint" | "pattern" | "human" | "influence";
   listenFor?: boolean;
@@ -85,6 +86,7 @@ export function useAINuggets(
           trackId,
           timestampSec: Math.min(timestampSec, durationSec - 10),
           durationMs: 7000,
+          headline: n.headline,
           text: n.text,
           kind: n.kind,
           listenFor: n.listenFor || false,

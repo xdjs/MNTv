@@ -46,6 +46,7 @@ export type Nugget = {
   trackId: string;
   timestampSec: number;
   durationMs: number;
+  headline?: string;
   text: string;
   kind: "process" | "constraint" | "pattern" | "human" | "influence";
   listenFor?: boolean;
