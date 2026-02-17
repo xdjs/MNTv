@@ -160,9 +160,9 @@ STRUCTURE:
 CRITICAL RULES:
 - Set exactly ONE of nuggets 1-2's listenFor to true (an audio moment to listen for). Nugget 3's listenFor must be false.
 - Each nugget MUST have TWO text fields:
-  - "headline": A single punchy sentence (max 15 words) that hooks the reader — a complete thought, no ellipsis
-  - "text": The full 2-3 sentence explanation with detail and context
-- For nugget 3 (discovery): The headline should feel like a friend nudging you ("If this moves you, try..." or "The thread from here leads to...")
+  - "headline": 1-2 sentences that spark curiosity and make the reader WANT to learn more. Don't write a dry fact — write something that teases a surprising detail or asks an implicit question. Examples: "The cash register sounds at the start? Roger Waters recorded them by throwing coins into a mixing bowl in his pottery shed." or "There's a reason this song feels unsettling — and it has nothing to do with the lyrics." Make the reader think "wait, really?" or "tell me more."
+  - "text": The full 2-3 sentence explanation that delivers on the headline's promise with rich detail and context. This is what the user sees when they expand for more.
+- For nugget 3 (discovery): The headline should feel like a friend nudging you with genuine enthusiasm, e.g. "If this groove hit you right, you need to hear what Nile Rodgers did on this other track."
 - For YouTube sources from videos above: set type "youtube", include videoIndex, include a real quote
 - For article/interview sources: cite REAL publications with real article titles
 - Include locator (timestamp for videos, section for articles) when possible
