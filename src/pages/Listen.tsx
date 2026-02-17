@@ -92,6 +92,14 @@ export default function Listen() {
 
   const [nuggetFocused, setNuggetFocused] = useState(false);
   const nuggetRef = useRef<HTMLDivElement>(null);
+  const dwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [dwelling, setDwelling] = useState(false);
+
+  // Clear dwell timer helper
+  const clearDwell = useCallback(() => {
+    if (dwellTimerRef.current) { clearTimeout(dwellTimerRef.current); dwellTimerRef.current = null; }
+    setDwelling(false);
+  }, []);
 
   // Focus zones: top (back=0, nerd=1), nugget, bar (dislike=0..like=4)
   type FocusZone = 'top' | 'nugget' | 'bar';
@@ -132,43 +140,62 @@ export default function Listen() {
       if (deepDiveNugget || mediaOverlay || readingOverlay) return;
       if (e.key === "ArrowUp") {
         e.preventDefault();
+        clearDwell();
         const zones = getZonesInOrder();
         const idx = zones.indexOf(focusZone);
         if (idx > 0) {
           const newZone = zones[idx - 1];
           setFocusZone(newZone);
           setNuggetFocused(newZone === 'nugget');
-          if (newZone === 'nugget') nuggetRef.current?.focus();
-          // Only show bar when landing on bar or top, not nugget
+          if (newZone === 'nugget') {
+            nuggetRef.current?.focus();
+            // Start dwell timer
+            setDwelling(true);
+            dwellTimerRef.current = setTimeout(() => {
+              if (activeNugget) handleNuggetClick(activeNugget);
+              setDwelling(false);
+            }, 1500);
+          }
           if (newZone !== 'nugget') showBar();
         } else {
           showBar();
         }
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
+        clearDwell();
         const zones = getZonesInOrder();
         const idx = zones.indexOf(focusZone);
         if (idx < zones.length - 1) {
           const newZone = zones[idx + 1];
           setFocusZone(newZone);
           setNuggetFocused(newZone === 'nugget');
-          // Only show bar when landing on bar
+          if (newZone === 'nugget') {
+            nuggetRef.current?.focus();
+            setDwelling(true);
+            dwellTimerRef.current = setTimeout(() => {
+              if (activeNugget) handleNuggetClick(activeNugget);
+              setDwelling(false);
+            }, 1500);
+          }
           if (newZone === 'bar') showBar();
         } else {
           showBar();
         }
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
+        clearDwell();
         if (focusZone === 'bar') setBarFocusIndex((i) => Math.max(0, i - 1));
         else if (focusZone === 'top') setTopFocusIndex((i) => Math.max(0, i - 1));
         showBar();
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
+        clearDwell();
         if (focusZone === 'bar') setBarFocusIndex((i) => Math.min(BAR_BUTTON_COUNT - 1, i + 1));
         else if (focusZone === 'top') setTopFocusIndex((i) => Math.min(TOP_BUTTON_COUNT - 1, i + 1));
         showBar();
       } else if (e.key === "Enter") {
         e.preventDefault();
+        clearDwell();
         if (focusZone === 'nugget' && activeNugget) {
           handleNuggetClick(activeNugget);
           // Don't show bar when entering deep dive
@@ -187,7 +214,12 @@ export default function Listen() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showBar, toggle, focusZone, barFocusIndex, topFocusIndex, activeNugget, handleNuggetClick, handleBarAction, handleTopAction, getZonesInOrder, deepDiveNugget, mediaOverlay, readingOverlay]);
+  }, [showBar, toggle, focusZone, barFocusIndex, topFocusIndex, activeNugget, handleNuggetClick, handleBarAction, handleTopAction, getZonesInOrder, deepDiveNugget, mediaOverlay, readingOverlay, clearDwell]);
+
+  // Clean up dwell timer on unmount or nugget change
+  useEffect(() => {
+    return () => clearDwell();
+  }, [activeNugget, clearDwell]);
 
   useEffect(() => { play(); }, [play]);
 
@@ -405,7 +437,14 @@ export default function Listen() {
                       animate={{ opacity: 1 }}
                       className="mt-2 text-center text-xs text-muted-foreground"
                     >
-                      Press Enter to explore
+                      {dwelling ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                          Exploring…
+                        </span>
+                      ) : (
+                        "Press Enter to explore"
+                      )}
                     </motion.p>
                   )}
                 </motion.div>
