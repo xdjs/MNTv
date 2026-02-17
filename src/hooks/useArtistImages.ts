@@ -4,6 +4,8 @@ import type { Artist } from "@/mock/types";
 
 const imageCache = new Map<string, string>();
 
+const SKIP_API_LOOKUP = new Set(["Jamee Cornelia"]);
+
 /**
  * Hook that enriches an array of artists with real photos from MusicBrainz/Wikidata.
  * Returns the same array with imageUrl potentially replaced by the real photo.
