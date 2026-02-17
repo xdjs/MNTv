@@ -78,30 +78,33 @@ export default function Browse() {
 
   const HEADER_ITEMS = 2; // logo, search
 
-  // Get the visual center X position of a tile at a given row and column
-  const getTileCenterX = useCallback((row: number, col: number) => {
-    if (row === -1) return col === 0 ? 40 : window.innerWidth - 80; // header items
-    const rowData = allRows[row];
-    if (!rowData) return 0;
-    const w = tileSizeMap[rowData.size] || 176;
-    return 40 + col * (w + tileGap) + w / 2; // 40px = px-10 padding
-  }, [allRows]);
-
-  // Find the closest tile in a target row to a given X position
-  const findClosestCol = useCallback((targetRow: number, centerX: number) => {
-    if (targetRow === -1) return centerX > window.innerWidth / 2 ? 1 : 0;
-    const rowData = allRows[targetRow];
-    if (!rowData) return 0;
-    const w = tileSizeMap[rowData.size] || 176;
+  // Find the closest tile in a target row to the current tile's viewport center X
+  const findClosestColByViewport = useCallback((targetRowLabel: string, currentCenterX: number) => {
+    const tiles = document.querySelectorAll<HTMLElement>(`[data-tile-row="${targetRowLabel}"]`);
     let bestCol = 0;
     let bestDist = Infinity;
-    for (let i = 0; i < rowData.items.length; i++) {
-      const tileCenterX = 40 + i * (w + tileGap) + w / 2;
-      const dist = Math.abs(tileCenterX - centerX);
-      if (dist < bestDist) { bestDist = dist; bestCol = i; }
-    }
+    tiles.forEach((el) => {
+      const rect = el.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const dist = Math.abs(cx - currentCenterX);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestCol = parseInt(el.dataset.tileCol || "0", 10);
+      }
+    });
     return bestCol;
-  }, [allRows]);
+  }, []);
+
+  // Get the viewport center X of the currently focused tile
+  const getCurrentCenterX = useCallback(() => {
+    if (rowIndex === -1) return window.innerWidth / 2;
+    const label = allRows[rowIndex]?.label;
+    if (!label) return window.innerWidth / 2;
+    const el = document.querySelector<HTMLElement>(`[data-tile-row="${label}"][data-tile-col="${colIndex}"]`);
+    if (!el) return window.innerWidth / 2;
+    const rect = el.getBoundingClientRect();
+    return rect.left + rect.width / 2;
+  }, [rowIndex, colIndex, allRows]);
 
   useEffect(() => {
     if (searchOpen) return;
@@ -111,16 +114,23 @@ export default function Browse() {
         e.preventDefault();
         const next = Math.min(rowIndex + 1, allRows.length - 1);
         if (next !== rowIndex) {
-          const maxCol = next === -1 ? HEADER_ITEMS - 1 : (allRows[next]?.items.length || 1) - 1;
-          setColIndex((c) => Math.min(c, maxCol));
+          const cx = getCurrentCenterX();
+          const targetLabel = allRows[next]?.label;
+          if (targetLabel) setColIndex(findClosestColByViewport(targetLabel, cx));
           setRowIndex(next);
         }
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         const next = Math.max(rowIndex - 1, -1);
         if (next !== rowIndex) {
-          const maxCol = next === -1 ? HEADER_ITEMS - 1 : (allRows[next]?.items.length || 1) - 1;
-          setColIndex((c) => Math.min(c, maxCol));
+          if (next === -1) {
+            const cx = getCurrentCenterX();
+            setColIndex(cx > window.innerWidth / 2 ? 1 : 0);
+          } else {
+            const cx = getCurrentCenterX();
+            const targetLabel = allRows[next]?.label;
+            if (targetLabel) setColIndex(findClosestColByViewport(targetLabel, cx));
+          }
           setRowIndex(next);
         }
       } else if (e.key === "ArrowLeft") {
@@ -146,7 +156,7 @@ export default function Browse() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [searchOpen, rowIndex, colIndex, allRows, navigate, getTileCenterX, findClosestCol]);
+  }, [searchOpen, rowIndex, colIndex, allRows, navigate, getCurrentCenterX, findClosestColByViewport]);
 
   const focusGlow = "tv-focus-glow";
 
