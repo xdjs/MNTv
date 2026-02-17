@@ -1,4 +1,4 @@
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -14,6 +14,7 @@ interface Props {
   label: string;
   items: TileItem[];
   tileSize?: "sm" | "md" | "lg";
+  focusedIndex?: number | null;
 }
 
 const sizes = {
@@ -22,13 +23,25 @@ const sizes = {
   lg: "w-56 h-56",
 };
 
-export default function TileRow({ label, items, tileSize = "md" }: Props) {
+export default function TileRow({ label, items, tileSize = "md", focusedIndex = null }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const tileRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const navigate = useNavigate();
 
   const scroll = useCallback((dir: number) => {
     scrollRef.current?.scrollBy({ left: dir * 320, behavior: "smooth" });
   }, []);
+
+  // Auto-scroll focused tile into view
+  useEffect(() => {
+    if (focusedIndex !== null && tileRefs.current[focusedIndex]) {
+      tileRefs.current[focusedIndex]?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "center",
+      });
+    }
+  }, [focusedIndex]);
 
   if (items.length === 0) return null;
 
@@ -55,11 +68,16 @@ export default function TileRow({ label, items, tileSize = "md" }: Props) {
           className="flex gap-4 overflow-x-auto scroll-smooth px-10 pb-2 scrollbar-hide"
           style={{ scrollbarWidth: "none" }}
         >
-          {items.map((item) => (
+          {items.map((item, i) => (
             <button
               key={item.id}
+              ref={(el) => { tileRefs.current[i] = el; }}
               onClick={() => navigate(item.href)}
-              className={`${sizes[tileSize]} shrink-0 group/tile relative overflow-hidden rounded-xl transition-transform duration-200 hover:scale-105 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background outline-none`}
+              className={`${sizes[tileSize]} shrink-0 group/tile relative overflow-hidden rounded-xl transition-all duration-200 hover:scale-105 outline-none ${
+                focusedIndex === i
+                  ? "ring-2 ring-primary ring-offset-2 ring-offset-background scale-105"
+                  : ""
+              }`}
             >
               <img
                 src={item.imageUrl}
