@@ -65,7 +65,7 @@ export default function TileRow({ label, items, tileSize = "md", focusedIndex = 
 
         <div
           ref={scrollRef}
-          className="flex gap-4 overflow-x-auto scroll-smooth px-10 pb-2 scrollbar-hide"
+          className="flex gap-5 overflow-x-auto scroll-smooth px-10 pb-4 pt-2 scrollbar-hide"
           style={{ scrollbarWidth: "none" }}
         >
           {items.map((item, i) => (
@@ -73,21 +73,23 @@ export default function TileRow({ label, items, tileSize = "md", focusedIndex = 
               key={item.id}
               ref={(el) => { tileRefs.current[i] = el; }}
               onClick={() => navigate(item.href)}
-              className={`${sizes[tileSize]} shrink-0 group/tile relative overflow-hidden rounded-xl transition-all duration-200 hover:scale-105 outline-none ${
+              className={`${sizes[tileSize]} shrink-0 group/tile relative rounded-xl transition-all duration-200 hover:scale-105 outline-none ${
                 focusedIndex === i
                   ? "tv-focus-glow scale-105"
                   : ""
               }`}
             >
-              <img
-                src={item.imageUrl}
-                alt={item.title}
-                className="h-full w-full object-cover"
-              />
-              {/* Gradient overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+              <div className="absolute inset-0 rounded-xl overflow-hidden">
+                <img
+                  src={item.imageUrl}
+                  alt={item.title}
+                  className="h-full w-full object-cover"
+                />
+                {/* Gradient overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+              </div>
               {/* Text */}
-              <div className="absolute bottom-0 left-0 right-0 p-3">
+              <div className="absolute bottom-0 left-0 right-0 p-3 z-10">
                 <p className="text-sm font-bold text-white leading-tight line-clamp-2" style={{ fontFamily: "'Nunito Sans', sans-serif" }}>
                   {item.title}
                 </p>
