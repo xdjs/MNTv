@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { Compass } from "lucide-react";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import { getSourceById } from "@/mock/tracks";
 import type { Nugget, AnimationStyle, Source } from "@/mock/types";
@@ -19,6 +20,7 @@ const kindLabels: Record<string, string> = {
   pattern: "Pattern",
   human: "Human Story",
   influence: "Influence",
+  discovery: "Explore Next",
 };
 
 // Style A — Glass Slide + Focus Bloom
@@ -116,7 +118,10 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
           animate={{ opacity: 1, transition: { delay: 0.35, duration: 0.3 } }}
           className="mb-2 flex items-center gap-2 text-[11px] text-muted-foreground"
         >
-          <span className="uppercase tracking-wider">{kindLabels[nugget.kind] || nugget.kind}</span>
+          {nugget.kind === "discovery" && <Compass size={12} className="text-primary" />}
+          <span className={`uppercase tracking-wider ${nugget.kind === "discovery" ? "text-primary" : ""}`}>
+            {kindLabels[nugget.kind] || nugget.kind}
+          </span>
           {currentTime && (
             <>
               <span className="text-foreground/20">•</span>

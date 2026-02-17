@@ -146,19 +146,23 @@ async function generateWithGemini(
   ];
   const pickedAngles = angles.sort(() => Math.random() - 0.5).slice(0, 3);
 
-  const prompt = `You are a music historian and trivia expert. Generate exactly 3 fascinating, UNIQUE pieces of trivia about "${title}" by ${artist}${album ? ` from "${album}"` : ""}.
+  const prompt = `You are a music historian and trivia expert. Generate exactly 3 fascinating, UNIQUE pieces about "${title}" by ${artist}${album ? ` from "${album}"` : ""}.
 
-Focus on these angles: ${pickedAngles.join(", ")}. (Seed: ${seed} — generate DIFFERENT facts each time)
+Focus on these angles for nuggets 1-2: ${pickedAngles.join(", ")}. (Seed: ${seed} — generate DIFFERENT facts each time)
 
 ${videoListContext ? `Available YouTube videos:\n${videoListContext}\n` : ""}
 ${transcriptContext ? `Real transcript content:\n\n${transcriptContext}\n` : "No transcripts available — use your knowledge and Google Search to find real sources."}
 
+STRUCTURE:
+- Nuggets 1 and 2: Fascinating trivia with diverse "kind" values from: process, constraint, pattern, human, influence
+- Nugget 3 (MUST have kind "discovery"): A discovery nudge — recommend a specific song, album, or artist the listener should explore next. Explain WHY based on a genuine musical connection to "${title}" (shared production approach, influence chain, emotional palette, cultural moment, collaboration). Be opinionated and specific like a knowledgeable friend, not a generic recommendation engine. Name the exact track or album and why it matters in context of what they're hearing right now.
+
 CRITICAL RULES:
-- Exactly 3 nuggets with diverse "kind" values from: process, constraint, pattern, human, influence
-- Set exactly ONE nugget's listenFor to true (an audio moment to listen for)
+- Set exactly ONE of nuggets 1-2's listenFor to true (an audio moment to listen for). Nugget 3's listenFor must be false.
 - Each nugget MUST have TWO text fields:
   - "headline": A single punchy sentence (max 15 words) that hooks the reader — a complete thought, no ellipsis
   - "text": The full 2-3 sentence explanation with detail and context
+- For nugget 3 (discovery): The headline should feel like a friend nudging you ("If this moves you, try..." or "The thread from here leads to...")
 - For YouTube sources from videos above: set type "youtube", include videoIndex, include a real quote
 - For article/interview sources: cite REAL publications with real article titles
 - Include locator (timestamp for videos, section for articles) when possible
@@ -171,7 +175,7 @@ Return ONLY valid JSON:
     {
       "headline": "One punchy complete sentence hook",
       "text": "2-3 sentences of surprising music trivia with full detail",
-      "kind": "process|constraint|pattern|human|influence",
+      "kind": "process|constraint|pattern|human|influence|discovery",
       "listenFor": false,
       "source": {
         "type": "youtube|article|interview",

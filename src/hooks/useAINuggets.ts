@@ -5,7 +5,7 @@ import type { Nugget, Source } from "@/mock/types";
 interface AINuggetData {
   headline?: string;
   text: string;
-  kind: "process" | "constraint" | "pattern" | "human" | "influence";
+  kind: "process" | "constraint" | "pattern" | "human" | "influence" | "discovery";
   listenFor?: boolean;
   source: {
     type: "youtube" | "article" | "interview";
