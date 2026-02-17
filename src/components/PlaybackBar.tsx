@@ -11,7 +11,8 @@ interface Props {
   hasPrev: boolean;
   hasNext: boolean;
   liked?: boolean | null;
-  nuggetMarkers?: number[]; // percentages (0-100) where nuggets appear
+  nuggetMarkers?: number[];
+  focusedIndex?: number | null; // 0=dislike, 1=prev, 2=play, 3=next, 4=like
   onToggle: () => void;
   onSeek: (pct: number) => void;
   onPrev: () => void;
@@ -19,6 +20,8 @@ interface Props {
   onLike?: () => void;
   onDislike?: () => void;
 }
+
+const BUTTON_LABELS = ["Dislike", "Previous", "Play / Pause", "Next", "Like"];
 
 export default function PlaybackBar({
   isPlaying,
@@ -31,6 +34,7 @@ export default function PlaybackBar({
   hasNext,
   liked = null,
   nuggetMarkers = [],
+  focusedIndex = null,
   onToggle,
   onSeek,
   onPrev,
@@ -38,6 +42,10 @@ export default function PlaybackBar({
   onLike,
   onDislike,
 }: Props) {
+  const isFocused = (idx: number) => focusedIndex === idx;
+
+  const focusRing = "ring-2 ring-primary ring-offset-2 ring-offset-background";
+
   return (
     <motion.div
       initial={false}
@@ -68,7 +76,6 @@ export default function PlaybackBar({
               className="absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-primary shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
               style={{ left: `${progress}%`, transform: `translateX(-50%) translateY(-50%)` }}
             />
-            {/* Nugget markers */}
             {nuggetMarkers.map((pct, i) => (
               <div
                 key={i}
@@ -80,58 +87,81 @@ export default function PlaybackBar({
           <span className="w-14 text-sm text-foreground/70 tabular-nums">{durationFormatted}</span>
         </div>
 
-        {/* Transport controls row — centered below */}
-        <div className="flex items-center justify-center gap-6">
-          {/* Dislike button */}
-          <button
-            onClick={onDislike}
-            className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors tv-focus-visible ${
-              liked === false
-                ? "text-primary bg-primary/20"
-                : "text-foreground/40 hover:text-foreground/70"
-            }`}
-            aria-label="Dislike"
-          >
-            <ThumbsDown size={16} />
-          </button>
+        {/* Transport controls row */}
+        <div className="flex flex-col items-center gap-2">
+          <div className="flex items-center justify-center gap-6">
+            {/* Dislike - index 0 */}
+            <button
+              onClick={onDislike}
+              className={`flex h-9 w-9 items-center justify-center rounded-full transition-all ${
+                liked === false
+                  ? "text-primary bg-primary/20"
+                  : "text-foreground/40 hover:text-foreground/70"
+              } ${isFocused(0) ? focusRing + " scale-110" : ""}`}
+              aria-label="Dislike"
+            >
+              <ThumbsDown size={16} />
+            </button>
 
-          <button
-            onClick={onPrev}
-            disabled={!hasPrev}
-            className="flex h-10 w-10 items-center justify-center rounded-full text-foreground/70 transition-colors hover:text-foreground disabled:opacity-30 disabled:cursor-default tv-focus-visible"
-            aria-label="Previous track"
-          >
-            <SkipBack size={20} />
-          </button>
+            {/* Prev - index 1 */}
+            <button
+              onClick={onPrev}
+              disabled={!hasPrev}
+              className={`flex h-10 w-10 items-center justify-center rounded-full text-foreground/70 transition-all hover:text-foreground disabled:opacity-30 disabled:cursor-default ${
+                isFocused(1) ? focusRing + " scale-110" : ""
+              }`}
+              aria-label="Previous track"
+            >
+              <SkipBack size={20} />
+            </button>
 
-          <button
-            onClick={onToggle}
-            className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/20 text-primary backdrop-blur-sm transition-colors hover:bg-primary/30 tv-focus-visible"
-          >
-            {isPlaying ? <Pause size={24} /> : <Play size={24} className="ml-0.5" />}
-          </button>
+            {/* Play/Pause - index 2 */}
+            <button
+              onClick={onToggle}
+              className={`flex h-14 w-14 items-center justify-center rounded-full bg-primary/20 text-primary backdrop-blur-sm transition-all hover:bg-primary/30 ${
+                isFocused(2) ? focusRing + " scale-110" : ""
+              }`}
+            >
+              {isPlaying ? <Pause size={24} /> : <Play size={24} className="ml-0.5" />}
+            </button>
 
-          <button
-            onClick={onNext}
-            disabled={!hasNext}
-            className="flex h-10 w-10 items-center justify-center rounded-full text-foreground/70 transition-colors hover:text-foreground disabled:opacity-30 disabled:cursor-default tv-focus-visible"
-            aria-label="Next track"
-          >
-            <SkipForward size={20} />
-          </button>
+            {/* Next - index 3 */}
+            <button
+              onClick={onNext}
+              disabled={!hasNext}
+              className={`flex h-10 w-10 items-center justify-center rounded-full text-foreground/70 transition-all hover:text-foreground disabled:opacity-30 disabled:cursor-default ${
+                isFocused(3) ? focusRing + " scale-110" : ""
+              }`}
+              aria-label="Next track"
+            >
+              <SkipForward size={20} />
+            </button>
 
-          {/* Like button */}
-          <button
-            onClick={onLike}
-            className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors tv-focus-visible ${
-              liked === true
-                ? "text-primary bg-primary/20"
-                : "text-foreground/40 hover:text-foreground/70"
-            }`}
-            aria-label="Like"
-          >
-            <ThumbsUp size={16} />
-          </button>
+            {/* Like - index 4 */}
+            <button
+              onClick={onLike}
+              className={`flex h-9 w-9 items-center justify-center rounded-full transition-all ${
+                liked === true
+                  ? "text-primary bg-primary/20"
+                  : "text-foreground/40 hover:text-foreground/70"
+              } ${isFocused(4) ? focusRing + " scale-110" : ""}`}
+              aria-label="Like"
+            >
+              <ThumbsUp size={16} />
+            </button>
+          </div>
+
+          {/* Focused button label */}
+          {focusedIndex !== null && (
+            <motion.p
+              key={focusedIndex}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-xs text-muted-foreground"
+            >
+              {BUTTON_LABELS[focusedIndex]}
+            </motion.p>
+          )}
         </div>
       </div>
     </motion.div>

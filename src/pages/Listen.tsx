@@ -87,32 +87,70 @@ export default function Listen() {
   const [nuggetFocused, setNuggetFocused] = useState(false);
   const nuggetRef = useRef<HTMLDivElement>(null);
 
+  // Focus zones: 'bar' (playback buttons) or 'nugget'
+  type FocusZone = 'bar' | 'nugget';
+  const [focusZone, setFocusZone] = useState<FocusZone>('bar');
+  // Bar buttons: dislike(0), prev(1), play(2), next(3), like(4)
+  const [barFocusIndex, setBarFocusIndex] = useState(2); // start on play
+
+  const BAR_BUTTON_COUNT = 5;
+
+  const handleBarAction = useCallback((index: number) => {
+    switch (index) {
+      case 0: setLiked((v) => v === false ? null : false); break; // dislike
+      case 1: if (prev) navigate(`/listen/${prev}`); break; // prev
+      case 2: toggle(); break; // play/pause
+      case 3: if (next) navigate(`/listen/${next}`); break; // next
+      case 4: setLiked((v) => v === true ? null : true); break; // like
+    }
+  }, [prev, next, navigate, toggle]);
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "ArrowUp") {
         e.preventDefault();
-        if (activeNugget && !nuggetFocused) {
+        if (focusZone === 'bar' && activeNugget) {
+          setFocusZone('nugget');
           setNuggetFocused(true);
           nuggetRef.current?.focus();
-        } else {
-          showBar();
         }
+        showBar();
       } else if (e.key === "ArrowDown") {
-        if (nuggetFocused) {
-          e.preventDefault();
-          setNuggetFocused(false);
-          showBar();
-        }
-      } else if (e.key === "Enter" && nuggetFocused && activeNugget) {
         e.preventDefault();
-        handleNuggetClick(activeNugget);
-      } else if (e.key === " ") { e.preventDefault(); showBar(); toggle(); }
-      else if (e.key === "ArrowRight" && !nuggetFocused && next) navigate(`/listen/${next}`);
-      else if (e.key === "ArrowLeft" && !nuggetFocused && prev) navigate(`/listen/${prev}`);
+        if (focusZone === 'nugget') {
+          setFocusZone('bar');
+          setNuggetFocused(false);
+        }
+        showBar();
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        if (focusZone === 'bar') {
+          setBarFocusIndex((i) => Math.max(0, i - 1));
+        }
+        showBar();
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        if (focusZone === 'bar') {
+          setBarFocusIndex((i) => Math.min(BAR_BUTTON_COUNT - 1, i + 1));
+        }
+        showBar();
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (focusZone === 'nugget' && activeNugget) {
+          handleNuggetClick(activeNugget);
+        } else if (focusZone === 'bar') {
+          handleBarAction(barFocusIndex);
+        }
+        showBar();
+      } else if (e.key === " ") {
+        e.preventDefault();
+        showBar();
+        toggle();
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showBar, toggle, navigate, prev, next, nuggetFocused, activeNugget, handleNuggetClick]);
+  }, [showBar, toggle, focusZone, barFocusIndex, activeNugget, handleNuggetClick, handleBarAction]);
 
   useEffect(() => { play(); }, [play]);
 
@@ -335,6 +373,7 @@ export default function Listen() {
           hasNext={!!next}
           liked={liked}
           nuggetMarkers={trackNuggets.map((n) => (n.timestampSec / track.durationSec) * 100)}
+          focusedIndex={focusZone === 'bar' ? barFocusIndex : null}
           onToggle={() => { showBar(); toggle(); }}
           onSeek={(pct) => { showBar(); seek(pct * track.durationSec); }}
           onPrev={() => prev && navigate(`/listen/${prev}`)}
