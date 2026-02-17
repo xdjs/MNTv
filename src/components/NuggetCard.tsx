@@ -96,19 +96,30 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
         }`}
       >
 
-        {/* Style B border sweep */}
+        {/* Style B — rotating glow border */}
         {animationStyle === "B" && (
-          <motion.div
-            initial={{ backgroundSize: "0% 2px, 2px 0%, 0% 2px, 2px 0%" }}
-            animate={{ backgroundSize: "100% 2px, 2px 100%, 100% 2px, 2px 100%" }}
-            transition={{ duration: 0.7, delay: 0.3, ease: "easeOut" }}
-            className="pointer-events-none absolute inset-0 rounded-2xl"
-            style={{
-              backgroundImage: `linear-gradient(hsl(var(--primary)), hsl(var(--primary))), linear-gradient(hsl(var(--primary)), hsl(var(--primary))), linear-gradient(hsl(var(--primary)), hsl(var(--primary))), linear-gradient(hsl(var(--primary)), hsl(var(--primary)))`,
-              backgroundPosition: "0 0, 100% 0, 100% 100%, 0 100%",
-              backgroundRepeat: "no-repeat",
-            }}
-          />
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3, duration: 0.4 }}
+              className="pointer-events-none absolute inset-0 rounded-xl overflow-hidden"
+            >
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
+                className="absolute inset-[-50%]"
+                style={{
+                  background: "conic-gradient(from 0deg, transparent 0%, hsl(330 90% 60% / 0.6) 10%, transparent 20%, transparent 50%, hsl(330 90% 60% / 0.4) 60%, transparent 70%)",
+                }}
+              />
+            </motion.div>
+            {/* Inner mask to keep only the border visible */}
+            <div
+              className="pointer-events-none absolute inset-[2px] rounded-[10px] z-[1]"
+              style={{ background: "inherit", backdropFilter: "inherit" }}
+            />
+          </>
         )}
 
 
