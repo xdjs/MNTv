@@ -1,6 +1,5 @@
-import { useState } from "react";
 import { motion } from "framer-motion";
-import { X, ExternalLink, FileText, Mic, Globe, AlertCircle } from "lucide-react";
+import { X, ExternalLink, FileText, Mic } from "lucide-react";
 import type { Source } from "@/mock/types";
 
 interface Props {
@@ -11,22 +10,6 @@ interface Props {
 export default function ReadingOverlay({ source, onClose }: Props) {
   const isInterview = source.type === "interview";
   const Icon = isInterview ? Mic : FileText;
-  const [showEmbed, setShowEmbed] = useState(false);
-  const [embedFailed, setEmbedFailed] = useState(false);
-
-  // Check if URL is a real article link (not a Google search or redirect)
-  const isRealUrl =
-    source.url &&
-    !source.url.includes("google.com/search") &&
-    !source.url.includes("vertexaisearch.cloud.google.com");
-
-  // Build a Google cache/AMP URL as fallback for embedding
-  const getEmbedUrl = () => {
-    if (!source.url) return null;
-    // Google's web cache often works in iframes
-    if (isRealUrl) return source.url;
-    return source.url;
-  };
 
   return (
     <motion.div
@@ -78,30 +61,8 @@ export default function ReadingOverlay({ source, onClose }: Props) {
           <img src={source.thumbnailUrl} alt="" className="rounded-xl w-full object-cover max-h-48" />
         )}
 
-        {/* Inline article embed */}
-        {showEmbed && !embedFailed && source.url && (
-          <div className="flex-1 min-h-[300px] rounded-xl overflow-hidden border border-foreground/10">
-            <iframe
-              src={getEmbedUrl()!}
-              title={source.title}
-              className="w-full h-full min-h-[400px] bg-background"
-              sandbox="allow-scripts allow-same-origin allow-popups"
-              onError={() => setEmbedFailed(true)}
-            />
-          </div>
-        )}
-
-        {showEmbed && embedFailed && (
-          <div className="flex flex-col items-center gap-3 rounded-xl bg-foreground/5 p-6 text-center">
-            <AlertCircle size={24} className="text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              This article can't be embedded. Use the link below to read it externally.
-            </p>
-          </div>
-        )}
-
         {/* Spacer to push actions to bottom */}
-        {!showEmbed && <div className="flex-1" />}
+        <div className="flex-1" />
 
         <div className="flex gap-3">
           <button
@@ -110,15 +71,6 @@ export default function ReadingOverlay({ source, onClose }: Props) {
           >
             Return to Listening
           </button>
-          {source.url && !showEmbed && (
-            <button
-              onClick={() => setShowEmbed(true)}
-              className="flex items-center gap-2 rounded-xl bg-foreground/5 px-6 py-3 text-sm text-muted-foreground transition-colors hover:text-foreground tv-focus-visible"
-            >
-              <Globe size={14} />
-              Read In App
-            </button>
-          )}
           {source.url && (
             <a
               href={source.url}
@@ -127,7 +79,7 @@ export default function ReadingOverlay({ source, onClose }: Props) {
               className="flex items-center gap-2 rounded-xl bg-foreground/5 px-6 py-3 text-sm text-muted-foreground transition-colors hover:text-foreground tv-focus-visible"
             >
               <ExternalLink size={14} />
-              {showEmbed ? "Open Externally" : (isInterview ? "Read Interview" : "Read Article")}
+              {isInterview ? "Read Interview" : "Read Article"}
             </a>
           )}
         </div>

@@ -283,7 +283,7 @@ serve(async (req) => {
       artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY
     );
 
-    // Step 4: Assemble response with real video IDs and grounded URLs
+    // Step 4: Assemble response with real video IDs and targeted search URLs
     const nuggets = rawNuggets.map((n) => {
       const result: any = {
         text: n.text,
@@ -307,24 +307,29 @@ serve(async (req) => {
         }
       }
 
-      // For article sources, match grounding chunks for real URLs
-      if (
-        (n.source.type === "article" || n.source.type === "interview") &&
-        groundingChunks.length > 0
-      ) {
-        const matchingChunk = groundingChunks.find(
-          (c: any) =>
-            c.web?.title?.toLowerCase().includes(n.source.publisher.toLowerCase()) ||
-            c.web?.title?.toLowerCase().includes(n.source.title.toLowerCase().slice(0, 20))
-        );
-        if (matchingChunk?.web?.uri) {
-          result.source.url = matchingChunk.web.uri;
-        }
-      }
-
-      // Fallback: Google Search link
+      // For article/interview sources, build a targeted Google Search URL
+      // that uses the exact article title in quotes + site: for the publisher
+      // This reliably surfaces the actual article as the top result
       if (!result.source.url) {
-        const q = `${n.source.title} ${n.source.publisher} ${artist}`;
+        // Use quoted title for exact match, plus publisher site hint
+        const publisherDomains: Record<string, string> = {
+          "pitchfork": "site:pitchfork.com",
+          "rolling stone": "site:rollingstone.com",
+          "nme": "site:nme.com",
+          "the guardian": "site:theguardian.com",
+          "billboard": "site:billboard.com",
+          "spin": "site:spin.com",
+          "stereogum": "site:stereogum.com",
+          "consequence of sound": "site:consequence.net",
+          "the quietus": "site:thequietus.com",
+          "sound on sound": "site:soundonsound.com",
+          "wikipedia": "site:en.wikipedia.org",
+          "far out magazine": "site:faroutmagazine.co.uk",
+          "the line of best fit": "site:thelineofbestfit.com",
+        };
+        const pubLower = n.source.publisher.toLowerCase();
+        const siteHint = publisherDomains[pubLower] || "";
+        const q = `"${n.source.title}" ${siteHint} ${artist}`.trim();
         result.source.url = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
       }
 
