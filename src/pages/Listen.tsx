@@ -6,7 +6,7 @@ import MusicNerdLogo from "@/components/MusicNerdLogo";
 import NuggetCard from "@/components/NuggetCard";
 import MediaOverlay from "@/components/overlays/MediaOverlay";
 import ReadingOverlay from "@/components/overlays/ReadingOverlay";
-import NuggetDeepDive from "@/components/overlays/NuggetDeepDive";
+import NuggetDeepDiveInline from "@/components/overlays/NuggetDeepDiveInline";
 import DevPanel from "@/components/DevPanel";
 import PlaybackBar from "@/components/PlaybackBar";
 import { getTrackById, getNuggetsForTrack, getSourceById, getAdjacentTrackIds, getYouTubeSourceForTrack } from "@/mock/tracks";
@@ -374,44 +374,69 @@ export default function Listen() {
           )}
         </motion.div>
 
-        {/* Nugget cards — clickable for deep dive */}
+        {/* Nugget / Deep-dive morphing container */}
         <div className="relative z-10 flex flex-1 items-center justify-end px-10 pb-24">
-          <div className="w-[520px] shrink-0">
-            <AnimatePresence mode="wait">
-              {activeNugget && (
-                <motion.div
-                  key={activeNugget.id}
-                  ref={nuggetRef}
-                  tabIndex={0}
-                  className="cursor-pointer outline-none"
-                  onClick={() => !deepDiveNugget && handleNuggetClick(activeNugget)}
-                  onFocus={() => setNuggetFocused(true)}
-                  onBlur={() => setNuggetFocused(false)}
-                  animate={{ opacity: deepDiveNugget ? 0 : 1, scale: deepDiveNugget ? 0.95 : 1 }}
-                  transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                  style={{ pointerEvents: deepDiveNugget ? "none" : "auto" }}
-                >
-                  <NuggetCard
-                    nugget={activeNugget}
-                    animationStyle={animStyle}
-                    onSourceClick={() => handleSourceClick(activeNugget)}
-                    currentTime={formatTime(activeNugget.timestampSec)}
-                    sourceOverride={getSource(activeNugget.sourceId) || null}
-                    focused={nuggetFocused && !deepDiveNugget}
-                  />
-                  {nuggetFocused && !deepDiveNugget && (
-                    <motion.p
+          <AnimatePresence mode="wait">
+            {activeNugget && (
+              <motion.div
+                key={activeNugget.id}
+                layout
+                ref={nuggetRef}
+                tabIndex={0}
+                className={`outline-none ${deepDiveNugget ? "w-full max-w-3xl mx-auto" : "w-[520px] shrink-0 cursor-pointer"}`}
+                onClick={() => !deepDiveNugget && handleNuggetClick(activeNugget)}
+                onFocus={() => setNuggetFocused(true)}
+                onBlur={() => setNuggetFocused(false)}
+                transition={{ layout: { duration: 0.45, ease: [0.22, 1, 0.36, 1] } }}
+              >
+                <AnimatePresence mode="wait" initial={false}>
+                  {deepDiveNugget ? (
+                    <motion.div
+                      key="deep-dive"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      className="mt-2 text-center text-xs text-muted-foreground"
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.25, delay: 0.15 }}
                     >
-                      Press Enter to explore
-                    </motion.p>
+                      <NuggetDeepDiveInline
+                        nugget={deepDiveNugget}
+                        source={getSource(deepDiveNugget.sourceId) || null}
+                        artist={track.artist}
+                        trackTitle={track.title}
+                        onClose={() => setDeepDiveNugget(null)}
+                      />
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="card"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <NuggetCard
+                        nugget={activeNugget}
+                        animationStyle={animStyle}
+                        onSourceClick={() => handleSourceClick(activeNugget)}
+                        currentTime={formatTime(activeNugget.timestampSec)}
+                        sourceOverride={getSource(activeNugget.sourceId) || null}
+                        focused={nuggetFocused && !deepDiveNugget}
+                      />
+                      {nuggetFocused && (
+                        <motion.p
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          className="mt-2 text-center text-xs text-muted-foreground"
+                        >
+                          Press Enter to explore
+                        </motion.p>
+                      )}
+                    </motion.div>
                   )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+                </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Playback controls */}
@@ -472,17 +497,6 @@ export default function Listen() {
             <ReadingOverlay
               source={readingOverlay}
               onClose={() => setReadingOverlay(null)}
-            />
-          )}
-        </AnimatePresence>
-        <AnimatePresence>
-          {deepDiveNugget && (
-            <NuggetDeepDive
-              nugget={deepDiveNugget}
-              source={getSource(deepDiveNugget.sourceId) || null}
-              artist={track.artist}
-              trackTitle={track.title}
-              onClose={() => setDeepDiveNugget(null)}
             />
           )}
         </AnimatePresence>
