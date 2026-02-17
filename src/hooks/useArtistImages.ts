@@ -4,6 +4,8 @@ import type { Artist } from "@/mock/types";
 
 const imageCache = new Map<string, string>();
 
+const SKIP_API_LOOKUP = new Set(["Jamee Cornelia"]);
+
 /**
  * Hook that enriches an array of artists with real photos from MusicBrainz/Wikidata.
  * Returns the same array with imageUrl potentially replaced by the real photo.
@@ -41,7 +43,11 @@ export function useArtistImages(artists: Artist[]): Artist[] {
 
         const artist = toFetch[i];
         try {
-          const { data, error } = await supabase.functions.invoke("artist-image", {
+        if (SKIP_API_LOOKUP.has(artist.name)) {
+          imageCache.set(artist.name, artist.imageUrl);
+          continue;
+        }
+        const { data, error } = await supabase.functions.invoke("artist-image", {
             body: { artist: artist.name, width: 600 },
           });
 
