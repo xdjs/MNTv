@@ -9,6 +9,7 @@ interface Props {
   onSourceClick: () => void;
   currentTime?: string;
   sourceOverride?: Source | null;
+  focused?: boolean;
 }
 
 // Kind labels for the nugget header
@@ -67,7 +68,7 @@ const styleMap = {
   C: { card: cardC, logo: logoC },
 };
 
-export default function NuggetCard({ nugget, animationStyle, onSourceClick, currentTime, sourceOverride }: Props) {
+export default function NuggetCard({ nugget, animationStyle, onSourceClick, currentTime, sourceOverride, focused }: Props) {
   const source = sourceOverride !== undefined ? sourceOverride : getSourceById(nugget.sourceId);
   const { card: cardVariants, logo: logoVariants } = styleMap[animationStyle];
 
@@ -81,10 +82,11 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
         <MusicNerdLogo size={animationStyle === "C" ? 32 : 22} glow />
       </motion.div>
 
-      {/* Card */}
       <motion.div
         variants={cardVariants}
-        className="apple-glass relative rounded-xl px-5 py-3 ml-2"
+        className={`apple-glass relative rounded-xl px-5 py-3 ml-2 transition-all duration-200 ${
+          focused ? "tv-focus-glow scale-[1.03]" : "hover:scale-[1.02]"
+        }`}
       >
 
         {/* Style B border sweep */}
