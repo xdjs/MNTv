@@ -136,15 +136,15 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
       transition={{ duration: 0.3 }}
       className="fixed inset-0 z-50 flex items-center justify-center"
     >
-      {/* Backdrop — no click-to-close for TV */}
-      <div className="absolute inset-0 bg-background/85 backdrop-blur-md" />
+      {/* Backdrop — lighter for TV, let artwork show through */}
+      <div className="absolute inset-0 bg-background/40 backdrop-blur-sm" />
 
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-        className="apple-glass relative z-10 mx-8 w-full max-w-4xl max-h-[70vh] flex flex-col rounded-2xl overflow-hidden"
+        className="apple-glass relative z-10 mx-8 w-full max-w-4xl max-h-[70vh] flex flex-col rounded-3xl overflow-hidden shadow-[0_8px_60px_hsl(0_0%_0%/0.35)]"
       >
         {/* Header */}
         <div className="flex items-center gap-3 px-8 pt-6 pb-2">
@@ -192,8 +192,16 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
                   {currentContent?.text}
                 </p>
 
-                {/* Source attribution — shown only on original view */}
-                {currentView === 'original' && source && (
+                {/* Source attribution — only on original view, quote OR source line (not both) */}
+                {currentView === 'original' && source?.quoteSnippet && (
+                  <blockquote className="border-l-2 border-primary/40 pl-4 text-base text-foreground/50 italic leading-relaxed">
+                    "{source.quoteSnippet}"
+                    <span className="block mt-1 text-xs text-muted-foreground not-italic">
+                      — {source.title}, {source.publisher}
+                    </span>
+                  </blockquote>
+                )}
+                {currentView === 'original' && source && !source.quoteSnippet && (
                   <div className="flex items-center gap-2 rounded-lg bg-foreground/5 px-4 py-2.5 text-sm text-muted-foreground">
                     <span>
                       {source.type === "youtube" ? "▶" : source.type === "article" ? "📄" : "🎙"}
@@ -202,12 +210,6 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
                     <span className="text-foreground/20">·</span>
                     <span>{source.publisher}</span>
                   </div>
-                )}
-
-                {currentView === 'original' && source?.quoteSnippet && (
-                  <blockquote className="border-l-2 border-primary pl-4 text-lg text-foreground/70 italic leading-relaxed">
-                    "{source.quoteSnippet}"
-                  </blockquote>
                 )}
 
                 {/* Follow-up teaser */}
