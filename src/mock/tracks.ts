@@ -450,7 +450,12 @@ export function getSourceById(id: string): Source | undefined {
   return sources.find((s) => s.id === id);
 }
 
-export function getAdjacentTrackIds(currentId: string): { prev: string | null; next: string | null } {
+export function getAdjacentTrackIds(currentId: string, shuffle = false): { prev: string | null; next: string | null } {
+  if (shuffle) {
+    const others = tracks.filter((t) => t.id !== currentId);
+    const random = others[Math.floor(Math.random() * others.length)];
+    return { prev: null, next: random?.id || null };
+  }
   const idx = tracks.findIndex((t) => t.id === currentId);
   return {
     prev: idx > 0 ? tracks[idx - 1].id : null,
