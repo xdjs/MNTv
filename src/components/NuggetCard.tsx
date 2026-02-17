@@ -96,26 +96,42 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
         }`}
       >
 
-        {/* Style B — glowing border sweep that loops */}
+        {/* Style B — glowing border that traces in then rotates */}
         {animationStyle === "B" && (
-          <motion.div
-            initial={{ backgroundSize: "0% 3px, 3px 0%, 0% 3px, 3px 0%" }}
-            animate={{
-              backgroundSize: [
-                "0% 3px, 3px 0%, 0% 3px, 3px 0%",
-                "100% 3px, 3px 100%, 100% 3px, 3px 100%",
-                "0% 3px, 3px 0%, 0% 3px, 3px 0%",
-              ],
-            }}
-            transition={{ duration: 3, delay: 0.3, ease: "easeInOut", repeat: Infinity }}
-            className="pointer-events-none absolute inset-0 rounded-xl"
-            style={{
-              backgroundImage: `linear-gradient(hsl(330 90% 60% / 0.8), hsl(330 90% 60% / 0.8)), linear-gradient(hsl(330 90% 60% / 0.8), hsl(330 90% 60% / 0.8)), linear-gradient(hsl(330 90% 60% / 0.8), hsl(330 90% 60% / 0.8)), linear-gradient(hsl(330 90% 60% / 0.8), hsl(330 90% 60% / 0.8))`,
-              backgroundPosition: "0 0, 100% 0, 100% 100%, 0 100%",
-              backgroundRepeat: "no-repeat",
-              filter: "blur(3px)",
-            }}
-          />
+          <>
+            {/* Initial trace-in */}
+            <motion.div
+              initial={{ backgroundSize: "0% 3px, 3px 0%, 0% 3px, 3px 0%" }}
+              animate={{ backgroundSize: "100% 3px, 3px 100%, 100% 3px, 3px 100%" }}
+              transition={{ duration: 0.7, delay: 0.3, ease: "easeOut" }}
+              className="pointer-events-none absolute inset-0 rounded-xl"
+              style={{
+                backgroundImage: `linear-gradient(hsl(330 90% 60% / 0.7), hsl(330 90% 60% / 0.7)), linear-gradient(hsl(330 90% 60% / 0.7), hsl(330 90% 60% / 0.7)), linear-gradient(hsl(330 90% 60% / 0.7), hsl(330 90% 60% / 0.7)), linear-gradient(hsl(330 90% 60% / 0.7), hsl(330 90% 60% / 0.7))`,
+                backgroundPosition: "0 0, 100% 0, 100% 100%, 0 100%",
+                backgroundRepeat: "no-repeat",
+                filter: "blur(2px)",
+              }}
+            />
+            {/* Rotating glow highlight that travels the border after trace-in */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 1, duration: 0.5 }}
+              className="pointer-events-none absolute inset-[-1px] rounded-xl overflow-hidden"
+            >
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 3, ease: "linear" }}
+                className="absolute inset-[-50%]"
+                style={{
+                  background: "conic-gradient(from 0deg, transparent 60%, hsl(330 90% 60% / 0.9) 75%, hsl(330 90% 60% / 0.3) 85%, transparent 100%)",
+                  filter: "blur(4px)",
+                }}
+              />
+              {/* Inner cutout so only border ring is visible */}
+              <div className="absolute inset-[3px] rounded-[9px] bg-background/80 backdrop-blur-xl" />
+            </motion.div>
+          </>
         )}
 
 
