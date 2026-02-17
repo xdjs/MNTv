@@ -73,10 +73,28 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
           return next;
         });
       }
+      // Up/Down to navigate between explored entries
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setCurrentView(prev => {
+          if (prev === 'original') return prev; // already at first
+          if (prev === 0) return 'original';
+          return prev - 1;
+        });
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setCurrentView(prev => {
+          if (entries.length === 0) return prev; // nothing to navigate
+          if (prev === 'original') return 0;
+          if (typeof prev === 'number' && prev < entries.length - 1) return prev + 1;
+          return prev;
+        });
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onClose, buttonCount, source?.url]);
+  }, [onClose, buttonCount, source?.url, entries.length]);
 
   const explore = useCallback(async () => {
     setLoading(true);
