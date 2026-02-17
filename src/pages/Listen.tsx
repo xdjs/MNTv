@@ -78,16 +78,41 @@ export default function Listen() {
     return () => window.removeEventListener("mousemove", onMouseMove);
   }, [showBar]);
 
+  // Click nugget card to open deep dive
+  const handleNuggetClick = useCallback((nugget: Nugget) => {
+    setDeepDiveNugget(nugget);
+    setNuggetFocused(false);
+  }, []);
+
+  const [nuggetFocused, setNuggetFocused] = useState(false);
+  const nuggetRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "ArrowUp") { e.preventDefault(); showBar(); }
-      else if (e.key === " ") { e.preventDefault(); showBar(); toggle(); }
-      else if (e.key === "ArrowRight" && next) navigate(`/listen/${next}`);
-      else if (e.key === "ArrowLeft" && prev) navigate(`/listen/${prev}`);
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (activeNugget && !nuggetFocused) {
+          setNuggetFocused(true);
+          nuggetRef.current?.focus();
+        } else {
+          showBar();
+        }
+      } else if (e.key === "ArrowDown") {
+        if (nuggetFocused) {
+          e.preventDefault();
+          setNuggetFocused(false);
+          showBar();
+        }
+      } else if (e.key === "Enter" && nuggetFocused && activeNugget) {
+        e.preventDefault();
+        handleNuggetClick(activeNugget);
+      } else if (e.key === " ") { e.preventDefault(); showBar(); toggle(); }
+      else if (e.key === "ArrowRight" && !nuggetFocused && next) navigate(`/listen/${next}`);
+      else if (e.key === "ArrowLeft" && !nuggetFocused && prev) navigate(`/listen/${prev}`);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showBar, toggle, navigate, prev, next]);
+  }, [showBar, toggle, navigate, prev, next, nuggetFocused, activeNugget, handleNuggetClick]);
 
   useEffect(() => { play(); }, [play]);
 
@@ -117,12 +142,12 @@ export default function Listen() {
     }
   }, [currentTime, isPlaying, nerdActive, trackNuggets, activeNugget, shownNuggetIds]);
 
-  // Auto-dismiss nugget (but not if deep dive is open)
+  // Auto-dismiss nugget (but not if deep dive is open or nugget is focused)
   useEffect(() => {
-    if (!activeNugget || deepDiveNugget) return;
+    if (!activeNugget || deepDiveNugget || nuggetFocused) return;
     const timer = setTimeout(() => setActiveNugget(null), activeNugget.durationMs);
     return () => clearTimeout(timer);
-  }, [activeNugget, deepDiveNugget]);
+  }, [activeNugget, deepDiveNugget, nuggetFocused]);
 
   useEffect(() => {
     if (!activeNugget && nuggetQueue.length > 0) {
@@ -151,11 +176,6 @@ export default function Listen() {
     [pauseForOverlay, getSource]
   );
 
-  // Click nugget card to open deep dive
-  const handleNuggetClick = useCallback((nugget: Nugget) => {
-    setDeepDiveNugget(nugget);
-    // Keep the nugget visible while deep dive is open
-  }, []);
 
   const jumpToNugget = useCallback(
     (idx: number) => {
@@ -269,8 +289,16 @@ export default function Listen() {
             <AnimatePresence mode="wait">
               {activeNugget && (
                 <div
-                  className="cursor-pointer transition-transform hover:scale-[1.02]"
+                  ref={nuggetRef}
+                  tabIndex={0}
+                  className={`cursor-pointer transition-all duration-200 hover:scale-[1.02] outline-none rounded-xl ${
+                    nuggetFocused
+                      ? "ring-2 ring-primary ring-offset-2 ring-offset-background scale-[1.03]"
+                      : ""
+                  }`}
                   onClick={() => handleNuggetClick(activeNugget)}
+                  onFocus={() => setNuggetFocused(true)}
+                  onBlur={() => setNuggetFocused(false)}
                 >
                   <NuggetCard
                     key={activeNugget.id}
@@ -280,6 +308,15 @@ export default function Listen() {
                     currentTime={formatTime(activeNugget.timestampSec)}
                     sourceOverride={getSource(activeNugget.sourceId) || null}
                   />
+                  {nuggetFocused && (
+                    <motion.p
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="mt-2 text-center text-xs text-muted-foreground"
+                    >
+                      Press Enter to explore
+                    </motion.p>
+                  )}
                 </div>
               )}
             </AnimatePresence>
