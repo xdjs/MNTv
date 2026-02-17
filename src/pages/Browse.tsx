@@ -111,16 +111,16 @@ export default function Browse() {
         e.preventDefault();
         const next = Math.min(rowIndex + 1, allRows.length - 1);
         if (next !== rowIndex) {
-          const centerX = getTileCenterX(rowIndex, colIndex);
-          setColIndex(findClosestCol(next, centerX));
+          const maxCol = next === -1 ? HEADER_ITEMS - 1 : (allRows[next]?.items.length || 1) - 1;
+          setColIndex((c) => Math.min(c, maxCol));
           setRowIndex(next);
         }
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         const next = Math.max(rowIndex - 1, -1);
         if (next !== rowIndex) {
-          const centerX = getTileCenterX(rowIndex, colIndex);
-          setColIndex(findClosestCol(next, centerX));
+          const maxCol = next === -1 ? HEADER_ITEMS - 1 : (allRows[next]?.items.length || 1) - 1;
+          setColIndex((c) => Math.min(c, maxCol));
           setRowIndex(next);
         }
       } else if (e.key === "ArrowLeft") {
