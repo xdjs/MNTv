@@ -144,8 +144,21 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-        className="apple-glass relative z-10 mx-8 w-full max-w-4xl max-h-[70vh] flex flex-col rounded-3xl overflow-hidden shadow-[0_8px_60px_hsl(0_0%_0%/0.35)]"
+        className="apple-glass relative z-10 mx-8 w-full max-w-3xl max-h-[65vh] flex flex-col rounded-3xl overflow-hidden shadow-[0_8px_60px_hsl(0_0%_0%/0.35)]"
       >
+        {/* Breathing glow overlay */}
+        <motion.div
+          className="absolute inset-0 rounded-3xl pointer-events-none z-0"
+          animate={{
+            boxShadow: [
+              "0 0 10px 3px hsl(330 90% 60% / 0.2), 0 0 25px 6px hsl(330 90% 60% / 0.08)",
+              "0 0 22px 8px hsl(330 90% 60% / 0.5), 0 0 55px 14px hsl(330 90% 60% / 0.2)",
+            ],
+          }}
+          transition={{
+            boxShadow: { repeat: Infinity, repeatType: "reverse", duration: 1, ease: "easeInOut" },
+          }}
+        />
         {/* Header */}
         <div className="flex items-center gap-3 px-8 pt-6 pb-2">
           <MusicNerdLogo size={28} glow />
@@ -188,7 +201,7 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
                 transition={{ duration: 0.25, ease: "easeOut" }}
                 className="space-y-4"
               >
-                <p className="text-xl md:text-2xl leading-relaxed text-foreground/90">
+                <p className="text-lg md:text-xl leading-relaxed text-foreground/90">
                   {currentContent?.text}
                 </p>
 
