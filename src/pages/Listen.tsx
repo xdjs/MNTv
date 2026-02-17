@@ -52,7 +52,6 @@ export default function Listen() {
   const [mediaOverlay, setMediaOverlay] = useState<Source | null>(null);
   const [readingOverlay, setReadingOverlay] = useState<Source | null>(null);
   const [deepDiveNugget, setDeepDiveNugget] = useState<Nugget | null>(null);
-  const [returningFromDeepDive, setReturningFromDeepDive] = useState(false);
   const [devOpen, setDevOpen] = useState(false);
   const [nerdActive, setNerdActive] = useState(true);
   const [backdropMotion, setBackdropMotion] = useState(false);
@@ -379,27 +378,28 @@ export default function Listen() {
         <div className="relative z-10 flex flex-1 items-center justify-end px-10 pb-24">
           <div className="w-[520px] shrink-0">
             <AnimatePresence mode="wait">
-              {activeNugget && !deepDiveNugget && (
-                <div
+              {activeNugget && (
+                <motion.div
+                  key={activeNugget.id}
                   ref={nuggetRef}
                   tabIndex={0}
                   className="cursor-pointer outline-none"
-                  onClick={() => handleNuggetClick(activeNugget)}
+                  onClick={() => !deepDiveNugget && handleNuggetClick(activeNugget)}
                   onFocus={() => setNuggetFocused(true)}
                   onBlur={() => setNuggetFocused(false)}
+                  animate={{ opacity: deepDiveNugget ? 0 : 1, scale: deepDiveNugget ? 0.95 : 1 }}
+                  transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                  style={{ pointerEvents: deepDiveNugget ? "none" : "auto" }}
                 >
                   <NuggetCard
-                    key={returningFromDeepDive ? `${activeNugget.id}-return` : activeNugget.id}
                     nugget={activeNugget}
                     animationStyle={animStyle}
                     onSourceClick={() => handleSourceClick(activeNugget)}
                     currentTime={formatTime(activeNugget.timestampSec)}
                     sourceOverride={getSource(activeNugget.sourceId) || null}
-                    focused={nuggetFocused}
-                    skipAnimation={returningFromDeepDive}
-                    onAnimationComplete={() => { if (returningFromDeepDive) setReturningFromDeepDive(false); }}
+                    focused={nuggetFocused && !deepDiveNugget}
                   />
-                  {nuggetFocused && (
+                  {nuggetFocused && !deepDiveNugget && (
                     <motion.p
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
@@ -408,7 +408,7 @@ export default function Listen() {
                       Press Enter to explore
                     </motion.p>
                   )}
-                </div>
+                </motion.div>
               )}
             </AnimatePresence>
           </div>
@@ -482,7 +482,7 @@ export default function Listen() {
               source={getSource(deepDiveNugget.sourceId) || null}
               artist={track.artist}
               trackTitle={track.title}
-              onClose={() => { setReturningFromDeepDive(true); setDeepDiveNugget(null); }}
+              onClose={() => setDeepDiveNugget(null)}
             />
           )}
         </AnimatePresence>
