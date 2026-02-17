@@ -6,7 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// ── YouTube Data API search (optional, requires API enabled) ─────────
+// ── YouTube Data API search ──────────────────────────────────────────
 interface YTVideo {
   videoId: string;
   title: string;
@@ -46,8 +46,7 @@ async function fetchTranscript(videoId: string): Promise<string | null> {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         },
         body: JSON.stringify({
           videoId,
@@ -97,8 +96,8 @@ async function fetchTranscript(videoId: string): Promise<string | null> {
   }
 }
 
-// ── Generate nuggets via Lovable AI gateway ──────────────────────────
-interface NuggetResult {
+// ── Generate nuggets with Gemini + Google Search grounding ───────────
+interface GeminiNugget {
   text: string;
   kind: string;
   listenFor: boolean;
@@ -106,22 +105,20 @@ interface NuggetResult {
     type: "youtube" | "article" | "interview";
     title: string;
     publisher: string;
-    url?: string;
-    embedId?: string;
     quoteSnippet: string;
     locator?: string;
     videoIndex?: number;
   };
 }
 
-async function generateNuggets(
+async function generateWithGemini(
   artist: string,
   title: string,
   album: string | undefined,
   videos: YTVideo[],
   transcripts: Map<string, string>,
   apiKey: string
-): Promise<NuggetResult[]> {
+): Promise<{ nuggets: GeminiNugget[]; groundingChunks: any[] }> {
   const transcriptContext = videos
     .filter((v) => transcripts.has(v.videoId))
     .map((v, i) => {
@@ -134,34 +131,32 @@ async function generateNuggets(
     .map((v, i) => `[VIDEO ${i}] "${v.title}" by ${v.channelTitle} (videoId: ${v.videoId})`)
     .join("\n");
 
-  // Add randomness seed to get different results each time
+  // Randomize angles for variety each time
   const seed = Math.random().toString(36).slice(2, 8);
   const angles = [
     "production techniques", "personal stories", "cultural impact",
     "musical theory", "recording sessions", "live performances",
     "collaborations", "lyrical meaning", "instrument choices",
-    "historical context", "critical reception", "fan theories",
-    "samples and influences", "music video creation", "chart performance",
+    "historical context", "critical reception", "samples and influences",
+    "music video creation", "chart performance", "fan theories",
   ];
   const pickedAngles = angles.sort(() => Math.random() - 0.5).slice(0, 3);
 
-  const prompt = `You are a music historian and trivia expert. Generate exactly 3 fascinating, UNIQUE pieces of trivia about the song "${title}" by ${artist}${album ? ` from "${album}"` : ""}.
+  const prompt = `You are a music historian and trivia expert. Generate exactly 3 fascinating, UNIQUE pieces of trivia about "${title}" by ${artist}${album ? ` from "${album}"` : ""}.
 
-Focus on these angles for THIS generation: ${pickedAngles.join(", ")}. (Seed: ${seed})
+Focus on these angles: ${pickedAngles.join(", ")}. (Seed: ${seed} — generate DIFFERENT facts each time)
 
 ${videoListContext ? `Available YouTube videos:\n${videoListContext}\n` : ""}
-${transcriptContext ? `Real transcript content:\n\n${transcriptContext}\n` : ""}
+${transcriptContext ? `Real transcript content:\n\n${transcriptContext}\n` : "No transcripts available — use your knowledge and Google Search to find real sources."}
 
 CRITICAL RULES:
-- Generate exactly 3 nuggets with diverse "kind" values from: process, constraint, pattern, human, influence
-- Set exactly ONE nugget's listenFor to true (an audio moment listeners should pay attention to)
-- For each nugget provide a REAL source — a real article, interview, or video that actually exists
-- For YouTube sources from the videos above: set type to "youtube", include videoIndex number, and include a real quote
-- For article/interview sources: cite REAL publications (Pitchfork, Rolling Stone, NME, The Guardian, etc.) with real article titles that actually exist about this artist/song
-- Include a url field with the REAL URL to the source when possible
-- Include a locator (timestamp for videos, section for articles) when possible
+- Exactly 3 nuggets with diverse "kind" values from: process, constraint, pattern, human, influence
+- Set exactly ONE nugget's listenFor to true (an audio moment to listen for)
+- For YouTube sources from videos above: set type "youtube", include videoIndex, include a real quote
+- For article/interview sources: cite REAL publications with real article titles
+- Include locator (timestamp for videos, section for articles) when possible
 - Be factually accurate — do not fabricate quotes or facts
-- IMPORTANT: Generate DIFFERENT trivia each time — avoid the most obvious facts
+- Generate DIFFERENT trivia each time
 
 Return ONLY valid JSON:
 {
@@ -174,59 +169,65 @@ Return ONLY valid JSON:
         "type": "youtube|article|interview",
         "title": "Real source title",
         "publisher": "Real publisher/channel name",
-        "url": "https://real-url-to-source",
-        "quoteSnippet": "Real or closely paraphrased quote from the source",
-        "locator": "3:12 or Paragraph 6",
+        "quoteSnippet": "Real or closely paraphrased quote",
+        "locator": "3:12",
         "videoIndex": 0
       }
     }
   ]
 }`;
 
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [
-        {
-          role: "system",
-          content: "You are a music historian who provides accurate, well-sourced trivia. Always cite real sources with real URLs. Return only valid JSON.",
-        },
-        { role: "user", content: prompt },
-      ],
-      temperature: 1.0,
-    }),
-  });
+  const body: any = {
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    tools: [{ google_search: {} }],
+    generationConfig: { temperature: 1.0 },
+  };
 
-  if (!res.ok) {
+  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+  // Retry up to 3 times on 429
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(geminiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const candidate = data.candidates?.[0];
+      const text = candidate?.content?.parts?.[0]?.text || "";
+      const groundingChunks = candidate?.groundingMetadata?.groundingChunks || [];
+
+      let parsed: { nuggets: GeminiNugget[] };
+      try {
+        const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+        parsed = JSON.parse(cleaned);
+      } catch {
+        console.error("Failed to parse Gemini response:", text);
+        throw new Error("Failed to parse Gemini response");
+      }
+      return { nuggets: parsed.nuggets || [], groundingChunks };
+    }
+
+    if (res.status === 429 && attempt < 2) {
+      const errData = await res.json().catch(() => null);
+      const retryInfo = errData?.error?.details?.find((d: any) => d["@type"]?.includes("RetryInfo"));
+      const retryDelay = retryInfo?.retryDelay || "5s";
+      // Parse delay like "0.606s" or "5s"
+      const delaySec = parseFloat(retryDelay.replace("s", "")) || 5;
+      const waitMs = Math.min((delaySec + 2) * 1000, 55000);
+      console.log(`Rate limited, waiting ${waitMs / 1000}s before retry ${attempt + 1}...`);
+      await new Promise((r) => setTimeout(r, waitMs));
+      continue;
+    }
+
     const errText = await res.text();
-    console.error("Lovable AI error:", res.status, errText);
-    if (res.status === 429) {
-      throw new Error("Rate limited — please try again in a moment");
-    }
-    if (res.status === 402) {
-      throw new Error("AI credits exhausted — please add credits in workspace settings");
-    }
-    throw new Error(`AI gateway error: ${res.status}`);
+    console.error("Gemini API error:", res.status, errText);
+    throw new Error(`Gemini API error: ${res.status}`);
   }
 
-  const data = await res.json();
-  const content = data.choices?.[0]?.message?.content || "";
-
-  let parsed: { nuggets: NuggetResult[] };
-  try {
-    const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    parsed = JSON.parse(cleaned);
-  } catch {
-    console.error("Failed to parse AI response:", content);
-    throw new Error("Failed to parse AI response");
-  }
-
-  return parsed.nuggets || [];
+  throw new Error("Gemini API failed after retries");
 }
 
 // ── Main handler ─────────────────────────────────────────────────────
@@ -245,26 +246,22 @@ serve(async (req) => {
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY");
+    if (!GOOGLE_AI_API_KEY) {
+      throw new Error("GOOGLE_AI_API_KEY is not configured");
     }
 
-    const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY");
-
-    // Step 1: Search YouTube (optional — needs YouTube Data API enabled)
+    // Step 1: Search YouTube (needs YouTube Data API v3 enabled)
     let videos: YTVideo[] = [];
-    if (GOOGLE_AI_API_KEY) {
-      try {
-        const searchQuery = `${artist} ${title} interview OR breakdown OR behind the scenes`;
-        videos = await searchYouTube(searchQuery, GOOGLE_AI_API_KEY);
-      } catch (e) {
-        console.warn("YouTube search skipped:", e);
-      }
+    try {
+      const searchQuery = `${artist} ${title} interview OR breakdown OR behind the scenes`;
+      videos = await searchYouTube(searchQuery, GOOGLE_AI_API_KEY);
+    } catch (e) {
+      console.warn("YouTube search skipped:", e);
     }
     console.log(`Found ${videos.length} YouTube videos for "${artist} - ${title}"`);
 
-    // Step 2: Fetch transcripts in parallel (top 3 videos)
+    // Step 2: Fetch transcripts in parallel (top 3)
     const transcripts = new Map<string, string>();
     if (videos.length > 0) {
       const results = await Promise.allSettled(
@@ -281,12 +278,12 @@ serve(async (req) => {
     }
     console.log(`Fetched ${transcripts.size} transcripts`);
 
-    // Step 3: Generate nuggets via Lovable AI
-    const rawNuggets = await generateNuggets(
-      artist, title, album, videos, transcripts, LOVABLE_API_KEY
+    // Step 3: Generate nuggets with Gemini + Google Search grounding
+    const { nuggets: rawNuggets, groundingChunks } = await generateWithGemini(
+      artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY
     );
 
-    // Step 4: Assemble response — attach real video IDs where applicable
+    // Step 4: Assemble response with real video IDs and grounded URLs
     const nuggets = rawNuggets.map((n) => {
       const result: any = {
         text: n.text,
@@ -298,11 +295,10 @@ serve(async (req) => {
           publisher: n.source.publisher,
           quoteSnippet: n.source.quoteSnippet,
           locator: n.source.locator,
-          url: n.source.url,
         },
       };
 
-      // Attach real embedId for youtube sources
+      // Attach real embedId for YouTube sources
       if (n.source.type === "youtube" && n.source.videoIndex != null) {
         const video = videos[n.source.videoIndex];
         if (video) {
@@ -311,7 +307,22 @@ serve(async (req) => {
         }
       }
 
-      // Fallback: Google Search link if no real URL
+      // For article sources, match grounding chunks for real URLs
+      if (
+        (n.source.type === "article" || n.source.type === "interview") &&
+        groundingChunks.length > 0
+      ) {
+        const matchingChunk = groundingChunks.find(
+          (c: any) =>
+            c.web?.title?.toLowerCase().includes(n.source.publisher.toLowerCase()) ||
+            c.web?.title?.toLowerCase().includes(n.source.title.toLowerCase().slice(0, 20))
+        );
+        if (matchingChunk?.web?.uri) {
+          result.source.url = matchingChunk.web.uri;
+        }
+      }
+
+      // Fallback: Google Search link
       if (!result.source.url) {
         const q = `${n.source.title} ${n.source.publisher} ${artist}`;
         result.source.url = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
