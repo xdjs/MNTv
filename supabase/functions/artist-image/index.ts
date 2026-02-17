@@ -8,12 +8,27 @@ const corsHeaders = {
 
 const MB_USER_AGENT = "MusicNerd/1.0 (musicnerd-app)";
 
+/** Retry-aware fetch for flaky upstream APIs */
+async function fetchWithRetry(url: string, options?: RequestInit, retries = 3): Promise<Response> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(url, options);
+      return res;
+    } catch (e) {
+      if (i === retries - 1) throw e;
+      console.warn(`Fetch attempt ${i + 1} failed for ${url}, retrying...`);
+      await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+    }
+  }
+  throw new Error("Unreachable");
+}
+
 /**
  * Step 1: Search MusicBrainz for artist → get MBID
  */
 async function searchArtist(name: string): Promise<string | null> {
   const url = `https://musicbrainz.org/ws/2/artist/?query=artist:${encodeURIComponent(name)}&fmt=json&limit=1`;
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     headers: { "User-Agent": MB_USER_AGENT },
   });
   if (!res.ok) return null;
@@ -26,7 +41,7 @@ async function searchArtist(name: string): Promise<string | null> {
  */
 async function getWikidataId(mbid: string): Promise<string | null> {
   const url = `https://musicbrainz.org/ws/2/artist/${mbid}?inc=url-rels&fmt=json`;
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     headers: { "User-Agent": MB_USER_AGENT },
   });
   if (!res.ok) return null;
@@ -48,7 +63,7 @@ async function getWikidataId(mbid: string): Promise<string | null> {
  */
 async function getImageFromWikidata(wikidataId: string): Promise<string | null> {
   const url = `https://www.wikidata.org/wiki/Special:EntityData/${wikidataId}.json`;
-  const res = await fetch(url);
+  const res = await fetchWithRetry(url);
   if (!res.ok) return null;
   const data = await res.json();
 
@@ -90,7 +105,7 @@ function cyrb53Hash(_str: string): number {
 async function getCommonsImageUrl(filename: string, width: number): Promise<string | null> {
   const normalized = filename.replace(/ /g, "_");
   const url = `https://en.wikipedia.org/w/api.php?action=query&titles=File:${encodeURIComponent(normalized)}&prop=imageinfo&iiprop=url&iiurlwidth=${width}&format=json`;
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     headers: { "User-Agent": MB_USER_AGENT },
   });
   if (!res.ok) return null;
@@ -106,7 +121,7 @@ async function getCommonsImageUrl(filename: string, width: number): Promise<stri
  */
 async function getArtistImageUrl(wikidataId: string, width = 600): Promise<string | null> {
   const url = `https://www.wikidata.org/wiki/Special:EntityData/${wikidataId}.json`;
-  const res = await fetch(url);
+  const res = await fetchWithRetry(url);
   if (!res.ok) return null;
   const data = await res.json();
 
