@@ -198,12 +198,12 @@ export default function Listen() {
     }
   }, [currentTime, isPlaying, nerdActive, trackNuggets, activeNugget, shownNuggetIds]);
 
-  // Auto-dismiss nugget (but not if deep dive is open or nugget is focused)
+  // Auto-dismiss nugget (but not if deep dive is open, nugget is focused, or user is actively interacting)
   useEffect(() => {
-    if (!activeNugget || deepDiveNugget || nuggetFocused) return;
+    if (!activeNugget || deepDiveNugget || nuggetFocused || barVisible) return;
     const timer = setTimeout(() => setActiveNugget(null), activeNugget.durationMs);
     return () => clearTimeout(timer);
-  }, [activeNugget, deepDiveNugget, nuggetFocused]);
+  }, [activeNugget, deepDiveNugget, nuggetFocused, barVisible]);
 
   useEffect(() => {
     if (!activeNugget && nuggetQueue.length > 0) {
