@@ -380,14 +380,17 @@ export default function Listen() {
             {activeNugget && (
               <motion.div
                 key={activeNugget.id}
-                layout
                 ref={nuggetRef}
                 tabIndex={0}
-                className={`outline-none ${deepDiveNugget ? "w-full max-w-3xl mx-auto" : "w-[520px] shrink-0 cursor-pointer"}`}
+                className="outline-none"
                 onClick={() => !deepDiveNugget && handleNuggetClick(activeNugget)}
                 onFocus={() => setNuggetFocused(true)}
                 onBlur={() => setNuggetFocused(false)}
-                transition={{ layout: { duration: 0.45, ease: [0.22, 1, 0.36, 1] } }}
+                animate={{
+                  width: deepDiveNugget ? 720 : 520,
+                }}
+                transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                style={{ cursor: deepDiveNugget ? "default" : "pointer" }}
               >
                 <AnimatePresence mode="wait" initial={false}>
                   {deepDiveNugget ? (
@@ -396,7 +399,7 @@ export default function Listen() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      transition={{ duration: 0.25, delay: 0.15 }}
+                      transition={{ duration: 0.2, delay: 0.1 }}
                     >
                       <NuggetDeepDiveInline
                         nugget={deepDiveNugget}
@@ -409,10 +412,10 @@ export default function Listen() {
                   ) : (
                     <motion.div
                       key="card"
-                      initial={{ opacity: 0 }}
+                      initial={false}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      transition={{ duration: 0.2 }}
+                      transition={{ duration: 0.15 }}
                     >
                       <NuggetCard
                         nugget={activeNugget}
