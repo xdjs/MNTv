@@ -84,8 +84,17 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
 
       <motion.div
         variants={cardVariants}
+        animate={focused ? {
+          boxShadow: [
+            "0 0 8px 2px hsl(330 90% 60% / 0.25), 0 0 20px 4px hsl(330 90% 60% / 0.1)",
+            "0 0 20px 6px hsl(330 90% 60% / 0.55), 0 0 50px 12px hsl(330 90% 60% / 0.25)",
+          ],
+        } : undefined}
+        transition={focused ? {
+          boxShadow: { repeat: Infinity, repeatType: "reverse", duration: 1, ease: "easeInOut" },
+        } : undefined}
         className={`apple-glass relative rounded-xl px-5 py-3 ml-2 transition-all duration-200 ${
-          focused ? "tv-focus-glow scale-[1.03]" : "hover:scale-[1.02]"
+          focused ? "scale-[1.03]" : "hover:scale-[1.02]"
         }`}
       >
 
