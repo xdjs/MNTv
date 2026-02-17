@@ -1,15 +1,18 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 
-export function usePlayback(durationSec: number) {
+export function usePlayback(durationSec: number, onEnded?: () => void) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [fadingIn, setFadingIn] = useState(false);
   const intervalRef = useRef<number | null>(null);
+  const onEndedRef = useRef(onEnded);
+  onEndedRef.current = onEnded;
 
   const tick = useCallback(() => {
     setCurrentTime((prev) => {
       if (prev >= durationSec) {
         setIsPlaying(false);
+        onEndedRef.current?.();
         return durationSec;
       }
       return prev + 0.25;

@@ -22,10 +22,16 @@ export default function Listen() {
   const { trackId } = useParams<{ trackId: string }>();
   const navigate = useNavigate();
   const track = getTrackById(trackId || "");
-  const { prev, next } = useMemo(() => getAdjacentTrackIds(trackId || ""), [trackId]);
+  const [shuffleOn, setShuffleOn] = useState(false);
+  const { prev, next } = useMemo(() => getAdjacentTrackIds(trackId || "", shuffleOn), [trackId, shuffleOn]);
+
+  const handleTrackEnd = useCallback(() => {
+    const { next: nextId } = getAdjacentTrackIds(trackId || "", shuffleOn);
+    if (nextId) navigate(`/listen/${nextId}`);
+  }, [trackId, shuffleOn, navigate]);
 
   const { isPlaying, currentTime, fadingIn, play, pause, seek, toggle, pauseForOverlay, resumeWithFade } =
-    usePlayback(track?.durationSec || 300);
+    usePlayback(track?.durationSec || 300, handleTrackEnd);
 
   // AI-generated nuggets with real sources
   const { nuggets: aiNuggets, sources: aiSources, loading: aiLoading } = useAINuggets(
@@ -93,7 +99,7 @@ export default function Listen() {
   const [barFocusIndex, setBarFocusIndex] = useState(2);
   const [topFocusIndex, setTopFocusIndex] = useState(0); // 0=back, 1=nerd
 
-  const BAR_BUTTON_COUNT = 5;
+  const BAR_BUTTON_COUNT = 6;
   const TOP_BUTTON_COUNT = 2;
 
   const handleBarAction = useCallback((index: number) => {
@@ -103,6 +109,7 @@ export default function Listen() {
       case 2: toggle(); break;
       case 3: if (next) navigate(`/listen/${next}`); break;
       case 4: setLiked((v) => v === true ? null : true); break;
+      case 5: setShuffleOn((v) => !v); break;
     }
   }, [prev, next, navigate, toggle]);
 
@@ -409,6 +416,7 @@ export default function Listen() {
           hasPrev={!!prev}
           hasNext={!!next}
           liked={liked}
+          shuffle={shuffleOn}
           nuggetMarkers={trackNuggets.map((n) => (n.timestampSec / track.durationSec) * 100)}
           focusedIndex={focusZone === 'bar' ? barFocusIndex : null}
           onToggle={() => { showBar(); toggle(); }}
@@ -417,6 +425,7 @@ export default function Listen() {
           onNext={() => next && navigate(`/listen/${next}`)}
           onLike={() => setLiked((v) => v === true ? null : true)}
           onDislike={() => setLiked((v) => v === false ? null : false)}
+          onShuffle={() => setShuffleOn((v) => !v)}
         />
 
         {/* Dev panel */}

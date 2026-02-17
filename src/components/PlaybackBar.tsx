@@ -1,4 +1,4 @@
-import { Play, Pause, SkipBack, SkipForward, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Play, Pause, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Shuffle } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface Props {
@@ -11,17 +11,19 @@ interface Props {
   hasPrev: boolean;
   hasNext: boolean;
   liked?: boolean | null;
+  shuffle?: boolean;
   nuggetMarkers?: number[];
-  focusedIndex?: number | null; // 0=dislike, 1=prev, 2=play, 3=next, 4=like
+  focusedIndex?: number | null; // 0=dislike, 1=prev, 2=play, 3=next, 4=like, 5=shuffle
   onToggle: () => void;
   onSeek: (pct: number) => void;
   onPrev: () => void;
   onNext: () => void;
   onLike?: () => void;
   onDislike?: () => void;
+  onShuffle?: () => void;
 }
 
-const BUTTON_LABELS = ["Dislike", "Previous", "Play / Pause", "Next", "Like"];
+const BUTTON_LABELS = ["Dislike", "Previous", "Play / Pause", "Next", "Like", "Shuffle"];
 
 export default function PlaybackBar({
   isPlaying,
@@ -33,6 +35,7 @@ export default function PlaybackBar({
   hasPrev,
   hasNext,
   liked = null,
+  shuffle = false,
   nuggetMarkers = [],
   focusedIndex = null,
   onToggle,
@@ -41,6 +44,7 @@ export default function PlaybackBar({
   onNext,
   onLike,
   onDislike,
+  onShuffle,
 }: Props) {
   const isFocused = (idx: number) => focusedIndex === idx;
 
@@ -148,6 +152,19 @@ export default function PlaybackBar({
               aria-label="Like"
             >
               <ThumbsUp size={16} />
+            </button>
+
+            {/* Shuffle - index 5 */}
+            <button
+              onClick={onShuffle}
+              className={`flex h-9 w-9 items-center justify-center rounded-full transition-all ${
+                shuffle
+                  ? "text-primary bg-primary/20"
+                  : "text-foreground/40 hover:text-foreground/70"
+              } ${isFocused(5) ? focusGlow + " scale-110" : ""}`}
+              aria-label="Shuffle"
+            >
+              <Shuffle size={16} />
             </button>
           </div>
 
