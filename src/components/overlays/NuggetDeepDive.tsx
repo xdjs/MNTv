@@ -275,7 +275,7 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
               href={source.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 md:gap-2 rounded-xl bg-foreground/5 px-4 py-2.5 md:px-6 md:py-3 text-sm md:text-base text-muted-foreground transition-colors hover:text-foreground tv-focus-visible"
+              className="flex items-center gap-1.5 md:gap-2 rounded-xl bg-foreground/5 px-4 py-2.5 md:px-6 md:py-3 text-sm md:text-base text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground tv-focus-visible"
             >
               <ExternalLink size={14} />
               View Source
@@ -287,7 +287,7 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
           <button
             ref={buttonRefs[2] as React.RefObject<HTMLButtonElement>}
             onClick={onClose}
-            className="flex items-center gap-1.5 md:gap-2 rounded-xl bg-foreground/5 px-4 py-2.5 md:px-6 md:py-3 text-sm md:text-base text-muted-foreground transition-colors hover:text-foreground tv-focus-visible"
+            className="flex items-center gap-1.5 md:gap-2 rounded-xl bg-foreground/5 px-4 py-2.5 md:px-6 md:py-3 text-sm md:text-base text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground tv-focus-visible"
           >
             <ArrowLeft size={14} />
             Back
