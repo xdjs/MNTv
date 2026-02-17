@@ -24,6 +24,13 @@ export function useArtistImage(artistName: string, fallbackUrl: string): string 
       return;
     }
 
+    // Skip API for known-bad matches
+    if (SKIP_API_LOOKUP.has(artistName)) {
+      imageCache.set(artistName, null);
+      setImageUrl(fallbackUrl);
+      return;
+    }
+
     let cancelled = false;
 
     async function fetchImage() {
