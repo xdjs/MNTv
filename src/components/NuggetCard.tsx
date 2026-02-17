@@ -146,25 +146,10 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1, transition: { delay: animationStyle === "B" ? 0.5 : 0.4, duration: 0.3 } }}
-          className="text-sm leading-6 text-foreground/90"
+          className="text-base md:text-lg leading-7 text-foreground/90"
         >
           {nugget.headline || nugget.text}
         </motion.p>
-
-        {/* Source chip */}
-        {source && (
-          <motion.button
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0, transition: { delay: 0.6 } }}
-            onClick={(e) => { e.stopPropagation(); onSourceClick(); }}
-            className="mt-2 flex items-center gap-2 rounded-lg bg-foreground/5 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground tv-focus-visible"
-          >
-            <span className="uppercase tracking-wider font-medium">
-              {source.type === "youtube" ? "▶ Watch" : source.type === "article" ? "📄 Read" : "🎙 Interview"}
-            </span>
-            <span className="truncate max-w-[180px]">{source.publisher}</span>
-          </motion.button>
-        )}
       </motion.div>
     </motion.div>
   );
