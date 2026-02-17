@@ -22,6 +22,10 @@ export default function Browse() {
     href: `/artist/${a.id}`,
   })), [artists]);
 
+  // Tile pixel widths (must match TileRow sizes + gap)
+  const tileSizeMap: Record<string, number> = { sm: 144, md: 176, lg: 224 };
+  const tileGap = 20; // gap-5 = 20px
+
   const albumTiles = useMemo(() => albums.map((a) => {
     const artist = artists.find((ar) => ar.id === a.artistId);
     return {
@@ -58,14 +62,12 @@ export default function Browse() {
   }, [artists]);
 
   // All navigable rows: header(row 0), then tile rows
-  // Header items: logo(0), search(1)
-  // Row structure: [{items, getHref}]
   const allRows = useMemo(() => {
     const tileRows = [
-      { label: "Jump Back In", items: recentTiles },
-      { label: "Artists", items: artistTiles },
-      { label: "Albums", items: albumTiles },
-      ...genreSections.map((gs) => ({ label: gs.genre, items: gs.tiles })),
+      { label: "Jump Back In", items: recentTiles, size: "md" as const },
+      { label: "Artists", items: artistTiles, size: "lg" as const },
+      { label: "Albums", items: albumTiles, size: "md" as const },
+      ...genreSections.map((gs) => ({ label: gs.genre, items: gs.tiles, size: "sm" as const })),
     ].filter((r) => r.items.length > 0);
     return tileRows;
   }, [recentTiles, artistTiles, albumTiles, genreSections]);
@@ -76,10 +78,29 @@ export default function Browse() {
 
   const HEADER_ITEMS = 2; // logo, search
 
-  const clampCol = useCallback((row: number, col: number) => {
-    if (row === -1) return Math.max(0, Math.min(col, HEADER_ITEMS - 1));
-    const rowItems = allRows[row]?.items.length || 1;
-    return Math.max(0, Math.min(col, rowItems - 1));
+  // Get the visual center X position of a tile at a given row and column
+  const getTileCenterX = useCallback((row: number, col: number) => {
+    if (row === -1) return col === 0 ? 40 : window.innerWidth - 80; // header items
+    const rowData = allRows[row];
+    if (!rowData) return 0;
+    const w = tileSizeMap[rowData.size] || 176;
+    return 40 + col * (w + tileGap) + w / 2; // 40px = px-10 padding
+  }, [allRows]);
+
+  // Find the closest tile in a target row to a given X position
+  const findClosestCol = useCallback((targetRow: number, centerX: number) => {
+    if (targetRow === -1) return centerX > window.innerWidth / 2 ? 1 : 0;
+    const rowData = allRows[targetRow];
+    if (!rowData) return 0;
+    const w = tileSizeMap[rowData.size] || 176;
+    let bestCol = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < rowData.items.length; i++) {
+      const tileCenterX = 40 + i * (w + tileGap) + w / 2;
+      const dist = Math.abs(tileCenterX - centerX);
+      if (dist < bestDist) { bestDist = dist; bestCol = i; }
+    }
+    return bestCol;
   }, [allRows]);
 
   useEffect(() => {
@@ -88,18 +109,20 @@ export default function Browse() {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setRowIndex((r) => {
-          const next = Math.min(r + 1, allRows.length - 1);
-          setColIndex((c) => clampCol(next, c));
-          return next;
-        });
+        const next = Math.min(rowIndex + 1, allRows.length - 1);
+        if (next !== rowIndex) {
+          const centerX = getTileCenterX(rowIndex, colIndex);
+          setColIndex(findClosestCol(next, centerX));
+          setRowIndex(next);
+        }
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        setRowIndex((r) => {
-          const next = Math.max(r - 1, -1);
-          setColIndex((c) => clampCol(next, c));
-          return next;
-        });
+        const next = Math.max(rowIndex - 1, -1);
+        if (next !== rowIndex) {
+          const centerX = getTileCenterX(rowIndex, colIndex);
+          setColIndex(findClosestCol(next, centerX));
+          setRowIndex(next);
+        }
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
         setColIndex((c) => Math.max(0, c - 1));
@@ -123,7 +146,7 @@ export default function Browse() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [searchOpen, rowIndex, colIndex, allRows, clampCol, navigate]);
+  }, [searchOpen, rowIndex, colIndex, allRows, navigate, getTileCenterX, findClosestCol]);
 
   const focusGlow = "tv-focus-glow";
 
@@ -163,7 +186,7 @@ export default function Browse() {
             key={row.label}
             label={row.label}
             items={row.items}
-            tileSize={row.label === "Artists" ? "lg" : row.label === "Jump Back In" || row.label === "Albums" ? "md" : "sm"}
+            tileSize={row.size}
             focusedIndex={rowIndex === i ? colIndex : null}
           />
         ))}

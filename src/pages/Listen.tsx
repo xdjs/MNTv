@@ -132,8 +132,11 @@ export default function Listen() {
           setFocusZone(newZone);
           setNuggetFocused(newZone === 'nugget');
           if (newZone === 'nugget') nuggetRef.current?.focus();
+          // Only show bar when landing on bar or top, not nugget
+          if (newZone !== 'nugget') showBar();
+        } else {
+          showBar();
         }
-        showBar();
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
         const zones = getZonesInOrder();
@@ -142,8 +145,11 @@ export default function Listen() {
           const newZone = zones[idx + 1];
           setFocusZone(newZone);
           setNuggetFocused(newZone === 'nugget');
+          // Only show bar when landing on bar
+          if (newZone === 'bar') showBar();
+        } else {
+          showBar();
         }
-        showBar();
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
         if (focusZone === 'bar') setBarFocusIndex((i) => Math.max(0, i - 1));
