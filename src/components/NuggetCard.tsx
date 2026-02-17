@@ -11,8 +11,6 @@ interface Props {
   currentTime?: string;
   sourceOverride?: Source | null;
   focused?: boolean;
-  skipAnimation?: boolean;
-  onAnimationComplete?: () => void;
 }
 
 // Kind labels for the nugget header
@@ -72,25 +70,22 @@ const styleMap = {
   C: { card: cardC, logo: logoC },
 };
 
-export default function NuggetCard({ nugget, animationStyle, onSourceClick, currentTime, sourceOverride, focused, skipAnimation, onAnimationComplete }: Props) {
+export default function NuggetCard({ nugget, animationStyle, onSourceClick, currentTime, sourceOverride, focused }: Props) {
   const source = sourceOverride !== undefined ? sourceOverride : getSourceById(nugget.sourceId);
   const { card: cardVariants, logo: logoVariants } = styleMap[animationStyle];
 
-  const noAnim = { initial: { opacity: 1 }, animate: { opacity: 1 }, exit: cardVariants.exit };
-  const noLogoAnim = { initial: { opacity: 1, scale: 1, rotate: 0 }, animate: { opacity: 1, scale: 1, rotate: 0 }, exit: logoVariants.exit };
-
   return (
-    <motion.div className="relative" initial="initial" animate="animate" exit="exit" onAnimationComplete={onAnimationComplete}>
+    <motion.div className="relative" initial="initial" animate="animate" exit="exit">
       {/* Logo — left side, appears FIRST */}
       <motion.div
-        variants={skipAnimation ? noLogoAnim : logoVariants}
+        variants={logoVariants}
         className={`absolute -left-3 z-10 ${animationStyle === "C" ? "-bottom-3" : "-top-3"}`}
       >
         <MusicNerdLogo size={animationStyle === "C" ? 32 : 22} glow />
       </motion.div>
 
       <motion.div
-        variants={skipAnimation ? noAnim : cardVariants}
+        variants={cardVariants}
         style={{
           boxShadow: focused
             ? "0 0 20px 6px hsl(330 90% 60% / 0.5), 0 0 50px 12px hsl(330 90% 60% / 0.2)"
@@ -119,8 +114,8 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
 
         {/* Header: kind label + timestamp */}
         <motion.div
-          initial={{ opacity: skipAnimation ? 1 : 0 }}
-          animate={{ opacity: 1, transition: skipAnimation ? { duration: 0 } : { delay: 0.35, duration: 0.3 } }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1, transition: { delay: 0.35, duration: 0.3 } }}
           className="mb-2 flex items-center gap-2 text-[11px] text-muted-foreground"
         >
           {nugget.kind === "discovery" && <Compass size={12} className="text-primary" />}
@@ -138,8 +133,8 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
         {/* Listen-for badge */}
         {nugget.listenFor && (
           <motion.div
-            initial={{ opacity: skipAnimation ? 1 : 0, x: skipAnimation ? 0 : -10 }}
-            animate={{ opacity: 1, x: 0, transition: skipAnimation ? { duration: 0 } : { delay: 0.5 } }}
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0, transition: { delay: 0.5 } }}
             className="mb-2 flex items-center gap-1.5"
           >
             <span className="inline-block h-2 w-2 rounded-full bg-primary animate-pulse" />
@@ -149,8 +144,8 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
 
         {/* Nugget headline — short complete thought; full text shown in deep dive */}
         <motion.p
-          initial={{ opacity: skipAnimation ? 1 : 0 }}
-          animate={{ opacity: 1, transition: skipAnimation ? { duration: 0 } : { delay: animationStyle === "B" ? 0.5 : 0.4, duration: 0.3 } }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1, transition: { delay: animationStyle === "B" ? 0.5 : 0.4, duration: 0.3 } }}
           className="text-sm leading-6 text-foreground/90"
         >
           {nugget.headline || nugget.text}
@@ -159,8 +154,8 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
         {/* Source chip */}
         {source && (
           <motion.button
-            initial={{ opacity: skipAnimation ? 1 : 0, y: skipAnimation ? 0 : 5 }}
-            animate={{ opacity: 1, y: 0, transition: skipAnimation ? { duration: 0 } : { delay: 0.6 } }}
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0, transition: { delay: 0.6 } }}
             onClick={(e) => { e.stopPropagation(); onSourceClick(); }}
             className="mt-2 flex items-center gap-2 rounded-lg bg-foreground/5 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground tv-focus-visible"
           >
