@@ -359,11 +359,7 @@ export default function Listen() {
                 <div
                   ref={nuggetRef}
                   tabIndex={0}
-                  className={`cursor-pointer transition-all duration-200 hover:scale-[1.02] outline-none rounded-xl ${
-                    nuggetFocused
-                      ? "tv-focus-glow scale-[1.03]"
-                      : ""
-                  }`}
+                  className="cursor-pointer outline-none"
                   onClick={() => handleNuggetClick(activeNugget)}
                   onFocus={() => setNuggetFocused(true)}
                   onBlur={() => setNuggetFocused(false)}
@@ -375,6 +371,7 @@ export default function Listen() {
                     onSourceClick={() => handleSourceClick(activeNugget)}
                     currentTime={formatTime(activeNugget.timestampSec)}
                     sourceOverride={getSource(activeNugget.sourceId) || null}
+                    focused={nuggetFocused}
                   />
                   {nuggetFocused && (
                     <motion.p
