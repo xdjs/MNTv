@@ -196,15 +196,39 @@ Return ONLY valid JSON:
     if (res.ok) {
       const data = await res.json();
       const candidate = data.candidates?.[0];
+      
+      // Check for blocked/empty responses
+      const finishReason = candidate?.finishReason;
+      if (finishReason === "SAFETY" || finishReason === "RECITATION") {
+        console.warn("Gemini blocked response due to:", finishReason);
+        throw new Error(`Gemini blocked response: ${finishReason}`);
+      }
+      
       const text = candidate?.content?.parts?.[0]?.text || "";
       const groundingChunks = candidate?.groundingMetadata?.groundingChunks || [];
+
+      if (!text.trim()) {
+        console.error("Gemini returned empty text. Candidate:", JSON.stringify(candidate));
+        // Retry if we have attempts left
+        if (attempt < 2) {
+          console.log("Empty response, retrying...");
+          await new Promise((r) => setTimeout(r, 2000));
+          continue;
+        }
+        throw new Error("Gemini returned empty response after retries");
+      }
 
       let parsed: { nuggets: GeminiNugget[] };
       try {
         const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
         parsed = JSON.parse(cleaned);
       } catch {
-        console.error("Failed to parse Gemini response:", text);
+        console.error("Failed to parse Gemini response:", text.slice(0, 500));
+        if (attempt < 2) {
+          console.log("Parse failed, retrying...");
+          await new Promise((r) => setTimeout(r, 2000));
+          continue;
+        }
         throw new Error("Failed to parse Gemini response");
       }
       return { nuggets: parsed.nuggets || [], groundingChunks };
@@ -294,9 +318,36 @@ Return ONLY valid JSON:
       }
 
       const data = await res.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-      const parsed = JSON.parse(cleaned);
+      const candidate = data.candidates?.[0];
+      const text = candidate?.content?.parts?.[0]?.text || "";
+      
+      if (!text.trim()) {
+        console.error("Deep dive returned empty. Candidate:", JSON.stringify(candidate));
+        return new Response(JSON.stringify({ 
+          deepDive: { 
+            text: "This topic is fascinating but I couldn't dig deeper right now. Try again in a moment.", 
+            followUp: "There's always more to discover." 
+          } 
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      let parsed;
+      try {
+        const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+        parsed = JSON.parse(cleaned);
+      } catch {
+        console.error("Failed to parse deep dive:", text.slice(0, 500));
+        return new Response(JSON.stringify({ 
+          deepDive: { 
+            text: "Couldn't process that exploration. Try again in a moment.", 
+            followUp: "There's always more to discover." 
+          } 
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
 
       return new Response(JSON.stringify(parsed), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
