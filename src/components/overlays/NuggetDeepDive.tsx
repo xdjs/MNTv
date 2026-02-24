@@ -31,6 +31,7 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
   const [focusIndex, setFocusIndex] = useState(0);
 
   const buttonRefs = [useRef<HTMLButtonElement>(null), useRef<HTMLAnchorElement>(null), useRef<HTMLButtonElement>(null)];
+  const contentScrollRef = useRef<HTMLDivElement>(null);
   const buttonCount = source?.url ? 3 : 2;
 
   // Auto-focus first button on mount
@@ -71,23 +72,41 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
           return next;
         });
       }
-      // Up/Down to navigate between explored entries
+      // Up/Down: scroll content first, then navigate entries at boundaries
       if (e.key === "ArrowUp") {
         e.preventDefault();
-        setCurrentView(prev => {
-          if (prev === 'original') return prev; // already at first
-          if (prev === 0) return 'original';
-          return prev - 1;
-        });
+        const el = contentScrollRef.current;
+        if (el && el.scrollTop > 0) {
+          // Scroll up within current content
+          el.scrollBy({ top: -80, behavior: "smooth" });
+        } else {
+          // At top of scroll — navigate to previous entry
+          setCurrentView(prev => {
+            if (prev === 'original') return prev;
+            if (prev === 0) return 'original';
+            return prev - 1;
+          });
+          // Reset scroll to top for new content
+          if (el) el.scrollTop = 0;
+        }
       }
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setCurrentView(prev => {
-          if (entries.length === 0) return prev; // nothing to navigate
-          if (prev === 'original') return 0;
-          if (typeof prev === 'number' && prev < entries.length - 1) return prev + 1;
-          return prev;
-        });
+        const el = contentScrollRef.current;
+        if (el && el.scrollTop + el.clientHeight < el.scrollHeight - 2) {
+          // Scroll down within current content
+          el.scrollBy({ top: 80, behavior: "smooth" });
+        } else {
+          // At bottom of scroll — navigate to next entry
+          setCurrentView(prev => {
+            if (entries.length === 0) return prev;
+            if (prev === 'original') return 0;
+            if (typeof prev === 'number' && prev < entries.length - 1) return prev + 1;
+            return prev;
+          });
+          // Reset scroll to top for new content
+          if (el) el.scrollTop = 0;
+        }
       }
     };
     window.addEventListener("keydown", handler);
@@ -206,7 +225,7 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
         </div>
 
         {/* Content area — fixed height, no scroll */}
-        <div className="flex-1 flex flex-col px-4 py-4 md:px-8 md:py-6 min-h-[120px] md:min-h-[200px] overflow-y-auto gap-4">
+        <div ref={contentScrollRef} className="flex-1 flex flex-col px-4 py-4 md:px-8 md:py-6 min-h-[120px] md:min-h-[200px] overflow-y-auto gap-4">
           {/* Show nugget image in deep dive if available */}
           {nugget.imageUrl && currentView === 'original' && (
             <motion.div
