@@ -444,6 +444,7 @@ Return ONLY valid JSON:
 
     // Step 4: Assemble response with real video IDs and targeted search URLs
     const nuggets = rawNuggets.map((n) => {
+      const source = n.source || {};
       const result: any = {
         headline: n.headline,
         text: n.text,
@@ -451,17 +452,17 @@ Return ONLY valid JSON:
         listenFor: n.listenFor,
         imageHint: n.imageHint || null,
         source: {
-          type: n.source.type,
-          title: n.source.title,
-          publisher: n.source.publisher,
-          quoteSnippet: n.source.quoteSnippet,
-          locator: n.source.locator,
+          type: source.type || "article",
+          title: source.title || `${title} by ${artist}`,
+          publisher: source.publisher || "Unknown",
+          quoteSnippet: source.quoteSnippet || "",
+          locator: source.locator,
         },
       };
 
       // Attach real embedId for YouTube sources
-      if (n.source.type === "youtube" && n.source.videoIndex != null) {
-        const video = videos[n.source.videoIndex];
+      if (source.type === "youtube" && source.videoIndex != null) {
+        const video = videos[source.videoIndex];
         if (video) {
           result.source.embedId = video.videoId;
           result.source.url = `https://www.youtube.com/watch?v=${video.videoId}`;
@@ -485,9 +486,9 @@ Return ONLY valid JSON:
           "far out magazine": "site:faroutmagazine.co.uk",
           "the line of best fit": "site:thelineofbestfit.com",
         };
-        const pubLower = n.source.publisher.toLowerCase();
+        const pubLower = (source.publisher || "").toLowerCase();
         const siteHint = publisherDomains[pubLower] || "";
-        const q = `"${n.source.title}" ${siteHint} ${artist}`.trim();
+        const q = `"${source.title || title}" ${siteHint} ${artist}`.trim();
         result.source.url = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
       }
 
