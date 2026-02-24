@@ -89,9 +89,22 @@ export default function TileRow({ label, items, tileSize = "md", focusedIndex = 
                     ? "scale-110 z-10"
                     : "hover:scale-110 hover:z-10"
                 }`}
-                style={isFocused ? {
-                  boxShadow: "0 0 20px 6px hsl(330 90% 60% / 0.5), 0 0 50px 12px hsl(330 90% 60% / 0.2)",
-                } : undefined}
+                style={{
+                  boxShadow: isFocused
+                    ? "0 0 20px 6px hsl(330 90% 60% / 0.5), 0 0 50px 12px hsl(330 90% 60% / 0.2)"
+                    : undefined,
+                }}
+                onMouseEnter={(e) => {
+                  if (focusedIndex === null) {
+                    (e.currentTarget as HTMLElement).style.boxShadow =
+                      "0 0 20px 6px hsl(330 90% 60% / 0.5), 0 0 50px 12px hsl(330 90% 60% / 0.2)";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isFocused) {
+                    (e.currentTarget as HTMLElement).style.boxShadow = "";
+                  }
+                }}
               >
                 <div className="absolute inset-0 rounded-xl overflow-hidden">
                   <img
