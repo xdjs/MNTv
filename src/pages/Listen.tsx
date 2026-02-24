@@ -52,7 +52,7 @@ export default function Listen() {
   );
 
   const mockNuggets = useMemo(() => getNuggetsForTrack(trackId || ""), [trackId]);
-  const trackNuggets = aiNuggets.length > 0 ? aiNuggets : mockNuggets;
+  const trackNuggets = aiLoading ? [] : (aiNuggets.length > 0 ? aiNuggets : mockNuggets);
 
   const [animStyle, setAnimStyle] = useState<AnimationStyle>("A");
   const [activeNugget, setActiveNugget] = useState<Nugget | null>(null);
