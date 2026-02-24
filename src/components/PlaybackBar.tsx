@@ -178,17 +178,6 @@ export default function PlaybackBar({
             </button>
           </div>
 
-          {/* Focused button label */}
-          {focusedIndex !== null && (
-            <motion.p
-              key={focusedIndex}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-xs text-muted-foreground"
-            >
-              {BUTTON_LABELS[focusedIndex]}
-            </motion.p>
-          )}
         </div>
       </div>
     </motion.div>
