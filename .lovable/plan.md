@@ -1,153 +1,118 @@
-# QR Code Companion Page with Clickable Source Links
 
-This plan adds a permanent QR code to the Listen screen and a mobile-friendly companion page. Each nugget on the companion page includes a clickable source link so users can trace where the information came from.
 
----
+# Companion Page Optimization & Redesign
 
-## Part 1: New Dependency
-
-Add `qrcode.react` to render white SVG QR codes with transparent backgrounds.
+Four changes: database caching, shorter content, new nugget UI components, and source URL fixes.
 
 ---
 
-## Part 2: QR Code on Listen Screen
+## Part 1: Database Caching for Generated Content
 
-**File: `src/pages/Listen.tsx**`
+**New table: `companion_cache`**
 
-- Import `QRCodeSVG` from `qrcode.react`
-- Render a 72px white-on-transparent QR code, positioned bottom-left, always visible
-- Opacity ~40% so it blends with the cinematic backdrop
-- Encodes: `https://musicnerdtv.lovable.app/companion/${trackId}`
-- Sits at `z-10`, outside the playback bar's auto-hide behavior
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid | PK, auto-generated |
+| track_key | text | Unique, e.g. "Daft Punk::Get Lucky" |
+| listen_count_tier | integer | 1, 2, or 3 — which tier was generated |
+| content | jsonb | Full JSON response from Gemini |
+| created_at | timestamptz | Default now() |
 
----
+RLS: permissive ALL with `true` (same pattern as `nugget_history` — no auth required for this testing/public data).
 
-## Part 3: Companion Edge Function
+**Edge function change (`generate-companion/index.ts`):**
+- Before calling Gemini, check `companion_cache` for a matching `track_key` + `listen_count_tier`
+- If cache hit, return cached `content` immediately — no AI call
+- After successful Gemini generation, upsert into `companion_cache`
+- This eliminates regeneration during testing
 
-**New file: `supabase/functions/generate-companion/index.ts**`
-
-Uses the same Gemini + Google Search grounding pipeline. Accepts `{ artist, title, album, listenCount }`.
-
-**Nugget scaling by listen count:**
-
-- `listenCount <= 1` → 3 nuggets (1 artist, 1 track, 1 discovery)
-- `listenCount === 2` → 6 nuggets (2 artist, 2 track, 2 discovery)
-- `listenCount >= 3` → 9 nuggets (3 artist, 3 track, 3 discovery) — capped
-
-**Each nugget includes a `source` object with:**
-
-- `type` (youtube/article/interview)
-- `title` (real source title)
-- `publisher` (channel or publication name)
-- `url` (YouTube watch link or Google Search URL — same logic as `generate-nuggets`)
-- `quoteSnippet` (relevant quote from the source)
-
-**Also generates:**
-
-- `artistSummary`: 2-3 paragraphs about the artist
-- `trackStory`: 2-3 paragraphs about the track
-- `externalLinks`: Array of `{ label, url }` for Wikipedia, Spotify, YouTube Music
-
-Uses existing `GOOGLE_AI_API_KEY` secret. CORS headers included. `verify_jwt = false`.
+**Pre-generation for all artists:** After caching is in place, we can trigger generation for all tracks by visiting each companion page once, or by adding a batch endpoint. For now the cache-on-first-visit approach avoids the complexity of a batch job while still solving the repeated regeneration problem.
 
 ---
 
-## Part 4: Companion Page
+## Part 2: Shorter Content in Prompt
 
-**New file: `src/pages/Companion.tsx**`
+**File: `supabase/functions/generate-companion/index.ts`**
 
-Mobile-optimized, scrollable article page. Data flow on load:
+Change the prompt instructions:
+- `artistSummary`: Change from "2-3 paragraphs" to **"2 sentences maximum. Brief and punchy."**
+- `trackStory`: Change from "2-3 paragraphs" to **"1 short paragraph (3-4 sentences max)."**
 
-1. Extract `trackId` from URL params
-2. Look up track + artist from mock data
-3. Fetch real artist photo via existing `artist-image` edge function
-4. Query `nugget_history` table for this track's `listen_count`
-5. Call `generate-companion` edge function with `{ artist, title, album, listenCount }`
-
-**Content sections:**
-
-1. **Header** — MusicNerd logo + branding
-2. **Artist Hero** — Real photo from `artist-image` function, fallback to mock
-3. **Artist Info** — Name, genre pills, bio from mock data
-4. **Track Details** — Title, album, cover art
-5. **AI Summaries** — Artist summary + track story paragraphs
-6. **Nuggets** — 3/6/9 based on listen count, each rendered as a card with:
-  - Kind label ("The Artist" / "The Track" / "Explore Next")
-  - Headline + full text
-  - **Clickable source link** — shows source title, publisher, and a link icon. Tapping opens the source URL (YouTube video or Google Search for the article) in a new tab
-7. **External Links** — Wikipedia, Spotify, YouTube Music search links
-
-**Styling:** Dark theme matching the TV app. Nunito Sans font. Glass-card sections. Loading skeleton while AI generates.
+This is a prompt-only change — no structural changes needed.
 
 ---
 
-## Part 5: Route Registration
+## Part 3: Nugget Category Components with Swipeable Glass Cards
 
-**File: `src/App.tsx**`
+Currently all nuggets render in a flat list. The new design groups them by kind into 3 separate glass containers, each independently scrollable by touch.
 
-Add: `<Route path="/companion/:trackId" element={<Companion />} />`
+**Nugget kinds renamed:**
+- `artist` → "History" (covers artist or track history)
+- `track` → "The Track"  
+- `discovery` → "Explore Next"
+
+**New component: `src/components/companion/NuggetCategoryCard.tsx`**
+
+Props: `{ kind: string; label: string; nuggets: CompanionNugget[]; colorClass: string }`
+
+Each card:
+- Uses the `apple-glass` class with rounded-2xl styling (matching the NuggetDeepDive overlay aesthetic)
+- Has a fixed height (~280px on mobile) with `overflow-y: auto` and `snap-y snap-mandatory` for touch-scrollable snapping between nuggets
+- Each nugget inside is a full-height snap child (`snap-start`, `min-h-full`)
+- Shows a dot indicator at the bottom (1/3, 2/3, 3/3) for which nugget is visible
+- Each nugget includes the clickable source link at the bottom
+
+**Updated `Companion.tsx`:**
+- Import `NuggetCategoryCard`
+- Group `data.nuggets` by kind: filter into `track`, `artist`, `discovery` arrays
+- Render 3 `NuggetCategoryCard` instances vertically (The Track, History, Explore Next)
+- Remove the old flat nugget list
+
+---
+
+## Part 4: Fix Source URL 404s
+
+The current prompt asks Gemini to provide "real URLs" but LLMs hallucinate URLs. The fix is to **always build source URLs as Google Search queries** rather than trusting Gemini's fabricated direct links.
+
+**File: `supabase/functions/generate-companion/index.ts`**
+
+Post-processing change — after parsing Gemini's response, **override ALL source URLs** (not just missing ones):
+
+```
+for (const n of parsed.nuggets) {
+  if (n.source) {
+    if (n.source.type === "youtube") {
+      // Build a YouTube search URL instead of trusting a hallucinated video ID
+      const q = `${n.source.title} ${n.source.publisher} ${artist}`;
+      n.source.url = `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
+    } else {
+      // Build a Google Search URL scoped to the publisher
+      const q = `"${n.source.title}" site:${publisherDomain(n.source.publisher)} ${artist}`;
+      n.source.url = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+    }
+  }
+}
+```
+
+Also add a `publisherDomain` helper that maps known publishers to domains (e.g. "Pitchfork" → "pitchfork.com", "Rolling Stone" → "rollingstone.com"), with a fallback to just using the publisher name in the query. This ensures every source link leads to a real search result page instead of a 404.
+
+Also update the prompt to tell Gemini NOT to fabricate URLs — just provide the source title, publisher, and type. The URL field in the prompt becomes optional since we override it anyway.
 
 ---
 
 ## Summary of Changes
 
+| File | Change |
+|---|---|
+| Database migration | Create `companion_cache` table |
+| `supabase/functions/generate-companion/index.ts` | Add cache read/write, shorten prompt, fix all source URLs with search fallbacks |
+| `src/components/companion/NuggetCategoryCard.tsx` | New glass-card component with touch-scroll for grouped nuggets |
+| `src/pages/Companion.tsx` | Use new nugget components, group by kind, update kind labels |
 
-| File                                             | Change                                                                |
-| ------------------------------------------------ | --------------------------------------------------------------------- |
-| `package.json`                                   | Add `qrcode.react`                                                    |
-| `src/pages/Listen.tsx`                           | Add QR code component (bottom-left)                                   |
-| `src/pages/Companion.tsx`                        | New mobile companion page with clickable source links on every nugget |
-| `supabase/functions/generate-companion/index.ts` | New edge function — listen-count-scaled nuggets with source URLs      |
-| `src/App.tsx`                                    | Add `/companion/:trackId` route                                       |
+### Technical Notes
 
+- The `companion_cache` table uses `track_key + listen_count_tier` as a unique pair so different listen tiers each get their own cached content
+- Touch scrolling uses CSS `overflow-y: auto` with `scroll-snap-type: y mandatory` — no JS library needed
+- The publisher domain mapping covers ~10 common music publications with a generic fallback
+- Clearing the cache (for regeneration) is as simple as deleting rows from `companion_cache`
 
-### Source Link Behavior on Companion Page
-
-Every nugget card has a tappable source attribution at the bottom:
-
-- Shows an external-link icon + source title + publisher name
-- YouTube sources → opens `https://www.youtube.com/watch?v={videoId}`
-- Article/interview sources → opens a targeted Google Search URL (same pattern as `generate-nuggets`: `"Article Title" site:publisher.com artist`)
-- Opens in a new tab (`target="_blank" rel="noopener"`)
-
-### Companion Page Mobile Layout
-
-```text
-┌─────────────────────────┐
-│  🎵 MusicNerd           │
-├─────────────────────────┤
-│   [Artist Photo]        │
-├─────────────────────────┤
-│  Artist Name            │
-│  Genre · Genre          │
-│  Bio paragraph...       │
-├─────────────────────────┤
-│  🎵 Track Title         │
-│  Album Name             │
-├─────────────────────────┤
-│  About the Artist       │
-│  Long-form summary...   │
-├─────────────────────────┤
-│  About This Track       │
-│  Long-form story...     │
-├─────────────────────────┤
-│  Nuggets (3/6/9)        │
-│  ┌───────────────────┐  │
-│  │ The Artist        │  │
-│  │ Headline text     │  │
-│  │ Full explanation  │  │
-│  │ 🔗 Source Title → │  │  ← clickable, opens source
-│  └───────────────────┘  │
-│  ┌───────────────────┐  │
-│  │ The Track         │  │
-│  │ ...               │  │
-│  │ 🔗 Source Title → │  │
-│  └───────────────────┘  │
-│  (repeat per tier)      │
-├─────────────────────────┤
-│  Explore Further        │
-│  📖 Wikipedia →         │
-│  🎵 Spotify →           │
-│  ▶  YouTube Music →     │
-└─────────────────────────┘
-```
