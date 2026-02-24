@@ -236,7 +236,7 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
               <img
                 src={nugget.imageUrl}
                 alt={nugget.imageCaption || nugget.headline || ""}
-                className="w-full max-h-[40vh] object-contain rounded-lg"
+                className="w-full max-h-[25vh] object-contain rounded-lg"
                 onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
               />
               {nugget.imageCaption && (
