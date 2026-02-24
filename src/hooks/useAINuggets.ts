@@ -87,6 +87,51 @@ export function useAINuggets(
 
       setListenCount(currentListenCount);
 
+      // ── Check nugget_cache for first listen ──────────────────────
+      if (currentListenCount <= 1) {
+        const { data: cached } = await supabase
+          .from("nugget_cache" as any)
+          .select("nuggets, sources")
+          .eq("track_id", trackId)
+          .maybeSingle();
+
+        if (cached && (cached as any).nuggets?.length > 0) {
+          console.log("[NuggetCache] Serving cached nuggets for", trackId);
+          const cachedNuggets = (cached as any).nuggets as Nugget[];
+          const cachedSources = new Map<string, Source>();
+          const rawSources = (cached as any).sources as Record<string, Source>;
+          for (const [key, val] of Object.entries(rawSources)) {
+            cachedSources.set(key, val);
+          }
+          setNuggets(cachedNuggets);
+          setSources(cachedSources);
+
+          // Upsert listen history so next time we generate fresh
+          if (historyRow) {
+            await supabase
+              .from("nugget_history" as any)
+              .update({
+                listen_count: currentListenCount + 1,
+                previous_nuggets: cachedNuggets.map((n) => n.headline || n.text).filter(Boolean),
+                updated_at: new Date().toISOString(),
+              } as any)
+              .eq("track_key", trackKey);
+          } else {
+            await supabase
+              .from("nugget_history" as any)
+              .insert({
+                track_key: trackKey,
+                listen_count: 2,
+                previous_nuggets: cachedNuggets.map((n) => n.headline || n.text).filter(Boolean),
+              } as any);
+          }
+
+          setLoading(false);
+          return;
+        }
+      }
+
+      // ── Generate fresh nuggets via AI ─────────────────────────────
       const { data, error: fnError } = await supabase.functions.invoke("generate-nuggets", {
         body: { artist, title, album, listenCount: currentListenCount, previousNuggets },
       });

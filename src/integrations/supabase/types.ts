@@ -38,6 +38,30 @@ export type Database = {
         }
         Relationships: []
       }
+      nugget_cache: {
+        Row: {
+          created_at: string
+          id: string
+          nuggets: Json
+          sources: Json
+          track_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          nuggets?: Json
+          sources?: Json
+          track_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          nuggets?: Json
+          sources?: Json
+          track_id?: string
+        }
+        Relationships: []
+      }
       nugget_history: {
         Row: {
           created_at: string | null
