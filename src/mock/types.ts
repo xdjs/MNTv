@@ -48,7 +48,7 @@ export type Nugget = {
   durationMs: number;
   headline?: string;
   text: string;
-  kind: "process" | "constraint" | "pattern" | "human" | "influence" | "discovery";
+  kind: "artist" | "track" | "discovery";
   listenFor?: boolean;
   relatedMomentSec?: number;
   sourceId: string;

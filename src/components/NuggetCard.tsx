@@ -15,11 +15,8 @@ interface Props {
 
 // Kind labels for the nugget header
 const kindLabels: Record<string, string> = {
-  process: "Behind the Scenes",
-  constraint: "Creative Constraint",
-  pattern: "Pattern",
-  human: "Human Story",
-  influence: "Influence",
+  artist: "The Artist",
+  track: "The Track",
   discovery: "Explore Next",
 };
 

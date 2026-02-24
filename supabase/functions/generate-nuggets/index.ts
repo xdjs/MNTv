@@ -102,8 +102,9 @@ class RecitationError extends Error {
 
 // ── Generate nuggets with Gemini + Google Search grounding ───────────
 interface GeminiNugget {
+  headline: string;
   text: string;
-  kind: string;
+  kind: "artist" | "track" | "discovery";
   listenFor: boolean;
   source: {
     type: "youtube" | "article" | "interview";
@@ -121,7 +122,9 @@ async function generateWithGemini(
   album: string | undefined,
   videos: YTVideo[],
   transcripts: Map<string, string>,
-  apiKey: string
+  apiKey: string,
+  listenCount: number = 1,
+  previousNuggets: string[] = []
 ): Promise<{ nuggets: GeminiNugget[]; groundingChunks: any[] }> {
   const transcriptContext = videos
     .filter((v) => transcripts.has(v.videoId))
@@ -135,39 +138,41 @@ async function generateWithGemini(
     .map((v, i) => `[VIDEO ${i}] "${v.title}" by ${v.channelTitle} (videoId: ${v.videoId})`)
     .join("\n");
 
-  // Randomize angles for variety each time
-  const seed = Math.random().toString(36).slice(2, 8);
-  const angles = [
-    "production techniques", "personal stories", "cultural impact",
-    "musical theory", "recording sessions", "live performances",
-    "collaborations", "lyrical meaning", "instrument choices",
-    "historical context", "critical reception", "samples and influences",
-    "music video creation", "chart performance", "fan theories",
-  ];
-  const pickedAngles = angles.sort(() => Math.random() - 0.5).slice(0, 3);
+  // Depth tier instructions
+  let depthInstruction: string;
+  if (listenCount <= 1) {
+    depthInstruction = "This is the listener's FIRST TIME hearing this track. Be introductory and welcoming. Set the stage — who is this artist, what's the basic story of this song, and what's one obvious next listen.";
+  } else if (listenCount === 2) {
+    depthInstruction = "The listener has heard this before. Skip the basics. Go deeper — surprising production details, lesser-known connections, a more adventurous recommendation.";
+  } else {
+    depthInstruction = "The listener keeps coming back (listen #" + listenCount + "). Give them deep cuts — obscure influences, technical breakdowns, unexpected cultural connections, niche recommendations only a true nerd would know.";
+  }
 
-  const prompt = `You are a music historian and trivia expert. Generate exactly 3 fascinating, UNIQUE pieces about "${title}" by ${artist}${album ? ` from "${album}"` : ""}.
+  const nonRepeatInstruction = previousNuggets.length > 0
+    ? `\n\nDO NOT repeat or closely rephrase any of these previously shown headlines:\n${previousNuggets.map((h) => `- "${h}"`).join("\n")}\nGenerate completely fresh angles.`
+    : "";
 
-Focus on these angles for nuggets 1-2: ${pickedAngles.join(", ")}. (Seed: ${seed} — generate DIFFERENT facts each time)
+  const prompt = `You are a music historian and trivia expert. Generate exactly 3 fascinating nuggets about "${title}" by ${artist}${album ? ` from "${album}"` : ""}.
+
+DEPTH CONTEXT: ${depthInstruction}${nonRepeatInstruction}
 
 ${videoListContext ? `Available YouTube videos:\n${videoListContext}\n` : ""}
 ${transcriptContext ? `Real transcript content:\n\n${transcriptContext}\n` : "No transcripts available — use your knowledge and Google Search to find real sources."}
 
-STRUCTURE:
-- Nuggets 1 and 2: Fascinating trivia with diverse "kind" values from: process, constraint, pattern, human, influence
-- Nugget 3 (MUST have kind "discovery"): A discovery nudge — recommend a specific song, album, or artist the listener should explore next. Explain WHY based on a genuine musical connection to "${title}" (shared production approach, influence chain, emotional palette, cultural moment, collaboration). Be opinionated and specific like a knowledgeable friend, not a generic recommendation engine. Name the exact track or album and why it matters in context of what they're hearing right now.
+STRUCTURE — always exactly 3 nuggets in this order:
+1. **Nugget 1 — kind: "artist"**: About the ARTIST — their story, creative philosophy, world. What makes them who they are. listenFor: false.
+2. **Nugget 2 — kind: "track"**: About THIS SPECIFIC TRACK — production, meaning, history, an audio moment to listen for. listenFor: true.
+3. **Nugget 3 — kind: "discovery"**: A specific recommendation — name the exact track, album, or artist the listener should explore next. Explain WHY based on a genuine musical connection. Be opinionated and specific like a knowledgeable friend. listenFor: false.
 
 CRITICAL RULES:
-- Set exactly ONE of nuggets 1-2's listenFor to true (an audio moment to listen for). Nugget 3's listenFor must be false.
 - Each nugget MUST have TWO text fields:
   - "headline": 1-2 sentences that spark curiosity and make the reader WANT to learn more. Don't write a dry fact — write something that teases a surprising detail or asks an implicit question. Examples: "The cash register sounds at the start? Roger Waters recorded them by throwing coins into a mixing bowl in his pottery shed." or "There's a reason this song feels unsettling — and it has nothing to do with the lyrics." Make the reader think "wait, really?" or "tell me more."
-  - "text": The full 2-3 sentence explanation that delivers on the headline's promise with rich detail and context. This is what the user sees when they expand for more.
+  - "text": The full 2-3 sentence explanation that delivers on the headline's promise with rich detail and context.
 - For nugget 3 (discovery): The headline should feel like a friend nudging you with genuine enthusiasm, e.g. "If this groove hit you right, you need to hear what Nile Rodgers did on this other track."
 - For YouTube sources from videos above: set type "youtube", include videoIndex, include a real quote
 - For article/interview sources: cite REAL publications with real article titles
 - Include locator (timestamp for videos, section for articles) when possible
 - Be factually accurate — do not fabricate quotes or facts
-- Generate DIFFERENT trivia each time
 
 Return ONLY valid JSON:
 {
@@ -175,7 +180,7 @@ Return ONLY valid JSON:
     {
       "headline": "One punchy complete sentence hook",
       "text": "2-3 sentences of surprising music trivia with full detail",
-      "kind": "process|constraint|pattern|human|influence|discovery",
+      "kind": "artist|track|discovery",
       "listenFor": false,
       "source": {
         "type": "youtube|article|interview",
@@ -279,7 +284,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher } = body;
+    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, listenCount, previousNuggets } = body;
 
     if (!artist || !title) {
       return new Response(
@@ -404,7 +409,7 @@ Return ONLY valid JSON:
     let groundingChunks: any[];
     try {
       const result = await generateWithGemini(
-        artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY
+        artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY, listenCount || 1, previousNuggets || []
       );
       rawNuggets = result.nuggets;
       groundingChunks = result.groundingChunks;
@@ -413,7 +418,7 @@ Return ONLY valid JSON:
         // Retry without transcripts — they likely contain copyrighted lyrics
         console.log("Retrying without transcripts to avoid RECITATION block...");
         const result = await generateWithGemini(
-          artist, title, album, videos, new Map(), GOOGLE_AI_API_KEY
+          artist, title, album, videos, new Map(), GOOGLE_AI_API_KEY, listenCount || 1, previousNuggets || []
         );
         rawNuggets = result.nuggets;
         groundingChunks = result.groundingChunks;

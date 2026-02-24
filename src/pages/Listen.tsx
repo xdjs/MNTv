@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -23,6 +24,7 @@ export default function Listen() {
   const navigate = useNavigate();
   const track = getTrackById(trackId || "");
   const [shuffleOn, setShuffleOn] = useState(false);
+  const [regenerateKey, setRegenerateKey] = useState(0);
   const { prev, next } = useMemo(() => getAdjacentTrackIds(trackId || "", shuffleOn), [trackId, shuffleOn]);
 
   const handleTrackEnd = useCallback(() => {
@@ -34,12 +36,13 @@ export default function Listen() {
     usePlayback(track?.durationSec || 300, handleTrackEnd);
 
   // AI-generated nuggets with real sources
-  const { nuggets: aiNuggets, sources: aiSources, loading: aiLoading } = useAINuggets(
+  const { nuggets: aiNuggets, sources: aiSources, loading: aiLoading, listenCount } = useAINuggets(
     trackId || "",
     track?.artist || "",
     track?.title || "",
     track?.album,
-    track?.durationSec || 300
+    track?.durationSec || 300,
+    regenerateKey
   );
 
   const mockNuggets = useMemo(() => getNuggetsForTrack(trackId || ""), [trackId]);
@@ -492,6 +495,27 @@ export default function Listen() {
               nuggetCount={trackNuggets.length}
               backdropMotion={backdropMotion}
               setBackdropMotion={setBackdropMotion}
+              listenCount={listenCount}
+              trackKey={track ? `${track.artist}::${track.title}` : undefined}
+              onResetHistory={async () => {
+                if (!track) return;
+                const trackKey = `${track.artist}::${track.title}`;
+                await supabase.from("nugget_history" as any).delete().eq("track_key", trackKey);
+                setRegenerateKey((k) => k + 1);
+              }}
+              onResetAllHistory={async () => {
+                await supabase.from("nugget_history" as any).delete().neq("track_key", "");
+                setRegenerateKey((k) => k + 1);
+              }}
+              onIncrementListen={async () => {
+                if (!track) return;
+                const trackKey = `${track.artist}::${track.title}`;
+                const { data } = await supabase.from("nugget_history" as any).select("listen_count").eq("track_key", trackKey).maybeSingle();
+                if (data) {
+                  await supabase.from("nugget_history" as any).update({ listen_count: ((data as any).listen_count || 1) + 1, updated_at: new Date().toISOString() } as any).eq("track_key", trackKey);
+                }
+                setRegenerateKey((k) => k + 1);
+              }}
             />
           )}
         </AnimatePresence>

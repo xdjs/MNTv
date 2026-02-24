@@ -8,9 +8,14 @@ interface Props {
   nuggetCount: number;
   backdropMotion: boolean;
   setBackdropMotion: (v: boolean) => void;
+  listenCount?: number;
+  trackKey?: string;
+  onResetHistory?: () => void;
+  onResetAllHistory?: () => void;
+  onIncrementListen?: () => void;
 }
 
-export default function DevPanel({ animStyle, setAnimStyle, onJumpToNugget, nuggetCount, backdropMotion, setBackdropMotion }: Props) {
+export default function DevPanel({ animStyle, setAnimStyle, onJumpToNugget, nuggetCount, backdropMotion, setBackdropMotion, listenCount, trackKey, onResetHistory, onResetAllHistory, onIncrementListen }: Props) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -19,6 +24,49 @@ export default function DevPanel({ animStyle, setAnimStyle, onJumpToNugget, nugg
       className="glass-panel fixed bottom-14 right-4 z-50 rounded-xl p-4 w-56"
     >
       <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Dev Panel</p>
+
+      {/* Listen Depth */}
+      {listenCount != null && (
+        <div className="mb-3">
+          <p className="text-xs text-muted-foreground mb-1.5">Listen Depth</p>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="rounded-lg bg-primary/15 px-2.5 py-1 text-xs font-semibold text-primary">
+              Listen #{listenCount}
+            </span>
+            {trackKey && (
+              <span className="text-[10px] text-muted-foreground truncate max-w-[100px]" title={trackKey}>
+                {trackKey}
+              </span>
+            )}
+          </div>
+          <div className="flex gap-1.5">
+            {onIncrementListen && (
+              <button
+                onClick={onIncrementListen}
+                className="rounded-lg bg-foreground/5 px-3 py-1.5 text-xs text-muted-foreground hover:bg-foreground/10 transition-colors"
+              >
+                +1
+              </button>
+            )}
+            {onResetHistory && (
+              <button
+                onClick={onResetHistory}
+                className="rounded-lg bg-foreground/5 px-3 py-1.5 text-xs text-muted-foreground hover:bg-foreground/10 transition-colors"
+              >
+                Reset
+              </button>
+            )}
+            {onResetAllHistory && (
+              <button
+                onClick={onResetAllHistory}
+                className="rounded-lg bg-destructive/15 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/25 transition-colors"
+              >
+                Reset All
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="mb-3">
         <p className="text-xs text-muted-foreground mb-1.5">Animation Style</p>

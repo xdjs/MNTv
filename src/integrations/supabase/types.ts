@@ -14,7 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      nugget_history: {
+        Row: {
+          created_at: string | null
+          id: string
+          listen_count: number | null
+          previous_nuggets: Json | null
+          track_key: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          listen_count?: number | null
+          previous_nuggets?: Json | null
+          track_key: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          listen_count?: number | null
+          previous_nuggets?: Json | null
+          track_key?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

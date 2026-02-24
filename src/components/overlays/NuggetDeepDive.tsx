@@ -14,11 +14,8 @@ interface Props {
 }
 
 const kindLabels: Record<string, string> = {
-  process: "Behind the Scenes",
-  constraint: "Creative Constraint",
-  pattern: "Pattern",
-  human: "Human Story",
-  influence: "Influence",
+  artist: "The Artist",
+  track: "The Track",
   discovery: "Explore Next",
 };
 

@@ -5,7 +5,7 @@ import type { Nugget, Source } from "@/mock/types";
 interface AINuggetData {
   headline: string;
   text: string;
-  kind: "process" | "constraint" | "pattern" | "human" | "influence" | "discovery";
+  kind: "artist" | "track" | "discovery";
   listenFor?: boolean;
   source: {
     type: "youtube" | "article" | "interview";
@@ -23,6 +23,7 @@ interface UseAINuggetsResult {
   sources: Map<string, Source>;
   loading: boolean;
   error: string | null;
+  listenCount: number;
 }
 
 export function useAINuggets(
@@ -30,12 +31,14 @@ export function useAINuggets(
   artist: string,
   title: string,
   album: string | undefined,
-  durationSec: number
+  durationSec: number,
+  regenerateKey: number = 0
 ): UseAINuggetsResult {
   const [nuggets, setNuggets] = useState<Nugget[]>([]);
   const [sources, setSources] = useState<Map<string, Source>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [listenCount, setListenCount] = useState(1);
 
   const generate = useCallback(async () => {
     if (!artist || !title) return;
@@ -44,8 +47,27 @@ export function useAINuggets(
     setError(null);
 
     try {
+      const trackKey = `${artist}::${title}`;
+
+      // Query listen history
+      let currentListenCount = 1;
+      let previousNuggets: string[] = [];
+
+      const { data: historyRow } = await supabase
+        .from("nugget_history" as any)
+        .select("*")
+        .eq("track_key", trackKey)
+        .maybeSingle();
+
+      if (historyRow) {
+        currentListenCount = (historyRow as any).listen_count || 1;
+        previousNuggets = (historyRow as any).previous_nuggets || [];
+      }
+
+      setListenCount(currentListenCount);
+
       const { data, error: fnError } = await supabase.functions.invoke("generate-nuggets", {
-        body: { artist, title, album },
+        body: { artist, title, album, listenCount: currentListenCount, previousNuggets },
       });
 
       if (fnError) {
@@ -75,9 +97,9 @@ export function useAINuggets(
         };
         newSources.set(sourceId, source);
 
-        // Distribute nuggets: first one early (8-15s), rest spread across remaining duration
+        // Distribute nuggets across track duration
         const earlyStart = 10;
-        const usableDuration = durationSec - 20; // leave buffer at end
+        const usableDuration = durationSec - 20;
         const spacing = usableDuration / aiNuggets.length;
         const timestampSec = Math.floor(earlyStart + spacing * i);
 
@@ -96,6 +118,29 @@ export function useAINuggets(
 
       setNuggets(newNuggets);
       setSources(newSources);
+
+      // Upsert listen history
+      const newHeadlines = newNuggets.map((n) => n.headline || n.text).filter(Boolean);
+      const updatedPreviousNuggets = [...previousNuggets, ...newHeadlines];
+
+      if (historyRow) {
+        await supabase
+          .from("nugget_history" as any)
+          .update({
+            listen_count: currentListenCount + 1,
+            previous_nuggets: updatedPreviousNuggets,
+            updated_at: new Date().toISOString(),
+          } as any)
+          .eq("track_key", trackKey);
+      } else {
+        await supabase
+          .from("nugget_history" as any)
+          .insert({
+            track_key: trackKey,
+            listen_count: 1,
+            previous_nuggets: newHeadlines,
+          } as any);
+      }
     } catch (e) {
       console.error("AI nugget generation failed:", e);
       setError(e instanceof Error ? e.message : "Unknown error");
@@ -106,7 +151,7 @@ export function useAINuggets(
 
   useEffect(() => {
     generate();
-  }, [generate]);
+  }, [generate, regenerateKey]);
 
-  return { nuggets, sources, loading, error };
+  return { nuggets, sources, loading, error, listenCount };
 }
