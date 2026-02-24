@@ -6,6 +6,7 @@ import { useArtistImage } from "@/hooks/useArtistImage";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ExternalLink, Music, BookOpen, Play } from "lucide-react";
+import NuggetCategoryCard from "@/components/companion/NuggetCategoryCard";
 
 interface CompanionNugget {
   headline: string;
@@ -27,17 +28,11 @@ interface CompanionData {
   externalLinks: { label: string; url: string }[];
 }
 
-const kindLabels: Record<string, string> = {
-  artist: "The Artist",
-  track: "The Track",
-  discovery: "Explore Next",
-};
-
-const kindColors: Record<string, string> = {
-  artist: "bg-primary/20 text-primary",
-  track: "bg-blue-500/20 text-blue-400",
-  discovery: "bg-emerald-500/20 text-emerald-400",
-};
+const nuggetCategories = [
+  { kind: "track", label: "The Track", colorClass: "bg-blue-500/20 text-blue-400" },
+  { kind: "artist", label: "History", colorClass: "bg-primary/20 text-primary" },
+  { kind: "discovery", label: "Explore Next", colorClass: "bg-emerald-500/20 text-emerald-400" },
+] as const;
 
 export default function Companion() {
   const { trackId } = useParams<{ trackId: string }>();
@@ -198,51 +193,21 @@ export default function Companion() {
               </section>
             )}
 
-            {/* Nuggets */}
+            {/* Nuggets by Category */}
             {data.nuggets?.length > 0 && (
-              <section>
-                <h3 className="text-lg font-bold text-foreground mb-3">
-                  Deep Dive ({data.nuggets.length} nuggets)
-                </h3>
-                <div className="space-y-3">
-                  {data.nuggets.map((nugget, i) => (
-                    <div key={i} className="apple-glass rounded-2xl p-4 space-y-2.5">
-                      <span
-                        className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                          kindColors[nugget.kind] || "bg-secondary text-secondary-foreground"
-                        }`}
-                      >
-                        {kindLabels[nugget.kind] || nugget.kind}
-                      </span>
-                      <p className="text-sm font-bold text-foreground leading-snug">
-                        {nugget.headline}
-                      </p>
-                      <p className="text-sm text-foreground/70 leading-relaxed">
-                        {nugget.text}
-                      </p>
-
-                      {/* Source Link */}
-                      {nugget.source?.url && (
-                        <a
-                          href={nugget.source.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-2 mt-1 px-3 py-2 rounded-xl bg-foreground/5 hover:bg-foreground/10 transition-colors group"
-                        >
-                          <ExternalLink size={14} className="text-primary shrink-0" />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-semibold text-foreground/80 truncate group-hover:text-primary transition-colors">
-                              {nugget.source.title}
-                            </p>
-                            <p className="text-[11px] text-muted-foreground truncate">
-                              {nugget.source.publisher}
-                            </p>
-                          </div>
-                        </a>
-                      )}
-                    </div>
-                  ))}
-                </div>
+              <section className="space-y-4">
+                <h3 className="text-lg font-bold text-foreground">Deep Dive</h3>
+                {nuggetCategories.map(({ kind, label, colorClass }) => {
+                  const filtered = data.nuggets.filter((n) => n.kind === kind);
+                  return (
+                    <NuggetCategoryCard
+                      key={kind}
+                      label={label}
+                      nuggets={filtered}
+                      colorClass={colorClass}
+                    />
+                  );
+                })}
               </section>
             )}
 

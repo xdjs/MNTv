@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      companion_cache: {
+        Row: {
+          content: Json
+          created_at: string
+          id: string
+          listen_count_tier: number
+          track_key: string
+        }
+        Insert: {
+          content: Json
+          created_at?: string
+          id?: string
+          listen_count_tier?: number
+          track_key: string
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          id?: string
+          listen_count_tier?: number
+          track_key?: string
+        }
+        Relationships: []
+      }
       nugget_history: {
         Row: {
           created_at: string | null
