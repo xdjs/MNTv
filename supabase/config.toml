@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.nugget-image]
 verify_jwt = false
+
+[functions.seed-nuggets]
+verify_jwt = false
