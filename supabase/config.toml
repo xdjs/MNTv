@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.generate-companion]
 verify_jwt = false
+
+[functions.nugget-image]
+verify_jwt = false

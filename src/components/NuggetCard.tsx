@@ -71,6 +71,8 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
   const source = sourceOverride !== undefined ? sourceOverride : getSourceById(nugget.sourceId);
   const { card: cardVariants, logo: logoVariants } = styleMap[animationStyle];
 
+  const isVisual = nugget.visualOnly && nugget.imageUrl;
+
   return (
     <motion.div className="relative" initial="initial" animate="animate" exit="exit">
       {/* Logo — left side, appears FIRST */}
@@ -131,45 +133,75 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
           </>
         )}
 
+        {/* ── Visual-only layout: image + caption ── */}
+        {isVisual ? (
+          <>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1, transition: { delay: 0.4, duration: 0.4, ease: [0.22, 1, 0.36, 1] } }}
+              className="overflow-hidden rounded-lg"
+            >
+              <img
+                src={nugget.imageUrl}
+                alt={nugget.imageCaption || nugget.headline || ""}
+                className="w-full max-h-[180px] object-cover rounded-lg"
+                onError={(e) => {
+                  // Hide image on error — card will still show caption
+                  (e.target as HTMLImageElement).style.display = "none";
+                }}
+              />
+            </motion.div>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1, transition: { delay: 0.55, duration: 0.3 } }}
+              className="mt-2 text-sm text-foreground/70 leading-snug"
+            >
+              {nugget.imageCaption || nugget.headline}
+            </motion.p>
+          </>
+        ) : (
+          <>
+            {/* ── Standard text layout ── */}
+            {/* Header: kind label + timestamp */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1, transition: { delay: 0.35, duration: 0.3 } }}
+              className="mb-2 flex items-center gap-2 text-xs md:text-sm text-muted-foreground"
+            >
+              {nugget.kind === "discovery" && <Compass size={12} className="text-primary" />}
+              <span className={`uppercase tracking-wider ${nugget.kind === "discovery" ? "text-primary" : ""}`}>
+                {kindLabels[nugget.kind] || nugget.kind}
+              </span>
+              {currentTime && (
+                <>
+                  <span className="text-foreground/20">•</span>
+                  <span className="tabular-nums">{currentTime}</span>
+                </>
+              )}
+            </motion.div>
 
-        {/* Header: kind label + timestamp */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1, transition: { delay: 0.35, duration: 0.3 } }}
-          className="mb-2 flex items-center gap-2 text-xs md:text-sm text-muted-foreground"
-        >
-          {nugget.kind === "discovery" && <Compass size={12} className="text-primary" />}
-          <span className={`uppercase tracking-wider ${nugget.kind === "discovery" ? "text-primary" : ""}`}>
-            {kindLabels[nugget.kind] || nugget.kind}
-          </span>
-          {currentTime && (
-            <>
-              <span className="text-foreground/20">•</span>
-              <span className="tabular-nums">{currentTime}</span>
-            </>
-          )}
-        </motion.div>
+            {/* Listen-for badge */}
+            {nugget.listenFor && (
+              <motion.div
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0, transition: { delay: 0.5 } }}
+                className="mb-2 flex items-center gap-1.5"
+              >
+                <span className="inline-block h-2 w-2 rounded-full bg-primary animate-pulse" />
+                <span className="text-xs font-medium uppercase tracking-wider text-primary">Listen for this</span>
+              </motion.div>
+            )}
 
-        {/* Listen-for badge */}
-        {nugget.listenFor && (
-          <motion.div
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0, transition: { delay: 0.5 } }}
-            className="mb-2 flex items-center gap-1.5"
-          >
-            <span className="inline-block h-2 w-2 rounded-full bg-primary animate-pulse" />
-            <span className="text-xs font-medium uppercase tracking-wider text-primary">Listen for this</span>
-          </motion.div>
+            {/* Nugget headline */}
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1, transition: { delay: animationStyle === "B" ? 0.5 : 0.4, duration: 0.3 } }}
+              className="text-base md:text-lg leading-7 text-foreground/90"
+            >
+              {nugget.headline || nugget.text}
+            </motion.p>
+          </>
         )}
-
-        {/* Nugget headline — short complete thought; full text shown in deep dive */}
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1, transition: { delay: animationStyle === "B" ? 0.5 : 0.4, duration: 0.3 } }}
-          className="text-base md:text-lg leading-7 text-foreground/90"
-        >
-          {nugget.headline || nugget.text}
-        </motion.p>
       </motion.div>
     </motion.div>
   );
