@@ -168,25 +168,21 @@ export function useAINuggets(
         }
       }
 
-      // If no resolved images, try fallbacks for the visual slot
+      // If no resolved images, ALWAYS assign a visual nugget using fallbacks
       if (!visualAssigned) {
         const fallbackIdx = visualSlotIndex % newNuggets.length;
         const nugget = newNuggets[fallbackIdx];
-        const fallbackKind = nugget?.kind;
-        let fallbackUrl: string | undefined;
-
-        if (fallbackKind === "track" && coverArtUrl) {
-          fallbackUrl = coverArtUrl;
-        } else if (artistImageUrl) {
-          fallbackUrl = artistImageUrl;
-        } else if (coverArtUrl) {
-          fallbackUrl = coverArtUrl;
-        }
-
-        if (fallbackUrl && nugget) {
-          nugget.imageUrl = fallbackUrl;
-          nugget.imageCaption = nugget.imageCaption || nugget.headline;
-          nugget.visualOnly = true;
+        if (nugget) {
+          // Try artist image first (local asset, always reliable), then cover art
+          const fallbackUrl = artistImageUrl || coverArtUrl;
+          if (fallbackUrl) {
+            nugget.imageUrl = fallbackUrl;
+            nugget.imageCaption = nugget.imageCaption || nugget.headline;
+            nugget.visualOnly = true;
+            console.log("[NuggetVisual] Used fallback image for visual nugget:", fallbackUrl);
+          } else {
+            console.warn("[NuggetVisual] No fallback images available — all nuggets text-only");
+          }
         }
       }
 
