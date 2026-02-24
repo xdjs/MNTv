@@ -11,6 +11,7 @@ import Browse from "./pages/Browse";
 import ArtistProfile from "./pages/ArtistProfile";
 import AlbumDetail from "./pages/AlbumDetail";
 import Listen from "./pages/Listen";
+import Companion from "./pages/Companion";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ function AnimatedRoutes() {
           <Route path="/artist/:artistId" element={<ArtistProfile />} />
           <Route path="/album/:albumId" element={<AlbumDetail />} />
           <Route path="/listen/:trackId" element={<Listen />} />
+          <Route path="/companion/:trackId" element={<Companion />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </AnimatePresence>
