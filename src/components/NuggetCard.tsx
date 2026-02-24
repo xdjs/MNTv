@@ -135,33 +135,33 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
 
         {/* ── Visual-only layout: image + caption ── */}
         {isVisual ? (
-          <>
+          <div className="-mx-5 -my-2.5">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1, transition: { delay: 0.4, duration: 0.4, ease: [0.22, 1, 0.36, 1] } }}
-              className="relative overflow-hidden rounded-lg"
+              className="relative overflow-hidden rounded-xl"
             >
               <img
                 src={nugget.imageUrl}
                 alt={nugget.imageCaption || nugget.headline || ""}
-                className="w-full rounded-lg object-contain"
+                className="w-full rounded-xl object-cover object-top"
                 style={{ maxHeight: "380px", minHeight: "160px" }}
                 onError={(e) => {
                   (e.target as HTMLImageElement).style.display = "none";
                 }}
               />
               {/* Gradient overlay for caption legibility */}
-              <div className="absolute inset-x-0 bottom-0 h-16 rounded-b-lg bg-gradient-to-t from-black/70 to-transparent" />
+              <div className="absolute inset-x-0 bottom-0 h-20 rounded-b-xl bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
               {/* Caption overlaid on gradient */}
               <motion.p
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1, transition: { delay: 0.55, duration: 0.3 } }}
-                className="absolute bottom-2 left-3 right-3 text-sm text-white/90 leading-snug drop-shadow-lg"
+                className="absolute bottom-3 left-4 right-4 text-sm text-white/90 leading-snug drop-shadow-lg"
               >
                 {nugget.imageCaption || nugget.headline}
               </motion.p>
             </motion.div>
-          </>
+          </div>
         ) : (
           <>
             {/* ── Standard text layout ── */}
