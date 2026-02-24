@@ -8,14 +8,18 @@ const corsHeaders = {
 
 const MB_USER_AGENT = "MusicNerd/1.0 (musicnerd-app)";
 
-async function fetchWithRetry(url: string, options?: RequestInit, retries = 3): Promise<Response> {
+async function fetchWithRetry(url: string, options?: RequestInit, retries = 2): Promise<Response> {
   for (let i = 0; i < retries; i++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
     try {
-      const res = await fetch(url, options);
+      const res = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timeout);
       return res;
     } catch (e) {
+      clearTimeout(timeout);
       if (i === retries - 1) throw e;
-      await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+      await new Promise((r) => setTimeout(r, 800 * (i + 1)));
     }
   }
   throw new Error("Unreachable");
