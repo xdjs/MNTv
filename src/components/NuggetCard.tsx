@@ -139,14 +139,14 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1, transition: { delay: 0.4, duration: 0.4, ease: [0.22, 1, 0.36, 1] } }}
-              className="overflow-hidden rounded-lg"
+              className="overflow-hidden rounded-lg bg-black/20"
             >
               <img
                 src={nugget.imageUrl}
                 alt={nugget.imageCaption || nugget.headline || ""}
-                className="w-full max-h-[180px] object-cover rounded-lg"
+                className="w-full rounded-lg"
+                style={{ maxHeight: "200px", objectFit: "contain" }}
                 onError={(e) => {
-                  // Hide image on error — card will still show caption
                   (e.target as HTMLImageElement).style.display = "none";
                 }}
               />
