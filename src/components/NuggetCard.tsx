@@ -139,25 +139,28 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1, transition: { delay: 0.4, duration: 0.4, ease: [0.22, 1, 0.36, 1] } }}
-              className="overflow-hidden rounded-lg bg-black/20"
+              className="relative overflow-hidden rounded-lg"
             >
               <img
                 src={nugget.imageUrl}
                 alt={nugget.imageCaption || nugget.headline || ""}
-                className="w-full rounded-lg"
-                style={{ maxHeight: "200px", objectFit: "contain" }}
+                className="w-full rounded-lg object-cover object-top"
+                style={{ maxHeight: "260px", minHeight: "140px" }}
                 onError={(e) => {
                   (e.target as HTMLImageElement).style.display = "none";
                 }}
               />
+              {/* Gradient overlay for caption legibility */}
+              <div className="absolute inset-x-0 bottom-0 h-16 rounded-b-lg bg-gradient-to-t from-black/70 to-transparent" />
+              {/* Caption overlaid on gradient */}
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1, transition: { delay: 0.55, duration: 0.3 } }}
+                className="absolute bottom-2 left-3 right-3 text-sm text-white/90 leading-snug drop-shadow-lg"
+              >
+                {nugget.imageCaption || nugget.headline}
+              </motion.p>
             </motion.div>
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1, transition: { delay: 0.55, duration: 0.3 } }}
-              className="mt-2 text-sm text-foreground/70 leading-snug"
-            >
-              {nugget.imageCaption || nugget.headline}
-            </motion.p>
           </>
         ) : (
           <>
