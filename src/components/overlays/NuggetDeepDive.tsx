@@ -206,7 +206,25 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
         </div>
 
         {/* Content area — fixed height, no scroll */}
-        <div className="flex-1 flex flex-col justify-center px-4 py-4 md:px-8 md:py-6 min-h-[120px] md:min-h-[200px] overflow-y-auto">
+        <div className="flex-1 flex flex-col px-4 py-4 md:px-8 md:py-6 min-h-[120px] md:min-h-[200px] overflow-y-auto gap-4">
+          {/* Show nugget image in deep dive if available */}
+          {nugget.imageUrl && currentView === 'original' && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1, transition: { delay: 0.2, duration: 0.3 } }}
+              className="flex-shrink-0"
+            >
+              <img
+                src={nugget.imageUrl}
+                alt={nugget.imageCaption || nugget.headline || ""}
+                className="w-full max-h-[40vh] object-contain rounded-lg"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+              />
+              {nugget.imageCaption && (
+                <p className="text-xs text-muted-foreground mt-1.5 italic text-center">{nugget.imageCaption}</p>
+              )}
+            </motion.div>
+          )}
           <AnimatePresence mode="wait">
             {loading ? (
               <motion.div
