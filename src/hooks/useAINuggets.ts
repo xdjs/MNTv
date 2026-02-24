@@ -2,11 +2,18 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Nugget, Source } from "@/mock/types";
 
+interface ImageHint {
+  type: "artist" | "album" | "wiki";
+  query: string;
+  caption: string;
+}
+
 interface AINuggetData {
   headline: string;
   text: string;
   kind: "artist" | "track" | "discovery";
   listenFor?: boolean;
+  imageHint?: ImageHint;
   source: {
     type: "youtube" | "article" | "interview";
     title: string;
@@ -26,13 +33,27 @@ interface UseAINuggetsResult {
   listenCount: number;
 }
 
+async function resolveImageHint(hint: ImageHint): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke("nugget-image", {
+      body: { type: hint.type, query: hint.query, width: 500 },
+    });
+    if (error || !data?.imageUrl) return null;
+    return data.imageUrl;
+  } catch {
+    return null;
+  }
+}
+
 export function useAINuggets(
   trackId: string,
   artist: string,
   title: string,
   album: string | undefined,
   durationSec: number,
-  regenerateKey: number = 0
+  regenerateKey: number = 0,
+  coverArtUrl?: string,
+  artistImageUrl?: string
 ): UseAINuggetsResult {
   const [nuggets, setNuggets] = useState<Nugget[]>([]);
   const [sources, setSources] = useState<Map<string, Source>>(new Map());
@@ -113,8 +134,61 @@ export function useAINuggets(
           kind: n.kind,
           listenFor: n.listenFor || false,
           sourceId,
-        };
+          // Store imageHint data temporarily for resolution
+          imageCaption: n.imageHint?.caption,
+        } as Nugget;
       });
+
+      // ── Resolve images and apply visual rotation ──────────────────
+      const visualSlotIndex = trackId.charCodeAt(0) % 3;
+
+      // Resolve all imageHints in parallel
+      const imageResults = await Promise.allSettled(
+        aiNuggets.map((n) =>
+          n.imageHint ? resolveImageHint(n.imageHint) : Promise.resolve(null)
+        )
+      );
+
+      // Attach resolved imageUrls
+      for (let i = 0; i < newNuggets.length; i++) {
+        const result = imageResults[i];
+        if (result?.status === "fulfilled" && result.value) {
+          newNuggets[i].imageUrl = result.value;
+          newNuggets[i].imageCaption = aiNuggets[i].imageHint?.caption;
+        }
+      }
+
+      // Try to mark the visual slot, falling back if image resolution failed
+      let visualAssigned = false;
+      for (let attempt = 0; attempt < 3 && !visualAssigned; attempt++) {
+        const idx = (visualSlotIndex + attempt) % 3;
+        if (idx < newNuggets.length && newNuggets[idx].imageUrl) {
+          newNuggets[idx].visualOnly = true;
+          visualAssigned = true;
+        }
+      }
+
+      // If no resolved images, try fallbacks for the visual slot
+      if (!visualAssigned) {
+        const fallbackIdx = visualSlotIndex % newNuggets.length;
+        const nugget = newNuggets[fallbackIdx];
+        const fallbackKind = nugget?.kind;
+        let fallbackUrl: string | undefined;
+
+        if (fallbackKind === "track" && coverArtUrl) {
+          fallbackUrl = coverArtUrl;
+        } else if (artistImageUrl) {
+          fallbackUrl = artistImageUrl;
+        } else if (coverArtUrl) {
+          fallbackUrl = coverArtUrl;
+        }
+
+        if (fallbackUrl && nugget) {
+          nugget.imageUrl = fallbackUrl;
+          nugget.imageCaption = nugget.imageCaption || nugget.headline;
+          nugget.visualOnly = true;
+        }
+      }
 
       setNuggets(newNuggets);
       setSources(newSources);
@@ -147,7 +221,7 @@ export function useAINuggets(
     } finally {
       setLoading(false);
     }
-  }, [trackId, artist, title, album, durationSec]);
+  }, [trackId, artist, title, album, durationSec, coverArtUrl, artistImageUrl]);
 
   useEffect(() => {
     generate();

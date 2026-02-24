@@ -11,7 +11,7 @@ import ReadingOverlay from "@/components/overlays/ReadingOverlay";
 import NuggetDeepDive from "@/components/overlays/NuggetDeepDive";
 import DevPanel from "@/components/DevPanel";
 import PlaybackBar from "@/components/PlaybackBar";
-import { getTrackById, getNuggetsForTrack, getSourceById, getAdjacentTrackIds, getYouTubeSourceForTrack } from "@/mock/tracks";
+import { getTrackById, getNuggetsForTrack, getSourceById, getAdjacentTrackIds, getYouTubeSourceForTrack, getArtistById } from "@/mock/tracks";
 import { usePlayback } from "@/hooks/usePlayback";
 import { useAINuggets } from "@/hooks/useAINuggets";
 import { useBackdropSync } from "@/hooks/useBackdropSync";
@@ -36,6 +36,9 @@ export default function Listen() {
   const { isPlaying, currentTime, fadingIn, play, pause, seek, toggle, pauseForOverlay, resumeWithFade } =
     usePlayback(track?.durationSec || 300, handleTrackEnd);
 
+  // Get artist's local image for fallback
+  const artistData = useMemo(() => getArtistById(track?.artistId || ""), [track?.artistId]);
+
   // AI-generated nuggets with real sources
   const { nuggets: aiNuggets, sources: aiSources, loading: aiLoading, listenCount } = useAINuggets(
     trackId || "",
@@ -43,7 +46,9 @@ export default function Listen() {
     track?.title || "",
     track?.album,
     track?.durationSec || 300,
-    regenerateKey
+    regenerateKey,
+    track?.coverArtUrl,
+    artistData?.imageUrl
   );
 
   const mockNuggets = useMemo(() => getNuggetsForTrack(trackId || ""), [trackId]);

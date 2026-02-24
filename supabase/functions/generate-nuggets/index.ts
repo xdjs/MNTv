@@ -106,6 +106,11 @@ interface GeminiNugget {
   text: string;
   kind: "artist" | "track" | "discovery";
   listenFor: boolean;
+  imageHint?: {
+    type: "artist" | "album" | "wiki";
+    query: string;
+    caption: string;
+  };
   source: {
     type: "youtube" | "article" | "interview";
     title: string;
@@ -168,6 +173,11 @@ CRITICAL RULES:
 - Each nugget MUST have TWO text fields:
   - "headline": 1-2 sentences that spark curiosity and make the reader WANT to learn more. Don't write a dry fact — write something that teases a surprising detail or asks an implicit question. Examples: "The cash register sounds at the start? Roger Waters recorded them by throwing coins into a mixing bowl in his pottery shed." or "There's a reason this song feels unsettling — and it has nothing to do with the lyrics." Make the reader think "wait, really?" or "tell me more."
   - "text": The full 2-3 sentence explanation that delivers on the headline's promise with rich detail and context.
+- Each nugget MUST have an "imageHint" object to suggest a contextually relevant real image:
+  - "type": one of "artist" (for a person — musician, producer, collaborator), "album" (for an album cover), or "wiki" (for an object, place, instrument, studio, etc.)
+  - "query": the search term to find the image (e.g. "Nile Rodgers", "OK Computer Radiohead", "Fender Rhodes piano", "Abbey Road Studios")
+  - "caption": a short 2-5 word caption for the image (e.g. "Nile Rodgers", "Abbey Road Studios")
+  - Pick the most visually interesting and relevant subject for each nugget. Prefer specific people, instruments, studios, or album covers over abstract concepts.
 - For nugget 3 (discovery): The headline should feel like a friend nudging you with genuine enthusiasm, e.g. "If this groove hit you right, you need to hear what Nile Rodgers did on this other track."
 - For YouTube sources from videos above: set type "youtube", include videoIndex, include a real quote
 - For article/interview sources: cite REAL publications with real article titles
@@ -182,6 +192,11 @@ Return ONLY valid JSON:
       "text": "2-3 sentences of surprising music trivia with full detail",
       "kind": "artist|track|discovery",
       "listenFor": false,
+      "imageHint": {
+        "type": "artist|album|wiki",
+        "query": "Search term for real image",
+        "caption": "Short caption"
+      },
       "source": {
         "type": "youtube|article|interview",
         "title": "Real source title",
@@ -434,6 +449,7 @@ Return ONLY valid JSON:
         text: n.text,
         kind: n.kind,
         listenFor: n.listenFor,
+        imageHint: n.imageHint || null,
         source: {
           type: n.source.type,
           title: n.source.title,

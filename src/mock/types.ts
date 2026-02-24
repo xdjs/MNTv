@@ -52,6 +52,9 @@ export type Nugget = {
   listenFor?: boolean;
   relatedMomentSec?: number;
   sourceId: string;
+  imageUrl?: string;
+  imageCaption?: string;
+  visualOnly?: boolean;
 };
 
 export type AnimationStyle = "A" | "B" | "C";
