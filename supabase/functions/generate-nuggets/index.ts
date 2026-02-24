@@ -176,7 +176,7 @@ CRITICAL RULES:
 - Each nugget MUST have an "imageHint" object to suggest a contextually relevant real image:
   - "type": one of "artist" (for a person — musician, producer, collaborator), "album" (for an album cover), or "wiki" (for an object, place, instrument, studio, etc.)
   - "query": the search term to find the image (e.g. "Nile Rodgers", "OK Computer Radiohead", "Fender Rhodes piano", "Abbey Road Studios")
-  - "caption": a short 2-5 word caption for the image (e.g. "Nile Rodgers", "Abbey Road Studios")
+  - "caption": a SHORT sentence (6-12 words) that explains HOW this image connects to the nugget's content. Do NOT just label the image — explain its relevance. Examples: "The Fender Rhodes that gave this track its shimmer" or "Nile Rodgers — the groove architect behind this hit" or "Abbey Road's Studio Two, where this was recorded". The viewer sees the image + caption WITHOUT the nugget text, so the caption must make the image's connection to the music self-evident.
   - Pick the most visually interesting and relevant subject for each nugget. Prefer specific people, instruments, studios, or album covers over abstract concepts.
 - For nugget 3 (discovery): The headline should feel like a friend nudging you with genuine enthusiasm, e.g. "If this groove hit you right, you need to hear what Nile Rodgers did on this other track."
 - For YouTube sources from videos above: set type "youtube", include videoIndex, include a real quote
@@ -299,7 +299,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, listenCount, previousNuggets } = body;
+    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, imageCaption, imageQuery, listenCount, previousNuggets } = body;
 
     if (!artist || !title) {
       return new Response(
@@ -322,6 +322,7 @@ The user has been reading this trivia and wants to go deeper:
 ${context}
 ---
 ${sourceTitle ? `The original source was: "${sourceTitle}" by ${sourcePublisher}` : ""}
+${imageCaption ? `An image was shown alongside this nugget: "${imageQuery}" with caption "${imageCaption}". If relevant, weave in how this visual element connects to the deeper story.` : ""}
 
 Continue this thread of discovery. Provide ONE more paragraph of 2-3 sentences MAX (under 80 words total) that goes deeper — reveal connections, context, or implications that make this even more interesting. Be concise and punchy — this is for a TV screen. Think about WHY this matters, HOW it connects to broader music history, or WHAT it reveals about the creative process.
 
