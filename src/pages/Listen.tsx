@@ -242,21 +242,55 @@ export default function Listen() {
     if (!nerdActive) { setActiveNugget(null); setNuggetQueue([]); }
   }, [nerdActive]);
 
-  // Nugget trigger logic
+  // Track seek events to trigger nuggets even when paused
+  const [seekCounter, setSeekCounter] = useState(0);
+
+  const handleSeek = useCallback((t: number) => {
+    // Reset shown nuggets when seeking so nuggets at new position can trigger
+    setShownNuggetIds(new Set());
+    setNuggetQueue([]);
+    setActiveNugget(null);
+    seek(t);
+    setSeekCounter((c) => c + 1);
+  }, [seek]);
+
+  // Nugget trigger logic — fires on playback tick OR after a seek
   useEffect(() => {
-    if (!isPlaying || !nerdActive) return;
-    for (const n of trackNuggets) {
-      if (shownNuggetIds.has(n.id)) continue;
-      if (currentTime >= n.timestampSec) {
-        if (activeNugget) {
+    if (!nerdActive) return;
+    // Find the nugget closest to (but not past) current time that hasn't been shown
+    // On seek: show the most relevant nugget for the current position
+    // On playback: show nuggets as they're reached
+    const candidatesAtTime = trackNuggets.filter(
+      (n) => !shownNuggetIds.has(n.id) && currentTime >= n.timestampSec
+    );
+
+    if (candidatesAtTime.length === 0) return;
+
+    // If playing, trigger nuggets normally (first unshown one past timestamp)
+    // If just seeked (or playing), pick the closest nugget to current time
+    const closest = candidatesAtTime.reduce((best, n) =>
+      Math.abs(n.timestampSec - currentTime) < Math.abs(best.timestampSec - currentTime) ? n : best
+    );
+
+    if (!isPlaying && seekCounter === 0) return; // Don't trigger on initial mount while paused
+
+    if (activeNugget) {
+      // Queue others but show closest immediately by replacing active
+      if (seekCounter > 0) {
+        // On seek, immediately show the closest nugget
+        setActiveNugget(closest);
+        setShownNuggetIds((s) => new Set(s).add(closest.id));
+      } else {
+        // During playback, queue as before
+        for (const n of candidatesAtTime) {
           setNuggetQueue((q) => (q.find((x) => x.id === n.id) ? q : [...q, n]));
-        } else {
-          setActiveNugget(n);
-          setShownNuggetIds((s) => new Set(s).add(n.id));
         }
       }
+    } else {
+      setActiveNugget(closest);
+      setShownNuggetIds((s) => new Set(s).add(closest.id));
     }
-  }, [currentTime, isPlaying, nerdActive, trackNuggets, activeNugget, shownNuggetIds]);
+  }, [currentTime, isPlaying, nerdActive, trackNuggets, activeNugget, shownNuggetIds, seekCounter]);
 
   // Auto-dismiss nugget: quick swap if queued, otherwise fade after 8s
   useEffect(() => {
@@ -298,14 +332,11 @@ export default function Listen() {
     (idx: number) => {
       const n = trackNuggets[idx];
       if (!n) return;
-      setActiveNugget(null);
-      setShownNuggetIds(new Set());
+      // Directly set the nugget — no setTimeout race condition
       setNuggetQueue([]);
+      setShownNuggetIds(new Set([n.id]));
+      setActiveNugget(n);
       seek(n.timestampSec);
-      setTimeout(() => {
-        setActiveNugget(n);
-        setShownNuggetIds(new Set([n.id]));
-      }, 100);
     },
     [trackNuggets, seek]
   );
@@ -476,7 +507,7 @@ export default function Listen() {
           nuggetMarkers={trackNuggets.map((n) => (n.timestampSec / track.durationSec) * 100)}
           focusedIndex={focusZone === 'bar' ? barFocusIndex : null}
           onToggle={() => { showBar(); toggle(); }}
-          onSeek={(pct) => { showBar(); seek(pct * track.durationSec); }}
+          onSeek={(pct) => { showBar(); handleSeek(pct * track.durationSec); }}
           onPrev={() => prev && navigate(`/listen/${prev}`)}
           onNext={() => next && navigate(`/listen/${next}`)}
           onLike={() => setLiked((v) => v === true ? null : true)}
