@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
@@ -477,6 +478,17 @@ export default function Listen() {
           onDislike={() => setLiked((v) => v === false ? null : false)}
           onShuffle={() => setShuffleOn((v) => !v)}
         />
+
+        {/* QR Code — permanent, bottom-left */}
+        <div className="fixed bottom-6 left-6 z-10 opacity-40 hover:opacity-80 transition-opacity">
+          <QRCodeSVG
+            value={`https://musicnerdtv.lovable.app/companion/${trackId}`}
+            size={72}
+            fgColor="#ffffff"
+            bgColor="transparent"
+            level="M"
+          />
+        </div>
 
         {/* Dev panel */}
         <button
