@@ -92,7 +92,7 @@ serve(async (req) => {
       ].join("\n");
     }).join("\n");
 
-    const prompt = `You are a music historian and trivia expert. Generate content about "${title}" by ${artist}${album ? ` from "${album}"` : ""}.
+    const prompt = `You are a music historian API. Output ONLY a JSON object, no prose, no markdown, no explanation. Generate content about "${title}" by ${artist}${album ? ` from "${album}"` : ""}.
 
 DEPTH CONTEXT: ${depthInstruction}
 
@@ -124,10 +124,11 @@ CRITICAL RULES FOR NUGGETS:
 - Be factually accurate — cite REAL sources with real titles and publishers
 - For articles, use real publication names (Pitchfork, Rolling Stone, NME, The Guardian, etc.)
 
-Return ONLY valid JSON:
+IMPORTANT: Output ONLY the raw JSON object. No introduction, no explanation, no markdown fences. Start with { and end with }.
+The JSON schema:
 {
-  "artistSummary": "...",
-  "trackStory": "...",
+  "artistSummary": "string",
+  "trackStory": "string",
   "nuggets": [...],
   "externalLinks": [
     { "label": "Wikipedia", "url": "https://en.wikipedia.org/wiki/..." },
@@ -146,7 +147,7 @@ Return ONLY valid JSON:
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: prompt }] }],
           tools: [{ google_search: {} }],
-          generationConfig: { temperature: 1.0 },
+          generationConfig: { temperature: 0.7 },
         }),
       });
 
@@ -175,7 +176,14 @@ Return ONLY valid JSON:
 
         let parsed;
         try {
-          const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+          // Strip markdown fences and any preamble text before the JSON
+          let cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+          // Find the first { and last } to extract JSON even if there's preamble
+          const firstBrace = cleaned.indexOf("{");
+          const lastBrace = cleaned.lastIndexOf("}");
+          if (firstBrace !== -1 && lastBrace > firstBrace) {
+            cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+          }
           parsed = JSON.parse(cleaned);
         } catch {
           console.error("Failed to parse:", text.slice(0, 500));
