@@ -144,8 +144,8 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
               <img
                 src={nugget.imageUrl}
                 alt={nugget.imageCaption || nugget.headline || ""}
-                className="w-full rounded-lg object-cover object-top"
-                style={{ maxHeight: "260px", minHeight: "140px" }}
+                className="w-full rounded-lg object-contain"
+                style={{ maxHeight: "380px", minHeight: "160px" }}
                 onError={(e) => {
                   (e.target as HTMLImageElement).style.display = "none";
                 }}
