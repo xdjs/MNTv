@@ -1,37 +1,161 @@
 
-# Dwell-to-Expand Nugget + Fix Deep Dive Button Focus Styles
 
-## Two Changes
+# Full Plan: Structured Nuggets + Progressive Depth + Dev Panel Controls
 
-### 1. Dwell Timer Auto-Expand (with instant Enter shortcut)
+This plan restructures how MusicNerd generates and presents nuggets into a predictable 3-part format, adds listen history so content evolves across replays, and adds dev controls to test it all.
 
-When the user presses Up to focus a nugget, a 1.5-second dwell timer starts. If they stay on the nugget for 1.5s, it auto-expands into the deep dive. If they press Enter before the timer fires, it opens immediately. If they press Up again (or any other direction) before the timer fires, the timer cancels and navigation continues normally to the top bar.
+---
 
-The hint text changes from "Press Enter to explore" to something like "Exploring..." with a subtle progress indicator during the dwell, so the user understands something is about to happen.
+## Part 1: Database — `nugget_history` Table
 
-**Changes in `src/pages/Listen.tsx`:**
-- Add a `dwellTimerRef = useRef` to track the 1.5s timeout
-- When `focusZone` becomes `'nugget'`, start the dwell timer that calls `handleNuggetClick(activeNugget)` after 1500ms
-- When `focusZone` leaves `'nugget'` (any direction key), clear the dwell timer
-- Enter on nugget still works instantly (clears timer + opens deep dive)
-- Update the hint text below the nugget from "Press Enter to explore" to a two-stage message: show "Exploring in a moment..." or a small animated indicator during the dwell period
+Create a new table to track what the user has already seen per track.
 
-### 2. Fix Deep Dive Button Focus Colors (View Source + Back)
+```sql
+CREATE TABLE nugget_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  track_key TEXT NOT NULL UNIQUE,          -- "artist::title"
+  listen_count INTEGER DEFAULT 1,
+  previous_nuggets JSONB DEFAULT '[]',     -- array of headline strings already shown
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
 
-The "View Source" and "Back" buttons use `tv-focus-visible` for keyboard focus styling, which only adds a glow/box-shadow but does NOT change the text color. The `hover:text-foreground` class only triggers on mouse hover, not on keyboard focus.
+ALTER TABLE nugget_history ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all access" ON nugget_history FOR ALL USING (true) WITH CHECK (true);
+```
 
-**Fix in `src/components/overlays/NuggetDeepDive.tsx`:**
-- Add `focus-visible:text-foreground` to both the "View Source" link (line 278) and the "Back" button (line 290) so keyboard focus matches the mouse hover text color change
+No auth — this is a single-user TV app. The table just persists listen state across sessions.
 
-## Technical Details
+---
 
-### `src/pages/Listen.tsx`
-- Add `dwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)`
-- In the keydown handler, when ArrowUp lands on `'nugget'` zone: start `dwellTimerRef.current = setTimeout(() => handleNuggetClick(activeNugget), 1500)`
-- When any key moves focus away from nugget zone, or Enter is pressed: `clearTimeout(dwellTimerRef.current)`
-- Also clear on component unmount and when `activeNugget` changes
-- Update the hint text under the focused nugget to show a subtle "Hold to explore..." or small animated dot sequence during dwell
+## Part 2: New Nugget Kind Types
 
-### `src/components/overlays/NuggetDeepDive.tsx`
-- Line 278 (View Source `<a>`): add `focus-visible:text-foreground` to className
-- Line 290 (Back `<button>`): add `focus-visible:text-foreground` to className
+**File: `src/mock/types.ts`**
+
+Change the `Nugget.kind` type from:
+```
+"process" | "constraint" | "pattern" | "human" | "influence" | "discovery"
+```
+to:
+```
+"artist" | "track" | "discovery"
+```
+
+This enforces the fixed 3-nugget structure everywhere.
+
+---
+
+## Part 3: Edge Function — Restructured Prompt + Depth Tiers
+
+**File: `supabase/functions/generate-nuggets/index.ts`**
+
+**Request body changes:** Accept two new optional fields: `listenCount` (number) and `previousNuggets` (string array of past headlines).
+
+**Prompt rewrite** (standard nugget generation only, deep dive stays the same):
+
+The prompt will enforce exactly 3 nuggets in order:
+1. **Nugget 1 — `kind: "artist"`**: About the artist — their story, creative philosophy, world. `listenFor: false`.
+2. **Nugget 2 — `kind: "track"`**: About this specific track — production, meaning, history, audio moment. `listenFor: true`.
+3. **Nugget 3 — `kind: "discovery"`**: A specific recommendation — name the exact track/album/artist and explain the connection. `listenFor: false`.
+
+**Depth tiers based on `listenCount`:**
+- **1 (or undefined)**: "This is the listener's FIRST TIME hearing this track. Be introductory and welcoming. Set the stage — who is this artist, what's the basic story of this song, and what's one obvious next listen."
+- **2**: "The listener has heard this before. Skip the basics. Go deeper — surprising production details, lesser-known connections, a more adventurous recommendation."
+- **3+**: "The listener keeps coming back. Give them deep cuts — obscure influences, technical breakdowns, unexpected cultural connections, niche recommendations only a true nerd would know."
+
+**Non-repetition:** If `previousNuggets` is provided, add: "DO NOT repeat or closely rephrase any of these previously shown headlines: [list]. Generate completely fresh angles."
+
+**`GeminiNugget` interface update:** Change `kind` to `"artist" | "track" | "discovery"`.
+
+---
+
+## Part 4: Frontend Hook — Listen History Integration
+
+**File: `src/hooks/useAINuggets.ts`**
+
+Before calling the edge function:
+1. Query `nugget_history` for `track_key = "${artist}::${title}"`
+2. If found, extract `listen_count` and `previous_nuggets`
+3. Pass `listenCount` and `previousNuggets` to the edge function request body
+
+After successful generation:
+1. Upsert `nugget_history`:
+   - If new: insert with `listen_count: 1`, `previous_nuggets: [new headlines]`
+   - If existing: increment `listen_count`, append new headlines to `previous_nuggets`, update `updated_at`
+
+Also update `AINuggetData.kind` type to `"artist" | "track" | "discovery"`.
+
+Expose `listenCount` in the return value so DevPanel and UI can use it.
+
+---
+
+## Part 5: NuggetCard Label Updates
+
+**File: `src/components/NuggetCard.tsx`**
+
+Replace `kindLabels`:
+```ts
+const kindLabels: Record<string, string> = {
+  artist: "The Artist",
+  track: "The Track",
+  discovery: "Explore Next",
+};
+```
+
+Keep the Compass icon for `discovery` kind. No other structural changes to the card.
+
+---
+
+## Part 6: NuggetDeepDive Label Updates
+
+**File: `src/components/overlays/NuggetDeepDive.tsx`**
+
+Update `kindLabels` (line 16-23) to match:
+```ts
+const kindLabels: Record<string, string> = {
+  artist: "The Artist",
+  track: "The Track",
+  discovery: "Explore Next",
+};
+```
+
+---
+
+## Part 7: Dev Panel — Listen Depth Controls
+
+**File: `src/components/DevPanel.tsx`**
+
+Add new props: `listenCount`, `trackKey`, `onResetHistory`, `onResetAllHistory`, `onIncrementListen`.
+
+Add a "Listen Depth" section showing:
+- Current listen count displayed as "Listen #N"
+- **Reset** button — calls `onResetHistory()` which deletes the current track's `nugget_history` row and re-generates nuggets
+- **Reset All** button — calls `onResetAllHistory()` which clears the entire table
+- **+1** button — calls `onIncrementListen()` which bumps the count and re-generates
+
+**File: `src/pages/Listen.tsx`**
+
+Wire the new DevPanel props:
+- Pass `listenCount` from `useAINuggets` return value
+- Pass `trackKey` as `"${track.artist}::${track.title}"`
+- `onResetHistory`: delete from `nugget_history` where `track_key` matches, then re-trigger the hook (via a `regenerateKey` state counter)
+- `onResetAllHistory`: delete all rows from `nugget_history`, re-trigger
+- `onIncrementListen`: manually update `listen_count` +1 in `nugget_history`, re-trigger
+
+The hook will accept an optional `regenerateKey` dependency so bumping it forces a fresh generation cycle.
+
+---
+
+## Summary of Files Changed
+
+| File | Change |
+|---|---|
+| Database migration | Create `nugget_history` table |
+| `src/mock/types.ts` | Update `Nugget.kind` union type |
+| `supabase/functions/generate-nuggets/index.ts` | Restructure prompt, accept `listenCount`/`previousNuggets`, enforce 3-nugget format with depth tiers |
+| `src/hooks/useAINuggets.ts` | Query/upsert `nugget_history`, pass depth params, expose `listenCount` |
+| `src/components/NuggetCard.tsx` | Update `kindLabels` to artist/track/discovery |
+| `src/components/overlays/NuggetDeepDive.tsx` | Update `kindLabels` to match |
+| `src/components/DevPanel.tsx` | Add Listen Depth section with Reset / Reset All / +1 buttons |
+| `src/pages/Listen.tsx` | Wire new DevPanel props and reset/increment callbacks |
+
