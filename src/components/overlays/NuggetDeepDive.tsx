@@ -224,73 +224,113 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
           )}
         </div>
 
-        {/* Content area — fixed height, no scroll */}
-        <div ref={contentScrollRef} className="flex-1 flex flex-col px-4 py-4 md:px-8 md:py-6 min-h-[120px] md:min-h-[200px] overflow-y-auto gap-4">
-          {/* Show nugget image in deep dive if available */}
-          {nugget.imageUrl && currentView === 'original' && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1, transition: { delay: 0.2, duration: 0.3 } }}
-              className="flex-shrink-0"
-            >
-              <img
-                src={nugget.imageUrl}
-                alt={nugget.imageCaption || nugget.headline || ""}
-                className="w-full max-h-[25vh] object-contain rounded-lg"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-              />
-              {nugget.imageCaption && (
-                <p className="text-xs text-muted-foreground mt-1.5 italic text-center">{nugget.imageCaption}</p>
-              )}
-            </motion.div>
-          )}
-          <AnimatePresence mode="wait">
-            {loading ? (
+        {/* Content area */}
+        <div ref={contentScrollRef} className="flex-1 overflow-y-auto glass-scrollbar px-4 py-4 md:px-8 md:py-6 min-h-[120px] md:min-h-[200px]">
+          {/* Side-by-side layout when image is present on original view */}
+          {nugget.imageUrl && currentView === 'original' ? (
+            <div className="flex flex-col md:flex-row gap-4 md:gap-6 h-full">
+              {/* Image column */}
               <motion.div
-                key="loading"
                 initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.15 }}
-                className="flex items-center justify-center gap-3 text-muted-foreground"
+                animate={{ opacity: 1, transition: { delay: 0.2, duration: 0.3 } }}
+                className="flex-shrink-0 md:w-[45%] flex flex-col"
               >
-                <Loader2 size={20} className="animate-spin" />
-                <span className="text-lg">Exploring deeper…</span>
-              </motion.div>
-            ) : (
-              <motion.div
-                key={contentKey}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.25, ease: "easeOut" }}
-                className="space-y-4"
-              >
-                <p className="text-base md:text-xl leading-relaxed text-foreground/90">
-                  {currentContent?.text}
-                </p>
-
-                {/* Source attribution — compact line only, no redundant quote */}
-                {currentView === 'original' && source && (
-                  <div className="flex items-center gap-2 rounded-lg bg-foreground/5 px-3 py-2 md:px-4 md:py-2.5 text-xs md:text-sm text-muted-foreground">
-                    <span>
-                      {source.type === "youtube" ? "▶" : source.type === "article" ? "📄" : "🎙"}
-                    </span>
-                    <span className="truncate">{source.title}</span>
-                    <span className="text-foreground/20">·</span>
-                    <span>{source.publisher}</span>
-                  </div>
+                <img
+                  src={nugget.imageUrl}
+                  alt={nugget.imageCaption || nugget.headline || ""}
+                  className="w-full max-h-[35vh] md:max-h-[45vh] object-contain rounded-lg"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+                {nugget.imageCaption && (
+                  <p className="text-xs text-muted-foreground mt-1.5 italic text-center">{nugget.imageCaption}</p>
                 )}
+              </motion.div>
 
-                {/* Follow-up teaser */}
-                {currentContent?.followUp && (
-                  <p className="text-base text-primary/60 italic mt-2">
-                    💡 {currentContent.followUp}
+              {/* Text column */}
+              <div className="flex-1 min-w-0">
+                <AnimatePresence mode="wait">
+                  {loading ? (
+                    <motion.div
+                      key="loading"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="flex items-center justify-center gap-3 text-muted-foreground h-full"
+                    >
+                      <Loader2 size={20} className="animate-spin" />
+                      <span className="text-lg">Exploring deeper…</span>
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key={contentKey}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.25, ease: "easeOut" }}
+                      className="space-y-4"
+                    >
+                      <p className="text-base md:text-xl leading-relaxed text-foreground/90">
+                        {currentContent?.text}
+                      </p>
+                      {currentView === 'original' && source && (
+                        <div className="flex items-center gap-2 rounded-lg bg-foreground/5 px-3 py-2 md:px-4 md:py-2.5 text-xs md:text-sm text-muted-foreground">
+                          <span>{source.type === "youtube" ? "▶" : source.type === "article" ? "📄" : "🎙"}</span>
+                          <span className="truncate">{source.title}</span>
+                          <span className="text-foreground/20">·</span>
+                          <span>{source.publisher}</span>
+                        </div>
+                      )}
+                      {currentContent?.followUp && (
+                        <p className="text-base text-primary/60 italic mt-2">💡 {currentContent.followUp}</p>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          ) : (
+            /* No image — standard stacked layout */
+            <AnimatePresence mode="wait">
+              {loading ? (
+                <motion.div
+                  key="loading"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="flex items-center justify-center gap-3 text-muted-foreground"
+                >
+                  <Loader2 size={20} className="animate-spin" />
+                  <span className="text-lg">Exploring deeper…</span>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key={contentKey}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.25, ease: "easeOut" }}
+                  className="space-y-4"
+                >
+                  <p className="text-base md:text-xl leading-relaxed text-foreground/90">
+                    {currentContent?.text}
                   </p>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+                  {currentView === 'original' && source && (
+                    <div className="flex items-center gap-2 rounded-lg bg-foreground/5 px-3 py-2 md:px-4 md:py-2.5 text-xs md:text-sm text-muted-foreground">
+                      <span>{source.type === "youtube" ? "▶" : source.type === "article" ? "📄" : "🎙"}</span>
+                      <span className="truncate">{source.title}</span>
+                      <span className="text-foreground/20">·</span>
+                      <span>{source.publisher}</span>
+                    </div>
+                  )}
+                  {currentContent?.followUp && (
+                    <p className="text-base text-primary/60 italic mt-2">💡 {currentContent.followUp}</p>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          )}
         </div>
 
         {/* Action buttons — horizontal row, D-pad navigable */}
