@@ -30,6 +30,9 @@ export default function Connect() {
   const [lastFmSyncing, setLastFmSyncing] = useState(false);
   const [spotifyConnecting, setSpotifyConnecting] = useState(false);
   const [googleSigningIn, setGoogleSigningIn] = useState(false);
+  const [youtubeImporting, setYoutubeImporting] = useState(false);
+  const [googleUser, setGoogleUser] = useState<{ name: string; email: string } | null>(null);
+  const [youtubeTopArtists, setYoutubeTopArtists] = useState<string[] | null>(null);
   const [pendingSpotifyArtists, setPendingSpotifyArtists] = useState<string[] | null>(null);
   const [pendingSpotifyTracks, setPendingSpotifyTracks] = useState<string[] | null>(null);
 
@@ -52,11 +55,30 @@ export default function Connect() {
     }
   }, []);
 
-  // Listen for Google OAuth callback
+  // After Google sign-in, fetch YouTube taste data using provider_token
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_IN") {
-        // Already on connect page, just advance past google step if needed
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_IN" && session?.provider_token) {
+        const meta = session.user?.user_metadata;
+        setGoogleUser({
+          name: meta?.full_name ?? meta?.name ?? "Google User",
+          email: session.user?.email ?? "",
+        });
+
+        // Fetch YouTube taste in background
+        setYoutubeImporting(true);
+        try {
+          const { data } = await supabase.functions.invoke("youtube-taste", {
+            body: { provider_token: session.provider_token },
+          });
+          if (data?.topArtists?.length > 0) {
+            setYoutubeTopArtists(data.topArtists);
+          }
+        } catch (e) {
+          console.warn("YouTube taste import failed (non-blocking):", e);
+        } finally {
+          setYoutubeImporting(false);
+        }
       }
     });
     return () => subscription.unsubscribe();
@@ -106,6 +128,10 @@ export default function Connect() {
     try {
       await lovable.auth.signInWithOAuth("google", {
         redirect_uri: window.location.origin,
+        extraParams: {
+          scope: "openid email profile https://www.googleapis.com/auth/youtube.readonly",
+          access_type: "offline",
+        },
       });
     } catch (e) {
       console.error("Google sign-in error:", e);
@@ -117,7 +143,7 @@ export default function Connect() {
     const profile: UserProfile = {
       streamingService: platform as Platform,
       lastFmUsername: lastFm.trim() || undefined,
-      spotifyTopArtists: pendingSpotifyArtists || undefined,
+      spotifyTopArtists: pendingSpotifyArtists ?? youtubeTopArtists ?? undefined,
       spotifyTopTracks: pendingSpotifyTracks || undefined,
       calculatedTier: t,
     };
@@ -206,26 +232,57 @@ export default function Connect() {
                   </div>
 
                   <div className="flex flex-col gap-3 w-full">
-                    <button
-                      onClick={handleGoogleSignIn}
-                      disabled={googleSigningIn}
-                      className="flex items-center gap-3 w-full rounded-2xl border border-foreground/15 bg-foreground/5 px-5 py-4 font-semibold text-foreground transition-all hover:bg-foreground/10 hover:border-foreground/30 disabled:opacity-60"
-                    >
-                      {googleSigningIn ? (
-                        <svg className="animate-spin h-6 w-6 text-muted-foreground" viewBox="0 0 24 24" fill="none">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                        </svg>
-                      ) : (
+                    {googleUser ? (
+                      <div className="flex items-center gap-3 w-full rounded-2xl border border-blue-500/40 bg-foreground/5 px-5 py-4 ring-1 ring-blue-500/20">
                         <svg viewBox="0 0 24 24" className="h-6 w-6 flex-shrink-0" xmlns="http://www.w3.org/2000/svg">
                           <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
                           <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
                           <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
                           <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
                         </svg>
-                      )}
-                      <span className="flex-1">{googleSigningIn ? "Signing in…" : "Continue with Google"}</span>
-                    </button>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-foreground">{googleUser.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {youtubeImporting ? (
+                              "Importing YouTube taste…"
+                            ) : youtubeTopArtists?.length ? (
+                              `${youtubeTopArtists.length} artists found · ${youtubeTopArtists.slice(0, 3).join(", ")}…`
+                            ) : (
+                              googleUser.email
+                            )}
+                          </p>
+                        </div>
+                        {youtubeImporting ? (
+                          <svg className="animate-spin h-4 w-4 text-blue-400 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                          </svg>
+                        ) : (
+                          <span className="text-xs font-semibold text-blue-400 flex-shrink-0">✓</span>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        onClick={handleGoogleSignIn}
+                        disabled={googleSigningIn}
+                        className="flex items-center gap-3 w-full rounded-2xl border border-foreground/15 bg-foreground/5 px-5 py-4 font-semibold text-foreground transition-all hover:bg-foreground/10 hover:border-foreground/30 disabled:opacity-60"
+                      >
+                        {googleSigningIn ? (
+                          <svg className="animate-spin h-6 w-6 text-muted-foreground" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                          </svg>
+                        ) : (
+                          <svg viewBox="0 0 24 24" className="h-6 w-6 flex-shrink-0" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                          </svg>
+                        )}
+                        <span className="flex-1">{googleSigningIn ? "Signing in…" : "Continue with Google"}</span>
+                      </button>
+                    )}
 
                     <div className="flex items-center gap-3">
                       <div className="flex-1 h-px bg-foreground/10" />
