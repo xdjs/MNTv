@@ -19,11 +19,17 @@ async function loadProfileFromDB(): Promise<UserProfile | null> {
 
   if (!data) return null;
 
+  // Taste arrays (spotify/youtube) are NOT stored in DB — localStorage only.
+  // Restore them from localStorage so the in-memory profile stays intact.
+  const local = (() => {
+    try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || "{}"); } catch { return {}; }
+  })();
+
   return {
     streamingService: (data.streaming_service as UserProfile["streamingService"]) || "",
     lastFmUsername: data.last_fm_username || undefined,
-    spotifyTopArtists: (data.spotify_top_artists as string[]) || undefined,
-    spotifyTopTracks: (data.spotify_top_tracks as string[]) || undefined,
+    spotifyTopArtists: local.spotifyTopArtists || undefined,
+    spotifyTopTracks: local.spotifyTopTracks || undefined,
     calculatedTier: (data.tier as UserProfile["calculatedTier"]) || "casual",
   };
 }
@@ -32,15 +38,13 @@ async function saveProfileToDB(p: UserProfile): Promise<void> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) return;
 
+  // Only persist identity/preference fields — taste arrays stay in localStorage.
   await supabase.from("profiles").upsert(
     {
       user_id: session.user.id,
       tier: p.calculatedTier,
       streaming_service: p.streamingService,
       last_fm_username: p.lastFmUsername || null,
-      spotify_top_artists: p.spotifyTopArtists || [],
-      spotify_top_tracks: p.spotifyTopTracks || [],
-      youtube_top_artists: [],
     },
     { onConflict: "user_id" }
   );

@@ -238,11 +238,8 @@ All edge functions use `Access-Control-Allow-Origin: *`. This is acceptable beca
 
 ## 10. Planned / Known Technical Debt
 
-### Data minimization (next improvement)
-`profiles.spotify_top_artists`, `spotify_top_tracks`, and `youtube_top_artists` are currently persisted in the DB. The intent is to move toward **not storing third-party taste data in our DB** at all — instead fetching fresh from Spotify/YouTube on each session (similar to how Last.fm is handled). This would:
-- Eliminate stale data concerns
-- Reduce PII stored on our end
-- Keep profiles truly minimal (just: `user_id`, `streaming_service`, `last_fm_username`, `tier`)
+### ✅ Data minimization (implemented 2026-03-04)
+`profiles.spotify_top_artists`, `spotify_top_tracks`, and `youtube_top_artists` have been **removed from the DB**. Taste arrays are now held in `localStorage` only (session-scoped). When a signed-in user's profile is loaded from the DB, taste arrays are restored from their local copy. The DB profile only contains: `user_id`, `streaming_service`, `last_fm_username`, `tier`.
 
 ### Missing profiles DELETE policy
 Users cannot delete their own profile row (no RLS policy). Should be added when a "Delete Account" flow is built.
