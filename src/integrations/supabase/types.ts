@@ -116,6 +116,45 @@ export type Database = {
         }
         Relationships: []
       }
+      profiles: {
+        Row: {
+          created_at: string
+          id: string
+          last_fm_username: string | null
+          spotify_top_artists: Json | null
+          spotify_top_tracks: Json | null
+          streaming_service: string | null
+          tier: string
+          updated_at: string
+          user_id: string
+          youtube_top_artists: Json | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_fm_username?: string | null
+          spotify_top_artists?: Json | null
+          spotify_top_tracks?: Json | null
+          streaming_service?: string | null
+          tier?: string
+          updated_at?: string
+          user_id: string
+          youtube_top_artists?: Json | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_fm_username?: string | null
+          spotify_top_artists?: Json | null
+          spotify_top_tracks?: Json | null
+          streaming_service?: string | null
+          tier?: string
+          updated_at?: string
+          user_id?: string
+          youtube_top_artists?: Json | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

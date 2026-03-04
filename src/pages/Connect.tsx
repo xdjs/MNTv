@@ -20,6 +20,8 @@ const slideVariants = {
   exit: (dir: number) => ({ x: dir > 0 ? -60 : 60, opacity: 0 }),
 };
 
+type AuthMode = "choose" | "signup" | "login";
+
 export default function Connect() {
   const navigate = useNavigate();
   const { saveProfile } = useUserProfile();
@@ -35,6 +37,14 @@ export default function Connect() {
   const [youtubeTopArtists, setYoutubeTopArtists] = useState<string[] | null>(null);
   const [pendingSpotifyArtists, setPendingSpotifyArtists] = useState<string[] | null>(null);
   const [pendingSpotifyTracks, setPendingSpotifyTracks] = useState<string[] | null>(null);
+
+  // Email auth state
+  const [authMode, setAuthMode] = useState<AuthMode>("choose");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [emailSent, setEmailSent] = useState(false);
 
   // Skip if profile already set
   useEffect(() => {
@@ -123,7 +133,25 @@ export default function Connect() {
     }
   };
 
-  const handleGoogleSignIn = async () => {
+  const handleEmailSignUp = async () => {
+    setAuthError("");
+    setAuthLoading(true);
+    const { error } = await supabase.auth.signUp({ email, password });
+    setAuthLoading(false);
+    if (error) { setAuthError(error.message); return; }
+    setEmailSent(true);
+  };
+
+  const handleEmailLogin = async () => {
+    setAuthError("");
+    setAuthLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setAuthLoading(false);
+    if (error) { setAuthError(error.message); return; }
+    goNext();
+  };
+
+
     setGoogleSigningIn(true);
     try {
       await lovable.auth.signInWithOAuth("google", {
@@ -214,7 +242,7 @@ export default function Connect() {
 
           <div className="w-full overflow-hidden">
             <AnimatePresence mode="wait" custom={direction}>
-              {/* Step 0: Sign in */}
+              {/* Step 0: Sign in / create account */}
               {step === 0 && (
                 <motion.div
                   key="step-0"
@@ -226,14 +254,14 @@ export default function Connect() {
                   transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
                   className="flex flex-col items-center gap-6"
                 >
-                  <div className="text-center">
-                    <h1 className="text-3xl font-black text-foreground tracking-tight">Welcome to MusicNerd</h1>
-                    <p className="mt-2 text-muted-foreground">Sign in to save your profile and unlock personalised insights.</p>
-                  </div>
-
-                  <div className="flex flex-col gap-3 w-full">
-                    {googleUser ? (
-                      <div className="flex items-center gap-3 w-full rounded-2xl border border-blue-500/40 bg-foreground/5 px-5 py-4 ring-1 ring-blue-500/20">
+                  {/* Already signed in via Google */}
+                  {googleUser ? (
+                    <>
+                      <div className="text-center">
+                        <h1 className="text-3xl font-black text-foreground tracking-tight">Welcome back</h1>
+                        <p className="mt-2 text-muted-foreground">Signed in — let's set up your profile.</p>
+                      </div>
+                      <div className="flex items-center gap-3 w-full rounded-2xl border border-primary/40 bg-foreground/5 px-5 py-4 ring-1 ring-primary/20">
                         <svg viewBox="0 0 24 24" className="h-6 w-6 flex-shrink-0" xmlns="http://www.w3.org/2000/svg">
                           <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
                           <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -243,62 +271,124 @@ export default function Connect() {
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-foreground">{googleUser.name}</p>
                           <p className="text-xs text-muted-foreground truncate">
-                            {youtubeImporting ? (
-                              "Importing YouTube taste…"
-                            ) : youtubeTopArtists?.length ? (
-                              `${youtubeTopArtists.length} artists found · ${youtubeTopArtists.slice(0, 3).join(", ")}…`
-                            ) : (
-                              googleUser.email
-                            )}
+                            {youtubeImporting ? "Importing YouTube taste…" : youtubeTopArtists?.length ? `${youtubeTopArtists.length} artists found · ${youtubeTopArtists.slice(0, 3).join(", ")}…` : googleUser.email}
                           </p>
                         </div>
                         {youtubeImporting ? (
-                          <svg className="animate-spin h-4 w-4 text-blue-400 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                          <svg className="animate-spin h-4 w-4 text-primary flex-shrink-0" viewBox="0 0 24 24" fill="none">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
                           </svg>
-                        ) : (
-                          <span className="text-xs font-semibold text-blue-400 flex-shrink-0">✓</span>
-                        )}
+                        ) : <span className="text-xs font-semibold text-primary flex-shrink-0">✓</span>}
                       </div>
-                    ) : (
-                      <button
-                        onClick={handleGoogleSignIn}
-                        disabled={googleSigningIn}
-                        className="flex items-center gap-3 w-full rounded-2xl border border-foreground/15 bg-foreground/5 px-5 py-4 font-semibold text-foreground transition-all hover:bg-foreground/10 hover:border-foreground/30 disabled:opacity-60"
-                      >
-                        {googleSigningIn ? (
-                          <svg className="animate-spin h-6 w-6 text-muted-foreground" viewBox="0 0 24 24" fill="none">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                          </svg>
-                        ) : (
-                          <svg viewBox="0 0 24 24" className="h-6 w-6 flex-shrink-0" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                          </svg>
-                        )}
-                        <span className="flex-1">{googleSigningIn ? "Signing in…" : "Continue with Google"}</span>
+                      <button onClick={() => goNext()} className="w-full rounded-2xl bg-primary px-5 py-4 font-semibold text-primary-foreground hover:opacity-90 transition-opacity">
+                        Continue →
                       </button>
-                    )}
+                    </>
+                  ) : authMode === "choose" ? (
+                    <>
+                      <div className="text-center">
+                        <h1 className="text-3xl font-black text-foreground tracking-tight">Create your account</h1>
+                        <p className="mt-2 text-muted-foreground">Save your profile and access it from any device.</p>
+                      </div>
+                      <div className="flex flex-col gap-3 w-full">
+                        {/* Google */}
+                        <button
+                          onClick={handleGoogleSignIn}
+                          disabled={googleSigningIn}
+                          className="flex items-center gap-3 w-full rounded-2xl border border-foreground/15 bg-foreground/5 px-5 py-4 font-semibold text-foreground transition-all hover:bg-foreground/10 hover:border-foreground/30 disabled:opacity-60"
+                        >
+                          {googleSigningIn ? (
+                            <svg className="animate-spin h-6 w-6 text-muted-foreground" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+                          ) : (
+                            <svg viewBox="0 0 24 24" className="h-6 w-6 flex-shrink-0" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                            </svg>
+                          )}
+                          <span className="flex-1">{googleSigningIn ? "Signing in…" : "Continue with Google"}</span>
+                        </button>
 
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 h-px bg-foreground/10" />
-                      <span className="text-xs text-muted-foreground">or</span>
-                      <div className="flex-1 h-px bg-foreground/10" />
-                    </div>
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1 h-px bg-foreground/10" />
+                          <span className="text-xs text-muted-foreground">or</span>
+                          <div className="flex-1 h-px bg-foreground/10" />
+                        </div>
 
-                    <button
-                      onClick={() => goNext()}
-                      className="w-full rounded-2xl border border-foreground/10 bg-foreground/5 px-5 py-4 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      Continue without signing in →
-                    </button>
-                  </div>
+                        {/* Email options */}
+                        <button
+                          onClick={() => setAuthMode("signup")}
+                          className="w-full rounded-2xl bg-primary px-5 py-4 font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
+                        >
+                          Sign up with email
+                        </button>
+                        <button
+                          onClick={() => setAuthMode("login")}
+                          className="w-full rounded-2xl border border-foreground/15 bg-foreground/5 px-5 py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          Already have an account? Log in
+                        </button>
+                        <button
+                          onClick={() => goNext()}
+                          className="text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+                        >
+                          Continue without an account →
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-center">
+                        <h1 className="text-3xl font-black text-foreground tracking-tight">
+                          {authMode === "signup" ? "Create account" : "Welcome back"}
+                        </h1>
+                        <p className="mt-2 text-muted-foreground">
+                          {authMode === "signup" ? "Enter your email and a password." : "Log in to your MusicNerd account."}
+                        </p>
+                      </div>
+
+                      {emailSent ? (
+                        <div className="w-full rounded-2xl border border-primary/30 bg-primary/10 px-5 py-4 text-center">
+                          <p className="font-semibold text-foreground">Check your email ✉️</p>
+                          <p className="text-sm text-muted-foreground mt-1">Click the confirmation link to verify your account, then come back and log in.</p>
+                          <button onClick={() => { setEmailSent(false); setAuthMode("login"); }} className="mt-3 text-sm text-primary hover:underline">Log in →</button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-3 w-full">
+                          <input
+                            type="email"
+                            placeholder="Email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            className="w-full rounded-2xl border border-foreground/15 bg-foreground/5 px-5 py-4 text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/60 transition-colors"
+                          />
+                          <input
+                            type="password"
+                            placeholder="Password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && (authMode === "signup" ? handleEmailSignUp() : handleEmailLogin())}
+                            className="w-full rounded-2xl border border-foreground/15 bg-foreground/5 px-5 py-4 text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/60 transition-colors"
+                          />
+                          {authError && <p className="text-sm text-destructive px-1">{authError}</p>}
+                          <button
+                            onClick={authMode === "signup" ? handleEmailSignUp : handleEmailLogin}
+                            disabled={authLoading || !email || !password}
+                            className="w-full rounded-2xl bg-primary px-5 py-4 font-semibold text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
+                          >
+                            {authLoading && <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>}
+                            {authMode === "signup" ? "Create account" : "Log in"}
+                          </button>
+                          <button onClick={() => { setAuthMode("choose"); setAuthError(""); }} className="text-xs text-muted-foreground hover:text-foreground transition-colors">← Back</button>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </motion.div>
               )}
+
 
               {/* Step 1: Platform */}
               {step === 1 && (
