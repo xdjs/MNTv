@@ -1,50 +1,63 @@
 import { useState, useCallback, useEffect } from "react";
 import type { UserProfile } from "@/mock/types";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 const PROFILE_KEY = "musicnerd_profile";
-const LISTENS_KEY = "musicnerd_listens";
 
 // ── DB profile sync ───────────────────────────────────────────────────────────
+// Accept userId as a param — callers obtain it from AuthContext (no extra getSession() calls).
 
-async function loadProfileFromDB(): Promise<UserProfile | null> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user) return null;
-
+async function loadProfileFromDB(userId: string): Promise<UserProfile | null> {
   const { data } = await supabase
     .from("profiles")
     .select("*")
-    .eq("user_id", session.user.id)
+    .eq("user_id", userId)
     .maybeSingle();
 
   if (!data) return null;
 
-  // Taste arrays (spotify/youtube) are NOT stored in DB — localStorage only.
-  // Restore them from localStorage so the in-memory profile stays intact.
-  const local = (() => {
-    try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || "{}"); } catch { return {}; }
-  })();
+  // Parse spotify_taste JSONB column into typed arrays.
+  const taste = data.spotify_taste as {
+    topArtists?: string[];
+    topTracks?: string[];
+    artistImages?: Record<string, string>;
+    artistIds?: Record<string, string>;
+    trackImages?: { title: string; artist: string; imageUrl: string }[];
+  } | null;
 
   return {
     streamingService: (data.streaming_service as UserProfile["streamingService"]) || "",
     lastFmUsername: data.last_fm_username || undefined,
-    spotifyTopArtists: local.spotifyTopArtists || undefined,
-    spotifyTopTracks: local.spotifyTopTracks || undefined,
+    spotifyTopArtists: taste?.topArtists ?? undefined,
+    spotifyTopTracks: taste?.topTracks ?? undefined,
+    spotifyArtistImages: taste?.artistImages ?? undefined,
+    spotifyArtistIds: taste?.artistIds ?? undefined,
+    spotifyTrackImages: taste?.trackImages ?? undefined,
     calculatedTier: (data.tier as UserProfile["calculatedTier"]) || "casual",
   };
 }
 
-async function saveProfileToDB(p: UserProfile): Promise<void> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user) return;
+async function saveProfileToDB(p: UserProfile, userId: string): Promise<void> {
+  // Persist all profile fields including Spotify taste arrays and images.
+  const spotify_taste =
+    p.spotifyTopArtists || p.spotifyTopTracks
+      ? {
+          topArtists: p.spotifyTopArtists ?? [],
+          topTracks: p.spotifyTopTracks ?? [],
+          artistImages: p.spotifyArtistImages ?? {},
+          artistIds: p.spotifyArtistIds ?? {},
+          trackImages: p.spotifyTrackImages ?? [],
+        }
+      : null;
 
-  // Only persist identity/preference fields — taste arrays stay in localStorage.
   await supabase.from("profiles").upsert(
     {
-      user_id: session.user.id,
+      user_id: userId,
       tier: p.calculatedTier,
       streaming_service: p.streamingService,
       last_fm_username: p.lastFmUsername || null,
+      spotify_taste,
     },
     { onConflict: "user_id" }
   );
@@ -53,6 +66,8 @@ async function saveProfileToDB(p: UserProfile): Promise<void> {
 // ── Profile hook ──────────────────────────────────────────────────────────────
 
 export function useUserProfile() {
+  const { user } = useAuth();
+
   const [profile, setProfileState] = useState<UserProfile | null>(() => {
     try {
       const raw = localStorage.getItem(PROFILE_KEY);
@@ -62,21 +77,50 @@ export function useUserProfile() {
     }
   });
 
-  // On mount, try to load from DB (overrides localStorage if signed in)
+  // Re-load from DB whenever the signed-in user changes.
+  // Local (localStorage) data is treated as fresher than DB — it may contain a profile
+  // that was just saved but whose async DB write hasn't landed yet.
   useEffect(() => {
-    loadProfileFromDB().then((dbProfile) => {
-      if (dbProfile) {
-        localStorage.setItem(PROFILE_KEY, JSON.stringify(dbProfile));
-        setProfileState(dbProfile);
+    if (!user?.id) return;
+    loadProfileFromDB(user.id).then((dbProfile) => {
+      if (!dbProfile) return;
+      const local = (() => {
+        try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || "null"); } catch { return null; }
+      })() as UserProfile | null;
+
+      // If local already has Spotify taste data, it's fresher — don't overwrite it with stale DB
+      if (local?.spotifyTopArtists?.length && local.spotifyArtistImages
+          && Object.keys(local.spotifyArtistImages).length > 0) {
+        // Only pull non-Spotify fields from DB (tier, lastFm) if local is missing them
+        const merged: UserProfile = {
+          ...local,
+          calculatedTier: local.calculatedTier || dbProfile.calculatedTier,
+          lastFmUsername: local.lastFmUsername || dbProfile.lastFmUsername,
+          streamingService: "Spotify",
+        };
+        localStorage.setItem(PROFILE_KEY, JSON.stringify(merged));
+        setProfileState(merged);
+        return;
       }
+
+      // No local Spotify data — use DB profile (e.g. new device sign-in)
+      const merged: UserProfile = {
+        ...dbProfile,
+        streamingService: (dbProfile.spotifyTopArtists?.length ?? 0) > 0 ? "Spotify" : dbProfile.streamingService,
+        spotifyArtistImages: dbProfile.spotifyArtistImages ?? local?.spotifyArtistImages,
+        spotifyArtistIds: dbProfile.spotifyArtistIds ?? local?.spotifyArtistIds,
+        spotifyTrackImages: dbProfile.spotifyTrackImages ?? local?.spotifyTrackImages,
+      };
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(merged));
+      setProfileState(merged);
     });
-  }, []);
+  }, [user?.id]);
 
   const saveProfile = useCallback(async (p: UserProfile) => {
     localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
     setProfileState(p);
-    await saveProfileToDB(p); // no-op if not signed in
-  }, []);
+    if (user?.id) await saveProfileToDB(p, user.id);
+  }, [user?.id]);
 
   const clearProfile = useCallback(() => {
     localStorage.removeItem(PROFILE_KEY);
@@ -95,48 +139,15 @@ export function getStoredProfile(): UserProfile | null {
   }
 }
 
-// ── Per-track listen counts ───────────────────────────────────────────────────
-
-function getListens(): Record<string, number> {
-  try {
-    const raw = localStorage.getItem(LISTENS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-export function useListenCount(trackId: string) {
-  const [count, setCount] = useState<number>(() => {
-    return getListens()[trackId] ?? 1;
-  });
-
-  const increment = useCallback(() => {
-    const listens = getListens();
-    const next = (listens[trackId] ?? 1) + 1;
-    listens[trackId] = next;
-    localStorage.setItem(LISTENS_KEY, JSON.stringify(listens));
-    setCount(next);
-    return next;
-  }, [trackId]);
-
-  return { count, increment };
-}
-
-export function getListenCount(trackId: string): number {
-  return getListens()[trackId] ?? 1;
-}
-
 // ── Tier helpers ──────────────────────────────────────────────────────────────
 
 export function tierLabel(tier: UserProfile["calculatedTier"]): string {
   return tier === "nerd" ? "Nerd" : tier === "curious" ? "Curious Fan" : "Casual Listener";
 }
 
-export function tierGreeting(tier: UserProfile["calculatedTier"] | undefined): string {
-  if (!tier) return "Good evening";
-  if (tier === "nerd") return "Good evening, Nerd";
-  if (tier === "curious") return "Good evening, Curious Fan";
+export function tierGreeting(tier: UserProfile["calculatedTier"] | undefined, userName?: string): string {
+  const firstName = userName?.trim().split(/\s+/)[0];
+  if (firstName) return `Good evening, ${firstName}`;
   return "Good evening";
 }
 

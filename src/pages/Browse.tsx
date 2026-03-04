@@ -14,13 +14,29 @@ import { useAuth } from "@/contexts/AuthContext";
 export default function Browse() {
   const [searchOpen, setSearchOpen] = useState(false);
   const navigate = useNavigate();
-  const { profile, clearProfile } = useUserProfile();
+  const { profile, saveProfile, clearProfile } = useUserProfile();
   const tier = profile?.calculatedTier;
+
+  const cycleTier = useCallback(() => {
+    if (!profile) return;
+    const tiers: Array<"casual" | "curious" | "nerd"> = ["casual", "curious", "nerd"];
+    const currentIdx = tiers.indexOf(tier || "casual");
+    const nextTier = tiers[(currentIdx + 1) % tiers.length];
+    saveProfile({ ...profile, calculatedTier: nextTier });
+  }, [profile, tier, saveProfile]);
 
   useTierAccent();
 
   const { rows: allRows } = usePersonalizedCatalog(profile);
-  const { isGuest } = useAuth();
+  const { user, isGuest } = useAuth();
+  const userName = user?.user_metadata?.full_name || user?.user_metadata?.name || "";
+
+  const tierLogoGlow: Record<string, string> = {
+    casual: "#22c55e",
+    curious: "#3b82f6",
+    nerd: "#ec4899",
+  };
+
 
   const handleSignOut = async () => {
     // Sign out of Supabase (best-effort — always clear local state afterward)
@@ -30,7 +46,8 @@ export default function Browse() {
       console.warn("Supabase sign-out error (ignored):", err);
     } finally {
       clearProfile();
-      navigate("/", { replace: true });
+      localStorage.removeItem("spotify_playback_token");
+      navigate("/connect", { replace: true });
     }
   };
 
@@ -75,9 +92,13 @@ export default function Browse() {
       <div className="min-h-screen bg-background">
         {/* Header */}
         <header className="flex items-center justify-between px-10 pt-8 pb-6">
-          <div className={`rounded-full transition-all ${rowIndex === -1 && colIndex === 0 ? focusGlow + " scale-110" : ""}`}>
-            <MusicNerdLogo size={36} glow className="opacity-80" />
-          </div>
+          <button
+            onClick={cycleTier}
+            title={`Switch tier (currently ${tier || "casual"})`}
+            className={`rounded-full transition-all ${rowIndex === -1 && colIndex === 0 ? focusGlow + " scale-110" : ""}`}
+          >
+            <MusicNerdLogo size={36} glow className="opacity-80" glowColor={tierLogoGlow[tier || "casual"]} />
+          </button>
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSearchOpen(true)}
@@ -105,7 +126,7 @@ export default function Browse() {
               className="text-4xl font-black text-foreground tracking-tight md:text-5xl"
               style={{ fontFamily: "'Nunito Sans', sans-serif" }}
             >
-              {tierGreeting(tier)}
+              {tierGreeting(tier, userName)}
             </h1>
             {tier && (
               <span className={`text-xs font-bold px-3 py-1 rounded-full ${badgeColor}`}>
@@ -114,9 +135,11 @@ export default function Browse() {
             )}
           </div>
           <p className="mt-1 text-muted-foreground text-lg">
-            {profile?.streamingService
-              ? `Listening via ${profile.streamingService}`
-              : "What do you want to listen to?"}
+            {profile?.spotifyTopArtists?.length
+              ? "Listening via Spotify"
+              : profile?.streamingService
+                ? `Listening via ${profile.streamingService}`
+                : "What do you want to listen to?"}
           </p>
         </div>
 
