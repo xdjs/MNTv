@@ -87,5 +87,8 @@ export interface DeepDiveResponse {
 export interface UserProfile {
   streamingService: "Spotify" | "YouTube Music" | "Apple Music" | "";
   lastFmUsername?: string;
+  // Spotify taste profile — populated after OAuth, stored as serialised top artists/tracks
+  spotifyTopArtists?: string[];   // e.g. ["Radiohead", "Björk", "Portishead"]
+  spotifyTopTracks?: string[];    // e.g. ["Karma Police", "Hyperballad"]
   calculatedTier: "casual" | "curious" | "nerd";
 }
