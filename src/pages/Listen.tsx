@@ -572,14 +572,17 @@ export default function Listen() {
           />
         </div>
 
-        {/* Dev panel */}
+        {/* Dev panel — development only */}
+        {import.meta.env.DEV && (
         <button
           onClick={() => setDevOpen((o) => !o)}
           className="fixed bottom-4 right-4 z-50 rounded-lg bg-foreground/5 px-3 py-1.5 text-xs text-muted-foreground hover:bg-foreground/10 transition-colors"
         >
           DEV
         </button>
+        )}
 
+        {import.meta.env.DEV && (
         <AnimatePresence>
           {devOpen && (
             <DevPanel
@@ -598,6 +601,7 @@ export default function Listen() {
                 setRegenerateKey((k) => k + 1);
               }}
               onResetAllHistory={async () => {
+                if (!window.confirm("Delete ALL listening history? This cannot be undone.")) return;
                 await supabase.from("nugget_history" as any).delete().neq("track_key", "");
                 setRegenerateKey((k) => k + 1);
               }}
@@ -613,6 +617,7 @@ export default function Listen() {
             />
           )}
         </AnimatePresence>
+        )}
 
         {/* Overlays */}
         <AnimatePresence>
