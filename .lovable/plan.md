@@ -1,61 +1,151 @@
 
+## Current State
 
-## Problem
+The backend RAG pipeline is already partially built:
+- `generate-nuggets/index.ts` — YouTube search + Gemini grounding + transcript extraction, returns `{headline, text, kind, source}` per nugget
+- `generate-companion/index.ts` — Gemini + Google Search, returns `{artistSummary, trackStory, nuggets[], externalLinks[]}`, cached in `companion_cache` by `track_key + listen_count_tier`
+- Both functions use `listenCount` to scale depth (1=intro, 2=deeper, 3=deep cuts)
 
-The visual nugget card uses `object-contain` which leaves ugly black/empty space around the image (visible in the screenshot — the Roger Waters photo floats in a dark box with dead space on the sides). The card has a fixed `maxHeight: 200px` constraint that doesn't adapt to the image's natural proportions.
+**What's missing**: tier awareness, the new `CompanionNugget` schema with `category`/`listenUnlockLevel`/`sourceName`/`sourceUrl`, the `UserProfile` system, updated Onboarding, tier-aware Browse, and the new Companion UI layout.
 
-## Solution
+---
 
-Redesign the visual nugget layout to be image-forward and adaptive:
+## The RAG-Aware Architecture
 
-1. **Remove fixed maxHeight and object-contain** — these cause the awkward floating image effect
-2. **Use `object-cover` with a taller, constrained container** — fill the width of the card, crop minimally
-3. **Use `object-position: top`** — for portrait photos of artists, prioritize showing the face/head area rather than centering (which often cuts heads off)
-4. **Add a gradient overlay at the bottom** — fade the image into the caption text, creating a cinematic look instead of a harsh image-then-text boundary
-5. **Position the caption over the gradient** — overlay the caption text on the bottom of the image with a text-shadow for legibility
+The backend already does retrieval (YouTube + Google Search grounding) and synthesis (Gemini as editor). What we're adding:
 
-### Changes in `src/components/NuggetCard.tsx` (visual-only block, ~lines 137–155):
+- **Tier routing**: `casual` → Gemini Flash + 3 nuggets, `curious` → Gemini Flash + 6 nuggets, `nerd` → Gemini Pro + 9 nuggets + Reddit/deep-cut angle
+- **Strict schema output**: backend returns `category: 'track'|'history'|'explore'`, `listenUnlockLevel`, `sourceName`, `sourceUrl` (direct links, not Google search fallbacks)
+- **Last.fm context**: if username provided, it's passed to the prompt for personalization
 
-Replace the current visual layout:
-```tsx
-{/* ── Visual-only layout: image + caption ── */}
-{isVisual ? (
-  <>
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1, transition: { delay: 0.4, duration: 0.4, ease: [0.22, 1, 0.36, 1] } }}
-      className="relative overflow-hidden rounded-lg"
-    >
-      <img
-        src={nugget.imageUrl}
-        alt={nugget.imageCaption || nugget.headline || ""}
-        className="w-full rounded-lg object-cover object-top"
-        style={{ maxHeight: "260px", minHeight: "140px" }}
-        onError={(e) => {
-          (e.target as HTMLImageElement).style.display = "none";
-        }}
-      />
-      {/* Gradient overlay for caption legibility */}
-      <div className="absolute inset-x-0 bottom-0 h-16 rounded-b-lg bg-gradient-to-t from-black/70 to-transparent" />
-      {/* Caption overlaid on gradient */}
-      <motion.p
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1, transition: { delay: 0.55, duration: 0.3 } }}
-        className="absolute bottom-2 left-3 right-3 text-sm text-white/90 leading-snug drop-shadow-lg"
-      >
-        {nugget.imageCaption || nugget.headline}
-      </motion.p>
-    </motion.div>
-  </>
-) : ( ... )}
+---
+
+## Files to Change
+
+### 1. `src/mock/types.ts`
+Add alongside existing types:
+```ts
+export interface CompanionNugget {
+  id: string;
+  timestamp: number;
+  text: string;
+  headline?: string;
+  imageUrl?: string;
+  imageCaption?: string;
+  sourceName: string;
+  sourceUrl: string;
+  category: 'track' | 'history' | 'explore';
+  listenUnlockLevel: number;
+}
+export interface DeepDiveResponse {
+  text: string;
+  followUp: string;
+  source: { publisher: string; title: string; url: string; }
+}
+export interface UserProfile {
+  streamingService: 'Spotify' | 'YouTube Music' | 'Apple Music' | '';
+  lastFmUsername?: string;
+  calculatedTier: 'casual' | 'curious' | 'nerd';
+}
 ```
 
-### Key differences from current code:
-- **`object-cover` + `object-top`** instead of `object-contain` — fills the card width, crops from the bottom (preserving faces)
-- **`maxHeight: 260px`, `minHeight: 140px`** — adapts to image aspect ratio within a range
-- **Removed `bg-black/20`** wrapper background — no more visible dead space
-- **Gradient overlay + overlaid caption** — cinematic look, caption reads over the image bottom edge
-- **Removed separate caption `<p>` below image** — it's now part of the image container
+### 2. `src/hooks/useMusicNerdState.ts` (NEW)
+- `useUserProfile()` — read/write `UserProfile` from `localStorage('musicnerd_profile')`
+- `useListenCount(trackId)` — per-track count from `localStorage('musicnerd_listens')`
+- `incrementListenCount(trackId)` 
 
-This creates a polished, TV-ready visual card where the image fills edge-to-edge and the caption integrates naturally.
+### 3. `src/pages/Onboarding.tsx` — 3-step flow
+- Step 1: Platform selection (Spotify / YouTube Music / Apple Music) — button group with logos
+- Step 2: Last.fm username — optional text input with Skip
+- Step 3: Tier selection — three large colored cards:
+  - Casual Listener (green) — "Just here for the vibes"
+  - Curious Fan (blue) — "I like knowing the backstory"
+  - Hardcore Nerd (pink) — "Give me every detail"
+- On complete: save `UserProfile` to localStorage → navigate `/connect`
+- If profile already exists in localStorage → skip to `/browse` immediately
+- `framer-motion AnimatePresence` slide transitions between steps
 
+### 4. `src/pages/Browse.tsx` — Tier-aware UI
+- Read profile from `useMusicNerdState`
+- Personalized greeting: `"Good evening, Nerd"` / `"Good evening, Curious Fan"` / `"Good evening"`
+- Small tier badge next to greeting: colored pill (`● Nerd Mode` / `● Curious` / `● Casual`)
+- Tier glow on the hero greeting block (same inset shadow system)
+- Row ordering by tier:
+  - Casual: standard (Jump Back In, Artists, Albums, genres)
+  - Curious: adds a "Dig Deeper" row (albums sorted differently, labeled as hidden gems)
+  - Nerd: genre rows first, then artists, then "Deep Cuts" row
+
+### 5. `supabase/functions/generate-companion/index.ts` — Tier-aware RAG
+Update to:
+- Accept `tier: 'casual' | 'curious' | 'nerd'` and `lastFmUsername?: string`
+- Route to different Gemini models:
+  - casual/curious → `gemini-2.5-flash`
+  - nerd → `gemini-2.5-pro` (richer, deeper output)
+- Adjust nugget count: casual=3, curious=6, nerd=9
+- Output new schema: each nugget gets `category: 'track'|'history'|'explore'`, `listenUnlockLevel: 1|2|3`, `sourceName`, `sourceUrl` (direct verified URL or targeted search)
+- Cache key includes tier: `track_key + listen_count_tier + tier_slug`
+- Include Last.fm context in prompt if `lastFmUsername` provided
+- Depth prompt language adapts per tier:
+  - casual: "accessible, no jargon, feel-good discoveries"
+  - curious: "production details, cultural context, artist history"
+  - nerd: "technical breakdowns, obscure influences, deep fan theory angles, Reddit-level deep cuts"
+
+### 6. `src/pages/Companion.tsx` — New layout
+- Read `UserProfile` from `useMusicNerdState`
+- Pass `tier` + `lastFmUsername` to `generate-companion` edge function
+- Tier-based inset glow on main container:
+  - casual: `shadow-[inset_0_0_50px_rgba(34,197,94,0.15)]`
+  - curious: `shadow-[inset_0_0_50px_rgba(59,130,246,0.15)]`
+  - nerd: `shadow-[inset_0_0_50px_rgba(236,72,153,0.15)]`
+- Three stacked sections: "The Track", "History", "Explore Next"
+- Each section filters `CompanionNugget[]` by `category` + `listenUnlockLevel <= currentListenCount`, sorted by `timestamp` descending
+- Show locked indicator when higher-level nuggets exist but aren't unlocked yet: "Listen again to unlock 3 more insights"
+- Replace existing `NuggetCategoryCard` usage with new `CompanionNuggetCard`
+
+### 7. `src/components/companion/CompanionNuggetCard.tsx` (NEW)
+- Props: `nugget: CompanionNugget`, `onDeepDive: (nugget) => void`
+- Image (if present) displayed prominently with caption below
+- Nugget text body
+- "Go Deeper" button → fires `onDeepDive`
+- Pill button: `Source: {sourceName}` → links to `sourceUrl` in `target="_blank"`
+- Glass card styling matching app aesthetic
+
+### 8. `src/App.tsx` — Onboarding guard
+- Check localStorage for `musicnerd_profile` on `/` route
+- If exists, redirect to `/browse` directly
+
+---
+
+## Data Flow (End-to-End)
+
+```text
+User picks tier in Onboarding
+         ↓
+localStorage: { calculatedTier, streamingService, lastFmUsername }
+         ↓
+Companion page reads profile
+         ↓
+Calls generate-companion edge function with { artist, title, listenCount, tier, lastFmUsername }
+         ↓
+Backend: tier routes model choice (Flash vs Pro) + nugget count (3/6/9)
+         ↓
+Gemini generates CompanionNugget[] with category, listenUnlockLevel, sourceName, sourceUrl
+         ↓
+Cached in companion_cache (key: track_key + tier + listen_count_tier)
+         ↓
+Frontend filters by category → 3 sections
+Frontend filters by listenUnlockLevel <= currentListenCount → progressive unlocking
+Frontend sorts by timestamp descending → newest unlock at top
+         ↓
+CompanionNuggetCard shows text + image + Source pill + Go Deeper button
+         ↓
+NuggetDeepDive overlay with DeepDiveResponse + Source pill
+```
+
+---
+
+## Key Decisions
+- **No mock data** — all content from the real Gemini RAG pipeline
+- **Cache key update**: `companion_cache` currently keys on `track_key + listen_count_tier` — we extend to also include `tier` (casual/curious/nerd) so each tier gets its own cached response
+- **Companion cache schema needs a migration** to add a `tier` column, or we encode it into a composite string key like `"radiohead::creep::nerd::1"`
+- **Source URLs**: `generate-companion` currently uses Google Search fallback URLs. We update the prompt to demand real direct URLs and only fall back to search if truly necessary, matching the user's requirement for strict RAG citations
