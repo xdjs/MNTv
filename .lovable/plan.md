@@ -1,151 +1,104 @@
 
-## Current State
+## The Problem
 
-The backend RAG pipeline is already partially built:
-- `generate-nuggets/index.ts` — YouTube search + Gemini grounding + transcript extraction, returns `{headline, text, kind, source}` per nugget
-- `generate-companion/index.ts` — Gemini + Google Search, returns `{artistSummary, trackStory, nuggets[], externalLinks[]}`, cached in `companion_cache` by `track_key + listen_count_tier`
-- Both functions use `listenCount` to scale depth (1=intro, 2=deeper, 3=deep cuts)
+Right now the Last.fm username is just stored in localStorage and passed as a text hint to Gemini. We never actually call the Last.fm API. The user wants real data — but calling the Last.fm API on every single companion load would be wasteful and could run up costs fast.
 
-**What's missing**: tier awareness, the new `CompanionNugget` schema with `category`/`listenUnlockLevel`/`sourceName`/`sourceUrl`, the `UserProfile` system, updated Onboarding, tier-aware Browse, and the new Companion UI layout.
+## The Smart Solution: `lastfm_cache` table + TTL refresh
+
+Instead of calling Last.fm on every listen, we:
+1. Store the fetched Last.fm profile data in a new `lastfm_cache` table in the database
+2. Only refresh it if the cached data is older than **24 hours** (configurable TTL)
+3. The `generate-companion` edge function checks the cache first — if fresh, uses it; if stale/missing, fetches from Last.fm API, stores it, then uses it
+
+This means a user who listens 20 times in a day only makes **1** Last.fm API call, not 20.
 
 ---
 
-## The RAG-Aware Architecture
+## What Last.fm Data to Fetch
 
-The backend already does retrieval (YouTube + Google Search grounding) and synthesis (Gemini as editor). What we're adding:
+The Last.fm API is free (no cost per call, just rate-limited). We'll fetch:
+- `user.getTopArtists` — top 10 artists (period: 1 month) → used to personalize "Explore Next" recommendations
+- `user.getRecentTracks` — last 5 tracks → used to avoid recommending things they just heard
+- `user.getInfo` — playcount, registered date → for the "Nerd" tier badge context
 
-- **Tier routing**: `casual` → Gemini Flash + 3 nuggets, `curious` → Gemini Flash + 6 nuggets, `nerd` → Gemini Pro + 9 nuggets + Reddit/deep-cut angle
-- **Strict schema output**: backend returns `category: 'track'|'history'|'explore'`, `listenUnlockLevel`, `sourceName`, `sourceUrl` (direct links, not Google search fallbacks)
-- **Last.fm context**: if username provided, it's passed to the prompt for personalization
+This gets injected into the Gemini prompt as structured context, not just a username string.
 
 ---
 
 ## Files to Change
 
-### 1. `src/mock/types.ts`
-Add alongside existing types:
-```ts
-export interface CompanionNugget {
-  id: string;
-  timestamp: number;
-  text: string;
-  headline?: string;
-  imageUrl?: string;
-  imageCaption?: string;
-  sourceName: string;
-  sourceUrl: string;
-  category: 'track' | 'history' | 'explore';
-  listenUnlockLevel: number;
-}
-export interface DeepDiveResponse {
-  text: string;
-  followUp: string;
-  source: { publisher: string; title: string; url: string; }
-}
-export interface UserProfile {
-  streamingService: 'Spotify' | 'YouTube Music' | 'Apple Music' | '';
-  lastFmUsername?: string;
-  calculatedTier: 'casual' | 'curious' | 'nerd';
-}
+### 1. Database migration — new `lastfm_cache` table
+```sql
+CREATE TABLE public.lastfm_cache (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  username text NOT NULL UNIQUE,
+  top_artists jsonb NOT NULL DEFAULT '[]',
+  recent_tracks jsonb NOT NULL DEFAULT '[]',
+  user_info jsonb NOT NULL DEFAULT '{}',
+  fetched_at timestamptz NOT NULL DEFAULT now()
+);
+-- RLS: public read/write (no auth on this app)
+ALTER TABLE public.lastfm_cache ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all on lastfm_cache" ON public.lastfm_cache FOR ALL USING (true) WITH CHECK (true);
 ```
 
-### 2. `src/hooks/useMusicNerdState.ts` (NEW)
-- `useUserProfile()` — read/write `UserProfile` from `localStorage('musicnerd_profile')`
-- `useListenCount(trackId)` — per-track count from `localStorage('musicnerd_listens')`
-- `incrementListenCount(trackId)` 
+### 2. New edge function: `supabase/functions/lastfm-sync/index.ts`
+A dedicated function that:
+- Accepts `{ username: string }`
+- Checks `lastfm_cache` for existing row
+- If `fetched_at` < 24h ago → return cached data immediately (no Last.fm API call)
+- If stale or missing → call Last.fm API for `user.getTopArtists`, `user.getRecentTracks`, `user.getInfo`
+- Upsert result into `lastfm_cache`
+- Return the data
 
-### 3. `src/pages/Onboarding.tsx` — 3-step flow
-- Step 1: Platform selection (Spotify / YouTube Music / Apple Music) — button group with logos
-- Step 2: Last.fm username — optional text input with Skip
-- Step 3: Tier selection — three large colored cards:
-  - Casual Listener (green) — "Just here for the vibes"
-  - Curious Fan (blue) — "I like knowing the backstory"
-  - Hardcore Nerd (pink) — "Give me every detail"
-- On complete: save `UserProfile` to localStorage → navigate `/connect`
-- If profile already exists in localStorage → skip to `/browse` immediately
-- `framer-motion AnimatePresence` slide transitions between steps
+This function needs a `LASTFM_API_KEY` secret (Last.fm API keys are free — user will need to create one at last.fm/api/account/create).
 
-### 4. `src/pages/Browse.tsx` — Tier-aware UI
-- Read profile from `useMusicNerdState`
-- Personalized greeting: `"Good evening, Nerd"` / `"Good evening, Curious Fan"` / `"Good evening"`
-- Small tier badge next to greeting: colored pill (`● Nerd Mode` / `● Curious` / `● Casual`)
-- Tier glow on the hero greeting block (same inset shadow system)
-- Row ordering by tier:
-  - Casual: standard (Jump Back In, Artists, Albums, genres)
-  - Curious: adds a "Dig Deeper" row (albums sorted differently, labeled as hidden gems)
-  - Nerd: genre rows first, then artists, then "Deep Cuts" row
+### 3. Update `supabase/functions/generate-companion/index.ts`
+- If `lastFmUsername` is provided, call the `lastfm-sync` function internally (via supabase functions invoke, or direct HTTP to the same project)
+- Inject structured Last.fm context into the Gemini prompt:
+```
+User's Last.fm top artists this month: Radiohead, Aphex Twin, Portishead...
+Recently played: [track list]
+Total scrobbles: 45,230
+```
+Instead of the current weak: `"Last.fm user: {username} — personalize recommendations subtly"`
 
-### 5. `supabase/functions/generate-companion/index.ts` — Tier-aware RAG
-Update to:
-- Accept `tier: 'casual' | 'curious' | 'nerd'` and `lastFmUsername?: string`
-- Route to different Gemini models:
-  - casual/curious → `gemini-2.5-flash`
-  - nerd → `gemini-2.5-pro` (richer, deeper output)
-- Adjust nugget count: casual=3, curious=6, nerd=9
-- Output new schema: each nugget gets `category: 'track'|'history'|'explore'`, `listenUnlockLevel: 1|2|3`, `sourceName`, `sourceUrl` (direct verified URL or targeted search)
-- Cache key includes tier: `track_key + listen_count_tier + tier_slug`
-- Include Last.fm context in prompt if `lastFmUsername` provided
-- Depth prompt language adapts per tier:
-  - casual: "accessible, no jargon, feel-good discoveries"
-  - curious: "production details, cultural context, artist history"
-  - nerd: "technical breakdowns, obscure influences, deep fan theory angles, Reddit-level deep cuts"
+### 4. Update `supabase/config.toml`
+Add `[functions.lastfm-sync]` with `verify_jwt = false`
 
-### 6. `src/pages/Companion.tsx` — New layout
-- Read `UserProfile` from `useMusicNerdState`
-- Pass `tier` + `lastFmUsername` to `generate-companion` edge function
-- Tier-based inset glow on main container:
-  - casual: `shadow-[inset_0_0_50px_rgba(34,197,94,0.15)]`
-  - curious: `shadow-[inset_0_0_50px_rgba(59,130,246,0.15)]`
-  - nerd: `shadow-[inset_0_0_50px_rgba(236,72,153,0.15)]`
-- Three stacked sections: "The Track", "History", "Explore Next"
-- Each section filters `CompanionNugget[]` by `category` + `listenUnlockLevel <= currentListenCount`, sorted by `timestamp` descending
-- Show locked indicator when higher-level nuggets exist but aren't unlocked yet: "Listen again to unlock 3 more insights"
-- Replace existing `NuggetCategoryCard` usage with new `CompanionNuggetCard`
-
-### 7. `src/components/companion/CompanionNuggetCard.tsx` (NEW)
-- Props: `nugget: CompanionNugget`, `onDeepDive: (nugget) => void`
-- Image (if present) displayed prominently with caption below
-- Nugget text body
-- "Go Deeper" button → fires `onDeepDive`
-- Pill button: `Source: {sourceName}` → links to `sourceUrl` in `target="_blank"`
-- Glass card styling matching app aesthetic
-
-### 8. `src/App.tsx` — Onboarding guard
-- Check localStorage for `musicnerd_profile` on `/` route
-- If exists, redirect to `/browse` directly
+### 5. Frontend: `src/pages/Setup.tsx`
+- After user enters Last.fm username and hits Continue, call `lastfm-sync` immediately in the background to warm the cache
+- Show a small "Syncing your Last.fm..." loading state while it runs
+- If Last.fm API key isn't configured yet, gracefully degrade (no crash)
 
 ---
 
-## Data Flow (End-to-End)
+## TTL Strategy (Cost Control)
 
-```text
-User picks tier in Onboarding
-         ↓
-localStorage: { calculatedTier, streamingService, lastFmUsername }
-         ↓
-Companion page reads profile
-         ↓
-Calls generate-companion edge function with { artist, title, listenCount, tier, lastFmUsername }
-         ↓
-Backend: tier routes model choice (Flash vs Pro) + nugget count (3/6/9)
-         ↓
-Gemini generates CompanionNugget[] with category, listenUnlockLevel, sourceName, sourceUrl
-         ↓
-Cached in companion_cache (key: track_key + tier + listen_count_tier)
-         ↓
-Frontend filters by category → 3 sections
-Frontend filters by listenUnlockLevel <= currentListenCount → progressive unlocking
-Frontend sorts by timestamp descending → newest unlock at top
-         ↓
-CompanionNuggetCard shows text + image + Source pill + Go Deeper button
-         ↓
-NuggetDeepDive overlay with DeepDiveResponse + Source pill
-```
+| Scenario | Last.fm API calls |
+|---|---|
+| 1st listen ever | 1 call to warm cache |
+| Listens 2–100 same day | 0 calls (served from DB cache) |
+| First listen next day | 1 call to refresh |
+| User changes username | 1 call |
+
+24h TTL keeps data reasonably fresh (Last.fm scrobble data changes daily) while keeping API usage minimal. Could be bumped to 6h for Nerd users if they want more up-to-date context.
 
 ---
 
-## Key Decisions
-- **No mock data** — all content from the real Gemini RAG pipeline
-- **Cache key update**: `companion_cache` currently keys on `track_key + listen_count_tier` — we extend to also include `tier` (casual/curious/nerd) so each tier gets its own cached response
-- **Companion cache schema needs a migration** to add a `tier` column, or we encode it into a composite string key like `"radiohead::creep::nerd::1"`
-- **Source URLs**: `generate-companion` currently uses Google Search fallback URLs. We update the prompt to demand real direct URLs and only fall back to search if truly necessary, matching the user's requirement for strict RAG citations
+## Secret Needed
+
+The Last.fm API is free but requires an API key. We'll need to request a `LASTFM_API_KEY` secret from the user. They can get one at: **last.fm/api/account/create** (instant, no payment required).
+
+---
+
+## Summary of New Files/Tables
+
+| Item | Type | Purpose |
+|---|---|---|
+| `lastfm_cache` | DB table | Stores fetched Last.fm data with TTL |
+| `supabase/functions/lastfm-sync/index.ts` | Edge function | Fetch + cache Last.fm data |
+| `generate-companion/index.ts` | Updated | Uses rich Last.fm context in Gemini prompt |
+| `src/pages/Setup.tsx` | Updated | Warms cache on username entry |
+
+Before we can build this, we need the `LASTFM_API_KEY` secret. The user will need to create a free Last.fm API account.
