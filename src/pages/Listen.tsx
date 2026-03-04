@@ -2,6 +2,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft } from "lucide-react";
 import { useAccentColor } from "@/hooks/useAccentColor";
+import { useTierAccent } from "@/hooks/useTierAccent";
 import { QRCode } from "react-qrcode-logo";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -352,8 +353,9 @@ export default function Listen() {
 
   const progress = (currentTime / track.durationSec) * 100;
 
-  // Drive the global accent colour from this track's cover art
-  useAccentColor(track.coverArtUrl);
+  // Lock glow/primary to user's tier — album art only drives --backdrop-color
+  useTierAccent();
+  useAccentColor(track.coverArtUrl); // sets --backdrop-color only
 
   return (
     <PageTransition>

@@ -8,6 +8,7 @@ import PageTransition from "@/components/PageTransition";
 import { artists as rawArtists, albums, tracks } from "@/mock/tracks";
 import { useArtistImages } from "@/hooks/useArtistImages";
 import { useUserProfile, tierGreeting, tierBadgeLabel, tierBadgeColor, tierGlowClass } from "@/hooks/useMusicNerdState";
+import { useTierAccent } from "@/hooks/useTierAccent";
 
 export default function Browse() {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -15,6 +16,8 @@ export default function Browse() {
   const artists = useArtistImages(rawArtists);
   const { profile, clearProfile } = useUserProfile();
   const tier = profile?.calculatedTier;
+
+  useTierAccent(); // lock --primary/--neon-glow/--ring to the user's tier color
 
   const handleSignOut = () => {
     clearProfile();

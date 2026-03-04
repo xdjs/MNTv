@@ -1,14 +1,13 @@
 import { useEffect, useRef } from "react";
 
 /**
- * Extracts the dominant vibrant colour from an image URL using an offscreen canvas,
- * then injects it as --primary / --neon-glow / --ring CSS variables on :root.
- *
- * Falls back to the default pink (330 90% 60%) if extraction fails.
+ * Extracts the dominant vibrant colour from cover art and injects it as
+ * --backdrop-color ONLY — it does NOT touch --primary / --neon-glow / --ring.
+ * Those are owned by useTierAccent and must stay locked to the user's tier.
  */
 
 const DEFAULT_HSL = "330 90% 60%";
-const FALLBACK_TIMEOUT = 3000; // ms before we apply fallback
+const FALLBACK_TIMEOUT = 3000;
 
 function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
   r /= 255; g /= 255; b /= 255;
@@ -27,10 +26,9 @@ function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
   return [Math.round(h * 360), Math.round(s * 100), Math.round(l * 100)];
 }
 
-/** Score a colour for vibrancy: prefer high saturation, mid lightness */
 function vibrancyScore(s: number, l: number): number {
-  if (l < 15 || l > 85) return 0; // too dark or too light
-  if (s < 25) return 0; // too grey
+  if (l < 15 || l > 85) return 0;
+  if (s < 25) return 0;
   return s * (1 - Math.abs(l - 55) / 55);
 }
 
@@ -38,7 +36,6 @@ export function extractDominantHsl(imageUrl: string): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
-
     const fallback = () => resolve(DEFAULT_HSL);
     const timer = setTimeout(fallback, FALLBACK_TIMEOUT);
 
@@ -46,19 +43,15 @@ export function extractDominantHsl(imageUrl: string): Promise<string> {
       clearTimeout(timer);
       try {
         const canvas = document.createElement("canvas");
-        const SIZE = 64; // sample at 64x64 for speed
-        canvas.width = SIZE;
-        canvas.height = SIZE;
+        const SIZE = 64;
+        canvas.width = SIZE; canvas.height = SIZE;
         const ctx = canvas.getContext("2d");
         if (!ctx) { resolve(DEFAULT_HSL); return; }
-
         ctx.drawImage(img, 0, 0, SIZE, SIZE);
         const { data } = ctx.getImageData(0, 0, SIZE, SIZE);
 
-        // Bucket colours into 8-level quantisation bins
         type Bucket = { r: number; g: number; b: number; count: number };
         const buckets = new Map<string, Bucket>();
-
         for (let i = 0; i < data.length; i += 4) {
           const r = Math.round(data[i] / 32) * 32;
           const g = Math.round(data[i + 1] / 32) * 32;
@@ -74,7 +67,6 @@ export function extractDominantHsl(imageUrl: string): Promise<string> {
 
         let bestHsl = DEFAULT_HSL;
         let bestScore = -1;
-
         for (const b of buckets.values()) {
           const avgR = b.r / b.count;
           const avgG = b.g / b.count;
@@ -83,15 +75,11 @@ export function extractDominantHsl(imageUrl: string): Promise<string> {
           const score = vibrancyScore(s, l) * Math.log(b.count + 1);
           if (score > bestScore) {
             bestScore = score;
-            // Boost saturation slightly and normalise lightness for UI use
             bestHsl = `${h} ${Math.min(95, s + 10)}% ${Math.max(50, Math.min(65, l))}%`;
           }
         }
-
         resolve(bestHsl);
-      } catch {
-        resolve(DEFAULT_HSL);
-      }
+      } catch { resolve(DEFAULT_HSL); }
     };
 
     img.onerror = () => { clearTimeout(timer); resolve(DEFAULT_HSL); };
@@ -99,27 +87,28 @@ export function extractDominantHsl(imageUrl: string): Promise<string> {
   });
 }
 
-/** Injects the accent HSL string as CSS variables on :root with a smooth transition */
-export function applyAccentColor(hsl: string) {
-  const root = document.documentElement;
-  root.style.setProperty("--primary", hsl);
-  root.style.setProperty("--neon-glow", hsl);
-  root.style.setProperty("--ring", hsl);
-  root.style.setProperty("--accent", hsl);
-  root.style.setProperty("--sidebar-primary", hsl);
-  root.style.setProperty("--sidebar-ring", hsl);
+/**
+ * Sets ONLY --backdrop-color from the cover art's dominant hue.
+ * Does NOT touch --primary / --neon-glow / --ring (those belong to useTierAccent).
+ */
+export function applyBackdropColor(hsl: string) {
+  document.documentElement.style.setProperty("--backdrop-color", hsl);
 }
 
 /**
- * React hook: given a cover art URL, extracts the dominant colour and
- * applies it to the global CSS variables. Reverts to default on unmount.
+ * @deprecated Use useTierAccent for primary/glow colors.
+ * Kept for any legacy callers — now only sets --backdrop-color.
  */
+export function applyAccentColor(hsl: string) {
+  applyBackdropColor(hsl);
+}
+
 export function useAccentColor(imageUrl: string | undefined) {
   const prevHsl = useRef(DEFAULT_HSL);
 
   useEffect(() => {
     if (!imageUrl) {
-      applyAccentColor(DEFAULT_HSL);
+      applyBackdropColor(DEFAULT_HSL);
       return;
     }
 
@@ -127,12 +116,12 @@ export function useAccentColor(imageUrl: string | undefined) {
     extractDominantHsl(imageUrl).then((hsl) => {
       if (cancelled) return;
       prevHsl.current = hsl;
-      applyAccentColor(hsl);
+      applyBackdropColor(hsl);
     });
 
     return () => {
       cancelled = true;
-      applyAccentColor(DEFAULT_HSL);
+      applyBackdropColor(DEFAULT_HSL);
     };
   }, [imageUrl]);
 }
