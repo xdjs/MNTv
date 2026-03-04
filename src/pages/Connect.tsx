@@ -6,7 +6,7 @@ import MusicNerdLogo from "@/components/MusicNerdLogo";
 import { useUserProfile, getStoredProfile } from "@/hooks/useMusicNerdState";
 import type { UserProfile } from "@/mock/types";
 import spotifyLogo from "@/assets/spotify-logo.png";
-import youtubeMusicLogo from "@/assets/youtube-music-logo.png";
+
 import { supabase } from "@/integrations/supabase/client";
 import { initiateSpotifyAuth } from "@/hooks/useSpotifyAuth";
 import { lovable } from "@/integrations/lovable/index";
@@ -127,7 +127,6 @@ export default function Connect() {
 
   const platforms: { name: Platform; logo?: string; color: string }[] = [
     { name: "Spotify", logo: spotifyLogo, color: "border-green-500/40 hover:border-green-500 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)]" },
-    { name: "YouTube Music", logo: youtubeMusicLogo, color: "border-red-500/40 hover:border-red-500 hover:shadow-[0_0_20px_rgba(239,68,68,0.3)]" },
     { name: "Apple Music", color: "border-rose-500/40 hover:border-rose-500 hover:shadow-[0_0_20px_rgba(244,63,94,0.3)]" },
   ];
 
