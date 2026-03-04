@@ -87,8 +87,8 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
         variants={cardVariants}
         style={{
           boxShadow: focused
-            ? "0 0 20px 6px hsl(330 90% 60% / 0.5), 0 0 50px 12px hsl(330 90% 60% / 0.2)"
-            : "0 0 8px 2px hsl(330 90% 60% / 0.15), 0 0 18px 4px hsl(330 90% 60% / 0.07)",
+            ? "0 0 20px 6px hsl(var(--neon-glow) / 0.5), 0 0 50px 12px hsl(var(--neon-glow) / 0.2)"
+            : "0 0 8px 2px hsl(var(--neon-glow) / 0.15), 0 0 18px 4px hsl(var(--neon-glow) / 0.07)",
         }}
         className={`apple-glass relative rounded-xl px-5 py-2.5 ml-2 transition-all duration-200 ${
           focused ? "scale-[1.03]" : "hover:scale-[1.02]"
@@ -105,7 +105,7 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
               transition={{ duration: 0.7, delay: 0.3, ease: "easeOut" }}
               className="pointer-events-none absolute inset-0 rounded-xl"
               style={{
-                backgroundImage: `linear-gradient(hsl(330 90% 60% / 0.7), hsl(330 90% 60% / 0.7)), linear-gradient(hsl(330 90% 60% / 0.7), hsl(330 90% 60% / 0.7)), linear-gradient(hsl(330 90% 60% / 0.7), hsl(330 90% 60% / 0.7)), linear-gradient(hsl(330 90% 60% / 0.7), hsl(330 90% 60% / 0.7))`,
+                backgroundImage: `linear-gradient(hsl(var(--neon-glow) / 0.7), hsl(var(--neon-glow) / 0.7)), linear-gradient(hsl(var(--neon-glow) / 0.7), hsl(var(--neon-glow) / 0.7)), linear-gradient(hsl(var(--neon-glow) / 0.7), hsl(var(--neon-glow) / 0.7)), linear-gradient(hsl(var(--neon-glow) / 0.7), hsl(var(--neon-glow) / 0.7))`,
                 backgroundPosition: "0 0, 100% 0, 100% 100%, 0 100%",
                 backgroundRepeat: "no-repeat",
                 filter: "blur(2px)",
@@ -122,10 +122,10 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
                 animate={{ rotate: 360 }}
                 transition={{ repeat: Infinity, duration: 3, ease: "linear" }}
                 className="absolute inset-[-50%]"
-                style={{
-                  background: "conic-gradient(from 0deg, transparent 60%, hsl(330 90% 60% / 0.9) 75%, hsl(330 90% 60% / 0.3) 85%, transparent 100%)",
-                  filter: "blur(4px)",
-                }}
+                  style={{
+                    background: "conic-gradient(from 0deg, transparent 60%, hsl(var(--neon-glow) / 0.9) 75%, hsl(var(--neon-glow) / 0.3) 85%, transparent 100%)",
+                    filter: "blur(4px)",
+                  }}
               />
               {/* Inner cutout so only border ring is visible */}
               <div className="absolute inset-[3px] rounded-[9px] bg-background/80 backdrop-blur-xl" />
