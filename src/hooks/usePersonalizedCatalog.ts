@@ -33,7 +33,7 @@ export interface BrowseRow {
 }
 
 interface LastFmArtist { name: string; playcount: number; }
-interface LastFmTrack { artist: string; name: string; album: string; }
+interface LastFmTrack { artist: string; name: string; album: string; imageUrl?: string; }
 interface RealArtist { name: string; imageUrl: string; tags: string[]; }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -232,15 +232,17 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
     const recentTiles: BrowseTile[] = [];
 
     if (lastFmData?.recentTracks?.length) {
-      lastFmData.recentTracks.slice(0, 8).forEach((t) => {
+      lastFmData.recentTracks.slice(0, 10).forEach((t) => {
         const mockTrack = mockTracks.find(
           (m) =>
             m.title.toLowerCase() === t.name.toLowerCase() &&
             m.artist.toLowerCase() === t.artist.toLowerCase()
         );
+        // Use Last.fm album art if available, then Spotify, then mock, then DiceBear
+        const image = t.imageUrl || trackCoverUrl(t.name, t.artist, spotifyTrackImgs);
         recentTiles.push({
           id: `recent-${t.artist}-${t.name}`,
-          imageUrl: trackCoverUrl(t.name, t.artist, spotifyTrackImgs),
+          imageUrl: image,
           title: t.name,
           subtitle: t.artist,
           href: mockTrack

@@ -400,9 +400,20 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [activePlayer]);
 
   const toggle = useCallback(() => {
+    // If activePlayer is "none" but we have a URI, try to resume
+    if (activePlayer === "none") {
+      if (currentSpotifyUri && spReady) {
+        setActivePlayer("spotify");
+        hasAutoPlayedRef.current = false; // trigger auto-play
+      } else if (currentVideoId) {
+        setActivePlayer("youtube");
+        hasAutoPlayedRef.current = false;
+      }
+      return;
+    }
     const playing = activePlayer === "spotify" ? spPlaying : ytPlaying;
     if (playing) pause(); else play();
-  }, [activePlayer, spPlaying, ytPlaying, pause, play]);
+  }, [activePlayer, spPlaying, ytPlaying, pause, play, currentSpotifyUri, currentVideoId, spReady]);
 
   const seek = useCallback((seconds: number) => {
     if (activePlayer === "spotify") {

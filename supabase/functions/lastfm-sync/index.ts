@@ -133,7 +133,7 @@ serve(async (req) => {
     // Fetch from Last.fm API
     const [topArtistsData, recentTracksData, userInfoData] = await Promise.all([
       lastfmGet("user.getTopArtists", { user: username, period: "1month", limit: "10" }, LASTFM_API_KEY).catch(() => null),
-      lastfmGet("user.getRecentTracks", { user: username, limit: "5" }, LASTFM_API_KEY).catch(() => null),
+      lastfmGet("user.getRecentTracks", { user: username, limit: "20" }, LASTFM_API_KEY).catch(() => null),
       lastfmGet("user.getInfo", { user: username }, LASTFM_API_KEY).catch(() => null),
     ]);
 
@@ -143,15 +143,25 @@ serve(async (req) => {
       playcount: parseInt(a.playcount, 10) || 0,
     }));
 
-    // Normalise recent tracks (skip "now playing" marker)
+    // Normalise recent tracks (skip "now playing" marker, extract images)
     const recentTracks = (recentTracksData?.recenttracks?.track || [])
       .filter((t: any) => !t["@attr"]?.nowplaying)
-      .slice(0, 5)
-      .map((t: any) => ({
-        artist: t.artist?.["#text"] || t.artist?.name || "",
-        name: t.name,
-        album: t.album?.["#text"] || "",
-      }));
+      .slice(0, 20)
+      .map((t: any) => {
+        // Last.fm image array: [{size: "small", "#text": url}, ...] — pick largest
+        const images = t.image || [];
+        const imageUrl =
+          (images.find((i: any) => i.size === "extralarge")?.["#text"]) ||
+          (images.find((i: any) => i.size === "large")?.["#text"]) ||
+          (images.find((i: any) => i.size === "medium")?.["#text"]) ||
+          "";
+        return {
+          artist: t.artist?.["#text"] || t.artist?.name || "",
+          name: t.name,
+          album: t.album?.["#text"] || "",
+          imageUrl: imageUrl || "",
+        };
+      });
 
     // Normalise user info
     const userInfo = userInfoData?.user
