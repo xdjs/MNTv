@@ -74,11 +74,17 @@ export function useAINuggets(
       let currentListenCount = 1;
       let previousNuggets: string[] = [];
 
-      const { data: historyRow } = await supabase
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+
+      const historyQuery = supabase
         .from("nugget_history" as any)
         .select("*")
-        .eq("track_key", trackKey)
-        .maybeSingle();
+        .eq("track_key", trackKey);
+
+      const { data: historyRow } = userId
+        ? await historyQuery.eq("user_id", userId).maybeSingle()
+        : await historyQuery.is("user_id", null).maybeSingle();
 
       if (historyRow) {
         currentListenCount = (historyRow as any).listen_count || 1;
@@ -115,12 +121,14 @@ export function useAINuggets(
                 previous_nuggets: cachedNuggets.map((n) => n.headline || n.text).filter(Boolean),
                 updated_at: new Date().toISOString(),
               } as any)
-              .eq("track_key", trackKey);
-          } else {
+              .eq("track_key", trackKey)
+              .eq("user_id", userId);
+          } else if (userId) {
             await supabase
               .from("nugget_history" as any)
               .insert({
                 track_key: trackKey,
+                user_id: userId,
                 listen_count: 2,
                 previous_nuggets: cachedNuggets.map((n) => n.headline || n.text).filter(Boolean),
               } as any);
@@ -246,12 +254,14 @@ export function useAINuggets(
             previous_nuggets: updatedPreviousNuggets,
             updated_at: new Date().toISOString(),
           } as any)
-          .eq("track_key", trackKey);
-      } else {
+          .eq("track_key", trackKey)
+          .eq("user_id", userId);
+      } else if (userId) {
         await supabase
           .from("nugget_history" as any)
           .insert({
             track_key: trackKey,
+            user_id: userId,
             listen_count: 1,
             previous_nuggets: newHeadlines,
           } as any);
