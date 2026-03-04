@@ -76,7 +76,7 @@ export default function SpotifyCallback() {
         if (existing) {
           navigate("/browse", { replace: true });
         } else {
-          navigate("/setup", { replace: true });
+          navigate("/connect", { replace: true });
         }
       }, 1500);
     }
@@ -134,7 +134,7 @@ export default function SpotifyCallback() {
           <p className="text-destructive font-semibold">Connection failed</p>
           <p className="text-sm text-muted-foreground">{errorMsg}</p>
           <button
-            onClick={() => navigate("/setup", { replace: true })}
+            onClick={() => navigate("/connect", { replace: true })}
             className="rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
           >
             Back to Setup
