@@ -106,6 +106,42 @@ async function getLastFmContext(username: string, supabaseUrl: string, supabaseK
   }
 }
 
+// ── Build taste context from ALL available sources ────────────────────────────
+function buildTasteContext(
+  lastFmContext: string,
+  spotifyTopArtists: string[] | null,
+  spotifyTopTracks: string[] | null,
+  streamingService: string | null
+): string {
+  const lines: string[] = [];
+
+  // Last.fm context (already formatted by getLastFmContext)
+  if (lastFmContext) {
+    lines.push(lastFmContext.trim());
+  }
+
+  // Spotify taste signals
+  if (spotifyTopArtists?.length || spotifyTopTracks?.length) {
+    lines.push("\nSPOTIFY TASTE PROFILE (use to personalise Explore Next recommendations):");
+    if (spotifyTopArtists?.length) {
+      lines.push(`Top artists on Spotify: ${spotifyTopArtists.join(", ")}`);
+    }
+    if (spotifyTopTracks?.length) {
+      lines.push(`Top tracks on Spotify: ${spotifyTopTracks.slice(0, 8).join(", ")}`);
+    }
+    lines.push("(Use these to infer genre preferences and suggest genuinely relevant artists/albums)");
+  }
+
+  // Streaming service hint (even without OAuth taste data, helps tailor links)
+  if (streamingService && !spotifyTopArtists?.length) {
+    lines.push(`\nUser's streaming service: ${streamingService} (tailor external links accordingly)`);
+  }
+
+  if (!lines.length) return "";
+
+  return `\n\nUSER TASTE CONTEXT:\n${lines.join("\n")}\n`;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -119,6 +155,9 @@ serve(async (req) => {
       listenCount = 1,
       tier = "casual",
       lastFmUsername,
+      spotifyTopArtists = null,
+      spotifyTopTracks = null,
+      streamingService = null,
     } = await req.json();
 
     if (!artist || !title) {
@@ -140,8 +179,10 @@ serve(async (req) => {
 
     const cacheKey = `${artist}::${title}::${tier}::${listenTier}`;
 
-    // Check companion cache (but skip if user has Last.fm — their cache is personalised)
-    if (!lastFmUsername) {
+    // Personalised = has ANY taste signals (Last.fm OR Spotify). Skip cache for these.
+    const isPersonalised = !!(lastFmUsername || spotifyTopArtists?.length || spotifyTopTracks?.length);
+
+    if (!isPersonalised) {
       const { data: cached } = await supabase
         .from("companion_cache")
         .select("content")
@@ -157,10 +198,13 @@ serve(async (req) => {
       }
     }
 
-    // Fetch Last.fm context (served from cache 99% of the time)
+    // Fetch Last.fm context (served from lastfm_cache, near-instant)
     const lastFmContext = lastFmUsername
       ? await getLastFmContext(lastFmUsername, supabaseUrl, supabaseKey)
       : "";
+
+    // Merge all taste signals into one context block
+    const tasteContext = buildTasteContext(lastFmContext, spotifyTopArtists, spotifyTopTracks, streamingService);
 
     // Depth instruction based on listen count
     let depthInstruction: string;
@@ -175,18 +219,25 @@ serve(async (req) => {
     const nuggetsPerCategory = Math.floor(tierConfig.nuggetCount / 3);
     const now = Date.now();
 
+    // Build streaming-service-aware external links hint
+    const streamingLinkHint = streamingService === "Apple Music"
+      ? 'For external links, include Apple Music search instead of Spotify.'
+      : streamingService === "YouTube Music"
+      ? 'For external links, include YouTube Music search instead of Spotify.'
+      : 'For external links, include Spotify search.';
+
     const prompt = `You are a music historian API. Output ONLY a valid JSON object. No markdown, no prose, no explanation. Start with { end with }.
 
 Track: "${title}" by ${artist}${album ? ` from "${album}"` : ""}
 Tier: ${tier.toUpperCase()} — ${tierConfig.depthLabel}
 Depth: ${depthInstruction}
-Sources to use: ${tierConfig.sources}${lastFmContext}
+Sources to use: ${tierConfig.sources}${tasteContext}
 
 Generate:
 1. "artistSummary": 2 punchy sentences capturing the artist's essence.
 2. "trackStory": 1 short paragraph (3-4 sentences) about this track's creation, meaning, cultural impact.
 3. "nuggets": Exactly ${tierConfig.nuggetCount} nuggets — ${nuggetsPerCategory} per category ("track", "history", "explore").
-4. "externalLinks": 3 useful links (Wikipedia, Spotify, YouTube Music).
+4. "externalLinks": 3 useful links (Wikipedia, streaming service, YouTube Music).
 
 NUGGET SCHEMA (each nugget):
 {
@@ -207,7 +258,8 @@ RULES:
 - Each nugget covers a DIFFERENT angle — no two nuggets share the same fact.
 - "listenUnlockLevel" distribution: first ${Math.ceil(tierConfig.nuggetCount / 3)} nuggets = level 1, next = level 2, rest = level 3.
 - Timestamps must be staggered so reverse-chronological sort within each category works correctly.
-${lastFmContext ? "- Use the Last.fm user context to make 'explore' category recommendations genuinely relevant to this listener's taste — not generic suggestions." : ""}
+${tasteContext ? "- Use the USER TASTE CONTEXT above to make 'explore' category recommendations genuinely relevant to this listener — not generic suggestions." : ""}
+- ${streamingLinkHint}
 
 OUTPUT: Raw JSON only. No backticks.`;
 
@@ -269,19 +321,33 @@ OUTPUT: Raw JSON only. No backticks.`;
           }
         }
 
-        // Fallback external links
+        // Build service-appropriate external links fallback
         if (!parsed.externalLinks?.length) {
           const encodedQuery = encodeURIComponent(`${artist} ${title}`);
           const encodedArtist = encodeURIComponent(artist).replace(/%20/g, "_");
+          const streamingLink =
+            streamingService === "Apple Music"
+              ? { label: "Apple Music", url: `https://music.apple.com/search?term=${encodedQuery}` }
+              : streamingService === "YouTube Music"
+              ? { label: "YouTube Music", url: `https://music.youtube.com/search?q=${encodedQuery}` }
+              : { label: "Spotify", url: `https://open.spotify.com/search/${encodedQuery}` };
           parsed.externalLinks = [
             { label: "Wikipedia", url: `https://en.wikipedia.org/wiki/${encodedArtist}` },
-            { label: "Spotify", url: `https://open.spotify.com/search/${encodedQuery}` },
+            streamingLink,
             { label: "YouTube Music", url: `https://music.youtube.com/search?q=${encodedQuery}` },
           ];
+          // Deduplicate if streaming service is already YouTube Music
+          if (streamingService === "YouTube Music") {
+            parsed.externalLinks = [
+              { label: "Wikipedia", url: `https://en.wikipedia.org/wiki/${encodedArtist}` },
+              streamingLink,
+              { label: "Spotify", url: `https://open.spotify.com/search/${encodedQuery}` },
+            ];
+          }
         }
 
-        // Cache result (only for non-personalised responses)
-        if (!lastFmUsername) {
+        // Cache only non-personalised responses
+        if (!isPersonalised) {
           await supabase.from("companion_cache").upsert(
             { track_key: cacheKey, listen_count_tier: listenTier, content: parsed },
             { onConflict: "track_key,listen_count_tier" }

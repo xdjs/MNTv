@@ -64,7 +64,11 @@ export default function Companion() {
               album: track!.album,
               listenCount: serverListenCount,
               tier,
-              lastFmUsername: profile?.lastFmUsername,
+              // Taste profile — send everything available; edge fn merges them
+              lastFmUsername: profile?.lastFmUsername || null,
+              spotifyTopArtists: profile?.spotifyTopArtists || null,
+              spotifyTopTracks: profile?.spotifyTopTracks || null,
+              streamingService: profile?.streamingService || null,
             },
           }
         );
