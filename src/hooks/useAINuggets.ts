@@ -63,28 +63,36 @@ export function useAINuggets(
 
   const generate = useCallback(async () => {
     if (!artist || !title) return;
-    
+
     setLoading(true);
     setError(null);
 
     try {
       const trackKey = `${artist}::${title}`;
 
-      // Query listen history
-      let currentListenCount = 1;
-      let previousNuggets: string[] = [];
-
+      // Auth is always required — session is checked by the ProtectedRoute before
+      // this page even renders, so we can safely read the session here.
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id;
 
-      const historyQuery = supabase
+      if (!userId) {
+        // Should never happen in practice (ProtectedRoute prevents unauthenticated access),
+        // but handle it gracefully just in case.
+        setError("You must be signed in to generate nuggets.");
+        setLoading(false);
+        return;
+      }
+
+      // ── Listen history ────────────────────────────────────────────
+      let currentListenCount = 1;
+      let previousNuggets: string[] = [];
+
+      const { data: historyRow } = await supabase
         .from("nugget_history" as any)
         .select("*")
-        .eq("track_key", trackKey);
-
-      const { data: historyRow } = userId
-        ? await historyQuery.eq("user_id", userId).maybeSingle()
-        : await historyQuery.is("user_id", null).maybeSingle();
+        .eq("track_key", trackKey)
+        .eq("user_id", userId)
+        .maybeSingle();
 
       if (historyRow) {
         currentListenCount = (historyRow as any).listen_count || 1;
@@ -123,7 +131,7 @@ export function useAINuggets(
               } as any)
               .eq("track_key", trackKey)
               .eq("user_id", userId);
-          } else if (userId) {
+          } else {
             await supabase
               .from("nugget_history" as any)
               .insert({
@@ -153,7 +161,7 @@ export function useAINuggets(
       }
 
       const aiNuggets: AINuggetData[] = data?.nuggets || [];
-      
+
       const newSources = new Map<string, Source>();
       const newNuggets: Nugget[] = aiNuggets.map((n, i) => {
         const sourceId = `ai-src-${trackId}-${i}`;
@@ -187,7 +195,6 @@ export function useAINuggets(
           kind: n.kind,
           listenFor: n.listenFor || false,
           sourceId,
-          // Store imageHint data temporarily for resolution
           imageCaption: n.imageHint?.caption,
         } as Nugget;
       });
@@ -195,14 +202,12 @@ export function useAINuggets(
       // ── Resolve images and apply visual rotation ──────────────────
       const visualSlotIndex = trackId.charCodeAt(0) % 3;
 
-      // Resolve all imageHints in parallel
       const imageResults = await Promise.allSettled(
         aiNuggets.map((n) =>
           n.imageHint ? resolveImageHint(n.imageHint) : Promise.resolve(null)
         )
       );
 
-      // Attach resolved imageUrls
       for (let i = 0; i < newNuggets.length; i++) {
         const result = imageResults[i];
         if (result?.status === "fulfilled" && result.value) {
@@ -211,7 +216,6 @@ export function useAINuggets(
         }
       }
 
-      // Try to mark the visual slot, falling back if image resolution failed
       let visualAssigned = false;
       for (let attempt = 0; attempt < 3 && !visualAssigned; attempt++) {
         const idx = (visualSlotIndex + attempt) % 3;
@@ -221,12 +225,10 @@ export function useAINuggets(
         }
       }
 
-      // If no resolved images, ALWAYS assign a visual nugget using fallbacks
       if (!visualAssigned) {
         const fallbackIdx = visualSlotIndex % newNuggets.length;
         const nugget = newNuggets[fallbackIdx];
         if (nugget) {
-          // Try artist image first (local asset, always reliable), then cover art
           const fallbackUrl = artistImageUrl || coverArtUrl;
           if (fallbackUrl) {
             nugget.imageUrl = fallbackUrl;
@@ -242,7 +244,7 @@ export function useAINuggets(
       setNuggets(newNuggets);
       setSources(newSources);
 
-      // Upsert listen history
+      // ── Upsert listen history ─────────────────────────────────────
       const newHeadlines = newNuggets.map((n) => n.headline || n.text).filter(Boolean);
       const updatedPreviousNuggets = [...previousNuggets, ...newHeadlines];
 
@@ -256,7 +258,7 @@ export function useAINuggets(
           } as any)
           .eq("track_key", trackKey)
           .eq("user_id", userId);
-      } else if (userId) {
+      } else {
         await supabase
           .from("nugget_history" as any)
           .insert({

@@ -10,6 +10,30 @@ import { supabase } from "@/integrations/supabase/client";
 import { initiateSpotifyAuth } from "@/hooks/useSpotifyAuth";
 import { lovable } from "@/integrations/lovable/index";
 
+/** Load a user's profile from the DB and persist to localStorage. Returns the profile or null. */
+async function loadAndPersistDBProfile(): Promise<UserProfile | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) return null;
+  const { data } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("user_id", session.user.id)
+    .maybeSingle();
+  if (!data) return null;
+  const local = (() => {
+    try { return JSON.parse(localStorage.getItem("musicnerd_profile") || "{}"); } catch { return {}; }
+  })();
+  const profile: UserProfile = {
+    streamingService: (data.streaming_service as UserProfile["streamingService"]) || "",
+    lastFmUsername: data.last_fm_username || undefined,
+    spotifyTopArtists: local.spotifyTopArtists || undefined,
+    spotifyTopTracks: local.spotifyTopTracks || undefined,
+    calculatedTier: (data.tier as UserProfile["calculatedTier"]) || "casual",
+  };
+  localStorage.setItem("musicnerd_profile", JSON.stringify(profile));
+  return profile;
+}
+
 type Platform = "Spotify" | "YouTube Music" | "Apple Music";
 type Tier = "casual" | "curious" | "nerd";
 type AuthMode = "choose" | "signup" | "login";
@@ -148,7 +172,15 @@ export default function Connect() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setAuthLoading(false);
     if (error) { setAuthError(error.message); return; }
-    goNext();
+
+    // Returning user — check if they already have a completed profile in the DB
+    const existingProfile = await loadAndPersistDBProfile();
+    if (existingProfile?.calculatedTier) {
+      // Profile is complete — skip setup and go straight to Browse
+      navigate("/browse", { replace: true });
+    } else {
+      goNext(); // New user — continue through setup
+    }
   };
 
   const handleTierSelect = (t: Tier) => {
@@ -242,9 +274,6 @@ export default function Connect() {
                         </button>
                         <button onClick={() => setAuthMode("login")} className="w-full rounded-2xl border border-foreground/15 bg-foreground/5 px-5 py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
                           Already have an account? Log in
-                        </button>
-                        <button onClick={() => goNext()} className="text-xs text-muted-foreground hover:text-foreground transition-colors py-1">
-                          Continue without an account →
                         </button>
                       </div>
                     </>

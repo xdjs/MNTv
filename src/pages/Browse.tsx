@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, LogOut } from "lucide-react";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
@@ -9,6 +9,7 @@ import { useUserProfile, tierGreeting, tierBadgeLabel, tierBadgeColor, tierGlowC
 import { usePersonalizedCatalog } from "@/hooks/usePersonalizedCatalog";
 import { useTierAccent } from "@/hooks/useTierAccent";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Browse() {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -19,11 +20,18 @@ export default function Browse() {
   useTierAccent();
 
   const { rows: allRows } = usePersonalizedCatalog(profile);
+  const { isGuest } = useAuth();
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut().catch(() => {});
-    clearProfile();
-    navigate("/", { replace: true });
+    // Sign out of Supabase (best-effort — always clear local state afterward)
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.warn("Supabase sign-out error (ignored):", err);
+    } finally {
+      clearProfile();
+      navigate("/", { replace: true });
+    }
   };
 
   // Focus state: rowIndex (-1 = header), colIndex
