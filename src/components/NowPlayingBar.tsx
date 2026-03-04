@@ -11,8 +11,8 @@ export default function NowPlayingBar() {
   // Don't show on the Listen page (it has its own full playback bar)
   const isListenPage = location.pathname.startsWith("/listen/");
 
-  // Don't show if nothing is playing/loaded
-  const visible = !isListenPage && currentTrack && activePlayer !== "none";
+  // Show if there's a loaded track (even if paused/stopped — user can resume)
+  const visible = !isListenPage && !!currentTrack;
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 

@@ -117,6 +117,10 @@ export default function Companion() {
         }
         setListenCount(serverListenCount);
 
+        // Use AbortController for timeout (30s)
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
+
         const { data: companionData, error: fnError } = await supabase.functions.invoke(
           "generate-companion",
           {
@@ -134,6 +138,7 @@ export default function Companion() {
           }
         );
 
+        clearTimeout(timeout);
         if (fnError) throw new Error(fnError.message);
         setData(companionData as CompanionData);
       } catch (e) {

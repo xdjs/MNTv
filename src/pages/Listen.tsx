@@ -249,12 +249,19 @@ export default function Listen() {
 
   // Load track into global player when sources resolve
   // Skip if the same track is already playing (e.g. returning from Browse via mini-player)
+  const lastLoadedTrackRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!ytVideoId && !spotifyUri) return;
+    // Already playing this exact track — don't re-load
     const alreadyPlaying =
       (spotifyUri && player.currentSpotifyUri === spotifyUri) ||
       (!spotifyUri && ytVideoId && player.currentVideoId === ytVideoId);
     if (alreadyPlaying) return;
+    // Build a key for what we're about to load
+    const loadKey = `${ytVideoId || ""}::${spotifyUri || ""}`;
+    if (lastLoadedTrackRef.current === loadKey) return;
+    lastLoadedTrackRef.current = loadKey;
     player.loadTrack({
       videoId: ytVideoId || undefined,
       spotifyUri: spotifyUri || undefined,
@@ -293,6 +300,38 @@ export default function Listen() {
   useEffect(() => {
     if (aiError) console.error("[Listen] AI nugget error:", aiError);
   }, [aiError]);
+
+  // Pre-generate companion content so QR code only shows when ready
+  const [companionReady, setCompanionReady] = useState(false);
+  useEffect(() => {
+    setCompanionReady(false);
+  }, [rawTrackId]);
+
+  useEffect(() => {
+    if (aiLoading || aiNuggets.length === 0 || !track) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { error } = await supabase.functions.invoke("generate-companion", {
+          body: {
+            artist: track.artist,
+            title: track.title,
+            album: track.album,
+            listenCount: listenCount || 1,
+            tier,
+            lastFmUsername: profile?.lastFmUsername || null,
+            spotifyTopArtists: profile?.spotifyTopArtists || null,
+            spotifyTopTracks: profile?.spotifyTopTracks || null,
+            streamingService: profile?.streamingService || null,
+          },
+        });
+        if (!cancelled && !error) setCompanionReady(true);
+      } catch {
+        // Companion pre-gen failed — QR just won't show
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [aiLoading, aiNuggets.length, track?.artist, track?.title, tier]);
 
   const mockNuggets = useMemo(() => isRealTrack ? [] : getNuggetsForTrack(trackId), [isRealTrack, trackId]);
   const trackNuggets = useMemo(
@@ -753,19 +792,25 @@ export default function Listen() {
           onShuffle={() => setShuffleOn((v) => !v)}
         />
 
-        {/* QR Code — permanent, bottom-left */}
-        <div className="fixed bottom-6 left-6 z-10 opacity-50 hover:opacity-90 transition-opacity">
-          <QRCode
-            value={`${window.location.origin}/companion/${trackId}`}
-            size={80}
-            qrStyle="dots"
-            eyeRadius={8}
-            fgColor="#ffffff"
-            bgColor="transparent"
-            ecLevel="M"
-            quietZone={0}
-          />
-        </div>
+        {/* QR Code — only shown once companion content is pre-generated */}
+        {companionReady && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 0.5, scale: 1 }}
+            className="fixed bottom-6 left-6 z-10 hover:opacity-90 transition-opacity"
+          >
+            <QRCode
+              value={`${window.location.origin}/companion/${trackId}`}
+              size={80}
+              qrStyle="dots"
+              eyeRadius={8}
+              fgColor="#ffffff"
+              bgColor="transparent"
+              ecLevel="M"
+              quietZone={0}
+            />
+          </motion.div>
+        )}
 
         {/* Dev panel — development only */}
         {import.meta.env.DEV && (
