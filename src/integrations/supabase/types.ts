@@ -14,6 +14,84 @@ export type Database = {
   }
   public: {
     Tables: {
+      companion_cache: {
+        Row: {
+          content: Json
+          created_at: string
+          id: string
+          listen_count_tier: number
+          track_key: string
+        }
+        Insert: {
+          content: Json
+          created_at?: string
+          id?: string
+          listen_count_tier?: number
+          track_key: string
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          id?: string
+          listen_count_tier?: number
+          track_key?: string
+        }
+        Relationships: []
+      }
+      lastfm_cache: {
+        Row: {
+          fetched_at: string
+          id: string
+          recent_tracks: Json
+          top_artists: Json
+          user_info: Json
+          username: string
+        }
+        Insert: {
+          fetched_at?: string
+          id?: string
+          recent_tracks?: Json
+          top_artists?: Json
+          user_info?: Json
+          username: string
+        }
+        Update: {
+          fetched_at?: string
+          id?: string
+          recent_tracks?: Json
+          top_artists?: Json
+          user_info?: Json
+          username?: string
+        }
+        Relationships: []
+      }
+      nugget_cache: {
+        Row: {
+          created_at: string
+          id: string
+          nuggets: Json
+          sources: Json
+          status: string
+          track_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          nuggets?: Json
+          sources?: Json
+          status?: string
+          track_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          nuggets?: Json
+          sources?: Json
+          status?: string
+          track_id?: string
+        }
+        Relationships: []
+      }
       nugget_history: {
         Row: {
           created_at: string | null
@@ -22,6 +100,7 @@ export type Database = {
           previous_nuggets: Json | null
           track_key: string
           updated_at: string | null
+          user_id: string | null
         }
         Insert: {
           created_at?: string | null
@@ -30,6 +109,7 @@ export type Database = {
           previous_nuggets?: Json | null
           track_key: string
           updated_at?: string | null
+          user_id?: string | null
         }
         Update: {
           created_at?: string | null
@@ -38,6 +118,40 @@ export type Database = {
           previous_nuggets?: Json | null
           track_key?: string
           updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          id: string
+          last_fm_username: string | null
+          spotify_taste: Json | null
+          streaming_service: string | null
+          tier: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_fm_username?: string | null
+          spotify_taste?: Json | null
+          streaming_service?: string | null
+          tier?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_fm_username?: string | null
+          spotify_taste?: Json | null
+          streaming_service?: string | null
+          tier?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }

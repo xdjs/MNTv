@@ -4,9 +4,10 @@ interface LogoProps {
   size?: number;
   className?: string;
   glow?: boolean;
+  glowColor?: string;
 }
 
-export default function MusicNerdLogo({ size = 64, className = "", glow = false }: LogoProps) {
+export default function MusicNerdLogo({ size = 64, className = "", glow = false, glowColor }: LogoProps) {
   return (
     <img
       src={musicNerdLogo}
@@ -14,7 +15,10 @@ export default function MusicNerdLogo({ size = 64, className = "", glow = false 
       width={size}
       height={size}
       className={`inline-block ${glow ? "neon-glow" : ""} ${className}`}
-      style={{ imageRendering: "auto" }}
+      style={{
+        imageRendering: "auto",
+        ...(glowColor ? { filter: `drop-shadow(0 0 8px ${glowColor})` } : {}),
+      }}
     />
   );
 }

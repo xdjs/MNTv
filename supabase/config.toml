@@ -5,3 +5,27 @@ verify_jwt = false
 
 [functions.generate-companion]
 verify_jwt = false
+
+[functions.nugget-image]
+verify_jwt = false
+
+[functions.seed-nuggets]
+verify_jwt = false
+
+[functions.lastfm-sync]
+verify_jwt = false
+
+[functions.spotify-taste]
+verify_jwt = false
+
+[functions.artist-image]
+verify_jwt = false
+
+[functions.lastfm-recommendations]
+verify_jwt = false
+
+[functions.spotify-search]
+verify_jwt = false
+
+[functions.youtube-search]
+verify_jwt = false

@@ -13,9 +13,12 @@ interface Props {
   onResetHistory?: () => void;
   onResetAllHistory?: () => void;
   onIncrementListen?: () => void;
+  activePlayer?: "spotify" | "youtube" | "timer" | null;
+  ytVideoId?: string | null;
+  spotifyUri?: string | null;
 }
 
-export default function DevPanel({ animStyle, setAnimStyle, onJumpToNugget, nuggetCount, backdropMotion, setBackdropMotion, listenCount, trackKey, onResetHistory, onResetAllHistory, onIncrementListen }: Props) {
+export default function DevPanel({ animStyle, setAnimStyle, onJumpToNugget, nuggetCount, backdropMotion, setBackdropMotion, listenCount, trackKey, onResetHistory, onResetAllHistory, onIncrementListen, activePlayer, ytVideoId, spotifyUri }: Props) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -102,7 +105,7 @@ export default function DevPanel({ animStyle, setAnimStyle, onJumpToNugget, nugg
         </div>
       </div>
 
-      <div>
+      <div className="mb-3">
         <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
           <input
             type="checkbox"
@@ -110,8 +113,19 @@ export default function DevPanel({ animStyle, setAnimStyle, onJumpToNugget, nugg
             checked={backdropMotion}
             onChange={(e) => setBackdropMotion(e.target.checked)}
           />
-          Backdrop motion (YouTube)
+          Show video
         </label>
+      </div>
+
+      {/* Playback source info */}
+      <div>
+        <p className="text-xs text-muted-foreground mb-1">Player: <span className="font-semibold text-foreground">{activePlayer || "None"}</span></p>
+        {spotifyUri && (
+          <p className="text-[10px] text-muted-foreground truncate" title={spotifyUri}>SP: {spotifyUri}</p>
+        )}
+        {ytVideoId && (
+          <p className="text-[10px] text-muted-foreground truncate" title={ytVideoId}>YT: {ytVideoId}</p>
+        )}
       </div>
     </motion.div>
   );

@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -100,12 +101,58 @@ class RecitationError extends Error {
   constructor() { super("RECITATION"); this.name = "RecitationError"; }
 }
 
+// ── Tier configuration ──────────────────────────────────────────────
+type Tier = "casual" | "curious" | "nerd";
+
+const TIER_CONFIG: Record<Tier, {
+  tone: string;
+  artistFocus: string;
+  trackFocus: string;
+  discoveryFocus: string;
+  sourceExpectation: string;
+  model: string;
+  temperature: number;
+}> = {
+  casual: {
+    tone: "Conversational, jargon-free, feel-good. Like texting a friend a fun fact.",
+    artistFocus: "Humanizing details, fun anecdotes, latest news. Relatable and interesting.",
+    trackFocus: "The vibe, a fun fact about how it was made. No music theory.",
+    discoveryFocus: "Similar vibe, easy to get into. 'If you like this, you'll love...'",
+    sourceExpectation: "Social media, mainstream interviews, YouTube, Wikipedia.",
+    model: "gemini-2.5-flash",
+    temperature: 1.0,
+  },
+  curious: {
+    tone: "Engaging storytelling. Balanced depth — production details + cultural connections.",
+    artistFocus: "Career context, creative evolution, artistic tensions.",
+    trackFocus: "Production choices, songwriting process, cultural moment.",
+    discoveryFocus: "Genuine musical thread — shared producer, genre lineage, thematic connection.",
+    sourceExpectation: "Pitchfork, Rolling Stone, AllMusic, quality interviews.",
+    model: "gemini-2.5-flash",
+    temperature: 0.9,
+  },
+  nerd: {
+    tone: "Authoritative, technical, maximum depth. Assume music terminology fluency.",
+    artistFocus: "Technical innovations, gear, influence chains, recording philosophy.",
+    trackFocus: "Production techniques, harmonic analysis, exact gear/studio/engineer details.",
+    discoveryFocus: "Obscure but connected — session musicians, sample sources, micro-history.",
+    sourceExpectation: "Sound on Sound, Tape Op, Discogs, MusicBrainz, Reddit deep dives.",
+    model: "gemini-2.5-pro",
+    temperature: 0.8,
+  },
+};
+
 // ── Generate nuggets with Gemini + Google Search grounding ───────────
 interface GeminiNugget {
   headline: string;
   text: string;
   kind: "artist" | "track" | "discovery";
   listenFor: boolean;
+  imageHint?: {
+    type: "artist" | "album" | "wiki";
+    query: string;
+    caption: string;
+  };
   source: {
     type: "youtube" | "article" | "interview";
     title: string;
@@ -124,8 +171,10 @@ async function generateWithGemini(
   transcripts: Map<string, string>,
   apiKey: string,
   listenCount: number = 1,
-  previousNuggets: string[] = []
+  previousNuggets: string[] = [],
+  tier: Tier = "casual"
 ): Promise<{ nuggets: GeminiNugget[]; groundingChunks: any[] }> {
+  const tierConfig = TIER_CONFIG[tier];
   const transcriptContext = videos
     .filter((v) => transcripts.has(v.videoId))
     .map((v, i) => {
@@ -156,18 +205,26 @@ async function generateWithGemini(
 
 DEPTH CONTEXT: ${depthInstruction}${nonRepeatInstruction}
 
+TONE & STYLE: ${tierConfig.tone}
+SOURCE EXPECTATIONS: Prefer sources from ${tierConfig.sourceExpectation}.
+
 ${videoListContext ? `Available YouTube videos:\n${videoListContext}\n` : ""}
 ${transcriptContext ? `Real transcript content:\n\n${transcriptContext}\n` : "No transcripts available — use your knowledge and Google Search to find real sources."}
 
 STRUCTURE — always exactly 3 nuggets in this order:
-1. **Nugget 1 — kind: "artist"**: About the ARTIST — their story, creative philosophy, world. What makes them who they are. listenFor: false.
-2. **Nugget 2 — kind: "track"**: About THIS SPECIFIC TRACK — production, meaning, history, an audio moment to listen for. listenFor: true.
-3. **Nugget 3 — kind: "discovery"**: A specific recommendation — name the exact track, album, or artist the listener should explore next. Explain WHY based on a genuine musical connection. Be opinionated and specific like a knowledgeable friend. listenFor: false.
+1. **Nugget 1 — kind: "artist"**: ${tierConfig.artistFocus}. listenFor: false.
+2. **Nugget 2 — kind: "track"**: ${tierConfig.trackFocus}. listenFor: true.
+3. **Nugget 3 — kind: "discovery"**: ${tierConfig.discoveryFocus}. Be opinionated and specific like a knowledgeable friend. listenFor: false.
 
 CRITICAL RULES:
 - Each nugget MUST have TWO text fields:
   - "headline": 1-2 sentences that spark curiosity and make the reader WANT to learn more. Don't write a dry fact — write something that teases a surprising detail or asks an implicit question. Examples: "The cash register sounds at the start? Roger Waters recorded them by throwing coins into a mixing bowl in his pottery shed." or "There's a reason this song feels unsettling — and it has nothing to do with the lyrics." Make the reader think "wait, really?" or "tell me more."
   - "text": The full 2-3 sentence explanation that delivers on the headline's promise with rich detail and context.
+- Each nugget MUST have an "imageHint" object to suggest a contextually relevant real image:
+  - "type": one of "artist" (for a person — musician, producer, collaborator), "album" (for an album cover), or "wiki" (for an object, place, instrument, studio, etc.)
+   - "query": a SPECIFIC search term that will find an image showing EXACTLY what the caption describes. If the caption mentions a specific instrument, the query MUST include that instrument name. If it mentions a person, include their name AND what they're doing or holding. Examples: "David Gilmour playing Black Strat guitar", "Fender Rhodes electric piano", "Abbey Road Studios interior", "Syd Barrett with guitar 1967". NEVER use a generic person name alone — always add the specific subject (instrument, object, setting) that the caption references.
+   - "caption": a SHORT sentence (6-12 words) that explains HOW this image connects to the nugget's content. Do NOT just label the image — explain its relevance. Examples: "The Fender Rhodes that gave this track its shimmer" or "Nile Rodgers — the groove architect behind this hit" or "Abbey Road's Studio Two, where this was recorded". The viewer sees the image + caption WITHOUT the nugget text, so the caption must make the image's connection to the music self-evident.
+  - Pick the most visually interesting and relevant subject for each nugget. Prefer specific people, instruments, studios, or album covers over abstract concepts.
 - For nugget 3 (discovery): The headline should feel like a friend nudging you with genuine enthusiasm, e.g. "If this groove hit you right, you need to hear what Nile Rodgers did on this other track."
 - For YouTube sources from videos above: set type "youtube", include videoIndex, include a real quote
 - For article/interview sources: cite REAL publications with real article titles
@@ -182,6 +239,11 @@ Return ONLY valid JSON:
       "text": "2-3 sentences of surprising music trivia with full detail",
       "kind": "artist|track|discovery",
       "listenFor": false,
+      "imageHint": {
+        "type": "artist|album|wiki",
+        "query": "Search term for real image",
+        "caption": "Short caption"
+      },
       "source": {
         "type": "youtube|article|interview",
         "title": "Real source title",
@@ -197,10 +259,10 @@ Return ONLY valid JSON:
   const body: any = {
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     tools: [{ google_search: {} }],
-    generationConfig: { temperature: 1.0 },
+    generationConfig: { temperature: tierConfig.temperature },
   };
 
-  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${tierConfig.model}:generateContent?key=${apiKey}`;
 
   // Retry up to 3 times on 429
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -276,22 +338,70 @@ Return ONLY valid JSON:
   throw new Error("Gemini API failed after retries");
 }
 
+// ── Auth helper ───────────────────────────────────────────────────────
+async function requireAuth(req: Request): Promise<{ userId: string } | Response> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader } } }
+  );
+  const token = authHeader.replace("Bearer ", "");
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  return { userId: user.id };
+}
+
 // ── Main handler ─────────────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await requireAuth(req);
+  if (auth instanceof Response) return auth;
+
   try {
     const body = await req.json();
-    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, listenCount, previousNuggets } = body;
+    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, imageCaption, imageQuery, listenCount, previousNuggets, tier: rawTier } = body;
+    const tier: Tier = (rawTier === "casual" || rawTier === "curious" || rawTier === "nerd") ? rawTier : "casual";
 
-    if (!artist || !title) {
-      return new Response(
-        JSON.stringify({ error: "artist and title are required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // ── Input validation ────────────────────────────────────────────
+    const MAX_STR = 300;
+    const MAX_CONTEXT = 2000;
+    const MAX_ARRAY = 50;
+
+    if (!artist || typeof artist !== "string" || artist.trim().length === 0 || artist.length > MAX_STR) {
+      return new Response(JSON.stringify({ error: "Invalid artist (max 300 chars)" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+    if (!title || typeof title !== "string" || title.trim().length === 0 || title.length > MAX_STR) {
+      return new Response(JSON.stringify({ error: "Invalid title (max 300 chars)" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (album !== undefined && album !== null && (typeof album !== "string" || album.length > MAX_STR)) {
+      return new Response(JSON.stringify({ error: "Invalid album" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (context !== undefined && (typeof context !== "string" || context.length > MAX_CONTEXT)) {
+      return new Response(JSON.stringify({ error: "Invalid context (max 2000 chars)" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const safeListenCount = Math.max(1, Math.min(10, typeof listenCount === "number" ? Math.floor(listenCount) : 1));
+    const safePreviousNuggets: string[] = Array.isArray(previousNuggets)
+      ? previousNuggets.slice(0, MAX_ARRAY).map((s: unknown) => (typeof s === "string" ? s.slice(0, 200) : "")).filter(Boolean)
+      : [];
+    const safeSourceTitle = typeof sourceTitle === "string" ? sourceTitle.slice(0, 300) : undefined;
+    const safeSourcePublisher = typeof sourcePublisher === "string" ? sourcePublisher.slice(0, 200) : undefined;
+    const safeImageCaption = typeof imageCaption === "string" ? imageCaption.slice(0, 300) : undefined;
+    const safeImageQuery = typeof imageQuery === "string" ? imageQuery.slice(0, 300) : undefined;
 
     const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY");
     if (!GOOGLE_AI_API_KEY) {
@@ -306,7 +416,8 @@ The user has been reading this trivia and wants to go deeper:
 ---
 ${context}
 ---
-${sourceTitle ? `The original source was: "${sourceTitle}" by ${sourcePublisher}` : ""}
+${safeSourceTitle ? `The original source was: "${safeSourceTitle}" by ${safeSourcePublisher}` : ""}
+${safeImageCaption ? `An image was shown alongside this nugget: "${safeImageQuery}" with caption "${safeImageCaption}". If relevant, weave in how this visual element connects to the deeper story.` : ""}
 
 Continue this thread of discovery. Provide ONE more paragraph of 2-3 sentences MAX (under 80 words total) that goes deeper — reveal connections, context, or implications that make this even more interesting. Be concise and punchy — this is for a TV screen. Think about WHY this matters, HOW it connects to broader music history, or WHAT it reveals about the creative process.
 
@@ -409,16 +520,15 @@ Return ONLY valid JSON:
     let groundingChunks: any[];
     try {
       const result = await generateWithGemini(
-        artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY, listenCount || 1, previousNuggets || []
+        artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier
       );
       rawNuggets = result.nuggets;
       groundingChunks = result.groundingChunks;
     } catch (e) {
       if (e instanceof RecitationError) {
-        // Retry without transcripts — they likely contain copyrighted lyrics
         console.log("Retrying without transcripts to avoid RECITATION block...");
         const result = await generateWithGemini(
-          artist, title, album, videos, new Map(), GOOGLE_AI_API_KEY, listenCount || 1, previousNuggets || []
+          artist, title, album, videos, new Map(), GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier
         );
         rawNuggets = result.nuggets;
         groundingChunks = result.groundingChunks;
@@ -427,52 +537,54 @@ Return ONLY valid JSON:
       }
     }
 
-    // Step 4: Assemble response with real video IDs and targeted search URLs
+    // Step 4: Assemble response with real video IDs and grounding-sourced URLs
     const nuggets = rawNuggets.map((n) => {
+      const source = n.source || {};
       const result: any = {
         headline: n.headline,
         text: n.text,
         kind: n.kind,
         listenFor: n.listenFor,
+        imageHint: n.imageHint || null,
         source: {
-          type: n.source.type,
-          title: n.source.title,
-          publisher: n.source.publisher,
-          quoteSnippet: n.source.quoteSnippet,
-          locator: n.source.locator,
+          type: source.type || "article",
+          title: source.title || `${title} by ${artist}`,
+          publisher: source.publisher || "Unknown",
+          quoteSnippet: source.quoteSnippet || "",
+          locator: source.locator,
         },
       };
 
       // Attach real embedId for YouTube sources
-      if (n.source.type === "youtube" && n.source.videoIndex != null) {
-        const video = videos[n.source.videoIndex];
+      if (source.type === "youtube" && source.videoIndex != null) {
+        const video = videos[source.videoIndex];
         if (video) {
           result.source.embedId = video.videoId;
           result.source.url = `https://www.youtube.com/watch?v=${video.videoId}`;
         }
       }
 
-      // For article/interview sources, build a targeted Google Search URL
+      // For non-YouTube sources, try to find a direct URL from Gemini's grounding chunks
+      if (!result.source.url && groundingChunks.length > 0) {
+        const pubLower = (source.publisher || "").toLowerCase();
+        const titleLower = (source.title || "").toLowerCase();
+        const match = groundingChunks.find((chunk: any) => {
+          const chunkTitle = (chunk?.web?.title || "").toLowerCase();
+          const chunkUri = (chunk?.web?.uri || "").toLowerCase();
+          return (
+            (pubLower && (chunkTitle.includes(pubLower) || chunkUri.includes(pubLower))) ||
+            (titleLower && chunkTitle.includes(titleLower))
+          );
+        });
+        if (match?.web?.uri) {
+          result.source.url = match.web.uri;
+        }
+      }
+
+      // Fallback: "I'm Feeling Lucky" Google search (goes directly to top result)
       if (!result.source.url) {
-        const publisherDomains: Record<string, string> = {
-          "pitchfork": "site:pitchfork.com",
-          "rolling stone": "site:rollingstone.com",
-          "nme": "site:nme.com",
-          "the guardian": "site:theguardian.com",
-          "billboard": "site:billboard.com",
-          "spin": "site:spin.com",
-          "stereogum": "site:stereogum.com",
-          "consequence of sound": "site:consequence.net",
-          "the quietus": "site:thequietus.com",
-          "sound on sound": "site:soundonsound.com",
-          "wikipedia": "site:en.wikipedia.org",
-          "far out magazine": "site:faroutmagazine.co.uk",
-          "the line of best fit": "site:thelineofbestfit.com",
-        };
-        const pubLower = n.source.publisher.toLowerCase();
-        const siteHint = publisherDomains[pubLower] || "";
-        const q = `"${n.source.title}" ${siteHint} ${artist}`.trim();
-        result.source.url = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+        const q = `"${source.title || title}" ${source.publisher || ""} ${artist}`.trim();
+        result.source.url = `https://www.google.com/search?btnI=1&q=${encodeURIComponent(q)}`;
       }
 
       return result;

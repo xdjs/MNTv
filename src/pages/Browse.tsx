@@ -1,84 +1,62 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search } from "lucide-react";
+import { Search, LogOut } from "lucide-react";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import TileRow from "@/components/TileRow";
 import SearchOverlay from "@/components/SearchOverlay";
 import PageTransition from "@/components/PageTransition";
-import { artists as rawArtists, albums, tracks } from "@/mock/tracks";
-import { useArtistImages } from "@/hooks/useArtistImages";
+import { useUserProfile, tierGreeting, tierBadgeLabel, tierBadgeColor, tierGlowClass } from "@/hooks/useMusicNerdState";
+import { usePersonalizedCatalog } from "@/hooks/usePersonalizedCatalog";
+import { useTierAccent } from "@/hooks/useTierAccent";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Browse() {
   const [searchOpen, setSearchOpen] = useState(false);
   const navigate = useNavigate();
-  const artists = useArtistImages(rawArtists);
+  const { profile, saveProfile, clearProfile } = useUserProfile();
+  const tier = profile?.calculatedTier;
 
-  // Build tile data
-  const artistTiles = useMemo(() => artists.map((a) => ({
-    id: a.id,
-    imageUrl: a.imageUrl,
-    title: a.name,
-    subtitle: a.genres[0],
-    href: `/artist/${a.id}`,
-  })), [artists]);
+  const cycleTier = useCallback(() => {
+    if (!profile) return;
+    const tiers: Array<"casual" | "curious" | "nerd"> = ["casual", "curious", "nerd"];
+    const currentIdx = tiers.indexOf(tier || "casual");
+    const nextTier = tiers[(currentIdx + 1) % tiers.length];
+    saveProfile({ ...profile, calculatedTier: nextTier });
+  }, [profile, tier, saveProfile]);
 
-  // Tile pixel widths (must match TileRow sizes + gap)
-  const tileSizeMap: Record<string, number> = { sm: 144, md: 176, lg: 224 };
-  const tileGap = 20; // gap-5 = 20px
+  useTierAccent();
 
-  const albumTiles = useMemo(() => albums.map((a) => {
-    const artist = artists.find((ar) => ar.id === a.artistId);
-    return {
-      id: a.id,
-      imageUrl: a.coverArtUrl,
-      title: a.title,
-      subtitle: artist?.name || "",
-      href: `/album/${a.id}`,
-    };
-  }), [artists]);
+  const { rows: allRows } = usePersonalizedCatalog(profile);
+  const { user, isGuest } = useAuth();
+  const userName = user?.user_metadata?.full_name || user?.user_metadata?.name || "";
 
-  const recentTiles = useMemo(() => tracks.slice(0, 8).map((t) => ({
-    id: t.id,
-    imageUrl: t.coverArtUrl,
-    title: t.title,
-    subtitle: t.artist,
-    href: `/listen/${t.id}`,
-  })), []);
+  const tierLogoGlow: Record<string, string> = {
+    casual: "#22c55e",
+    curious: "#3b82f6",
+    nerd: "#ec4899",
+  };
 
-  const genreSections = useMemo(() => {
-    const genres = [...new Set(albums.map((a) => a.genre))];
-    return genres.slice(0, 3).map((genre) => ({
-      genre,
-      tiles: albums
-        .filter((a) => a.genre === genre)
-        .map((a) => ({
-          id: a.id,
-          imageUrl: a.coverArtUrl,
-          title: a.title,
-          subtitle: artists.find((ar) => ar.id === a.artistId)?.name || "",
-          href: `/album/${a.id}`,
-        })),
-    }));
-  }, [artists]);
 
-  // All navigable rows: header(row 0), then tile rows
-  const allRows = useMemo(() => {
-    const tileRows = [
-      { label: "Jump Back In", items: recentTiles, size: "md" as const },
-      { label: "Artists", items: artistTiles, size: "lg" as const },
-      { label: "Albums", items: albumTiles, size: "md" as const },
-      ...genreSections.map((gs) => ({ label: gs.genre, items: gs.tiles, size: "sm" as const })),
-    ].filter((r) => r.items.length > 0);
-    return tileRows;
-  }, [recentTiles, artistTiles, albumTiles, genreSections]);
+  const handleSignOut = async () => {
+    // Sign out of Supabase (best-effort — always clear local state afterward)
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.warn("Supabase sign-out error (ignored):", err);
+    } finally {
+      clearProfile();
+      localStorage.removeItem("spotify_playback_token");
+      navigate("/connect", { replace: true });
+    }
+  };
 
   // Focus state: rowIndex (-1 = header), colIndex
   const [rowIndex, setRowIndex] = useState(-1);
   const [colIndex, setColIndex] = useState(0);
 
-  const HEADER_ITEMS = 2; // logo, search
+  const HEADER_ITEMS = 2;
 
-  // Find the closest tile in a target row to the current tile's viewport center X
   const findClosestColByViewport = useCallback((targetRowLabel: string, currentCenterX: number) => {
     const tiles = document.querySelectorAll<HTMLElement>(`[data-tile-row="${targetRowLabel}"]`);
     let bestCol = 0;
@@ -95,7 +73,6 @@ export default function Browse() {
     return bestCol;
   }, []);
 
-  // Get the viewport center X of the currently focused tile
   const getCurrentCenterX = useCallback(() => {
     if (rowIndex === -1) return window.innerWidth / 2;
     const label = allRows[rowIndex]?.label;
@@ -106,47 +83,56 @@ export default function Browse() {
     return rect.left + rect.width / 2;
   }, [rowIndex, colIndex, allRows]);
 
+  // ── D-pad keyboard navigation ──────────────────────────────────────
   useEffect(() => {
-    if (searchOpen) return;
+    if (searchOpen) return; // let search overlay handle its own keys
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        const next = Math.min(rowIndex + 1, allRows.length - 1);
-        if (next !== rowIndex) {
-          const cx = getCurrentCenterX();
-          const targetLabel = allRows[next]?.label;
-          if (targetLabel) setColIndex(findClosestColByViewport(targetLabel, cx));
-          setRowIndex(next);
+        if (rowIndex === -1) {
+          // Header → first row
+          if (allRows.length > 0) {
+            const centerX = getCurrentCenterX();
+            const nextCol = findClosestColByViewport(allRows[0].label, centerX);
+            setRowIndex(0);
+            setColIndex(nextCol);
+          }
+        } else if (rowIndex < allRows.length - 1) {
+          const centerX = getCurrentCenterX();
+          const nextRow = rowIndex + 1;
+          const nextCol = findClosestColByViewport(allRows[nextRow].label, centerX);
+          setRowIndex(nextRow);
+          setColIndex(nextCol);
         }
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        const next = Math.max(rowIndex - 1, -1);
-        if (next !== rowIndex) {
-          if (next === -1) {
-            const cx = getCurrentCenterX();
-            setColIndex(cx > window.innerWidth / 2 ? 1 : 0);
-          } else {
-            const cx = getCurrentCenterX();
-            const targetLabel = allRows[next]?.label;
-            if (targetLabel) setColIndex(findClosestColByViewport(targetLabel, cx));
-          }
-          setRowIndex(next);
+        if (rowIndex > 0) {
+          const centerX = getCurrentCenterX();
+          const nextRow = rowIndex - 1;
+          const nextCol = findClosestColByViewport(allRows[nextRow].label, centerX);
+          setRowIndex(nextRow);
+          setColIndex(nextCol);
+        } else if (rowIndex === 0) {
+          setRowIndex(-1);
+          setColIndex(0);
+        }
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        if (rowIndex === -1) {
+          setColIndex((c) => Math.min(c + 1, HEADER_ITEMS - 1));
+        } else {
+          const maxCol = (allRows[rowIndex]?.items.length || 1) - 1;
+          setColIndex((c) => Math.min(c + 1, maxCol));
         }
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
-        setColIndex((c) => Math.max(0, c - 1));
-      } else if (e.key === "ArrowRight") {
-        e.preventDefault();
-        setColIndex((c) => {
-          const max = rowIndex === -1 ? HEADER_ITEMS - 1 : (allRows[rowIndex]?.items.length || 1) - 1;
-          return Math.min(c + 1, max);
-        });
+        setColIndex((c) => Math.max(c - 1, 0));
       } else if (e.key === "Enter") {
         e.preventDefault();
         if (rowIndex === -1) {
-          if (colIndex === 1) setSearchOpen(true);
-          // colIndex 0 = logo, no action
+          if (colIndex === 0) cycleTier();
+          else if (colIndex === 1) setSearchOpen(true);
         } else {
           const item = allRows[rowIndex]?.items[colIndex];
           if (item) navigate(item.href);
@@ -156,38 +142,66 @@ export default function Browse() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [searchOpen, rowIndex, colIndex, allRows, navigate, getCurrentCenterX, findClosestColByViewport]);
+  }, [searchOpen, rowIndex, colIndex, allRows, navigate, cycleTier, getCurrentCenterX, findClosestColByViewport]);
 
   const focusGlow = "tv-focus-glow";
+  const glowClass = tier ? tierGlowClass(tier) : "";
+  const badgeColor = tier ? tierBadgeColor(tier) : "";
 
   return (
     <PageTransition>
       <div className="min-h-screen bg-background">
         {/* Header */}
         <header className="flex items-center justify-between px-10 pt-8 pb-6">
-          <div className={`rounded-full transition-all ${rowIndex === -1 && colIndex === 0 ? focusGlow + " scale-110" : ""}`}>
-            <MusicNerdLogo size={36} glow className="opacity-80" />
-          </div>
           <button
-            onClick={() => setSearchOpen(true)}
-            className={`flex h-10 items-center gap-2 rounded-full bg-foreground/5 px-5 text-sm text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground ${
-              rowIndex === -1 && colIndex === 1 ? focusGlow + " scale-105" : ""
-            }`}
+            onClick={cycleTier}
+            title={`Switch tier (currently ${tier || "casual"})`}
+            className={`rounded-full transition-all ${rowIndex === -1 && colIndex === 0 ? focusGlow + " scale-110" : ""}`}
           >
-            <Search size={16} />
-            <span style={{ fontFamily: "'Nunito Sans', sans-serif" }}>Search</span>
+            <MusicNerdLogo size={36} glow className="opacity-80" glowColor={tierLogoGlow[tier || "casual"]} />
           </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSearchOpen(true)}
+              className={`flex h-10 items-center gap-2 rounded-full bg-foreground/5 px-5 text-sm text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground ${
+                rowIndex === -1 && colIndex === 1 ? focusGlow + " scale-105" : ""
+              }`}
+            >
+              <Search size={16} />
+              <span style={{ fontFamily: "'Nunito Sans', sans-serif" }}>Search</span>
+            </button>
+            <button
+              onClick={handleSignOut}
+              title="Sign out"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-foreground/5 text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground"
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
         </header>
 
         {/* Hero greeting */}
-        <div className="px-10 mb-8">
-          <h1
-            className="text-4xl font-black text-foreground tracking-tight md:text-5xl"
-            style={{ fontFamily: "'Nunito Sans', sans-serif" }}
-          >
-            Good evening
-          </h1>
-          <p className="mt-1 text-muted-foreground text-lg">What do you want to listen to?</p>
+        <div className={`mx-10 mb-8 px-5 py-4 rounded-2xl ${glowClass}`}>
+          <div className="flex items-center gap-3">
+            <h1
+              className="text-4xl font-black text-foreground tracking-tight md:text-5xl"
+              style={{ fontFamily: "'Nunito Sans', sans-serif" }}
+            >
+              {tierGreeting(tier, userName)}
+            </h1>
+            {tier && (
+              <span className={`text-xs font-bold px-3 py-1 rounded-full ${badgeColor}`}>
+                ● {tierBadgeLabel(tier)}
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-muted-foreground text-lg">
+            {profile?.spotifyTopArtists?.length
+              ? "Listening via Spotify"
+              : profile?.streamingService
+                ? `Listening via ${profile.streamingService}`
+                : "What do you want to listen to?"}
+          </p>
         </div>
 
         {/* Rows */}
@@ -201,10 +215,8 @@ export default function Browse() {
           />
         ))}
 
-        {/* Bottom spacing */}
         <div className="h-20" />
 
-        {/* Search overlay */}
         <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
       </div>
     </PageTransition>

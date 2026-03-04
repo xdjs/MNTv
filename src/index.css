@@ -55,6 +55,15 @@
     @apply bg-background text-foreground;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
   }
+
+  /* Smooth accent colour transitions for dynamic palette */
+  :root {
+    transition:
+      --primary 0.8s ease,
+      --neon-glow 0.8s ease,
+      --ring 0.8s ease,
+      --accent 0.8s ease;
+  }
 }
 
 /* Noise texture overlay */
@@ -107,29 +116,49 @@
 
 /* Neon glow for logo */
 .neon-glow {
-  filter: drop-shadow(0 0 8px hsl(330 90% 60% / 0.6)) drop-shadow(0 0 20px hsl(330 90% 60% / 0.3));
+  filter: drop-shadow(0 0 8px hsl(var(--neon-glow) / 0.6)) drop-shadow(0 0 20px hsl(var(--neon-glow) / 0.3));
 }
 
 /* TV focus state — soft glow */
 .tv-focus-glow {
-  box-shadow: 0 0 16px 4px hsl(330 90% 60% / 0.45), 0 0 40px 8px hsl(330 90% 60% / 0.2);
+  box-shadow: 0 0 16px 4px hsl(var(--neon-glow) / 0.45), 0 0 40px 8px hsl(var(--neon-glow) / 0.2);
 }
 
 .tv-focus {
   @apply outline-none;
-  box-shadow: 0 0 16px 4px hsl(330 90% 60% / 0.45), 0 0 40px 8px hsl(330 90% 60% / 0.2);
+  box-shadow: 0 0 16px 4px hsl(var(--neon-glow) / 0.45), 0 0 40px 8px hsl(var(--neon-glow) / 0.2);
 }
 
 .tv-focus-visible:focus-visible {
   @apply outline-none;
-  box-shadow: 0 0 16px 4px hsl(330 90% 60% / 0.45), 0 0 40px 8px hsl(330 90% 60% / 0.2);
+  box-shadow: 0 0 16px 4px hsl(var(--neon-glow) / 0.45), 0 0 40px 8px hsl(var(--neon-glow) / 0.2);
 }
 
 /* Neon button glow */
 .neon-button {
-  box-shadow: 0 0 15px hsl(330 90% 60% / 0.3), 0 0 40px hsl(330 90% 60% / 0.1);
+  box-shadow: 0 0 15px hsl(var(--neon-glow) / 0.3), 0 0 40px hsl(var(--neon-glow) / 0.1);
   transition: box-shadow 0.3s ease;
 }
 .neon-button:hover {
-  box-shadow: 0 0 20px hsl(330 90% 60% / 0.5), 0 0 60px hsl(330 90% 60% / 0.2);
+  box-shadow: 0 0 20px hsl(var(--neon-glow) / 0.5), 0 0 60px hsl(var(--neon-glow) / 0.2);
+}
+
+/* Glass-themed scrollbar */
+.glass-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.glass-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.glass-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(0 0% 100% / 0.15);
+  border-radius: 999px;
+  border: 1px solid hsl(0 0% 100% / 0.06);
+}
+.glass-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(0 0% 100% / 0.25);
+}
+.glass-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(0 0% 100% / 0.15) transparent;
 }

@@ -1,153 +1,104 @@
-# QR Code Companion Page with Clickable Source Links
 
-This plan adds a permanent QR code to the Listen screen and a mobile-friendly companion page. Each nugget on the companion page includes a clickable source link so users can trace where the information came from.
+## The Problem
 
----
+Right now the Last.fm username is just stored in localStorage and passed as a text hint to Gemini. We never actually call the Last.fm API. The user wants real data — but calling the Last.fm API on every single companion load would be wasteful and could run up costs fast.
 
-## Part 1: New Dependency
+## The Smart Solution: `lastfm_cache` table + TTL refresh
 
-Add `qrcode.react` to render white SVG QR codes with transparent backgrounds.
+Instead of calling Last.fm on every listen, we:
+1. Store the fetched Last.fm profile data in a new `lastfm_cache` table in the database
+2. Only refresh it if the cached data is older than **24 hours** (configurable TTL)
+3. The `generate-companion` edge function checks the cache first — if fresh, uses it; if stale/missing, fetches from Last.fm API, stores it, then uses it
 
----
-
-## Part 2: QR Code on Listen Screen
-
-**File: `src/pages/Listen.tsx**`
-
-- Import `QRCodeSVG` from `qrcode.react`
-- Render a 72px white-on-transparent QR code, positioned bottom-left, always visible
-- Opacity ~40% so it blends with the cinematic backdrop
-- Encodes: `https://musicnerdtv.lovable.app/companion/${trackId}`
-- Sits at `z-10`, outside the playback bar's auto-hide behavior
+This means a user who listens 20 times in a day only makes **1** Last.fm API call, not 20.
 
 ---
 
-## Part 3: Companion Edge Function
+## What Last.fm Data to Fetch
 
-**New file: `supabase/functions/generate-companion/index.ts**`
+The Last.fm API is free (no cost per call, just rate-limited). We'll fetch:
+- `user.getTopArtists` — top 10 artists (period: 1 month) → used to personalize "Explore Next" recommendations
+- `user.getRecentTracks` — last 5 tracks → used to avoid recommending things they just heard
+- `user.getInfo` — playcount, registered date → for the "Nerd" tier badge context
 
-Uses the same Gemini + Google Search grounding pipeline. Accepts `{ artist, title, album, listenCount }`.
-
-**Nugget scaling by listen count:**
-
-- `listenCount <= 1` → 3 nuggets (1 artist, 1 track, 1 discovery)
-- `listenCount === 2` → 6 nuggets (2 artist, 2 track, 2 discovery)
-- `listenCount >= 3` → 9 nuggets (3 artist, 3 track, 3 discovery) — capped
-
-**Each nugget includes a `source` object with:**
-
-- `type` (youtube/article/interview)
-- `title` (real source title)
-- `publisher` (channel or publication name)
-- `url` (YouTube watch link or Google Search URL — same logic as `generate-nuggets`)
-- `quoteSnippet` (relevant quote from the source)
-
-**Also generates:**
-
-- `artistSummary`: 2-3 paragraphs about the artist
-- `trackStory`: 2-3 paragraphs about the track
-- `externalLinks`: Array of `{ label, url }` for Wikipedia, Spotify, YouTube Music
-
-Uses existing `GOOGLE_AI_API_KEY` secret. CORS headers included. `verify_jwt = false`.
+This gets injected into the Gemini prompt as structured context, not just a username string.
 
 ---
 
-## Part 4: Companion Page
+## Files to Change
 
-**New file: `src/pages/Companion.tsx**`
-
-Mobile-optimized, scrollable article page. Data flow on load:
-
-1. Extract `trackId` from URL params
-2. Look up track + artist from mock data
-3. Fetch real artist photo via existing `artist-image` edge function
-4. Query `nugget_history` table for this track's `listen_count`
-5. Call `generate-companion` edge function with `{ artist, title, album, listenCount }`
-
-**Content sections:**
-
-1. **Header** — MusicNerd logo + branding
-2. **Artist Hero** — Real photo from `artist-image` function, fallback to mock
-3. **Artist Info** — Name, genre pills, bio from mock data
-4. **Track Details** — Title, album, cover art
-5. **AI Summaries** — Artist summary + track story paragraphs
-6. **Nuggets** — 3/6/9 based on listen count, each rendered as a card with:
-  - Kind label ("The Artist" / "The Track" / "Explore Next")
-  - Headline + full text
-  - **Clickable source link** — shows source title, publisher, and a link icon. Tapping opens the source URL (YouTube video or Google Search for the article) in a new tab
-7. **External Links** — Wikipedia, Spotify, YouTube Music search links
-
-**Styling:** Dark theme matching the TV app. Nunito Sans font. Glass-card sections. Loading skeleton while AI generates.
-
----
-
-## Part 5: Route Registration
-
-**File: `src/App.tsx**`
-
-Add: `<Route path="/companion/:trackId" element={<Companion />} />`
-
----
-
-## Summary of Changes
-
-
-| File                                             | Change                                                                |
-| ------------------------------------------------ | --------------------------------------------------------------------- |
-| `package.json`                                   | Add `qrcode.react`                                                    |
-| `src/pages/Listen.tsx`                           | Add QR code component (bottom-left)                                   |
-| `src/pages/Companion.tsx`                        | New mobile companion page with clickable source links on every nugget |
-| `supabase/functions/generate-companion/index.ts` | New edge function — listen-count-scaled nuggets with source URLs      |
-| `src/App.tsx`                                    | Add `/companion/:trackId` route                                       |
-
-
-### Source Link Behavior on Companion Page
-
-Every nugget card has a tappable source attribution at the bottom:
-
-- Shows an external-link icon + source title + publisher name
-- YouTube sources → opens `https://www.youtube.com/watch?v={videoId}`
-- Article/interview sources → opens a targeted Google Search URL (same pattern as `generate-nuggets`: `"Article Title" site:publisher.com artist`)
-- Opens in a new tab (`target="_blank" rel="noopener"`)
-
-### Companion Page Mobile Layout
-
-```text
-┌─────────────────────────┐
-│  🎵 MusicNerd           │
-├─────────────────────────┤
-│   [Artist Photo]        │
-├─────────────────────────┤
-│  Artist Name            │
-│  Genre · Genre          │
-│  Bio paragraph...       │
-├─────────────────────────┤
-│  🎵 Track Title         │
-│  Album Name             │
-├─────────────────────────┤
-│  About the Artist       │
-│  Long-form summary...   │
-├─────────────────────────┤
-│  About This Track       │
-│  Long-form story...     │
-├─────────────────────────┤
-│  Nuggets (3/6/9)        │
-│  ┌───────────────────┐  │
-│  │ The Artist        │  │
-│  │ Headline text     │  │
-│  │ Full explanation  │  │
-│  │ 🔗 Source Title → │  │  ← clickable, opens source
-│  └───────────────────┘  │
-│  ┌───────────────────┐  │
-│  │ The Track         │  │
-│  │ ...               │  │
-│  │ 🔗 Source Title → │  │
-│  └───────────────────┘  │
-│  (repeat per tier)      │
-├─────────────────────────┤
-│  Explore Further        │
-│  📖 Wikipedia →         │
-│  🎵 Spotify →           │
-│  ▶  YouTube Music →     │
-└─────────────────────────┘
+### 1. Database migration — new `lastfm_cache` table
+```sql
+CREATE TABLE public.lastfm_cache (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  username text NOT NULL UNIQUE,
+  top_artists jsonb NOT NULL DEFAULT '[]',
+  recent_tracks jsonb NOT NULL DEFAULT '[]',
+  user_info jsonb NOT NULL DEFAULT '{}',
+  fetched_at timestamptz NOT NULL DEFAULT now()
+);
+-- RLS: public read/write (no auth on this app)
+ALTER TABLE public.lastfm_cache ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all on lastfm_cache" ON public.lastfm_cache FOR ALL USING (true) WITH CHECK (true);
 ```
+
+### 2. New edge function: `supabase/functions/lastfm-sync/index.ts`
+A dedicated function that:
+- Accepts `{ username: string }`
+- Checks `lastfm_cache` for existing row
+- If `fetched_at` < 24h ago → return cached data immediately (no Last.fm API call)
+- If stale or missing → call Last.fm API for `user.getTopArtists`, `user.getRecentTracks`, `user.getInfo`
+- Upsert result into `lastfm_cache`
+- Return the data
+
+This function needs a `LASTFM_API_KEY` secret (Last.fm API keys are free — user will need to create one at last.fm/api/account/create).
+
+### 3. Update `supabase/functions/generate-companion/index.ts`
+- If `lastFmUsername` is provided, call the `lastfm-sync` function internally (via supabase functions invoke, or direct HTTP to the same project)
+- Inject structured Last.fm context into the Gemini prompt:
+```
+User's Last.fm top artists this month: Radiohead, Aphex Twin, Portishead...
+Recently played: [track list]
+Total scrobbles: 45,230
+```
+Instead of the current weak: `"Last.fm user: {username} — personalize recommendations subtly"`
+
+### 4. Update `supabase/config.toml`
+Add `[functions.lastfm-sync]` with `verify_jwt = false`
+
+### 5. Frontend: `src/pages/Setup.tsx`
+- After user enters Last.fm username and hits Continue, call `lastfm-sync` immediately in the background to warm the cache
+- Show a small "Syncing your Last.fm..." loading state while it runs
+- If Last.fm API key isn't configured yet, gracefully degrade (no crash)
+
+---
+
+## TTL Strategy (Cost Control)
+
+| Scenario | Last.fm API calls |
+|---|---|
+| 1st listen ever | 1 call to warm cache |
+| Listens 2–100 same day | 0 calls (served from DB cache) |
+| First listen next day | 1 call to refresh |
+| User changes username | 1 call |
+
+24h TTL keeps data reasonably fresh (Last.fm scrobble data changes daily) while keeping API usage minimal. Could be bumped to 6h for Nerd users if they want more up-to-date context.
+
+---
+
+## Secret Needed
+
+The Last.fm API is free but requires an API key. We'll need to request a `LASTFM_API_KEY` secret from the user. They can get one at: **last.fm/api/account/create** (instant, no payment required).
+
+---
+
+## Summary of New Files/Tables
+
+| Item | Type | Purpose |
+|---|---|---|
+| `lastfm_cache` | DB table | Stores fetched Last.fm data with TTL |
+| `supabase/functions/lastfm-sync/index.ts` | Edge function | Fetch + cache Last.fm data |
+| `generate-companion/index.ts` | Updated | Uses rich Last.fm context in Gemini prompt |
+| `src/pages/Setup.tsx` | Updated | Warms cache on username entry |
+
+Before we can build this, we need the `LASTFM_API_KEY` secret. The user will need to create a free Last.fm API account.

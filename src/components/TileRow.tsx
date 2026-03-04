@@ -43,6 +43,15 @@ export default function TileRow({ label, items, tileSize = "md", focusedIndex = 
     }
   }, [focusedIndex]);
 
+  // Hover glow uses --neon-glow (tier color) — no per-image extraction
+  const handleTileEnter = useCallback((el: HTMLElement) => {
+    el.style.boxShadow = `0 0 20px 6px hsl(var(--neon-glow) / 0.5), 0 0 50px 12px hsl(var(--neon-glow) / 0.2)`;
+  }, []);
+
+  const handleTileLeave = useCallback((el: HTMLElement, isFocused: boolean) => {
+    if (!isFocused) el.style.boxShadow = "";
+  }, []);
+
   if (items.length === 0) return null;
 
   return (
@@ -68,7 +77,6 @@ export default function TileRow({ label, items, tileSize = "md", focusedIndex = 
           className="flex gap-5 overflow-x-auto scroll-smooth px-10 scrollbar-hide"
           style={{
             scrollbarWidth: "none",
-            /* Extra padding so glow (50px spread) + scale aren't clipped */
             paddingTop: 64,
             paddingBottom: 64,
             marginTop: -52,
@@ -85,20 +93,29 @@ export default function TileRow({ label, items, tileSize = "md", focusedIndex = 
                 data-tile-col={i}
                 onClick={() => navigate(item.href)}
                 className={`${sizes[tileSize]} shrink-0 group/tile relative rounded-xl transition-all duration-200 outline-none ${
-                  isFocused
-                    ? "scale-110 z-10"
-                    : "hover:scale-110 hover:z-10"
+                  isFocused ? "scale-110 z-10" : "hover:scale-110 hover:z-10"
                 }`}
-                style={isFocused ? {
-                  boxShadow: "0 0 20px 6px hsl(330 90% 60% / 0.5), 0 0 50px 12px hsl(330 90% 60% / 0.2)",
-                } : undefined}
+                style={{
+                  boxShadow: isFocused
+                    ? `0 0 20px 6px hsl(var(--neon-glow) / 0.5), 0 0 50px 12px hsl(var(--neon-glow) / 0.2)`
+                    : undefined,
+                }}
+                onMouseEnter={(e) => handleTileEnter(e.currentTarget)}
+                onMouseLeave={(e) => handleTileLeave(e.currentTarget, isFocused)}
               >
                 <div className="absolute inset-0 rounded-xl overflow-hidden">
-                  <img
-                    src={item.imageUrl}
-                    alt={item.title}
-                    className="h-full w-full object-cover"
-                  />
+                  {item.imageUrl ? (
+                    <img
+                      src={item.imageUrl}
+                      alt={item.title}
+                      className="h-full w-full object-cover"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                    />
+                  ) : (
+                    <div className="h-full w-full bg-foreground/10 flex items-center justify-center">
+                      <span className="text-2xl font-bold text-foreground/30">{item.title?.[0] || "?"}</span>
+                    </div>
+                  )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
                 </div>
                 <div className="absolute bottom-0 left-0 right-0 p-3 z-10">

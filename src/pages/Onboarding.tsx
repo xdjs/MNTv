@@ -2,16 +2,21 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import PageTransition from "@/components/PageTransition";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
+import { getStoredProfile } from "@/hooks/useMusicNerdState";
+import { useEffect } from "react";
 
 export default function Onboarding() {
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (getStoredProfile()) navigate("/browse", { replace: true });
+  }, []);
+
   return (
     <PageTransition>
       <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden noise-overlay">
-        {/* Background gradient */}
         <div className="absolute inset-0 bg-gradient-to-b from-background via-background to-secondary/20" />
-        
+
         <div className="relative z-10 flex flex-col items-center gap-8">
           <motion.div
             initial={{ scale: 0.5, opacity: 0 }}
