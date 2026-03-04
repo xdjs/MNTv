@@ -5,14 +5,15 @@
  * - Spotify top artists / tracks (stored in profile after OAuth)
  * - Last.fm top artists / recent tracks (fetched from lastfm-sync edge fn)
  * - YouTube top artists (stored after Google OAuth)
+ * - Real artist recommendations via Last.fm getSimilar (lastfm-recommendations fn)
  *
- * Falls back to the mock catalog for guest users.
+ * Falls back to the mock catalog ONLY for guests.
  */
 
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { UserProfile } from "@/mock/types";
-import { artists as mockArtists, albums as mockAlbums, tracks as mockTracks } from "@/mock/tracks";
+import { artists as mockArtists, tracks as mockTracks } from "@/mock/tracks";
 
 export interface BrowseTile {
   id: string;
@@ -20,7 +21,6 @@ export interface BrowseTile {
   title: string;
   subtitle: string;
   href: string;
-  /** true = open in-app listen; false = external */
   isRealTrack?: boolean;
 }
 
@@ -32,21 +32,19 @@ export interface BrowseRow {
 
 interface LastFmArtist { name: string; playcount: number; }
 interface LastFmTrack { artist: string; name: string; album: string; }
+interface RealArtist { name: string; imageUrl: string; tags: string[]; }
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function artistImageUrl(name: string): string {
-  // Try to find the artist in the mock catalog first (has real assets)
   const found = mockArtists.find(
     (a) => a.name.toLowerCase() === name.toLowerCase()
   );
   if (found) return found.imageUrl;
-  // Stable placeholder from DiceBear based on artist name
   return `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}&backgroundColor=1a1a2e&textColor=ffffff&fontSize=38`;
 }
 
 function trackCoverUrl(trackName: string, artistName: string): string {
-  // Check mock catalog
   const found = mockTracks.find(
     (t) =>
       t.title.toLowerCase() === trackName.toLowerCase() &&
@@ -57,7 +55,6 @@ function trackCoverUrl(trackName: string, artistName: string): string {
 }
 
 function realTrackHref(artist: string, title: string, album?: string): string {
-  // Encode into a special trackId format: real::artist::title::album
   const parts = ["real", artist, title, album || ""].map(encodeURIComponent);
   return `/listen/${parts.join("::")}`;
 }
@@ -78,12 +75,13 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
     topArtists: LastFmArtist[];
     recentTracks: LastFmTrack[];
   } | null>(null);
-  const [lastFmLoading, setLastFmLoading] = useState(false);
+
+  const [recommendations, setRecommendations] = useState<RealArtist[]>([]);
+  const [loading, setLoading] = useState(false);
 
   // Fetch Last.fm data if the user has a username
   useEffect(() => {
     if (!profile?.lastFmUsername) return;
-    setLastFmLoading(true);
     supabase.functions
       .invoke("lastfm-sync", { body: { username: profile.lastFmUsername } })
       .then(({ data }) => {
@@ -94,19 +92,51 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
           });
         }
       })
-      .catch(console.warn)
-      .finally(() => setLastFmLoading(false));
+      .catch(console.warn);
   }, [profile?.lastFmUsername]);
 
-  const rows = useMemo<BrowseRow[]>(() => {
-    // ── Guest / no profile → mock catalog ────────────────────────────
-    if (!profile) {
-      return buildMockRows();
+  // Fetch real artist recommendations based on the user's top artists
+  useEffect(() => {
+    if (!profile) return;
+
+    const topArtistNames: string[] = [];
+    if (profile.spotifyTopArtists?.length) topArtistNames.push(...profile.spotifyTopArtists);
+    if (lastFmData?.topArtists?.length) {
+      lastFmData.topArtists.forEach((a) => {
+        if (!topArtistNames.includes(a.name)) topArtistNames.push(a.name);
+      });
     }
+
+    if (!topArtistNames.length) return;
+
+    setLoading(true);
+    supabase.functions
+      .invoke("lastfm-recommendations", { body: { topArtists: topArtistNames } })
+      .then(({ data }) => {
+        if (data?.recommendations?.length) {
+          setRecommendations(data.recommendations);
+        }
+      })
+      .catch(console.warn)
+      .finally(() => setLoading(false));
+  }, [profile, lastFmData]);
+
+  const rows = useMemo<BrowseRow[]>(() => {
+    // ── Guest → mock catalog only ─────────────────────────────────────
+    if (!profile) return buildMockRows();
 
     const allRows: BrowseRow[] = [];
 
-    // ── 1. "Jump Back In" — recent tracks from Last.fm or mock ───────
+    // Collect top artist names from all connected sources
+    const topArtistNames: string[] = [];
+    if (profile.spotifyTopArtists?.length) topArtistNames.push(...profile.spotifyTopArtists);
+    if (lastFmData?.topArtists?.length) {
+      lastFmData.topArtists.forEach((a) => {
+        if (!topArtistNames.includes(a.name)) topArtistNames.push(a.name);
+      });
+    }
+
+    // ── 1. "Jump Back In" ────────────────────────────────────────────
     const recentTiles: BrowseTile[] = [];
 
     if (lastFmData?.recentTracks?.length) {
@@ -127,15 +157,24 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
           isRealTrack: !mockTrack,
         });
       });
-    } else {
-      // Fall back to mock recent
-      mockTracks.slice(0, 8).forEach((t) => {
+    } else if (profile.spotifyTopTracks?.length) {
+      // Use Spotify top tracks as "recently listened" if no Last.fm recent
+      profile.spotifyTopTracks.slice(0, 8).forEach((t) => {
+        const [trackTitle, artistName] = t.split(" — ");
+        const mockTrack = mockTracks.find(
+          (m) =>
+            m.title.toLowerCase() === (trackTitle || t).toLowerCase() &&
+            (!artistName || m.artist.toLowerCase() === artistName.toLowerCase())
+        );
         recentTiles.push({
-          id: t.id,
-          imageUrl: t.coverArtUrl,
-          title: t.title,
-          subtitle: t.artist,
-          href: `/listen/${t.id}`,
+          id: `recent-${t}`,
+          imageUrl: mockTrack?.coverArtUrl || trackCoverUrl(trackTitle || t, artistName || ""),
+          title: trackTitle || t,
+          subtitle: artistName || "",
+          href: mockTrack
+            ? `/listen/${mockTrack.id}`
+            : realTrackHref(artistName || "", trackTitle || t),
+          isRealTrack: !mockTrack,
         });
       });
     }
@@ -144,20 +183,7 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
       allRows.push({ label: "Jump Back In", items: recentTiles, size: "md" });
     }
 
-    // ── 2. "Your Top Artists" — from Spotify / YouTube / Last.fm ─────
-    const topArtistNames: string[] = [];
-
-    if (profile.spotifyTopArtists?.length) {
-      topArtistNames.push(...profile.spotifyTopArtists);
-    }
-    // Add YouTube artists not already included
-    // (stored as spotifyTopArtists when signed in with Google)
-    if (lastFmData?.topArtists?.length) {
-      lastFmData.topArtists.forEach((a) => {
-        if (!topArtistNames.includes(a.name)) topArtistNames.push(a.name);
-      });
-    }
-
+    // ── 2. "Your Top Artists" ────────────────────────────────────────
     const topArtistTiles: BrowseTile[] = topArtistNames.slice(0, 20).map((name) => ({
       id: `artist-${name}`,
       imageUrl: artistImageUrl(name),
@@ -170,42 +196,9 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
       allRows.push({ label: "Your Top Artists", items: topArtistTiles, size: "lg" });
     }
 
-    // ── 3. "Recommended For You" — based on related artists in mock ──
-    const relatedTiles: BrowseTile[] = [];
-    const addedIds = new Set<string>();
-
-    topArtistNames.forEach((name) => {
-      const mock = mockArtists.find(
-        (a) => a.name.toLowerCase() === name.toLowerCase()
-      );
-      if (!mock) return;
-      mock.relatedArtistIds.forEach((relId) => {
-        if (addedIds.has(relId)) return;
-        const rel = mockArtists.find((a) => a.id === relId);
-        if (!rel) return;
-        addedIds.add(relId);
-        relatedTiles.push({
-          id: `rec-${rel.id}`,
-          imageUrl: rel.imageUrl,
-          title: rel.name,
-          subtitle: rel.genres[0] || "",
-          href: `/artist/${rel.id}`,
-        });
-      });
-    });
-
-    if (relatedTiles.length > 0) {
-      allRows.push({
-        label: "Recommended For You",
-        items: relatedTiles.slice(0, 12),
-        size: "lg",
-      });
-    }
-
-    // ── 4. "Your Top Tracks" — Spotify top tracks ─────────────────────
+    // ── 3. "Your Top Tracks" ─────────────────────────────────────────
     if (profile.spotifyTopTracks?.length) {
       const trackTiles: BrowseTile[] = profile.spotifyTopTracks.slice(0, 16).map((t) => {
-        // Format: "Track Name — Artist Name"
         const [trackTitle, artistName] = t.split(" — ");
         const mockTrack = mockTracks.find(
           (m) =>
@@ -226,37 +219,28 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
       allRows.push({ label: "Your Top Tracks", items: trackTiles, size: "md" });
     }
 
-    // ── 5. Catalog rows — always show for discovery ───────────────────
-    // Show artists from catalog that aren't already in the user's top artists
-    const catalogArtistTiles = mockArtists
-      .filter(
-        (a) =>
-          !topArtistNames.some((n) => n.toLowerCase() === a.name.toLowerCase())
-      )
-      .map((a) => ({
-        id: a.id,
+    // ── 4. "Recommended For You" — real Last.fm similar artists ──────
+    if (recommendations.length > 0) {
+      const recTiles: BrowseTile[] = recommendations.map((a) => ({
+        id: `rec-${a.name}`,
         imageUrl: a.imageUrl,
         title: a.name,
-        subtitle: a.genres[0],
-        href: `/artist/${a.id}`,
+        subtitle: a.tags.slice(0, 2).join(", ") || "Artist",
+        href: artistHref(a.name),
       }));
-
-    if (catalogArtistTiles.length > 0) {
-      allRows.push({ label: "Discover Artists", items: catalogArtistTiles, size: "lg" });
+      allRows.push({ label: "Recommended For You", items: recTiles, size: "lg" });
     }
 
-    // If no personalized data at all, show full mock catalog
-    if (allRows.length <= 1) {
-      return buildMockRows();
-    }
+    // ── If no connected data yet — show mock catalog as fallback ─────
+    if (allRows.length === 0) return buildMockRows();
 
     return allRows;
-  }, [profile, lastFmData]);
+  }, [profile, lastFmData, recommendations]);
 
-  return { rows, loading: lastFmLoading };
+  return { rows, loading };
 }
 
-// ── Mock catalog fallback ─────────────────────────────────────────────
+// ── Mock catalog fallback (guests only) ──────────────────────────────
 
 function buildMockRows(): BrowseRow[] {
   const artistTiles: BrowseTile[] = mockArtists.map((a) => ({
@@ -266,17 +250,6 @@ function buildMockRows(): BrowseRow[] {
     subtitle: a.genres[0],
     href: `/artist/${a.id}`,
   }));
-
-  const albumTiles: BrowseTile[] = mockAlbums.map((a) => {
-    const artist = mockArtists.find((ar) => ar.id === a.artistId);
-    return {
-      id: a.id,
-      imageUrl: a.coverArtUrl,
-      title: a.title,
-      subtitle: artist?.name || "",
-      href: `/album/${a.id}`,
-    };
-  });
 
   const recentTiles: BrowseTile[] = mockTracks.slice(0, 8).map((t) => ({
     id: t.id,
@@ -289,6 +262,5 @@ function buildMockRows(): BrowseRow[] {
   return [
     { label: "Jump Back In", items: recentTiles, size: "md" },
     { label: "Artists", items: artistTiles, size: "lg" },
-    { label: "Albums", items: albumTiles, size: "md" },
   ];
 }
