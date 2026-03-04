@@ -18,13 +18,13 @@ const TIER_CONFIG: Record<Tier, { model: string; nuggetCount: number; depthLabel
   },
   curious: {
     model: "gemini-2.5-flash",
-    nuggetCount: 6, // 2 per category
+    nuggetCount: 3, // 1 per category
     depthLabel: "production details, cultural context, artist history. Engaging storytelling for music fans.",
     sources: "Discogs, Pitchfork, Rolling Stone, AllMusic, YouTube",
   },
   nerd: {
     model: "gemini-2.5-pro",
-    nuggetCount: 9, // 3 per category
+    nuggetCount: 3, // 1 per category
     depthLabel: "technical breakdowns, obscure influences, deep fan theory angles, Reddit-level deep cuts. Maximum depth for audiophiles.",
     sources: "Discogs, Pitchfork, Reddit, MusicBrainz, AllMusic, The Wire, Fact Magazine, YouTube",
   },
