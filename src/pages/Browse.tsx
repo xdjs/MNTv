@@ -7,11 +7,14 @@ import SearchOverlay from "@/components/SearchOverlay";
 import PageTransition from "@/components/PageTransition";
 import { artists as rawArtists, albums, tracks } from "@/mock/tracks";
 import { useArtistImages } from "@/hooks/useArtistImages";
+import { useUserProfile, tierGreeting, tierBadgeLabel, tierBadgeColor, tierGlowClass } from "@/hooks/useMusicNerdState";
 
 export default function Browse() {
   const [searchOpen, setSearchOpen] = useState(false);
   const navigate = useNavigate();
   const artists = useArtistImages(rawArtists);
+  const { profile } = useUserProfile();
+  const tier = profile?.calculatedTier;
 
   // Build tile data
   const artistTiles = useMemo(() => artists.map((a) => ({
@@ -21,10 +24,6 @@ export default function Browse() {
     subtitle: a.genres[0],
     href: `/artist/${a.id}`,
   })), [artists]);
-
-  // Tile pixel widths (must match TileRow sizes + gap)
-  const tileSizeMap: Record<string, number> = { sm: 144, md: 176, lg: 224 };
-  const tileGap = 20; // gap-5 = 20px
 
   const albumTiles = useMemo(() => albums.map((a) => {
     const artist = artists.find((ar) => ar.id === a.artistId);
@@ -61,24 +60,51 @@ export default function Browse() {
     }));
   }, [artists]);
 
-  // All navigable rows: header(row 0), then tile rows
+  // Tier-aware deep cuts: shuffle albums to simulate "hidden gems" row
+  const deepCutTiles = useMemo(() => [...albumTiles].sort(() => Math.random() - 0.5).slice(0, 8), [albumTiles]);
+
+  // Build rows based on tier
   const allRows = useMemo(() => {
-    const tileRows = [
+    const baseRows = [
       { label: "Jump Back In", items: recentTiles, size: "md" as const },
+    ];
+
+    if (tier === "nerd") {
+      // Nerd: genre rows first, then artists, then deep cuts
+      return [
+        ...baseRows,
+        ...genreSections.map((gs) => ({ label: gs.genre, items: gs.tiles, size: "sm" as const })),
+        { label: "Artists", items: artistTiles, size: "lg" as const },
+        { label: "Deep Cuts", items: deepCutTiles, size: "md" as const },
+      ].filter((r) => r.items.length > 0);
+    }
+
+    if (tier === "curious") {
+      // Curious: standard + "Dig Deeper" hidden gems row
+      return [
+        ...baseRows,
+        { label: "Artists", items: artistTiles, size: "lg" as const },
+        { label: "Albums", items: albumTiles, size: "md" as const },
+        { label: "Dig Deeper", items: deepCutTiles, size: "sm" as const },
+        ...genreSections.map((gs) => ({ label: gs.genre, items: gs.tiles, size: "sm" as const })),
+      ].filter((r) => r.items.length > 0);
+    }
+
+    // Casual (default)
+    return [
+      ...baseRows,
       { label: "Artists", items: artistTiles, size: "lg" as const },
       { label: "Albums", items: albumTiles, size: "md" as const },
       ...genreSections.map((gs) => ({ label: gs.genre, items: gs.tiles, size: "sm" as const })),
     ].filter((r) => r.items.length > 0);
-    return tileRows;
-  }, [recentTiles, artistTiles, albumTiles, genreSections]);
+  }, [recentTiles, artistTiles, albumTiles, genreSections, deepCutTiles, tier]);
 
   // Focus state: rowIndex (-1 = header), colIndex
   const [rowIndex, setRowIndex] = useState(-1);
   const [colIndex, setColIndex] = useState(0);
 
-  const HEADER_ITEMS = 2; // logo, search
+  const HEADER_ITEMS = 2;
 
-  // Find the closest tile in a target row to the current tile's viewport center X
   const findClosestColByViewport = useCallback((targetRowLabel: string, currentCenterX: number) => {
     const tiles = document.querySelectorAll<HTMLElement>(`[data-tile-row="${targetRowLabel}"]`);
     let bestCol = 0;
@@ -95,7 +121,6 @@ export default function Browse() {
     return bestCol;
   }, []);
 
-  // Get the viewport center X of the currently focused tile
   const getCurrentCenterX = useCallback(() => {
     if (rowIndex === -1) return window.innerWidth / 2;
     const label = allRows[rowIndex]?.label;
@@ -146,7 +171,6 @@ export default function Browse() {
         e.preventDefault();
         if (rowIndex === -1) {
           if (colIndex === 1) setSearchOpen(true);
-          // colIndex 0 = logo, no action
         } else {
           const item = allRows[rowIndex]?.items[colIndex];
           if (item) navigate(item.href);
@@ -159,6 +183,8 @@ export default function Browse() {
   }, [searchOpen, rowIndex, colIndex, allRows, navigate, getCurrentCenterX, findClosestColByViewport]);
 
   const focusGlow = "tv-focus-glow";
+  const glowClass = tier ? tierGlowClass(tier) : "";
+  const badgeColor = tier ? tierBadgeColor(tier) : "";
 
   return (
     <PageTransition>
@@ -180,13 +206,20 @@ export default function Browse() {
         </header>
 
         {/* Hero greeting */}
-        <div className="px-10 mb-8">
-          <h1
-            className="text-4xl font-black text-foreground tracking-tight md:text-5xl"
-            style={{ fontFamily: "'Nunito Sans', sans-serif" }}
-          >
-            Good evening
-          </h1>
+        <div className={`mx-10 mb-8 px-5 py-4 rounded-2xl ${glowClass}`}>
+          <div className="flex items-center gap-3">
+            <h1
+              className="text-4xl font-black text-foreground tracking-tight md:text-5xl"
+              style={{ fontFamily: "'Nunito Sans', sans-serif" }}
+            >
+              {tierGreeting(tier)}
+            </h1>
+            {tier && (
+              <span className={`text-xs font-bold px-3 py-1 rounded-full ${badgeColor}`}>
+                ● {tierBadgeLabel(tier)}
+              </span>
+            )}
+          </div>
           <p className="mt-1 text-muted-foreground text-lg">What do you want to listen to?</p>
         </div>
 
@@ -201,10 +234,8 @@ export default function Browse() {
           />
         ))}
 
-        {/* Bottom spacing */}
         <div className="h-20" />
 
-        {/* Search overlay */}
         <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
       </div>
     </PageTransition>

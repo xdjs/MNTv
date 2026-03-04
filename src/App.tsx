@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
 import { useEffect } from "react";
 import { AnimatePresence } from "framer-motion";
 import Onboarding from "./pages/Onboarding";
@@ -13,6 +13,7 @@ import AlbumDetail from "./pages/AlbumDetail";
 import Listen from "./pages/Listen";
 import Companion from "./pages/Companion";
 import NotFound from "./pages/NotFound";
+import { getStoredProfile } from "./hooks/useMusicNerdState";
 
 const queryClient = new QueryClient();
 
@@ -31,7 +32,7 @@ function AnimatedRoutes() {
       <ScrollToTop />
       <AnimatePresence mode="wait">
         <Routes location={location} key={location.pathname}>
-          <Route path="/" element={<Onboarding />} />
+          <Route path="/" element={getStoredProfile() ? <Navigate to="/browse" replace /> : <Onboarding />} />
           <Route path="/connect" element={<Connect />} />
           <Route path="/browse" element={<Browse />} />
           <Route path="/artist/:artistId" element={<ArtistProfile />} />
