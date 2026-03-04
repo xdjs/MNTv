@@ -537,6 +537,9 @@ Return ONLY valid JSON:
       }
     }
 
+    console.log(`[Grounding] ${groundingChunks.length} chunks for "${artist} - ${title}":`,
+      groundingChunks.map((c: any) => ({ title: c?.web?.title, uri: c?.web?.uri })));
+
     // Step 4: Assemble response with real video IDs and grounding-sourced URLs
     const nuggets = rawNuggets.map((n) => {
       const source = n.source || {};
@@ -566,18 +569,51 @@ Return ONLY valid JSON:
 
       // For non-YouTube sources, try to find a direct URL from Gemini's grounding chunks
       if (!result.source.url && groundingChunks.length > 0) {
+        // Filter out Vertex/Google internal grounding URLs
+        const realChunks = groundingChunks.filter((chunk: any) => {
+          const uri = (chunk?.web?.uri || "").toLowerCase();
+          const chunkTitle = (chunk?.web?.title || "").toLowerCase();
+          return uri && !uri.includes("vertexaisearch.cloud.google.com") &&
+                 !chunkTitle.includes("vertex ai") &&
+                 !chunkTitle.includes("grounding api");
+        });
+
         const pubLower = (source.publisher || "").toLowerCase();
         const titleLower = (source.title || "").toLowerCase();
-        const match = groundingChunks.find((chunk: any) => {
+        const artistLower = artist.toLowerCase();
+
+        // Try exact match on publisher or source title
+        let match = realChunks.find((chunk: any) => {
           const chunkTitle = (chunk?.web?.title || "").toLowerCase();
           const chunkUri = (chunk?.web?.uri || "").toLowerCase();
           return (
-            (pubLower && (chunkTitle.includes(pubLower) || chunkUri.includes(pubLower))) ||
+            (pubLower && pubLower !== "unknown" && (chunkTitle.includes(pubLower) || chunkUri.includes(pubLower))) ||
             (titleLower && chunkTitle.includes(titleLower))
           );
         });
+
+        // Broader match: chunk mentions the artist
+        if (!match) {
+          match = realChunks.find((chunk: any) => {
+            const chunkTitle = (chunk?.web?.title || "").toLowerCase();
+            return chunkTitle.includes(artistLower);
+          });
+        }
+
+        // Last resort: use the first real grounding chunk (Gemini thought it was relevant)
+        if (!match && realChunks.length > 0) {
+          match = realChunks[0];
+        }
+
         if (match?.web?.uri) {
           result.source.url = match.web.uri;
+          // Update publisher from grounding if it was generic
+          if (!pubLower || pubLower === "unknown") {
+            try {
+              const hostname = new URL(match.web.uri).hostname.replace("www.", "");
+              result.source.publisher = hostname;
+            } catch { /* keep original */ }
+          }
         }
       }
 
