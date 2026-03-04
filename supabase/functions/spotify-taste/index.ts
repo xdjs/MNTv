@@ -42,8 +42,14 @@ serve(async (req) => {
   try {
     const { accessToken } = await req.json();
 
-    if (!accessToken) {
-      return new Response(JSON.stringify({ error: "accessToken required" }), {
+    if (
+      !accessToken ||
+      typeof accessToken !== "string" ||
+      accessToken.length < 10 ||
+      accessToken.length > 2048 ||
+      !/^[A-Za-z0-9\-_=+/.]+$/.test(accessToken)
+    ) {
+      return new Response(JSON.stringify({ error: "Invalid accessToken" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
