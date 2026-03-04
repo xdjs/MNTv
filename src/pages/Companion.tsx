@@ -3,23 +3,12 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getTrackById, getArtistById } from "@/mock/tracks";
 import { useArtistImage } from "@/hooks/useArtistImage";
+import { useUserProfile, useListenCount, tierGlowClass } from "@/hooks/useMusicNerdState";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ExternalLink, Music, BookOpen, Play } from "lucide-react";
-import NuggetCategoryCard from "@/components/companion/NuggetCategoryCard";
-
-interface CompanionNugget {
-  headline: string;
-  text: string;
-  kind: "artist" | "track" | "discovery";
-  source: {
-    type: string;
-    title: string;
-    publisher: string;
-    url: string;
-    quoteSnippet?: string;
-  };
-}
+import { ExternalLink, Music, BookOpen, Play, Lock } from "lucide-react";
+import CompanionNuggetCard from "@/components/companion/CompanionNuggetCard";
+import type { CompanionNugget } from "@/mock/types";
 
 interface CompanionData {
   artistSummary: string;
@@ -28,21 +17,26 @@ interface CompanionData {
   externalLinks: { label: string; url: string }[];
 }
 
-const nuggetCategories = [
-  { kind: "track", label: "The Track", colorClass: "bg-blue-500/20 text-blue-400" },
-  { kind: "artist", label: "History", colorClass: "bg-primary/20 text-primary" },
-  { kind: "discovery", label: "Explore Next", colorClass: "bg-emerald-500/20 text-emerald-400" },
-] as const;
+const SECTIONS: { key: CompanionNugget["category"]; label: string; color: string }[] = [
+  { key: "track", label: "The Track", color: "bg-blue-500/20 text-blue-400" },
+  { key: "history", label: "History", color: "bg-primary/20 text-primary" },
+  { key: "explore", label: "Explore Next", color: "bg-emerald-500/20 text-emerald-400" },
+];
 
 export default function Companion() {
   const { trackId } = useParams<{ trackId: string }>();
   const track = getTrackById(trackId || "");
   const artist = track ? getArtistById(track.artistId) : undefined;
   const artistImage = useArtistImage(artist?.name || "", artist?.imageUrl || "");
+  const { profile } = useUserProfile();
+  const { count: listenCount } = useListenCount(trackId || "");
 
   const [data, setData] = useState<CompanionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const tier = profile?.calculatedTier ?? "casual";
+  const glowClass = tierGlowClass(tier);
 
   useEffect(() => {
     if (!track || !artist) return;
@@ -52,7 +46,6 @@ export default function Companion() {
       setError(null);
 
       try {
-        // Get listen count
         const trackKey = `${track!.artist}::${track!.title}`;
         const { data: historyData } = await supabase
           .from("nugget_history" as any)
@@ -60,9 +53,8 @@ export default function Companion() {
           .eq("track_key", trackKey)
           .maybeSingle();
 
-        const listenCount = (historyData as any)?.listen_count || 1;
+        const serverListenCount = (historyData as any)?.listen_count || listenCount;
 
-        // Call companion edge function
         const { data: companionData, error: fnError } = await supabase.functions.invoke(
           "generate-companion",
           {
@@ -70,7 +62,9 @@ export default function Companion() {
               artist: track!.artist,
               title: track!.title,
               album: track!.album,
-              listenCount,
+              listenCount: serverListenCount,
+              tier,
+              lastFmUsername: profile?.lastFmUsername,
             },
           }
         );
@@ -86,7 +80,7 @@ export default function Companion() {
     }
 
     fetchCompanion();
-  }, [trackId]);
+  }, [trackId, tier]);
 
   if (!track || !artist) {
     return (
@@ -96,12 +90,33 @@ export default function Companion() {
     );
   }
 
+  // Filter + sort nuggets for a section
+  function getSectionNuggets(category: CompanionNugget["category"]): CompanionNugget[] {
+    if (!data?.nuggets) return [];
+    return data.nuggets
+      .filter((n) => n.category === category && n.listenUnlockLevel <= listenCount)
+      .sort((a, b) => b.timestamp - a.timestamp);
+  }
+
+  function getLockedCount(category: CompanionNugget["category"]): number {
+    if (!data?.nuggets) return 0;
+    return data.nuggets.filter((n) => n.category === category && n.listenUnlockLevel > listenCount).length;
+  }
+
   return (
-    <div className="min-h-screen bg-background" style={{ fontFamily: "'Nunito Sans', sans-serif" }}>
+    <div className={`min-h-screen bg-background ${glowClass}`} style={{ fontFamily: "'Nunito Sans', sans-serif" }}>
       {/* Header */}
       <header className="sticky top-0 z-20 flex items-center gap-3 px-5 py-4 bg-background/80 backdrop-blur-xl border-b border-border/50">
         <MusicNerdLogo size={32} />
         <span className="text-sm font-bold text-foreground/70 tracking-wide">MUSICNERD</span>
+        {/* Tier badge */}
+        <span className={`ml-auto text-[10px] font-bold px-2.5 py-1 rounded-full ${
+          tier === "nerd" ? "bg-pink-500/20 text-pink-400" :
+          tier === "curious" ? "bg-blue-500/20 text-blue-400" :
+          "bg-green-500/20 text-green-400"
+        }`}>
+          {tier === "nerd" ? "● Nerd Mode" : tier === "curious" ? "● Curious" : "● Casual"}
+        </span>
       </header>
 
       {/* Artist Hero */}
@@ -110,9 +125,7 @@ export default function Companion() {
           src={artistImage}
           alt={artist.name}
           className="w-full h-full object-cover"
-          onError={(e) => {
-            (e.target as HTMLImageElement).src = artist.imageUrl;
-          }}
+          onError={(e) => { (e.target as HTMLImageElement).src = artist.imageUrl; }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/30 to-transparent" />
       </div>
@@ -134,36 +147,21 @@ export default function Companion() {
 
         {/* Track Details */}
         <section className="apple-glass rounded-2xl p-4 flex items-center gap-4">
-          <img
-            src={track.coverArtUrl}
-            alt={track.title}
-            className="w-16 h-16 rounded-lg object-cover shrink-0"
-          />
+          <img src={track.coverArtUrl} alt={track.title} className="w-16 h-16 rounded-lg object-cover shrink-0" />
           <div className="min-w-0">
             <h2 className="text-lg font-bold text-foreground truncate">{track.title}</h2>
-            {track.album && (
-              <p className="text-sm text-muted-foreground truncate">{track.album}</p>
-            )}
+            {track.album && <p className="text-sm text-muted-foreground truncate">{track.album}</p>}
           </div>
         </section>
 
-        {/* AI Content */}
+        {/* Loading */}
         {loading ? (
           <div className="space-y-6">
-            <div className="space-y-3">
-              <Skeleton className="h-6 w-40" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-3/4" />
-            </div>
-            <div className="space-y-3">
-              <Skeleton className="h-6 w-36" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-2/3" />
-            </div>
             {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-40 w-full rounded-2xl" />
+              <div key={i} className="space-y-3">
+                <Skeleton className="h-5 w-32" />
+                <Skeleton className="h-28 w-full rounded-2xl" />
+              </div>
             ))}
           </div>
         ) : error ? (
@@ -172,14 +170,12 @@ export default function Companion() {
             <p className="text-sm text-muted-foreground mt-1">{error}</p>
           </div>
         ) : data ? (
-          <div className="space-y-6">
+          <div className="space-y-8">
             {/* Artist Summary */}
             {data.artistSummary && (
               <section>
                 <h3 className="text-lg font-bold text-foreground mb-2">About the Artist</h3>
-                <div className="text-sm text-foreground/80 leading-relaxed whitespace-pre-line">
-                  {data.artistSummary}
-                </div>
+                <p className="text-sm text-foreground/80 leading-relaxed">{data.artistSummary}</p>
               </section>
             )}
 
@@ -187,29 +183,32 @@ export default function Companion() {
             {data.trackStory && (
               <section>
                 <h3 className="text-lg font-bold text-foreground mb-2">About This Track</h3>
-                <div className="text-sm text-foreground/80 leading-relaxed whitespace-pre-line">
-                  {data.trackStory}
-                </div>
+                <p className="text-sm text-foreground/80 leading-relaxed">{data.trackStory}</p>
               </section>
             )}
 
-            {/* Nuggets by Category */}
-            {data.nuggets?.length > 0 && (
-              <section className="space-y-4">
-                <h3 className="text-lg font-bold text-foreground">Deep Dive</h3>
-                {nuggetCategories.map(({ kind, label, colorClass }) => {
-                  const filtered = data.nuggets.filter((n) => n.kind === kind);
-                  return (
-                    <NuggetCategoryCard
-                      key={kind}
-                      label={label}
-                      nuggets={filtered}
-                      colorClass={colorClass}
-                    />
-                  );
-                })}
-              </section>
-            )}
+            {/* Three categorized sections */}
+            {SECTIONS.map(({ key, label, color }) => {
+              const visible = getSectionNuggets(key);
+              const locked = getLockedCount(key);
+              if (visible.length === 0 && locked === 0) return null;
+              return (
+                <section key={key} className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${color}`}>{label}</span>
+                  </div>
+                  {visible.map((nugget) => (
+                    <CompanionNuggetCard key={nugget.id} nugget={nugget} />
+                  ))}
+                  {locked > 0 && (
+                    <div className="flex items-center gap-2 px-4 py-3 rounded-xl border border-dashed border-foreground/15 text-muted-foreground text-xs">
+                      <Lock size={12} className="shrink-0 opacity-50" />
+                      Listen again to unlock {locked} more insight{locked > 1 ? "s" : ""}
+                    </div>
+                  )}
+                </section>
+              );
+            })}
 
             {/* External Links */}
             {data.externalLinks?.length > 0 && (
@@ -230,9 +229,7 @@ export default function Companion() {
                         className="flex items-center gap-3 px-4 py-3 rounded-xl apple-glass hover:bg-foreground/10 transition-colors"
                       >
                         <Icon size={18} className="text-primary shrink-0" />
-                        <span className="text-sm font-semibold text-foreground/80">
-                          {link.label}
-                        </span>
+                        <span className="text-sm font-semibold text-foreground/80">{link.label}</span>
                         <ExternalLink size={14} className="ml-auto text-muted-foreground" />
                       </a>
                     );

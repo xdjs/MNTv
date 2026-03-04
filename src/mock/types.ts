@@ -58,3 +58,34 @@ export type Nugget = {
 };
 
 export type AnimationStyle = "A" | "B" | "C";
+
+// ── RAG / Companion system types ──────────────────────────────────────────────
+
+export interface CompanionNugget {
+  id: string;
+  timestamp: number; // ms epoch — used for reverse-chronological sorting
+  text: string;
+  headline?: string;
+  imageUrl?: string;
+  imageCaption?: string;
+  sourceName: string;     // e.g. "Pitchfork", "Discogs", "Reddit"
+  sourceUrl: string;      // strict direct citation link
+  category: "track" | "history" | "explore";
+  listenUnlockLevel: number; // 1, 2, or 3
+}
+
+export interface DeepDiveResponse {
+  text: string;
+  followUp: string;
+  source: {
+    publisher: string;
+    title: string;
+    url: string;
+  };
+}
+
+export interface UserProfile {
+  streamingService: "Spotify" | "YouTube Music" | "Apple Music" | "";
+  lastFmUsername?: string;
+  calculatedTier: "casual" | "curious" | "nerd";
+}
