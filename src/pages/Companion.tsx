@@ -104,13 +104,17 @@ export default function Companion() {
 
       try {
         const trackKey = `${trackInfo!.artist}::${trackInfo!.title}`;
-        const { data: historyData } = await supabase
-          .from("nugget_history")
-          .select("listen_count")
-          .eq("track_key", trackKey)
-          .maybeSingle();
-
-        const serverListenCount = historyData?.listen_count || 1;
+        let serverListenCount = 1;
+        try {
+          const { data: historyData } = await supabase
+            .from("nugget_history")
+            .select("listen_count")
+            .eq("track_key", trackKey)
+            .maybeSingle();
+          serverListenCount = historyData?.listen_count || 1;
+        } catch {
+          // RLS may block unauthenticated reads — default to 1
+        }
         setListenCount(serverListenCount);
 
         const { data: companionData, error: fnError } = await supabase.functions.invoke(

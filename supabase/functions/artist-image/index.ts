@@ -166,9 +166,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const auth = await requireAuth(req);
-  if (auth instanceof Response) return auth;
-
+  // Auth is optional — companion page may call without a session
   try {
     const { artist, width } = await req.json();
 
