@@ -330,12 +330,31 @@ serve(async (req) => {
     const body = await req.json();
     const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, imageCaption, imageQuery, listenCount, previousNuggets } = body;
 
-    if (!artist || !title) {
-      return new Response(
-        JSON.stringify({ error: "artist and title are required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // ── Input validation ────────────────────────────────────────────
+    const MAX_STR = 300;
+    const MAX_CONTEXT = 2000;
+    const MAX_ARRAY = 50;
+
+    if (!artist || typeof artist !== "string" || artist.trim().length === 0 || artist.length > MAX_STR) {
+      return new Response(JSON.stringify({ error: "Invalid artist (max 300 chars)" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+    if (!title || typeof title !== "string" || title.trim().length === 0 || title.length > MAX_STR) {
+      return new Response(JSON.stringify({ error: "Invalid title (max 300 chars)" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (album !== undefined && album !== null && (typeof album !== "string" || album.length > MAX_STR)) {
+      return new Response(JSON.stringify({ error: "Invalid album" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (context !== undefined && (typeof context !== "string" || context.length > MAX_CONTEXT)) {
+      return new Response(JSON.stringify({ error: "Invalid context (max 2000 chars)" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const safeListenCount = Math.max(1, Math.min(10, typeof listenCount === "number" ? Math.floor(listenCount) : 1));
+    const safePreviousNuggets: string[] = Array.isArray(previousNuggets)
+      ? previousNuggets.slice(0, MAX_ARRAY).map((s: unknown) => (typeof s === "string" ? s.slice(0, 200) : "")).filter(Boolean)
+      : [];
+    const safeSourceTitle = typeof sourceTitle === "string" ? sourceTitle.slice(0, 300) : undefined;
+    const safeSourcePublisher = typeof sourcePublisher === "string" ? sourcePublisher.slice(0, 200) : undefined;
+    const safeImageCaption = typeof imageCaption === "string" ? imageCaption.slice(0, 300) : undefined;
+    const safeImageQuery = typeof imageQuery === "string" ? imageQuery.slice(0, 300) : undefined;
 
     const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY");
     if (!GOOGLE_AI_API_KEY) {
@@ -350,8 +369,8 @@ The user has been reading this trivia and wants to go deeper:
 ---
 ${context}
 ---
-${sourceTitle ? `The original source was: "${sourceTitle}" by ${sourcePublisher}` : ""}
-${imageCaption ? `An image was shown alongside this nugget: "${imageQuery}" with caption "${imageCaption}". If relevant, weave in how this visual element connects to the deeper story.` : ""}
+${safeSourceTitle ? `The original source was: "${safeSourceTitle}" by ${safeSourcePublisher}` : ""}
+${safeImageCaption ? `An image was shown alongside this nugget: "${safeImageQuery}" with caption "${safeImageCaption}". If relevant, weave in how this visual element connects to the deeper story.` : ""}
 
 Continue this thread of discovery. Provide ONE more paragraph of 2-3 sentences MAX (under 80 words total) that goes deeper — reveal connections, context, or implications that make this even more interesting. Be concise and punchy — this is for a TV screen. Think about WHY this matters, HOW it connects to broader music history, or WHAT it reveals about the creative process.
 
@@ -454,16 +473,15 @@ Return ONLY valid JSON:
     let groundingChunks: any[];
     try {
       const result = await generateWithGemini(
-        artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY, listenCount || 1, previousNuggets || []
+        artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets
       );
       rawNuggets = result.nuggets;
       groundingChunks = result.groundingChunks;
     } catch (e) {
       if (e instanceof RecitationError) {
-        // Retry without transcripts — they likely contain copyrighted lyrics
         console.log("Retrying without transcripts to avoid RECITATION block...");
         const result = await generateWithGemini(
-          artist, title, album, videos, new Map(), GOOGLE_AI_API_KEY, listenCount || 1, previousNuggets || []
+          artist, title, album, videos, new Map(), GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets
         );
         rawNuggets = result.nuggets;
         groundingChunks = result.groundingChunks;

@@ -209,12 +209,35 @@ serve(async (req) => {
       streamingService = null,
     } = await req.json();
 
-    if (!artist || !title) {
-      return new Response(
-        JSON.stringify({ error: "artist and title are required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // ── Input validation ────────────────────────────────────────────
+    const MAX_STR = 300;
+    const MAX_USERNAME = 50;
+    const MAX_ARRAY = 100;
+    const VALID_TIERS = ["casual", "curious", "nerd"];
+
+    if (!artist || typeof artist !== "string" || artist.trim().length === 0 || artist.length > MAX_STR) {
+      return new Response(JSON.stringify({ error: "Invalid artist (max 300 chars)" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+    if (!title || typeof title !== "string" || title.trim().length === 0 || title.length > MAX_STR) {
+      return new Response(JSON.stringify({ error: "Invalid title (max 300 chars)" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (album !== undefined && album !== null && (typeof album !== "string" || album.length > MAX_STR)) {
+      return new Response(JSON.stringify({ error: "Invalid album" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const safeTier = VALID_TIERS.includes(tier) ? tier : "casual";
+    const safeListenCount = Math.max(1, Math.min(10, typeof listenCount === "number" ? Math.floor(listenCount) : 1));
+    if (lastFmUsername !== undefined && lastFmUsername !== null) {
+      if (typeof lastFmUsername !== "string" || lastFmUsername.length > MAX_USERNAME || !/^[a-zA-Z0-9_-]+$/.test(lastFmUsername)) {
+        return new Response(JSON.stringify({ error: "Invalid lastFmUsername" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+    const safeSpotifyTopArtists = Array.isArray(spotifyTopArtists)
+      ? spotifyTopArtists.slice(0, MAX_ARRAY).map((s: unknown) => (typeof s === "string" ? s.slice(0, 200) : "")).filter(Boolean)
+      : null;
+    const safeSpotifyTopTracks = Array.isArray(spotifyTopTracks)
+      ? spotifyTopTracks.slice(0, MAX_ARRAY).map((s: unknown) => (typeof s === "string" ? s.slice(0, 200) : "")).filter(Boolean)
+      : null;
+    const safeStreamingService = typeof streamingService === "string" ? streamingService.slice(0, 50) : null;
 
     const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY");
     if (!GOOGLE_AI_API_KEY) throw new Error("GOOGLE_AI_API_KEY is not configured");
@@ -223,13 +246,13 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const tierConfig = TIER_CONFIG[tier as Tier] || TIER_CONFIG.casual;
-    const listenTier = Math.min(Math.max(listenCount, 1), 3);
+    const tierConfig = TIER_CONFIG[safeTier as Tier] || TIER_CONFIG.casual;
+    const listenTier = Math.min(Math.max(safeListenCount, 1), 3);
 
-    const cacheKey = `${artist}::${title}::${tier}::${listenTier}`;
+    const cacheKey = `${artist}::${title}::${safeTier}::${listenTier}`;
 
     // Personalised = has ANY taste signals (Last.fm OR Spotify). Skip cache for these.
-    const isPersonalised = !!(lastFmUsername || spotifyTopArtists?.length || spotifyTopTracks?.length);
+    const isPersonalised = !!(lastFmUsername || safeSpotifyTopArtists?.length || safeSpotifyTopTracks?.length);
 
     if (!isPersonalised) {
       const { data: cached } = await supabase
@@ -253,32 +276,32 @@ serve(async (req) => {
       : "";
 
     // Merge all taste signals into one context block
-    const tasteContext = buildTasteContext(lastFmContext, spotifyTopArtists, spotifyTopTracks, streamingService);
+    const tasteContext = buildTasteContext(lastFmContext, safeSpotifyTopArtists, safeSpotifyTopTracks, safeStreamingService);
 
     // Depth instruction based on listen count
     let depthInstruction: string;
-    if (listenCount <= 1) {
+    if (safeListenCount <= 1) {
       depthInstruction = "First listen. Set the stage, introduce the world of this track.";
-    } else if (listenCount === 2) {
+    } else if (safeListenCount === 2) {
       depthInstruction = "Second listen. Go deeper — production choices, lesser-known connections.";
     } else {
-      depthInstruction = `Listen #${listenCount}. Maximum depth — obscure influences, technical breakdowns, unexpected connections.`;
+      depthInstruction = `Listen #${safeListenCount}. Maximum depth — obscure influences, technical breakdowns, unexpected connections.`;
     }
 
     const nuggetsPerCategory = Math.floor(tierConfig.nuggetCount / 3);
     const now = Date.now();
 
     // Build streaming-service-aware external links hint
-    const streamingLinkHint = streamingService === "Apple Music"
+    const streamingLinkHint = safeStreamingService === "Apple Music"
       ? 'For external links, include Apple Music search instead of Spotify.'
-      : streamingService === "YouTube Music"
+      : safeStreamingService === "YouTube Music"
       ? 'For external links, include YouTube Music search instead of Spotify.'
       : 'For external links, include Spotify search.';
 
     const prompt = `You are a music historian API. Output ONLY a valid JSON object. No markdown, no prose, no explanation. Start with { end with }.
 
 Track: "${title}" by ${artist}${album ? ` from "${album}"` : ""}
-Tier: ${tier.toUpperCase()} — ${tierConfig.depthLabel}
+Tier: ${safeTier.toUpperCase()} — ${tierConfig.depthLabel}
 Depth: ${depthInstruction}
 Sources to use: ${tierConfig.sources}${tasteContext}
 
@@ -375,9 +398,9 @@ OUTPUT: Raw JSON only. No backticks.`;
           const encodedQuery = encodeURIComponent(`${artist} ${title}`);
           const encodedArtist = encodeURIComponent(artist).replace(/%20/g, "_");
           const streamingLink =
-            streamingService === "Apple Music"
+            safeStreamingService === "Apple Music"
               ? { label: "Apple Music", url: `https://music.apple.com/search?term=${encodedQuery}` }
-              : streamingService === "YouTube Music"
+              : safeStreamingService === "YouTube Music"
               ? { label: "YouTube Music", url: `https://music.youtube.com/search?q=${encodedQuery}` }
               : { label: "Spotify", url: `https://open.spotify.com/search/${encodedQuery}` };
           parsed.externalLinks = [
@@ -385,8 +408,7 @@ OUTPUT: Raw JSON only. No backticks.`;
             streamingLink,
             { label: "YouTube Music", url: `https://music.youtube.com/search?q=${encodedQuery}` },
           ];
-          // Deduplicate if streaming service is already YouTube Music
-          if (streamingService === "YouTube Music") {
+          if (safeStreamingService === "YouTube Music") {
             parsed.externalLinks = [
               { label: "Wikipedia", url: `https://en.wikipedia.org/wiki/${encodedArtist}` },
               streamingLink,

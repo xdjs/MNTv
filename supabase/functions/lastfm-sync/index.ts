@@ -78,9 +78,15 @@ serve(async (req) => {
 
   try {
     const { username } = await req.json();
-    if (!username || typeof username !== "string") {
+    if (
+      !username ||
+      typeof username !== "string" ||
+      username.trim().length === 0 ||
+      username.length > 50 ||
+      !/^[a-zA-Z0-9_-]+$/.test(username)
+    ) {
       return new Response(
-        JSON.stringify({ error: "username is required" }),
+        JSON.stringify({ error: "Invalid username (max 50 chars, alphanumeric/underscore/hyphen only)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
