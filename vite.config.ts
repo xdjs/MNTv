@@ -18,4 +18,9 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  // Spotify Client ID is a public identifier (OAuth spec) — safe to expose in the bundle.
+  // Read from env so it doesn't have to be hardcoded in source.
+  define: {
+    "import.meta.env.VITE_SPOTIFY_CLIENT_ID": JSON.stringify(process.env.SPOTIFY_CLIENT_ID ?? ""),
+  },
 }));

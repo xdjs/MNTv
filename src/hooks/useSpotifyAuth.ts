@@ -1,18 +1,14 @@
 /**
- * Spotify PKCE OAuth utilities
- * - generatePKCE: creates code_verifier + code_challenge
- * - initiateSpotifyAuth: redirects user to Spotify login
- * - exchangeSpotifyCode: exchanges auth code for access token via edge function
- * - fetchSpotifyTaste: fetches top artists + tracks via edge function
+ * Spotify PKCE OAuth — fully client-side.
+ * Client ID is public by spec; stored as VITE_SPOTIFY_CLIENT_ID.
+ * Token exchange is done directly with Spotify (no edge function needed for PKCE).
+ * Only the taste-profile fetch hits our edge function (backend needs it for RAG).
  */
 
 import { supabase } from "@/integrations/supabase/client";
 
-const SPOTIFY_SCOPES = [
-  "user-top-read",
-  "user-read-recently-played",
-  "user-read-private",
-].join(" ");
+const SPOTIFY_CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID as string;
+const SPOTIFY_SCOPES = "user-top-read user-read-recently-played user-read-private";
 
 const PKCE_STATE_KEY = "spotify_pkce_state";
 const PKCE_VERIFIER_KEY = "spotify_pkce_verifier";
@@ -30,42 +26,35 @@ async function generatePKCE(): Promise<{ verifier: string; challenge: string }> 
   const array = new Uint8Array(32);
   crypto.getRandomValues(array);
   const verifier = base64UrlEncode(array.buffer);
-
-  const encoder = new TextEncoder();
-  const data = encoder.encode(verifier);
-  const digest = await crypto.subtle.digest("SHA-256", data);
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
   const challenge = base64UrlEncode(digest);
-
   return { verifier, challenge };
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
+// ── Redirect URI ──────────────────────────────────────────────────────────────
 
 export function getSpotifyRedirectUri(): string {
   const { protocol, hostname, port } = window.location;
-  // Spotify rejects generic "localhost" — use explicit 127.0.0.1 for local dev
+  // Spotify rejects "localhost" — use explicit 127.0.0.1 for local dev
   const host = hostname === "localhost" ? "127.0.0.1" : hostname;
   const portSuffix = port ? `:${port}` : "";
   return `${protocol}//${host}${portSuffix}/spotify-callback`;
 }
 
+// ── Step 1: Kick off OAuth (redirect to Spotify) ──────────────────────────────
+
 export async function initiateSpotifyAuth(): Promise<void> {
-  // Get client ID from edge function
-  const { data, error } = await supabase.functions.invoke("spotify-taste", {
-    body: { action: "config" },
-  });
-  if (error || !data?.clientId) throw new Error("Could not load Spotify config");
+  if (!SPOTIFY_CLIENT_ID) throw new Error("VITE_SPOTIFY_CLIENT_ID is not set");
 
   const { verifier, challenge } = await generatePKCE();
   const state = base64UrlEncode(crypto.getRandomValues(new Uint8Array(16)).buffer);
 
-  // Persist for callback
   sessionStorage.setItem(PKCE_VERIFIER_KEY, verifier);
   sessionStorage.setItem(PKCE_STATE_KEY, state);
 
   const params = new URLSearchParams({
     response_type: "code",
-    client_id: data.clientId,
+    client_id: SPOTIFY_CLIENT_ID,
     scope: SPOTIFY_SCOPES,
     redirect_uri: getSpotifyRedirectUri(),
     state,
@@ -75,6 +64,8 @@ export async function initiateSpotifyAuth(): Promise<void> {
 
   window.location.href = `https://accounts.spotify.com/authorize?${params}`;
 }
+
+// ── Step 2: Exchange code for token — directly with Spotify (PKCE, no secret) ─
 
 export async function exchangeSpotifyCode(
   code: string,
@@ -91,22 +82,28 @@ export async function exchangeSpotifyCode(
   sessionStorage.removeItem(PKCE_STATE_KEY);
   sessionStorage.removeItem(PKCE_VERIFIER_KEY);
 
-  const { data, error } = await supabase.functions.invoke("spotify-taste", {
-    body: {
-      action: "exchange",
+  const res = await fetch("https://accounts.spotify.com/api/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
       code,
-      codeVerifier,
-      redirectUri: getSpotifyRedirectUri(),
-    },
+      redirect_uri: getSpotifyRedirectUri(),
+      client_id: SPOTIFY_CLIENT_ID,
+      code_verifier: codeVerifier,
+    }),
   });
 
-  if (error || !data?.access_token) {
-    console.error("Token exchange error:", error, data);
+  if (!res.ok) {
+    console.error("Spotify token exchange failed:", await res.text());
     return null;
   }
 
-  return { accessToken: data.access_token };
+  const data = await res.json();
+  return data.access_token ? { accessToken: data.access_token } : null;
 }
+
+// ── Step 3: Fetch taste profile — via edge function (backend needs it for RAG) ─
 
 export async function fetchSpotifyTaste(accessToken: string): Promise<{
   topArtists: string[];
@@ -114,7 +111,7 @@ export async function fetchSpotifyTaste(accessToken: string): Promise<{
   displayName: string | null;
 } | null> {
   const { data, error } = await supabase.functions.invoke("spotify-taste", {
-    body: { action: "taste", accessToken },
+    body: { accessToken },
   });
 
   if (error || !data) {
