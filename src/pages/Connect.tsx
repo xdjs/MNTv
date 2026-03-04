@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import PageTransition from "@/components/PageTransition";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
@@ -8,9 +8,8 @@ import type { UserProfile } from "@/mock/types";
 import spotifyLogo from "@/assets/spotify-logo.png";
 import { supabase } from "@/integrations/supabase/client";
 import { initiateSpotifyAuth } from "@/hooks/useSpotifyAuth";
-import { lovable } from "@/integrations/lovable/index";
 
-/** Load a user's profile from the DB and persist to localStorage. Returns the profile or null. */
+/** Load a user's profile from the DB and persist to localStorage. */
 async function loadAndPersistDBProfile(): Promise<UserProfile | null> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) return null;
@@ -20,14 +19,21 @@ async function loadAndPersistDBProfile(): Promise<UserProfile | null> {
     .eq("user_id", session.user.id)
     .maybeSingle();
   if (!data) return null;
-  const local = (() => {
-    try { return JSON.parse(localStorage.getItem("musicnerd_profile") || "{}"); } catch { return {}; }
-  })();
+  const taste = data.spotify_taste as {
+    topArtists?: string[]; topTracks?: string[];
+    artistImages?: Record<string, string>;
+    artistIds?: Record<string, string>;
+    trackImages?: { title: string; artist: string; imageUrl: string }[];
+  } | null;
+  const hasSpotify = (taste?.topArtists?.length ?? 0) > 0;
   const profile: UserProfile = {
-    streamingService: (data.streaming_service as UserProfile["streamingService"]) || "",
+    streamingService: hasSpotify ? "Spotify" : (data.streaming_service as UserProfile["streamingService"]) || "",
     lastFmUsername: data.last_fm_username || undefined,
-    spotifyTopArtists: local.spotifyTopArtists || undefined,
-    spotifyTopTracks: local.spotifyTopTracks || undefined,
+    spotifyTopArtists: taste?.topArtists || undefined,
+    spotifyTopTracks: taste?.topTracks || undefined,
+    spotifyArtistImages: taste?.artistImages || undefined,
+    spotifyArtistIds: taste?.artistIds || undefined,
+    spotifyTrackImages: taste?.trackImages || undefined,
     calculatedTier: (data.tier as UserProfile["calculatedTier"]) || "casual",
   };
   localStorage.setItem("musicnerd_profile", JSON.stringify(profile));
@@ -70,58 +76,113 @@ export default function Connect() {
   const [lastFmSyncing, setLastFmSyncing] = useState(false);
   const [spotifyConnecting, setSpotifyConnecting] = useState(false);
   const [googleSigningIn, setGoogleSigningIn] = useState(false);
-  const [youtubeImporting, setYoutubeImporting] = useState(false);
-  const [googleUser, setGoogleUser] = useState<{ name: string; email: string } | null>(null);
-  const [youtubeTopArtists, setYoutubeTopArtists] = useState<string[] | null>(null);
+  const [signedInUser, setSignedInUser] = useState<{ name: string; email: string; isGoogle: boolean } | null>(null);
   const [pendingSpotifyArtists, setPendingSpotifyArtists] = useState<string[] | null>(null);
   const [pendingSpotifyTracks, setPendingSpotifyTracks] = useState<string[] | null>(null);
+  const [pendingArtistImages, setPendingArtistImages] = useState<Record<string, string>>({});
+  const [pendingArtistIds, setPendingArtistIds] = useState<Record<string, string>>({});
+  const [pendingTrackImages, setPendingTrackImages] = useState<{ title: string; artist: string; imageUrl: string }[]>([]);
   const [authMode, setAuthMode] = useState<AuthMode>("choose");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState("");
   const [emailSent, setEmailSent] = useState(false);
+  const autoAdvanced = useRef(false);
 
+  // If already onboarded AND signed in, jump to tier picker so user can choose their vibe
   useEffect(() => {
-    if (getStoredProfile()) navigate("/browse", { replace: true });
+    async function checkSession() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session && getStoredProfile()) {
+        const meta = session.user?.user_metadata;
+        const isGoogle = session.user.app_metadata?.provider === "google";
+        setSignedInUser({
+          name: meta?.full_name ?? meta?.name ?? (isGoogle ? "Google User" : "User"),
+          email: session.user?.email ?? "",
+          isGoogle,
+        });
+        // Load existing profile data so tier select preserves it
+        const existing = getStoredProfile();
+        if (existing?.spotifyTopArtists) setPendingSpotifyArtists(existing.spotifyTopArtists);
+        if (existing?.spotifyTopTracks) setPendingSpotifyTracks(existing.spotifyTopTracks);
+        if (existing?.spotifyArtistImages) setPendingArtistImages(existing.spotifyArtistImages);
+        if (existing?.spotifyArtistIds) setPendingArtistIds(existing.spotifyArtistIds);
+        if (existing?.spotifyTrackImages) setPendingTrackImages(existing.spotifyTrackImages);
+        if (existing?.lastFmUsername) setLastFm(existing.lastFmUsername);
+        setStep(3); // tier picker
+      }
+    }
+    checkSession();
   }, []);
 
+  // Pick up Spotify data from sessionStorage (after Spotify OAuth redirect)
   useEffect(() => {
     const raw = sessionStorage.getItem("spotify_pending_taste");
     if (raw) {
       try {
-        const { topArtists, topTracks } = JSON.parse(raw);
+        const { topArtists, topTracks, artistImages, artistIds, trackImages } = JSON.parse(raw);
         setPendingSpotifyArtists(topArtists);
         setPendingSpotifyTracks(topTracks);
+        if (artistImages) setPendingArtistImages(artistImages);
+        if (artistIds) setPendingArtistIds(artistIds);
+        if (trackImages) setPendingTrackImages(trackImages);
         setPlatform("Spotify");
         sessionStorage.removeItem("spotify_pending_taste");
+        // If already signed in, skip straight to platform step with Spotify shown as connected
+        supabase.auth.getSession().then(({ data }) => {
+          if (data.session?.user) {
+            const meta = data.session.user.user_metadata;
+            const isGoogle = data.session.user.app_metadata?.provider === "google";
+            setSignedInUser({
+              name: meta?.full_name ?? meta?.name ?? (isGoogle ? "Google User" : "User"),
+              email: data.session.user.email ?? "",
+              isGoogle,
+            });
+            setStep(1);
+          }
+        });
       } catch { /* ignore */ }
     }
   }, []);
 
+  // Handle auth session — detect sign-in
   useEffect(() => {
+    function handleSession(session: import("@supabase/supabase-js").Session | null) {
+      if (!session?.user) return;
+      const meta = session.user?.user_metadata;
+      const isGoogle = session.user.app_metadata?.provider === "google";
+      setSignedInUser({
+        name: meta?.full_name ?? meta?.name ?? (isGoogle ? "Google User" : "User"),
+        email: session.user?.email ?? "",
+        isGoogle,
+      });
+    }
+
+    // Check existing session on mount (handles OAuth redirect return)
+    supabase.auth.getSession().then(({ data }) => handleSession(data.session));
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "SIGNED_IN" && session?.provider_token) {
-        const meta = session.user?.user_metadata;
-        setGoogleUser({
-          name: meta?.full_name ?? meta?.name ?? "Google User",
-          email: session.user?.email ?? "",
-        });
-        setYoutubeImporting(true);
-        try {
-          const { data } = await supabase.functions.invoke("youtube-taste", {
-            body: { provider_token: session.provider_token },
-          });
-          if (data?.topArtists?.length > 0) setYoutubeTopArtists(data.topArtists);
-        } catch (e) {
-          console.warn("YouTube taste import failed:", e);
-        } finally {
-          setYoutubeImporting(false);
-        }
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        handleSession(session);
       }
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // Auto-advance from step 0 to step 1 once signed in
+  useEffect(() => {
+    if (autoAdvanced.current) return;
+    if (step !== 0 || !signedInUser) return;
+    const timer = setTimeout(() => {
+      if (!autoAdvanced.current) {
+        autoAdvanced.current = true;
+        setDirection(1);
+        setStep(1);
+      }
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [step, signedInUser]);
 
   const goNext = (delta = 1) => { setDirection(delta); setStep((s) => s + delta); };
   const handlePlatformSelect = (p: Platform) => { setPlatform(p); goNext(); };
@@ -147,13 +208,14 @@ export default function Connect() {
   const handleGoogleSignIn = async () => {
     setGoogleSigningIn(true);
     try {
-      await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: window.location.origin,
-        extraParams: {
-          scope: "openid email profile https://www.googleapis.com/auth/youtube.readonly",
-          access_type: "offline",
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/connect`,
+          scopes: "openid email profile",
         },
       });
+      if (error) throw error;
     } catch (e) { console.error("Google sign-in error:", e); setGoogleSigningIn(false); }
   };
 
@@ -173,32 +235,34 @@ export default function Connect() {
     setAuthLoading(false);
     if (error) { setAuthError(error.message); return; }
 
-    // Returning user — check if they already have a completed profile in the DB
+    // Returning user — load their profile data, then go to tier picker
     const existingProfile = await loadAndPersistDBProfile();
-    if (existingProfile?.calculatedTier) {
-      // Profile is complete — skip setup and go straight to Browse
-      navigate("/browse", { replace: true });
-    } else {
-      goNext(); // New user — continue through setup
+    if (existingProfile) {
+      if (existingProfile.spotifyTopArtists) setPendingSpotifyArtists(existingProfile.spotifyTopArtists);
+      if (existingProfile.spotifyTopTracks) setPendingSpotifyTracks(existingProfile.spotifyTopTracks);
+      if (existingProfile.spotifyArtistImages) setPendingArtistImages(existingProfile.spotifyArtistImages);
+      if (existingProfile.spotifyArtistIds) setPendingArtistIds(existingProfile.spotifyArtistIds);
+      if (existingProfile.spotifyTrackImages) setPendingTrackImages(existingProfile.spotifyTrackImages);
+      if (existingProfile.lastFmUsername) setLastFm(existingProfile.lastFmUsername);
     }
+    // Always show tier picker so user can choose their vibe
+    setStep(3);
   };
 
   const handleTierSelect = (t: Tier) => {
     const profile: UserProfile = {
-      streamingService: platform as Platform,
+      streamingService: pendingSpotifyArtists?.length ? "Spotify" : "",
       lastFmUsername: lastFm.trim() || undefined,
-      spotifyTopArtists: pendingSpotifyArtists ?? youtubeTopArtists ?? undefined,
+      spotifyTopArtists: pendingSpotifyArtists || undefined,
       spotifyTopTracks: pendingSpotifyTracks || undefined,
+      spotifyArtistImages: Object.keys(pendingArtistImages).length ? pendingArtistImages : undefined,
+      spotifyArtistIds: Object.keys(pendingArtistIds).length ? pendingArtistIds : undefined,
+      spotifyTrackImages: pendingTrackImages.length ? pendingTrackImages : undefined,
       calculatedTier: t,
     };
     saveProfile(profile);
     navigate("/browse");
   };
-
-  const platforms: { name: Platform; logo?: string; color: string }[] = [
-    { name: "Spotify", logo: spotifyLogo, color: "border-green-500/40 hover:border-green-500 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)]" },
-    { name: "Apple Music", color: "border-rose-500/40 hover:border-rose-500 hover:shadow-[0_0_20px_rgba(244,63,94,0.3)]" },
-  ];
 
   const tiers = [
     { id: "casual" as Tier, label: "Casual Listener", desc: "Just here for the vibes", emoji: "🎵", color: "border-green-500/40 hover:border-green-500 hover:shadow-[0_0_25px_rgba(34,197,94,0.25)]", badge: "bg-green-500/20 text-green-400", hint: "3 nuggets per listen · accessible language · feel-good discoveries" },
@@ -230,26 +294,23 @@ export default function Connect() {
               {step === 0 && (
                 <motion.div key="step-0" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }} className="flex flex-col items-center gap-6">
 
-                  {googleUser ? (
-                    /* Google already connected */
+                  {signedInUser ? (
+                    /* Signed in — show confirmation, auto-advances */
                     <>
                       <div className="text-center">
-                        <h1 className="text-3xl font-black text-foreground tracking-tight">Welcome back</h1>
-                        <p className="mt-2 text-muted-foreground">Signed in — let's set up your profile.</p>
+                        <h1 className="text-3xl font-black text-foreground tracking-tight">Welcome, {signedInUser.name.split(" ")[0]}</h1>
+                        <p className="mt-2 text-muted-foreground">Setting up your profile...</p>
                       </div>
                       <div className="flex items-center gap-3 w-full rounded-2xl border border-primary/40 bg-foreground/5 px-5 py-4 ring-1 ring-primary/20">
-                        <GoogleIcon />
+                        {signedInUser.isGoogle ? <GoogleIcon /> : <span className="text-lg">✉️</span>}
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-foreground">{googleUser.name}</p>
+                          <p className="font-semibold text-foreground">{signedInUser.name}</p>
                           <p className="text-xs text-muted-foreground truncate">
-                            {youtubeImporting ? "Importing YouTube taste…" : youtubeTopArtists?.length ? `${youtubeTopArtists.length} artists found · ${youtubeTopArtists.slice(0, 3).join(", ")}…` : googleUser.email}
+                            {signedInUser.email}
                           </p>
                         </div>
-                        {youtubeImporting ? <Spinner className="h-4 w-4 text-primary flex-shrink-0" /> : <span className="text-xs font-semibold text-primary flex-shrink-0">✓</span>}
+                        <span className="text-xs font-semibold text-primary flex-shrink-0">✓</span>
                       </div>
-                      <button onClick={() => goNext()} className="w-full rounded-2xl bg-primary px-5 py-4 font-semibold text-primary-foreground hover:opacity-90 transition-opacity">
-                        Continue →
-                      </button>
                     </>
 
                   ) : authMode === "choose" ? (
@@ -262,7 +323,7 @@ export default function Connect() {
                       <div className="flex flex-col gap-3 w-full">
                         <button onClick={handleGoogleSignIn} disabled={googleSigningIn} className="flex items-center gap-3 w-full rounded-2xl border border-foreground/15 bg-foreground/5 px-5 py-4 font-semibold text-foreground transition-all hover:bg-foreground/10 hover:border-foreground/30 disabled:opacity-60">
                           {googleSigningIn ? <Spinner className="h-6 w-6 text-muted-foreground" /> : <GoogleIcon />}
-                          <span className="flex-1">{googleSigningIn ? "Signing in…" : "Continue with Google"}</span>
+                          <span className="flex-1">{googleSigningIn ? "Signing in..." : "Continue with Google"}</span>
                         </button>
                         <div className="flex items-center gap-3">
                           <div className="flex-1 h-px bg-foreground/10" />
@@ -292,10 +353,10 @@ export default function Connect() {
 
                       {emailSent ? (
                         <div className="w-full rounded-2xl border border-primary/30 bg-primary/10 px-5 py-4 text-center">
-                          <p className="font-semibold text-foreground">Check your email ✉️</p>
+                          <p className="font-semibold text-foreground">Check your email</p>
                           <p className="text-sm text-muted-foreground mt-1">Click the confirmation link, then come back and log in.</p>
                           <button onClick={() => { setEmailSent(false); setAuthMode("login"); }} className="mt-3 text-sm text-primary hover:underline">
-                            Log in →
+                            Log in
                           </button>
                         </div>
                       ) : (
@@ -308,7 +369,7 @@ export default function Connect() {
                             {authMode === "signup" ? "Create account" : "Log in"}
                           </button>
                           <button onClick={() => { setAuthMode("choose"); setAuthError(""); }} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-                            ← Back
+                            Back
                           </button>
                         </div>
                       )}
@@ -317,36 +378,50 @@ export default function Connect() {
                 </motion.div>
               )}
 
-              {/* ── Step 1: Platform ── */}
+              {/* ── Step 1: Connect music service ── */}
               {step === 1 && (
                 <motion.div key="step-1" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }} className="flex flex-col items-center gap-6">
                   <div className="text-center">
-                    <h1 className="text-3xl font-black text-foreground tracking-tight">Choose your platform</h1>
-                    <p className="mt-2 text-muted-foreground">Where do you listen to music?</p>
+                    <h1 className="text-3xl font-black text-foreground tracking-tight">Connect your music</h1>
+                    <p className="mt-2 text-muted-foreground">Link a service for personalized insights.</p>
                   </div>
                   <div className="flex flex-col gap-3 w-full">
+
+                    {/* Spotify — connect or show connected */}
                     {!pendingSpotifyArtists ? (
-                      <button onClick={handleConnectSpotify} disabled={spotifyConnecting} className={`flex items-center gap-4 w-full rounded-2xl border bg-foreground/5 px-5 py-4 text-left font-semibold text-foreground transition-all duration-200 disabled:opacity-70 ${platforms[0].color}`}>
+                      <button onClick={handleConnectSpotify} disabled={spotifyConnecting} className={`flex items-center gap-4 w-full rounded-2xl border bg-foreground/5 px-5 py-4 text-left font-semibold text-foreground transition-all duration-200 disabled:opacity-70 border-green-500/40 hover:border-green-500 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)]`}>
                         <img src={spotifyLogo} alt="Spotify" className="w-8 h-8 object-contain" />
                         <span className="flex-1">Spotify</span>
-                        {spotifyConnecting ? <Spinner className="h-4 w-4 text-green-400" /> : <span className="text-xs text-muted-foreground">Connect →</span>}
+                        {spotifyConnecting ? <Spinner className="h-4 w-4 text-green-400" /> : <span className="text-xs text-muted-foreground">Connect</span>}
                       </button>
                     ) : (
                       <button onClick={() => handlePlatformSelect("Spotify")} className="flex items-center gap-4 w-full rounded-2xl border bg-foreground/5 px-5 py-4 text-left font-semibold text-foreground transition-all duration-200 border-green-500/60 ring-1 ring-green-500/30">
                         <img src={spotifyLogo} alt="Spotify" className="w-8 h-8 object-contain" />
                         <div className="flex-1 min-w-0">
                           <p>Spotify</p>
-                          <p className="text-xs font-normal text-green-400 truncate">Connected · {pendingSpotifyArtists.slice(0, 3).join(", ")}{pendingSpotifyArtists.length > 3 ? "…" : ""}</p>
+                          <p className="text-xs font-normal text-green-400 truncate">Connected · {pendingSpotifyArtists.slice(0, 3).join(", ")}{pendingSpotifyArtists.length > 3 ? "..." : ""}</p>
                         </div>
                         <span className="text-xs font-semibold text-green-400">✓</span>
                       </button>
                     )}
-                    {platforms.slice(1).map((p) => (
-                      <button key={p.name} onClick={() => handlePlatformSelect(p.name)} className={`flex items-center gap-4 w-full rounded-2xl border bg-foreground/5 px-5 py-4 text-left font-semibold text-foreground transition-all duration-200 ${p.color}`}>
-                        {p.logo ? <img src={p.logo} alt={p.name} className="w-8 h-8 object-contain" /> : <span className="text-2xl">🎵</span>}
-                        <span className="flex-1">{p.name}</span>
-                      </button>
-                    ))}
+
+                    {/* Apple Music — coming soon */}
+                    <div className="flex items-center gap-4 w-full rounded-2xl border bg-foreground/5 px-5 py-4 text-left font-semibold text-foreground/40 border-foreground/10 cursor-not-allowed">
+                      <span className="text-2xl">🎵</span>
+                      <span className="flex-1">Apple Music</span>
+                      <span className="text-xs text-muted-foreground/60">Coming soon</span>
+                    </div>
+
+                    {/* Skip / Continue */}
+                    <button
+                      onClick={() => {
+                        if (pendingSpotifyArtists) setPlatform("Spotify");
+                        goNext();
+                      }}
+                      className="w-full rounded-2xl border border-foreground/15 bg-foreground/5 px-5 py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {pendingSpotifyArtists ? "Continue" : "Skip for now"}
+                    </button>
                   </div>
                 </motion.div>
               )}
@@ -356,14 +431,14 @@ export default function Connect() {
                 <motion.div key="step-2" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }} className="flex flex-col items-center gap-6">
                   <div className="text-center">
                     <h1 className="text-3xl font-black text-foreground tracking-tight">Last.fm username</h1>
-                    <p className="mt-2 text-muted-foreground">Get personalised listening stats in your insights.</p>
+                    <p className="mt-2 text-muted-foreground">Optional — unlocks personalized artist recommendations, recent listening history, and genre-based discovery.</p>
                   </div>
                   <input type="text" placeholder="Your Last.fm username" value={lastFm} onChange={(e) => setLastFm(e.target.value)} className="w-full rounded-2xl border border-foreground/15 bg-foreground/5 px-5 py-4 text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/60 transition-colors" />
                   <div className="flex gap-3 w-full">
                     <button onClick={() => goNext()} className="flex-1 rounded-2xl bg-foreground/5 border border-foreground/15 px-5 py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Skip</button>
-                    <button onClick={handleLastFmContinue} className="flex-1 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
+                    <button onClick={handleLastFmContinue} disabled={!lastFm.trim()} className="flex-1 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2">
                       {lastFmSyncing && <Spinner />}
-                      {lastFmSyncing ? "Syncing…" : "Continue"}
+                      {lastFmSyncing ? "Syncing..." : "Continue"}
                     </button>
                   </div>
                 </motion.div>
@@ -399,7 +474,7 @@ export default function Connect() {
 
           {step > 0 && (
             <button onClick={() => goNext(-1)} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-              ← Back
+              Back
             </button>
           )}
         </div>

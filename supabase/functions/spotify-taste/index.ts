@@ -29,9 +29,8 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { Authorization: authHeader } } }
     );
-    const token = authHeader.replace("Bearer ", "");
-    const { data, error } = await supabase.auth.getClaims(token);
-    if (error || !data?.claims) {
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -76,6 +75,19 @@ serve(async (req) => {
       profileRes.ok ? profileRes.json() : {},
     ]);
 
+    // Build artist map: name → best image URL, and name → Spotify ID
+    const artistImageMap: Record<string, string> = {};
+    const artistIdMap: Record<string, string> = {};
+    const pickImage = (a: any) => {
+      const imgs = a.images as { url: string; width: number }[] | undefined;
+      // Prefer ~300px image, fall back to first available
+      return imgs?.find((i) => i.width && i.width <= 320)?.url || imgs?.[0]?.url || "";
+    };
+    for (const a of [...(artistsShort.items || []), ...(artistsMedium.items || [])]) {
+      if (!artistImageMap[a.name]) artistImageMap[a.name] = pickImage(a);
+      if (!artistIdMap[a.name] && a.id) artistIdMap[a.name] = a.id;
+    }
+
     // Merge artists — short-term (most recent taste) first, then fill from medium-term
     const shortTermNames = new Set((artistsShort.items || []).map((a: any) => a.name as string));
     const allArtists: string[] = [
@@ -86,14 +98,34 @@ serve(async (req) => {
     ];
 
     const topArtists = [...new Set(allArtists)].slice(0, 20);
-    const topTracks = (tracksData.items || [])
-      .map((t: any) => `${t.name} — ${t.artists?.[0]?.name || ""}`)
-      .slice(0, 15) as string[];
+
+    // Build artist images object: { "Artist Name": "https://..." }
+    const artistImages: Record<string, string> = {};
+    for (const name of topArtists) {
+      if (artistImageMap[name]) artistImages[name] = artistImageMap[name];
+    }
+
+    // Tracks with album art and URIs
+    const topTracks = (tracksData.items || []).slice(0, 15).map((t: any) => ({
+      title: t.name as string,
+      artist: t.artists?.[0]?.name || "",
+      imageUrl: t.album?.images?.find((i: any) => i.width && i.width <= 320)?.url
+        || t.album?.images?.[0]?.url || "",
+      uri: t.uri || "",
+    }));
+
+    // Flat track strings for backward compat
+    const topTrackStrings = topTracks.map(
+      (t: { title: string; artist: string }) => `${t.title} — ${t.artist}`
+    );
 
     return new Response(
       JSON.stringify({
         topArtists,
-        topTracks,
+        topTracks: topTrackStrings,
+        artistImages,
+        artistIds: artistIdMap,
+        trackImages: topTracks,
         displayName: profileData.display_name || null,
         country: profileData.country || null,
       }),

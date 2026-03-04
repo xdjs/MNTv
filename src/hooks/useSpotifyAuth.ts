@@ -8,7 +8,7 @@
 import { supabase } from "@/integrations/supabase/client";
 
 const SPOTIFY_CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID as string;
-const SPOTIFY_SCOPES = "user-top-read user-read-recently-played user-read-private";
+const SPOTIFY_SCOPES = "user-top-read user-read-recently-played user-read-private streaming user-read-playback-state user-modify-playback-state";
 
 const PKCE_STATE_KEY = "spotify_pkce_state";
 const PKCE_VERIFIER_KEY = "spotify_pkce_verifier";
@@ -70,7 +70,7 @@ export async function initiateSpotifyAuth(): Promise<void> {
 export async function exchangeSpotifyCode(
   code: string,
   state: string
-): Promise<{ accessToken: string } | null> {
+): Promise<{ accessToken: string; refreshToken: string; expiresIn: number } | null> {
   const savedState = sessionStorage.getItem(PKCE_STATE_KEY);
   const codeVerifier = sessionStorage.getItem(PKCE_VERIFIER_KEY);
 
@@ -100,7 +100,43 @@ export async function exchangeSpotifyCode(
   }
 
   const data = await res.json();
-  return data.access_token ? { accessToken: data.access_token } : null;
+  return data.access_token
+    ? {
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token || "",
+        expiresIn: data.expires_in || 3600,
+      }
+    : null;
+}
+
+// ── Refresh token ────────────────────────────────────────────────────────────
+
+export async function refreshSpotifyToken(
+  refreshToken: string
+): Promise<{ accessToken: string; refreshToken: string; expiresIn: number } | null> {
+  const res = await fetch("https://accounts.spotify.com/api/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      client_id: SPOTIFY_CLIENT_ID,
+    }),
+  });
+
+  if (!res.ok) {
+    console.error("Spotify token refresh failed:", await res.text());
+    return null;
+  }
+
+  const data = await res.json();
+  return data.access_token
+    ? {
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token || refreshToken,
+        expiresIn: data.expires_in || 3600,
+      }
+    : null;
 }
 
 // ── Step 3: Fetch taste profile — via edge function (backend needs it for RAG) ─
@@ -108,6 +144,9 @@ export async function exchangeSpotifyCode(
 export async function fetchSpotifyTaste(accessToken: string): Promise<{
   topArtists: string[];
   topTracks: string[];
+  artistImages: Record<string, string>;
+  artistIds: Record<string, string>;
+  trackImages: { title: string; artist: string; imageUrl: string }[];
   displayName: string | null;
 } | null> {
   const { data, error } = await supabase.functions.invoke("spotify-taste", {
@@ -122,6 +161,9 @@ export async function fetchSpotifyTaste(accessToken: string): Promise<{
   return {
     topArtists: data.topArtists || [],
     topTracks: data.topTracks || [],
+    artistImages: data.artistImages || {},
+    artistIds: data.artistIds || {},
+    trackImages: data.trackImages || [],
     displayName: data.displayName || null,
   };
 }

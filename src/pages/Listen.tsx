@@ -1,8 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft } from "lucide-react";
-import { useAccentColor } from "@/hooks/useAccentColor";
-import { useTierAccent } from "@/hooks/useTierAccent";
+import { useThemeSync } from "@/hooks/useThemeSync";
 import { QRCode } from "react-qrcode-logo";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -14,9 +13,10 @@ import NuggetDeepDive from "@/components/overlays/NuggetDeepDive";
 import DevPanel from "@/components/DevPanel";
 import PlaybackBar from "@/components/PlaybackBar";
 import { getTrackById, getNuggetsForTrack, getSourceById, getAdjacentTrackIds, getYouTubeSourceForTrack, getArtistById } from "@/mock/tracks";
-import { usePlayback } from "@/hooks/usePlayback";
 import { useAINuggets } from "@/hooks/useAINuggets";
-import { useBackdropSync } from "@/hooks/useBackdropSync";
+import { useSpotifyToken } from "@/hooks/useSpotifyToken";
+import { usePlayer } from "@/contexts/PlayerContext";
+import { useUserProfile } from "@/hooks/useMusicNerdState";
 import PageTransition from "@/components/PageTransition";
 import type { Nugget, Source, AnimationStyle } from "@/mock/types";
 
@@ -25,6 +25,8 @@ const HIDE_DELAY = 3000;
 export default function Listen() {
   const { trackId: rawTrackId } = useParams<{ trackId: string }>();
   const navigate = useNavigate();
+
+  const { profile } = useUserProfile();
 
   // ── Real track support ─────────────────────────────────────────────
   // Real tracks are encoded as: real::<artist>::<title>::<album>
@@ -37,6 +39,7 @@ export default function Listen() {
       artist: decodeURIComponent(parts[1] || ""),
       title: decodeURIComponent(parts[2] || ""),
       album: decodeURIComponent(parts[3] || "") || undefined,
+      spotifyUri: decodeURIComponent(parts[4] || "") || undefined,
     };
   }, [isRealTrack, rawTrackId]);
 
@@ -44,7 +47,25 @@ export default function Listen() {
 
   const track = useMemo(() => {
     if (isRealTrack && realTrackMeta) {
-      // Synthesise a Track-like object for real tracks
+      // Try to find Spotify album art from the user's profile
+      let coverArtUrl = "";
+      if (profile?.spotifyTrackImages) {
+        const match = profile.spotifyTrackImages.find(
+          (t) =>
+            t.title.toLowerCase() === realTrackMeta.title.toLowerCase() &&
+            t.artist.toLowerCase() === realTrackMeta.artist.toLowerCase()
+        );
+        if (match?.imageUrl) coverArtUrl = match.imageUrl;
+      }
+      // Fall back to artist image from Spotify
+      if (!coverArtUrl && profile?.spotifyArtistImages?.[realTrackMeta.artist]) {
+        coverArtUrl = profile.spotifyArtistImages[realTrackMeta.artist];
+      }
+      // Final fallback: DiceBear initials
+      if (!coverArtUrl) {
+        coverArtUrl = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(realTrackMeta.artist + realTrackMeta.title)}&backgroundColor=111827&textColor=ffffff&fontSize=30`;
+      }
+
       return {
         id: trackId,
         title: realTrackMeta.title,
@@ -52,35 +73,211 @@ export default function Listen() {
         artistId: "",
         albumId: "",
         album: realTrackMeta.album,
-        durationSec: 300, // default 5 min
-        coverArtUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(realTrackMeta.artist + realTrackMeta.title)}&backgroundColor=111827&textColor=ffffff&fontSize=30`,
+        durationSec: 300,
+        coverArtUrl,
         trackNumber: 1,
       };
     }
     return getTrackById(trackId);
-  }, [isRealTrack, realTrackMeta, trackId]);
+  }, [isRealTrack, realTrackMeta, trackId, profile?.spotifyTrackImages, profile?.spotifyArtistImages]);
+
+  // ── Playback source resolution ───────────────────────────────────────
+  const { hasSpotifyToken } = useSpotifyToken();
+  const ytSource = useMemo(() => getYouTubeSourceForTrack(trackId || ""), [trackId]);
+  const [ytVideoId, setYtVideoId] = useState<string | null>(null);
+  const [spotifyUri, setSpotifyUri] = useState<string | null>(null);
+
+  // Resolve Spotify URI — from route (real tracks) or by searching Spotify
+  useEffect(() => {
+    setSpotifyUri(null);
+
+    // Real track with URI baked into the route
+    if (realTrackMeta?.spotifyUri) {
+      setSpotifyUri(realTrackMeta.spotifyUri);
+      return;
+    }
+
+    // No Spotify token → skip Spotify search
+    if (!hasSpotifyToken || !track) return;
+
+    let cancelled = false;
+    async function findSpotifyUri() {
+      try {
+        const { data, error } = await supabase.functions.invoke("spotify-search", {
+          body: { query: `${track!.artist} ${track!.title}` },
+        });
+        if (cancelled) return;
+        if (error) { console.error("[Listen] Spotify search error:", error); return; }
+        // Find the best matching track
+        const match = data?.tracks?.find((t: any) =>
+          t.title.toLowerCase() === track!.title.toLowerCase() &&
+          t.artist.toLowerCase() === track!.artist.toLowerCase()
+        ) || data?.tracks?.[0];
+        if (match?.uri) setSpotifyUri(match.uri);
+      } catch (err) {
+        console.error("[Listen] Spotify URI search failed:", err);
+      }
+    }
+    findSpotifyUri();
+    return () => { cancelled = true; };
+  }, [hasSpotifyToken, realTrackMeta?.spotifyUri, track?.artist, track?.title]);
+
+  // Resolve YouTube video ID — for backdrop visuals or audio fallback (no Spotify)
+  useEffect(() => {
+    setYtVideoId(null);
+
+    // Mock tracks: use existing embedId from mock data
+    if (!isRealTrack && ytSource?.embedId) {
+      setYtVideoId(ytSource.embedId);
+      return;
+    }
+
+    // Search YouTube for real tracks (and mock tracks without embedId)
+    if (!track) return;
+    let cancelled = false;
+    async function searchYT() {
+      try {
+        const { data, error } = await supabase.functions.invoke("youtube-search", {
+          body: { query: `${track!.artist} ${track!.title}` },
+        });
+        if (!cancelled && data?.videoId) setYtVideoId(data.videoId);
+        if (error) console.error("[Listen] YouTube search error:", error);
+      } catch (err) {
+        console.error("[Listen] YouTube search failed:", err);
+      }
+    }
+    searchYT();
+    return () => { cancelled = true; };
+  }, [isRealTrack, track?.artist, track?.title, ytSource?.embedId]);
 
   const [shuffleOn, setShuffleOn] = useState(false);
   const [regenerateKey, setRegenerateKey] = useState(0);
-  const { prev, next } = useMemo(
+  const [skipLoading, setSkipLoading] = useState(false);
+
+  // Mock catalog adjacency
+  const { prev: mockPrev, next: mockNext } = useMemo(
     () => isRealTrack ? { prev: null, next: null } : getAdjacentTrackIds(trackId, shuffleOn),
     [isRealTrack, trackId, shuffleOn]
   );
 
-  const handleTrackEnd = useCallback(() => {
-    if (isRealTrack) return;
-    const { next: nextId } = getAdjacentTrackIds(trackId, shuffleOn);
-    if (nextId) navigate(`/listen/${nextId}`);
-  }, [isRealTrack, trackId, shuffleOn, navigate]);
+  // Push current track to global history (persists across Listen re-mounts)
+  const player = usePlayer();
+  useEffect(() => {
+    player.pushTrackHistory(`/listen/${rawTrackId}`);
+  }, [rawTrackId]);
 
-  const { isPlaying, currentTime, fadingIn, play, pause, seek, toggle, pauseForOverlay, resumeWithFade } =
-    usePlayback(track?.durationSec || 300, handleTrackEnd);
+  // For real tracks: next is always available (we fetch on demand), prev uses global history
+  const hasPrev = isRealTrack ? !!player.prevTrackRoute : !!mockPrev;
+  const hasNext = isRealTrack ? true : !!mockNext;
+
+  // Fetch a related track from Spotify and navigate to it
+  const navigateToRelated = useCallback(async () => {
+    if (!track) return;
+    setSkipLoading(true);
+    try {
+      const { data } = await supabase.functions.invoke("spotify-search", {
+        body: { query: track.artist },
+      });
+      const candidates = (data?.tracks || []).filter(
+        (t: any) => t.title.toLowerCase() !== track.title.toLowerCase()
+      );
+      if (candidates.length > 0) {
+        const pick = candidates[Math.floor(Math.random() * Math.min(candidates.length, 5))];
+        navigate(
+          `/listen/real::${encodeURIComponent(pick.artist)}::${encodeURIComponent(pick.title)}::${encodeURIComponent(pick.album || "")}::${encodeURIComponent(pick.uri || "")}`
+        );
+      }
+    } catch (err) {
+      console.warn("[Listen] Skip next failed:", err);
+    } finally {
+      setSkipLoading(false);
+    }
+  }, [track?.artist, track?.title, navigate]);
+
+  const handlePrev = useCallback(() => {
+    if (!isRealTrack) {
+      if (mockPrev) navigate(`/listen/${mockPrev}`);
+      return;
+    }
+    const prev = player.popTrackHistory();
+    if (prev) navigate(prev);
+  }, [isRealTrack, mockPrev, navigate, player.popTrackHistory]);
+
+  const handleNext = useCallback(() => {
+    if (!isRealTrack) {
+      if (mockNext) navigate(`/listen/${mockNext}`);
+      return;
+    }
+    navigateToRelated();
+  }, [isRealTrack, mockNext, navigate, navigateToRelated]);
+
+  const handleTrackEnd = useCallback(() => {
+    if (!isRealTrack) {
+      const { next: nextId } = getAdjacentTrackIds(trackId, shuffleOn);
+      if (nextId) navigate(`/listen/${nextId}`);
+      return;
+    }
+    navigateToRelated();
+  }, [isRealTrack, trackId, shuffleOn, navigate, navigateToRelated]);
+
+  const {
+    isPlaying, currentTime, duration: playerDuration, activePlayer, playerContainerRef,
+  } = player;
+  const realDuration = playerDuration > 0 ? playerDuration : (track?.durationSec || 300);
+
+  // Register track-end handler on the global player
+  useEffect(() => {
+    player.setOnEnded(handleTrackEnd);
+    return () => player.setOnEnded(null);
+  }, [handleTrackEnd]);
+
+  // Fading state for overlay transitions
+  const [fadingIn, setFadingIn] = useState(false);
+
+  // Set track metadata on the global player
+  useEffect(() => {
+    if (!track) return;
+    player.setCurrentTrack({
+      trackId,
+      title: track.title,
+      artist: track.artist,
+      coverArtUrl: track.coverArtUrl,
+      album: track.album,
+      spotifyUri: spotifyUri || undefined,
+    });
+  }, [track?.title, track?.artist, trackId, spotifyUri]);
+
+  // Load track into global player when sources resolve
+  // Skip if the same track is already playing (e.g. returning from Browse via mini-player)
+  useEffect(() => {
+    if (!ytVideoId && !spotifyUri) return;
+    const alreadyPlaying =
+      (spotifyUri && player.currentSpotifyUri === spotifyUri) ||
+      (!spotifyUri && ytVideoId && player.currentVideoId === ytVideoId);
+    if (alreadyPlaying) return;
+    player.loadTrack({
+      videoId: ytVideoId || undefined,
+      spotifyUri: spotifyUri || undefined,
+      spotifyAvailable: hasSpotifyToken,
+    });
+  }, [ytVideoId, spotifyUri, hasSpotifyToken]);
+
+  const play = player.play;
+  const seek = player.seek;
+  const toggle = player.toggle;
+  const pauseForOverlay = player.pause;
+  const resumeWithFade = useCallback(() => {
+    setFadingIn(true);
+    player.play();
+    setTimeout(() => setFadingIn(false), 1000);
+  }, [player.play]);
 
   // Get artist's local image for fallback
   const artistData = useMemo(() => getArtistById(track?.artistId || ""), [track?.artistId]);
 
   // AI-generated nuggets with real sources
-  const { nuggets: aiNuggets, sources: aiSources, loading: aiLoading, listenCount } = useAINuggets(
+  const tier = (profile?.calculatedTier as "casual" | "curious" | "nerd") || "casual";
+  const { nuggets: aiNuggets, sources: aiSources, loading: aiLoading, error: aiError, listenCount } = useAINuggets(
     trackId,
     track?.artist || "",
     track?.title || "",
@@ -88,11 +285,20 @@ export default function Listen() {
     track?.durationSec || 300,
     regenerateKey,
     track?.coverArtUrl,
-    artistData?.imageUrl
+    artistData?.imageUrl,
+    tier
   );
 
+  // Log AI nugget errors for debugging
+  useEffect(() => {
+    if (aiError) console.error("[Listen] AI nugget error:", aiError);
+  }, [aiError]);
+
   const mockNuggets = useMemo(() => isRealTrack ? [] : getNuggetsForTrack(trackId), [isRealTrack, trackId]);
-  const trackNuggets = aiLoading ? [] : (aiNuggets.length > 0 ? aiNuggets : mockNuggets);
+  const trackNuggets = useMemo(
+    () => aiLoading ? [] : (aiNuggets.length > 0 ? aiNuggets : mockNuggets),
+    [aiLoading, aiNuggets, mockNuggets]
+  );
 
   const [animStyle, setAnimStyle] = useState<AnimationStyle>("A");
   const [activeNugget, setActiveNugget] = useState<Nugget | null>(null);
@@ -105,10 +311,6 @@ export default function Listen() {
   const [nerdActive, setNerdActive] = useState(true);
   const [backdropMotion, setBackdropMotion] = useState(false);
   const [liked, setLiked] = useState<boolean | null>(null);
-  const ytSource = useMemo(() => getYouTubeSourceForTrack(trackId || ""), [trackId]);
-
-  // Backdrop video sync
-  const { iframeRef } = useBackdropSync(isPlaying, currentTime, backdropMotion, ytSource?.embedId);
 
   // --- Auto-hide bar logic ---
   const [barVisible, setBarVisible] = useState(true);
@@ -162,13 +364,13 @@ export default function Listen() {
   const handleBarAction = useCallback((index: number) => {
     switch (index) {
       case 0: setLiked((v) => v === false ? null : false); break;
-      case 1: if (prev) navigate(`/listen/${prev}`); break;
+      case 1: handlePrev(); break;
       case 2: toggle(); break;
-      case 3: if (next) navigate(`/listen/${next}`); break;
+      case 3: handleNext(); break;
       case 4: setLiked((v) => v === true ? null : true); break;
       case 5: setShuffleOn((v) => !v); break;
     }
-  }, [prev, next, navigate, toggle]);
+  }, [handlePrev, handleNext, toggle]);
 
   const handleTopAction = useCallback((index: number) => {
     if (index === 0) navigate("/browse");
@@ -282,9 +484,6 @@ export default function Listen() {
     if (!nerdActive) { setActiveNugget(null); setNuggetQueue([]); }
   }, [nerdActive]);
 
-  // Track seek events to trigger nuggets even when paused
-  const [seekCounter, setSeekCounter] = useState(0);
-
   const handleSeek = useCallback((t: number) => {
     // Find the nugget whose window contains the seek position
     const targetNugget = trackNuggets.reduce<typeof trackNuggets[0] | null>((best, n) => {
@@ -379,6 +578,9 @@ export default function Listen() {
 
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
+  // Must be called unconditionally — before any early returns
+  useThemeSync(track?.coverArtUrl ?? "");
+
   if (!track) {
     return (
       <PageTransition>
@@ -392,29 +594,22 @@ export default function Listen() {
     );
   }
 
-  const progress = (currentTime / track.durationSec) * 100;
-
-  // Lock glow/primary to user's tier — album art only drives --backdrop-color
-  useTierAccent();
-  useAccentColor(track.coverArtUrl); // sets --backdrop-color only
+  const effectiveDuration = realDuration > 0 ? realDuration : track.durationSec;
+  const progress = (currentTime / effectiveDuration) * 100;
 
   return (
     <PageTransition>
       <div className="relative flex h-screen flex-col overflow-hidden">
-        {/* Background: YouTube motion or cover art */}
+        {/* Background: YouTube player (visible as backdrop) or cover art */}
         <div className="absolute inset-0">
-          {backdropMotion && ytSource?.embedId ? (
-            <div className="absolute inset-0 overflow-hidden">
-              <iframe
-                ref={iframeRef}
-                src={`https://www.youtube.com/embed/${ytSource.embedId}?autoplay=${isPlaying ? 1 : 0}&mute=1&loop=1&playlist=${ytSource.embedId}&controls=0&showinfo=0&modestbranding=1&rel=0&disablekb=1&enablejsapi=1`}
-                title="Backdrop motion"
-                allow="autoplay"
-                className={`absolute inset-0 w-full h-full pointer-events-none scale-[1.3] transition-all duration-700 ease-out ${barVisible ? 'brightness-[0.35]' : 'brightness-[0.8]'}`}
-                style={{ border: "none" }}
-              />
-            </div>
-          ) : (
+          {/* Global YouTube player — reposition into view when backdrop is on */}
+          <GlobalPlayerBackdrop
+            containerRef={playerContainerRef}
+            visible={backdropMotion && !!ytVideoId}
+            dim={barVisible}
+          />
+          {/* Cover art fallback — shown when no backdrop motion or no video */}
+          {(!backdropMotion || !ytVideoId) && (
             <img
               src={track.coverArtUrl}
               alt=""
@@ -541,27 +736,27 @@ export default function Listen() {
           fadingIn={fadingIn}
           progress={progress}
           currentTimeFormatted={formatTime(currentTime)}
-          durationFormatted={formatTime(track.durationSec)}
+          durationFormatted={formatTime(effectiveDuration)}
           visible={barVisible}
-          hasPrev={!!prev}
-          hasNext={!!next}
+          hasPrev={hasPrev}
+          hasNext={hasNext}
           liked={liked}
           shuffle={shuffleOn}
-          nuggetMarkers={trackNuggets.map((n) => (n.timestampSec / track.durationSec) * 100)}
+          nuggetMarkers={trackNuggets.map((n) => (n.timestampSec / effectiveDuration) * 100)}
           focusedIndex={focusZone === 'bar' ? barFocusIndex : null}
           onToggle={() => { showBar(); toggle(); }}
-          onSeek={(pct) => { showBar(); handleSeek(pct * track.durationSec); }}
-          onPrev={() => prev && navigate(`/listen/${prev}`)}
-          onNext={() => next && navigate(`/listen/${next}`)}
+          onSeek={(pct) => { showBar(); handleSeek(pct * effectiveDuration); }}
+          onPrev={handlePrev}
+          onNext={handleNext}
           onLike={() => setLiked((v) => v === true ? null : true)}
           onDislike={() => setLiked((v) => v === false ? null : false)}
           onShuffle={() => setShuffleOn((v) => !v)}
         />
 
         {/* QR Code — permanent, bottom-left */}
-        <div className="fixed bottom-6 left-6 z-10 opacity-40 hover:opacity-80 transition-opacity">
+        <div className="fixed bottom-6 left-6 z-10 opacity-50 hover:opacity-90 transition-opacity">
           <QRCode
-            value={`https://musicnerdtv.lovable.app/companion/${trackId}`}
+            value={`${window.location.origin}/companion/${trackId}`}
             size={80}
             qrStyle="dots"
             eyeRadius={8}
@@ -597,20 +792,23 @@ export default function Listen() {
               onResetHistory={async () => {
                 if (!track) return;
                 const trackKey = `${track.artist}::${track.title}`;
-                await supabase.from("nugget_history" as any).delete().eq("track_key", trackKey);
+                await supabase.from("nugget_history").delete().eq("track_key", trackKey);
                 setRegenerateKey((k) => k + 1);
               }}
               onResetAllHistory={async () => {
                 if (!window.confirm("Delete ALL listening history? This cannot be undone.")) return;
-                await supabase.from("nugget_history" as any).delete().neq("track_key", "");
+                await supabase.from("nugget_history").delete().neq("track_key", "");
                 setRegenerateKey((k) => k + 1);
               }}
+              activePlayer={activePlayer}
+              spotifyUri={spotifyUri}
+              ytVideoId={ytVideoId}
               onIncrementListen={async () => {
                 if (!track) return;
                 const trackKey = `${track.artist}::${track.title}`;
-                const { data } = await supabase.from("nugget_history" as any).select("listen_count").eq("track_key", trackKey).maybeSingle();
+                const { data } = await supabase.from("nugget_history").select("listen_count").eq("track_key", trackKey).maybeSingle();
                 if (data) {
-                  await supabase.from("nugget_history" as any).update({ listen_count: ((data as any).listen_count || 1) + 1, updated_at: new Date().toISOString() } as any).eq("track_key", trackKey);
+                  await supabase.from("nugget_history").update({ listen_count: (data.listen_count || 1) + 1, updated_at: new Date().toISOString() }).eq("track_key", trackKey);
                 }
                 setRegenerateKey((k) => k + 1);
               }}
@@ -649,5 +847,58 @@ export default function Listen() {
         </AnimatePresence>
       </div>
     </PageTransition>
+  );
+}
+
+/** Moves the global YT player container into view as a backdrop. */
+function GlobalPlayerBackdrop({ containerRef, visible, dim }: {
+  containerRef: React.RefObject<HTMLDivElement>;
+  visible: boolean;
+  dim: boolean;
+}) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    // Reposition the global player into this wrapper
+    el.style.position = "absolute";
+    el.style.zIndex = "0";
+    el.style.opacity = visible ? "1" : "0";
+    el.style.pointerEvents = "none";
+    el.style.top = "0";
+    el.style.left = "0";
+    el.style.width = "100%";
+    el.style.height = "100%";
+
+    const wrapper = wrapperRef.current;
+    if (wrapper && el.parentElement !== wrapper) {
+      wrapper.appendChild(el);
+    }
+
+    return () => {
+      // Move back to body-level when leaving Listen page
+      el.style.position = "fixed";
+      el.style.zIndex = "-1";
+      el.style.opacity = "0";
+      document.body.appendChild(el);
+    };
+  }, [containerRef, visible]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.style.opacity = visible ? "1" : "0";
+  }, [containerRef, visible]);
+
+  return (
+    <div
+      ref={wrapperRef}
+      className={`absolute inset-0 overflow-hidden pointer-events-none scale-[1.3] transition-all duration-700 ease-out ${
+        visible
+          ? dim ? 'brightness-[0.35]' : 'brightness-[0.8]'
+          : 'opacity-0'
+      }`}
+    />
   );
 }

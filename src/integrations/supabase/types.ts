@@ -71,6 +71,7 @@ export type Database = {
           id: string
           nuggets: Json
           sources: Json
+          status: string
           track_id: string
         }
         Insert: {
@@ -78,6 +79,7 @@ export type Database = {
           id?: string
           nuggets?: Json
           sources?: Json
+          status?: string
           track_id: string
         }
         Update: {
@@ -85,6 +87,7 @@ export type Database = {
           id?: string
           nuggets?: Json
           sources?: Json
+          status?: string
           track_id?: string
         }
         Relationships: []
@@ -124,6 +127,7 @@ export type Database = {
           created_at: string
           id: string
           last_fm_username: string | null
+          spotify_taste: Json | null
           streaming_service: string | null
           tier: string
           updated_at: string
@@ -133,6 +137,7 @@ export type Database = {
           created_at?: string
           id?: string
           last_fm_username?: string | null
+          spotify_taste?: Json | null
           streaming_service?: string | null
           tier?: string
           updated_at?: string
@@ -142,6 +147,7 @@ export type Database = {
           created_at?: string
           id?: string
           last_fm_username?: string | null
+          spotify_taste?: Json | null
           streaming_service?: string | null
           tier?: string
           updated_at?: string

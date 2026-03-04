@@ -101,6 +101,47 @@ class RecitationError extends Error {
   constructor() { super("RECITATION"); this.name = "RecitationError"; }
 }
 
+// ── Tier configuration ──────────────────────────────────────────────
+type Tier = "casual" | "curious" | "nerd";
+
+const TIER_CONFIG: Record<Tier, {
+  tone: string;
+  artistFocus: string;
+  trackFocus: string;
+  discoveryFocus: string;
+  sourceExpectation: string;
+  model: string;
+  temperature: number;
+}> = {
+  casual: {
+    tone: "Conversational, jargon-free, feel-good. Like texting a friend a fun fact.",
+    artistFocus: "Humanizing details, fun anecdotes, latest news. Relatable and interesting.",
+    trackFocus: "The vibe, a fun fact about how it was made. No music theory.",
+    discoveryFocus: "Similar vibe, easy to get into. 'If you like this, you'll love...'",
+    sourceExpectation: "Social media, mainstream interviews, YouTube, Wikipedia.",
+    model: "gemini-2.5-flash",
+    temperature: 1.0,
+  },
+  curious: {
+    tone: "Engaging storytelling. Balanced depth — production details + cultural connections.",
+    artistFocus: "Career context, creative evolution, artistic tensions.",
+    trackFocus: "Production choices, songwriting process, cultural moment.",
+    discoveryFocus: "Genuine musical thread — shared producer, genre lineage, thematic connection.",
+    sourceExpectation: "Pitchfork, Rolling Stone, AllMusic, quality interviews.",
+    model: "gemini-2.5-flash",
+    temperature: 0.9,
+  },
+  nerd: {
+    tone: "Authoritative, technical, maximum depth. Assume music terminology fluency.",
+    artistFocus: "Technical innovations, gear, influence chains, recording philosophy.",
+    trackFocus: "Production techniques, harmonic analysis, exact gear/studio/engineer details.",
+    discoveryFocus: "Obscure but connected — session musicians, sample sources, micro-history.",
+    sourceExpectation: "Sound on Sound, Tape Op, Discogs, MusicBrainz, Reddit deep dives.",
+    model: "gemini-2.5-pro",
+    temperature: 0.8,
+  },
+};
+
 // ── Generate nuggets with Gemini + Google Search grounding ───────────
 interface GeminiNugget {
   headline: string;
@@ -130,8 +171,10 @@ async function generateWithGemini(
   transcripts: Map<string, string>,
   apiKey: string,
   listenCount: number = 1,
-  previousNuggets: string[] = []
+  previousNuggets: string[] = [],
+  tier: Tier = "casual"
 ): Promise<{ nuggets: GeminiNugget[]; groundingChunks: any[] }> {
+  const tierConfig = TIER_CONFIG[tier];
   const transcriptContext = videos
     .filter((v) => transcripts.has(v.videoId))
     .map((v, i) => {
@@ -162,13 +205,16 @@ async function generateWithGemini(
 
 DEPTH CONTEXT: ${depthInstruction}${nonRepeatInstruction}
 
+TONE & STYLE: ${tierConfig.tone}
+SOURCE EXPECTATIONS: Prefer sources from ${tierConfig.sourceExpectation}.
+
 ${videoListContext ? `Available YouTube videos:\n${videoListContext}\n` : ""}
 ${transcriptContext ? `Real transcript content:\n\n${transcriptContext}\n` : "No transcripts available — use your knowledge and Google Search to find real sources."}
 
 STRUCTURE — always exactly 3 nuggets in this order:
-1. **Nugget 1 — kind: "artist"**: About the ARTIST — their story, creative philosophy, world. What makes them who they are. listenFor: false.
-2. **Nugget 2 — kind: "track"**: About THIS SPECIFIC TRACK — production, meaning, history, an audio moment to listen for. listenFor: true.
-3. **Nugget 3 — kind: "discovery"**: A specific recommendation — name the exact track, album, or artist the listener should explore next. Explain WHY based on a genuine musical connection. Be opinionated and specific like a knowledgeable friend. listenFor: false.
+1. **Nugget 1 — kind: "artist"**: ${tierConfig.artistFocus}. listenFor: false.
+2. **Nugget 2 — kind: "track"**: ${tierConfig.trackFocus}. listenFor: true.
+3. **Nugget 3 — kind: "discovery"**: ${tierConfig.discoveryFocus}. Be opinionated and specific like a knowledgeable friend. listenFor: false.
 
 CRITICAL RULES:
 - Each nugget MUST have TWO text fields:
@@ -213,10 +259,10 @@ Return ONLY valid JSON:
   const body: any = {
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     tools: [{ google_search: {} }],
-    generationConfig: { temperature: 1.0 },
+    generationConfig: { temperature: tierConfig.temperature },
   };
 
-  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${tierConfig.model}:generateContent?key=${apiKey}`;
 
   // Retry up to 3 times on 429
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -307,14 +353,14 @@ async function requireAuth(req: Request): Promise<{ userId: string } | Response>
     { global: { headers: { Authorization: authHeader } } }
   );
   const token = authHeader.replace("Bearer ", "");
-  const { data, error } = await supabase.auth.getClaims(token);
-  if (error || !data?.claims) {
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-  return { userId: data.claims.sub as string };
+  return { userId: user.id };
 }
 
 // ── Main handler ─────────────────────────────────────────────────────
@@ -328,7 +374,8 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, imageCaption, imageQuery, listenCount, previousNuggets } = body;
+    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, imageCaption, imageQuery, listenCount, previousNuggets, tier: rawTier } = body;
+    const tier: Tier = (rawTier === "casual" || rawTier === "curious" || rawTier === "nerd") ? rawTier : "casual";
 
     // ── Input validation ────────────────────────────────────────────
     const MAX_STR = 300;
@@ -473,7 +520,7 @@ Return ONLY valid JSON:
     let groundingChunks: any[];
     try {
       const result = await generateWithGemini(
-        artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets
+        artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier
       );
       rawNuggets = result.nuggets;
       groundingChunks = result.groundingChunks;
@@ -481,7 +528,7 @@ Return ONLY valid JSON:
       if (e instanceof RecitationError) {
         console.log("Retrying without transcripts to avoid RECITATION block...");
         const result = await generateWithGemini(
-          artist, title, album, videos, new Map(), GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets
+          artist, title, album, videos, new Map(), GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier
         );
         rawNuggets = result.nuggets;
         groundingChunks = result.groundingChunks;
@@ -490,7 +537,7 @@ Return ONLY valid JSON:
       }
     }
 
-    // Step 4: Assemble response with real video IDs and targeted search URLs
+    // Step 4: Assemble response with real video IDs and grounding-sourced URLs
     const nuggets = rawNuggets.map((n) => {
       const source = n.source || {};
       const result: any = {
@@ -517,27 +564,27 @@ Return ONLY valid JSON:
         }
       }
 
-      // For article/interview sources, build a targeted Google Search URL
-      if (!result.source.url) {
-        const publisherDomains: Record<string, string> = {
-          "pitchfork": "site:pitchfork.com",
-          "rolling stone": "site:rollingstone.com",
-          "nme": "site:nme.com",
-          "the guardian": "site:theguardian.com",
-          "billboard": "site:billboard.com",
-          "spin": "site:spin.com",
-          "stereogum": "site:stereogum.com",
-          "consequence of sound": "site:consequence.net",
-          "the quietus": "site:thequietus.com",
-          "sound on sound": "site:soundonsound.com",
-          "wikipedia": "site:en.wikipedia.org",
-          "far out magazine": "site:faroutmagazine.co.uk",
-          "the line of best fit": "site:thelineofbestfit.com",
-        };
+      // For non-YouTube sources, try to find a direct URL from Gemini's grounding chunks
+      if (!result.source.url && groundingChunks.length > 0) {
         const pubLower = (source.publisher || "").toLowerCase();
-        const siteHint = publisherDomains[pubLower] || "";
-        const q = `"${source.title || title}" ${siteHint} ${artist}`.trim();
-        result.source.url = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+        const titleLower = (source.title || "").toLowerCase();
+        const match = groundingChunks.find((chunk: any) => {
+          const chunkTitle = (chunk?.web?.title || "").toLowerCase();
+          const chunkUri = (chunk?.web?.uri || "").toLowerCase();
+          return (
+            (pubLower && (chunkTitle.includes(pubLower) || chunkUri.includes(pubLower))) ||
+            (titleLower && chunkTitle.includes(titleLower))
+          );
+        });
+        if (match?.web?.uri) {
+          result.source.url = match.web.uri;
+        }
+      }
+
+      // Fallback: "I'm Feeling Lucky" Google search (goes directly to top result)
+      if (!result.source.url) {
+        const q = `"${source.title || title}" ${source.publisher || ""} ${artist}`.trim();
+        result.source.url = `https://www.google.com/search?btnI=1&q=${encodeURIComponent(q)}`;
       }
 
       return result;

@@ -443,11 +443,24 @@ export function getTrackById(id: string): Track | undefined {
   return tracks.find((t) => t.id === id);
 }
 
+// ── DEV-gated static nuggets/sources ─────────────────────────────────────────
+// These functions return real data ONLY in development builds.
+// In production, AI (Gemini) is the sole source of nuggets and sources — the
+// static arrays are scaffolding only.
+//
+// Gating behind import.meta.env.DEV allows Vite/Rollup to dead-code-eliminate
+// the entire `nuggets` + `sources` arrays from the production bundle.
+//
+// Future: once real tracks fully replace the mock catalog, the `nuggets` and
+// `sources` exports themselves should be removed along with these helpers.
+
 export function getNuggetsForTrack(trackId: string): Nugget[] {
+  if (!import.meta.env.DEV) return [];
   return nuggets.filter((n) => n.trackId === trackId);
 }
 
 export function getSourceById(id: string): Source | undefined {
+  if (!import.meta.env.DEV) return undefined;
   return sources.find((s) => s.id === id);
 }
 

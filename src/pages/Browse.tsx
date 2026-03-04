@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, LogOut } from "lucide-react";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
@@ -82,6 +82,67 @@ export default function Browse() {
     const rect = el.getBoundingClientRect();
     return rect.left + rect.width / 2;
   }, [rowIndex, colIndex, allRows]);
+
+  // ── D-pad keyboard navigation ──────────────────────────────────────
+  useEffect(() => {
+    if (searchOpen) return; // let search overlay handle its own keys
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (rowIndex === -1) {
+          // Header → first row
+          if (allRows.length > 0) {
+            const centerX = getCurrentCenterX();
+            const nextCol = findClosestColByViewport(allRows[0].label, centerX);
+            setRowIndex(0);
+            setColIndex(nextCol);
+          }
+        } else if (rowIndex < allRows.length - 1) {
+          const centerX = getCurrentCenterX();
+          const nextRow = rowIndex + 1;
+          const nextCol = findClosestColByViewport(allRows[nextRow].label, centerX);
+          setRowIndex(nextRow);
+          setColIndex(nextCol);
+        }
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (rowIndex > 0) {
+          const centerX = getCurrentCenterX();
+          const nextRow = rowIndex - 1;
+          const nextCol = findClosestColByViewport(allRows[nextRow].label, centerX);
+          setRowIndex(nextRow);
+          setColIndex(nextCol);
+        } else if (rowIndex === 0) {
+          setRowIndex(-1);
+          setColIndex(0);
+        }
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        if (rowIndex === -1) {
+          setColIndex((c) => Math.min(c + 1, HEADER_ITEMS - 1));
+        } else {
+          const maxCol = (allRows[rowIndex]?.items.length || 1) - 1;
+          setColIndex((c) => Math.min(c + 1, maxCol));
+        }
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setColIndex((c) => Math.max(c - 1, 0));
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (rowIndex === -1) {
+          if (colIndex === 0) cycleTier();
+          else if (colIndex === 1) setSearchOpen(true);
+        } else {
+          const item = allRows[rowIndex]?.items[colIndex];
+          if (item) navigate(item.href);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [searchOpen, rowIndex, colIndex, allRows, navigate, cycleTier, getCurrentCenterX, findClosestColByViewport]);
 
   const focusGlow = "tv-focus-glow";
   const glowClass = tier ? tierGlowClass(tier) : "";

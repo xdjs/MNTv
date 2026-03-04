@@ -16,6 +16,8 @@ import SpotifyCallback from "./pages/SpotifyCallback";
 import NotFound from "./pages/NotFound";
 import { getStoredProfile } from "./hooks/useMusicNerdState";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { PlayerProvider } from "./contexts/PlayerContext";
+import NowPlayingBar from "./components/NowPlayingBar";
 
 const queryClient = new QueryClient();
 
@@ -62,8 +64,8 @@ function RootRoute() {
 
   if (loading) return null;
 
-  const hasProfile = !!getStoredProfile();
-  if (session && hasProfile) return <Navigate to="/browse" replace />;
+  // Always go through Connect so user can pick their tier/vibe
+  if (session) return <Navigate to="/connect" replace />;
 
   return <Onboarding />;
 }
@@ -103,7 +105,10 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <AnimatedRoutes />
+          <PlayerProvider>
+            <AnimatedRoutes />
+            <NowPlayingBar />
+          </PlayerProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

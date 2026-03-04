@@ -3,13 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import { exchangeSpotifyCode, fetchSpotifyTaste } from "@/hooks/useSpotifyAuth";
-import { useUserProfile, getStoredProfile } from "@/hooks/useMusicNerdState";
+import { useUserProfile } from "@/hooks/useMusicNerdState";
 
 type Status = "exchanging" | "fetching" | "saving" | "done" | "error";
 
 export default function SpotifyCallback() {
   const navigate = useNavigate();
-  const { saveProfile } = useUserProfile();
+  const { saveProfile, profile } = useUserProfile();
   const [status, setStatus] = useState<Status>("exchanging");
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -41,6 +41,16 @@ export default function SpotifyCallback() {
         return;
       }
 
+      // Persist playback tokens for Spotify Web Playback SDK
+      localStorage.setItem(
+        "spotify_playback_token",
+        JSON.stringify({
+          accessToken: tokenResult.accessToken,
+          refreshToken: tokenResult.refreshToken,
+          expiresAt: Date.now() + tokenResult.expiresIn * 1000,
+        })
+      );
+
       // Step 2: Fetch taste profile
       setStatus("fetching");
       const taste = await fetchSpotifyTaste(tokenResult.accessToken);
@@ -52,28 +62,37 @@ export default function SpotifyCallback() {
 
       // Step 3: Merge into existing profile
       setStatus("saving");
-      const existing = getStoredProfile();
-      if (existing) {
+      if (profile) {
         saveProfile({
-          ...existing,
+          ...profile,
+          streamingService: "Spotify",
           spotifyTopArtists: taste.topArtists,
           spotifyTopTracks: taste.topTracks,
+          spotifyArtistImages: taste.artistImages,
+          spotifyArtistIds: taste.artistIds,
+          spotifyTrackImages: taste.trackImages,
         });
       }
       // If no profile exists yet (direct OAuth before setup), store data in sessionStorage
-      // so Setup can pick it up
+      // so Connect/Onboarding can pick it up.
       else {
         sessionStorage.setItem(
           "spotify_pending_taste",
-          JSON.stringify({ topArtists: taste.topArtists, topTracks: taste.topTracks })
+          JSON.stringify({
+            topArtists: taste.topArtists,
+            topTracks: taste.topTracks,
+            artistImages: taste.artistImages,
+            artistIds: taste.artistIds,
+            trackImages: taste.trackImages,
+          })
         );
       }
 
       setStatus("done");
 
-      // Redirect: back to setup if no profile yet, otherwise browse
+      // Redirect: back to Connect if no profile yet, otherwise browse.
       setTimeout(() => {
-        if (existing) {
+        if (profile) {
           navigate("/browse", { replace: true });
         } else {
           navigate("/connect", { replace: true });
@@ -82,6 +101,9 @@ export default function SpotifyCallback() {
     }
 
     handleCallback();
+    // Intentional one-shot OAuth callback — must run exactly once on mount.
+    // profile/saveProfile/navigate are stable for the lifetime of this page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const messages: Record<Status, string> = {
