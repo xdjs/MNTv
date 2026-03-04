@@ -38,6 +38,33 @@ export type Database = {
         }
         Relationships: []
       }
+      lastfm_cache: {
+        Row: {
+          fetched_at: string
+          id: string
+          recent_tracks: Json
+          top_artists: Json
+          user_info: Json
+          username: string
+        }
+        Insert: {
+          fetched_at?: string
+          id?: string
+          recent_tracks?: Json
+          top_artists?: Json
+          user_info?: Json
+          username: string
+        }
+        Update: {
+          fetched_at?: string
+          id?: string
+          recent_tracks?: Json
+          top_artists?: Json
+          user_info?: Json
+          username?: string
+        }
+        Relationships: []
+      }
       nugget_cache: {
         Row: {
           created_at: string

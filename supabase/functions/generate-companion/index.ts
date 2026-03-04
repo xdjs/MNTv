@@ -12,30 +12,28 @@ type Tier = "casual" | "curious" | "nerd";
 const TIER_CONFIG: Record<Tier, { model: string; nuggetCount: number; depthLabel: string; sources: string }> = {
   casual: {
     model: "gemini-2.5-flash",
-    nuggetCount: 3, // 1 per category
+    nuggetCount: 3,
     depthLabel: "accessible, jargon-free, feel-good discoveries. Write like you're telling a friend.",
     sources: "Discogs, MusicBrainz, YouTube",
   },
   curious: {
     model: "gemini-2.5-flash",
-    nuggetCount: 3, // 1 per category
+    nuggetCount: 3,
     depthLabel: "production details, cultural context, artist history. Engaging storytelling for music fans.",
     sources: "Discogs, Pitchfork, Rolling Stone, AllMusic, YouTube",
   },
   nerd: {
     model: "gemini-2.5-pro",
-    nuggetCount: 3, // 1 per category
+    nuggetCount: 3,
     depthLabel: "technical breakdowns, obscure influences, deep fan theory angles, Reddit-level deep cuts. Maximum depth for audiophiles.",
     sources: "Discogs, Pitchfork, Reddit, MusicBrainz, AllMusic, The Wire, Fact Magazine, YouTube",
   },
 };
 
-// Build Gemini API URL for the given model
 function geminiUrl(model: string, apiKey: string): string {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 }
 
-// Map publisher names to domains for fallback search
 function publisherDomain(publisher: string): string {
   const map: Record<string, string> = {
     "pitchfork": "pitchfork.com",
@@ -55,6 +53,57 @@ function publisherDomain(publisher: string): string {
     "the wire": "thewire.co.uk",
   };
   return map[publisher.toLowerCase()] || publisher.toLowerCase().replace(/\s+/g, "") + ".com";
+}
+
+// Fetch Last.fm context from the lastfm-sync edge function (uses cache internally)
+async function getLastFmContext(username: string, supabaseUrl: string, supabaseKey: string): Promise<string> {
+  try {
+    const syncUrl = `${supabaseUrl}/functions/v1/lastfm-sync`;
+    const res = await fetch(syncUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": supabaseKey,
+      },
+      body: JSON.stringify({ username }),
+    });
+
+    if (!res.ok) {
+      console.warn(`lastfm-sync returned ${res.status} for ${username}`);
+      return "";
+    }
+
+    const data = await res.json();
+    if (data.error) {
+      console.warn("lastfm-sync error:", data.error);
+      return "";
+    }
+
+    const lines: string[] = [];
+
+    if (data.userInfo?.playcount) {
+      lines.push(`Last.fm profile: ${username} — ${data.userInfo.playcount.toLocaleString()} total scrobbles`);
+      if (data.userInfo.country) lines.push(`Country: ${data.userInfo.country}`);
+    }
+
+    if (data.topArtists?.length) {
+      const artists = data.topArtists.map((a: any) => `${a.name} (${a.playcount} plays)`).join(", ");
+      lines.push(`Top artists this month: ${artists}`);
+    }
+
+    if (data.recentTracks?.length) {
+      const tracks = data.recentTracks.map((t: any) => `"${t.name}" by ${t.artist}`).join(", ");
+      lines.push(`Recently played: ${tracks}`);
+      lines.push(`(Avoid recommending things too similar to their recently played tracks in Explore suggestions)`);
+    }
+
+    return lines.length
+      ? `\n\nLAST.FM USER CONTEXT (use to personalise Explore Next recommendations):\n${lines.join("\n")}\n`
+      : "";
+  } catch (e) {
+    console.warn("Failed to fetch Last.fm context:", e);
+    return "";
+  }
 }
 
 serve(async (req) => {
@@ -89,23 +138,29 @@ serve(async (req) => {
     const tierConfig = TIER_CONFIG[tier as Tier] || TIER_CONFIG.casual;
     const listenTier = Math.min(Math.max(listenCount, 1), 3);
 
-    // Cache key encodes track, tier, and listen depth
     const cacheKey = `${artist}::${title}::${tier}::${listenTier}`;
 
-    // Check cache
-    const { data: cached } = await supabase
-      .from("companion_cache")
-      .select("content")
-      .eq("track_key", cacheKey)
-      .eq("listen_count_tier", listenTier)
-      .maybeSingle();
+    // Check companion cache (but skip if user has Last.fm — their cache is personalised)
+    if (!lastFmUsername) {
+      const { data: cached } = await supabase
+        .from("companion_cache")
+        .select("content")
+        .eq("track_key", cacheKey)
+        .eq("listen_count_tier", listenTier)
+        .maybeSingle();
 
-    if (cached?.content) {
-      console.log(`Cache hit: ${cacheKey}`);
-      return new Response(JSON.stringify(cached.content), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      if (cached?.content) {
+        console.log(`Cache hit: ${cacheKey}`);
+        return new Response(JSON.stringify(cached.content), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
+
+    // Fetch Last.fm context (served from cache 99% of the time)
+    const lastFmContext = lastFmUsername
+      ? await getLastFmContext(lastFmUsername, supabaseUrl, supabaseKey)
+      : "";
 
     // Depth instruction based on listen count
     let depthInstruction: string;
@@ -119,10 +174,6 @@ serve(async (req) => {
 
     const nuggetsPerCategory = Math.floor(tierConfig.nuggetCount / 3);
     const now = Date.now();
-
-    const lastFmContext = lastFmUsername
-      ? `\nLast.fm user: "${lastFmUsername}" — personalize any "explore" recommendations subtly if relevant.\n`
-      : "";
 
     const prompt = `You are a music historian API. Output ONLY a valid JSON object. No markdown, no prose, no explanation. Start with { end with }.
 
@@ -156,6 +207,7 @@ RULES:
 - Each nugget covers a DIFFERENT angle — no two nuggets share the same fact.
 - "listenUnlockLevel" distribution: first ${Math.ceil(tierConfig.nuggetCount / 3)} nuggets = level 1, next = level 2, rest = level 3.
 - Timestamps must be staggered so reverse-chronological sort within each category works correctly.
+${lastFmContext ? "- Use the Last.fm user context to make 'explore' category recommendations genuinely relevant to this listener's taste — not generic suggestions." : ""}
 
 OUTPUT: Raw JSON only. No backticks.`;
 
@@ -202,7 +254,7 @@ OUTPUT: Raw JSON only. No backticks.`;
           throw new Error("Failed to parse Gemini response");
         }
 
-        // Post-process nuggets: validate / fallback sourceUrl
+        // Post-process nuggets
         if (parsed.nuggets) {
           for (const n of parsed.nuggets) {
             if (!n.sourceUrl || n.sourceUrl.includes("google.com/search")) {
@@ -210,9 +262,7 @@ OUTPUT: Raw JSON only. No backticks.`;
               const q = encodeURIComponent(`${artist} ${title} ${n.sourceName || ""}`);
               n.sourceUrl = `https://${domain}/search/?q=${q}`;
             }
-            // Ensure id
             if (!n.id) n.id = crypto.randomUUID();
-            // Ensure timestamp is a number
             if (!n.timestamp || typeof n.timestamp !== "number") {
               n.timestamp = now - Math.random() * tierConfig.nuggetCount * 60000;
             }
@@ -230,11 +280,13 @@ OUTPUT: Raw JSON only. No backticks.`;
           ];
         }
 
-        // Cache result
-        await supabase.from("companion_cache").upsert(
-          { track_key: cacheKey, listen_count_tier: listenTier, content: parsed },
-          { onConflict: "track_key,listen_count_tier" }
-        );
+        // Cache result (only for non-personalised responses)
+        if (!lastFmUsername) {
+          await supabase.from("companion_cache").upsert(
+            { track_key: cacheKey, listen_count_tier: listenTier, content: parsed },
+            { onConflict: "track_key,listen_count_tier" }
+          );
+        }
 
         return new Response(JSON.stringify(parsed), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
