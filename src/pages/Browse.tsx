@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search } from "lucide-react";
+import { Search, LogOut } from "lucide-react";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import TileRow from "@/components/TileRow";
 import SearchOverlay from "@/components/SearchOverlay";
@@ -13,8 +13,13 @@ export default function Browse() {
   const [searchOpen, setSearchOpen] = useState(false);
   const navigate = useNavigate();
   const artists = useArtistImages(rawArtists);
-  const { profile } = useUserProfile();
+  const { profile, clearProfile } = useUserProfile();
   const tier = profile?.calculatedTier;
+
+  const handleSignOut = () => {
+    clearProfile();
+    navigate("/", { replace: true });
+  };
 
   // Build tile data
   const artistTiles = useMemo(() => artists.map((a) => ({
@@ -194,15 +199,24 @@ export default function Browse() {
           <div className={`rounded-full transition-all ${rowIndex === -1 && colIndex === 0 ? focusGlow + " scale-110" : ""}`}>
             <MusicNerdLogo size={36} glow className="opacity-80" />
           </div>
-          <button
-            onClick={() => setSearchOpen(true)}
-            className={`flex h-10 items-center gap-2 rounded-full bg-foreground/5 px-5 text-sm text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground ${
-              rowIndex === -1 && colIndex === 1 ? focusGlow + " scale-105" : ""
-            }`}
-          >
-            <Search size={16} />
-            <span style={{ fontFamily: "'Nunito Sans', sans-serif" }}>Search</span>
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSearchOpen(true)}
+              className={`flex h-10 items-center gap-2 rounded-full bg-foreground/5 px-5 text-sm text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground ${
+                rowIndex === -1 && colIndex === 1 ? focusGlow + " scale-105" : ""
+              }`}
+            >
+              <Search size={16} />
+              <span style={{ fontFamily: "'Nunito Sans', sans-serif" }}>Search</span>
+            </button>
+            <button
+              onClick={handleSignOut}
+              title="Reset profile"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-foreground/5 text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground"
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
         </header>
 
         {/* Hero greeting */}
