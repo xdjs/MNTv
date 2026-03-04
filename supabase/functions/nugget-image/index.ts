@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,6 +8,31 @@ const corsHeaders = {
 };
 
 const MB_USER_AGENT = "MusicNerd/1.0 (musicnerd-app)";
+
+// ── Auth helper ───────────────────────────────────────────────────────
+async function requireAuth(req: Request): Promise<{ userId: string } | Response> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader } } }
+  );
+  const token = authHeader.replace("Bearer ", "");
+  const { data, error } = await supabase.auth.getClaims(token);
+  if (error || !data?.claims) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  return { userId: data.claims.sub as string };
+}
 
 async function fetchWithRetry(url: string, options?: RequestInit, retries = 2): Promise<Response> {
   for (let i = 0; i < retries; i++) {
@@ -77,7 +103,7 @@ async function getArtistImageUrl(wikidataId: string, width = 500): Promise<strin
 async function resolveArtist(query: string, width: number): Promise<string | null> {
   const mbid = await searchArtist(query);
   if (!mbid) return null;
-  await new Promise((r) => setTimeout(r, 1100)); // MusicBrainz rate limit
+  await new Promise((r) => setTimeout(r, 1100));
   const wikidataId = await getWikidataId(mbid);
   if (!wikidataId) return null;
   return getArtistImageUrl(wikidataId, width);
@@ -93,7 +119,6 @@ async function resolveAlbum(query: string): Promise<string | null> {
   const mbid = data["release-groups"]?.[0]?.id;
   if (!mbid) return null;
 
-  // Cover Art Archive — follows redirects to the actual image
   const caaUrl = `https://coverartarchive.org/release-group/${mbid}/front-500`;
   try {
     const caaRes = await fetch(caaUrl, { redirect: "follow" });
@@ -114,7 +139,6 @@ async function resolveWiki(query: string, width: number): Promise<string | null>
   const pages = data.query?.pages;
   if (!pages) return null;
 
-  // Find first result with an actual image URL
   for (const page of Object.values(pages) as any[]) {
     const thumbUrl = page?.imageinfo?.[0]?.thumburl;
     if (thumbUrl) return thumbUrl;
@@ -128,6 +152,9 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const auth = await requireAuth(req);
+  if (auth instanceof Response) return auth;
 
   try {
     const { type, query, width } = await req.json();
