@@ -186,8 +186,44 @@ export default function Setup() {
                     <h1 className="text-3xl font-black text-foreground tracking-tight">Choose your platform</h1>
                     <p className="mt-2 text-muted-foreground">Where do you listen to music?</p>
                   </div>
+
                   <div className="flex flex-col gap-3 w-full">
-                    {platforms.map((p) => (
+                    {/* Spotify — clicking connects OAuth and imports taste profile */}
+                    {!pendingSpotifyArtists ? (
+                      <button
+                        onClick={handleConnectSpotify}
+                        disabled={spotifyConnecting}
+                        className={`flex items-center gap-4 w-full rounded-2xl border bg-foreground/5 px-5 py-4 text-left font-semibold text-foreground transition-all duration-200 disabled:opacity-70 ${platforms[0].color}`}
+                      >
+                        <img src={spotifyLogo} alt="Spotify" className="w-8 h-8 object-contain" />
+                        <span className="flex-1">Spotify</span>
+                        {spotifyConnecting ? (
+                          <svg className="animate-spin h-4 w-4 text-green-400" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                          </svg>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Connect →</span>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handlePlatformSelect("Spotify")}
+                        className={`flex items-center gap-4 w-full rounded-2xl border bg-foreground/5 px-5 py-4 text-left font-semibold text-foreground transition-all duration-200 border-green-500/60 ring-1 ring-green-500/30`}
+                      >
+                        <img src={spotifyLogo} alt="Spotify" className="w-8 h-8 object-contain" />
+                        <div className="flex-1 min-w-0">
+                          <p>Spotify</p>
+                          <p className="text-xs font-normal text-green-400 truncate">
+                            Connected · {pendingSpotifyArtists.slice(0, 3).join(", ")}{pendingSpotifyArtists.length > 3 ? "…" : ""}
+                          </p>
+                        </div>
+                        <span className="text-xs font-semibold text-green-400">✓</span>
+                      </button>
+                    )}
+
+                    {/* YouTube Music & Apple Music — select and proceed, no OAuth */}
+                    {platforms.slice(1).map((p) => (
                       <button
                         key={p.name}
                         onClick={() => handlePlatformSelect(p.name)}
@@ -199,57 +235,9 @@ export default function Setup() {
                           <span className="text-2xl">🎵</span>
                         )}
                         <span className="flex-1">{p.name}</span>
-                        {p.name === "Spotify" && pendingSpotifyArtists && (
-                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">
-                            Connected ✓
-                          </span>
-                        )}
                       </button>
                     ))}
                   </div>
-
-                  {/* Spotify connect banner — shown if Spotify not yet connected */}
-                  {!pendingSpotifyArtists && (
-                    <div className="w-full rounded-2xl border border-foreground/10 bg-foreground/5 p-4 flex items-start gap-3">
-                      <span className="text-xl mt-0.5">🎵</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-foreground">Personalise with Spotify</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Connect Spotify to tailor "Explore Next" recommendations to your actual taste.
-                        </p>
-                        <button
-                          onClick={handleConnectSpotify}
-                          disabled={spotifyConnecting}
-                          className="mt-3 flex items-center gap-2 rounded-xl bg-[#1DB954] px-4 py-2 text-xs font-bold text-black hover:opacity-90 transition-opacity disabled:opacity-60"
-                        >
-                          {spotifyConnecting ? (
-                            <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                            </svg>
-                          ) : (
-                            <img src={spotifyLogo} alt="" className="w-3.5 h-3.5 object-contain" />
-                          )}
-                          {spotifyConnecting ? "Connecting…" : "Connect Spotify"}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {pendingSpotifyArtists && (
-                    <div className="w-full rounded-2xl border border-green-500/30 bg-green-500/10 p-4 flex items-start gap-3">
-                      <span className="text-xl mt-0.5">✓</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-green-400">Spotify connected</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Your taste profile is ready — top {pendingSpotifyArtists.length} artists imported.
-                        </p>
-                        <p className="text-[11px] text-foreground/40 mt-1 truncate">
-                          {pendingSpotifyArtists.slice(0, 5).join(", ")}{pendingSpotifyArtists.length > 5 ? "…" : ""}
-                        </p>
-                      </div>
-                    </div>
-                  )}
                 </motion.div>
               )}
 
