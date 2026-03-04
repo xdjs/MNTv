@@ -13,6 +13,7 @@ import ArtistProfile from "./pages/ArtistProfile";
 import AlbumDetail from "./pages/AlbumDetail";
 import Listen from "./pages/Listen";
 import Companion from "./pages/Companion";
+import SpotifyCallback from "./pages/SpotifyCallback";
 import NotFound from "./pages/NotFound";
 import { getStoredProfile } from "./hooks/useMusicNerdState";
 
@@ -41,6 +42,7 @@ function AnimatedRoutes() {
           <Route path="/album/:albumId" element={<AlbumDetail />} />
           <Route path="/listen/:trackId" element={<Listen />} />
           <Route path="/companion/:trackId" element={<Companion />} />
+          <Route path="/spotify-callback" element={<SpotifyCallback />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </AnimatePresence>

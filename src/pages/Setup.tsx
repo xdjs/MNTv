@@ -8,6 +8,7 @@ import type { UserProfile } from "@/mock/types";
 import spotifyLogo from "@/assets/spotify-logo.png";
 import youtubeMusicLogo from "@/assets/youtube-music-logo.png";
 import { supabase } from "@/integrations/supabase/client";
+import { initiateSpotifyAuth } from "@/hooks/useSpotifyAuth";
 
 type Platform = "Spotify" | "YouTube Music" | "Apple Music";
 type Tier = "casual" | "curious" | "nerd";
@@ -26,10 +27,29 @@ export default function Setup() {
   const [platform, setPlatform] = useState<Platform | "">("");
   const [lastFm, setLastFm] = useState("");
   const [lastFmSyncing, setLastFmSyncing] = useState(false);
+  const [spotifyConnecting, setSpotifyConnecting] = useState(false);
+  // Taste data pulled from Spotify OAuth (may arrive from sessionStorage after callback)
+  const [pendingSpotifyArtists, setPendingSpotifyArtists] = useState<string[] | null>(null);
+  const [pendingSpotifyTracks, setPendingSpotifyTracks] = useState<string[] | null>(null);
 
   // Skip if profile already set
   useEffect(() => {
     if (getStoredProfile()) navigate("/browse", { replace: true });
+  }, []);
+
+  // Pick up taste data deposited by SpotifyCallback when no profile existed yet
+  useEffect(() => {
+    const raw = sessionStorage.getItem("spotify_pending_taste");
+    if (raw) {
+      try {
+        const { topArtists, topTracks } = JSON.parse(raw);
+        setPendingSpotifyArtists(topArtists);
+        setPendingSpotifyTracks(topTracks);
+        // Auto-select Spotify platform if not already set
+        setPlatform("Spotify");
+        sessionStorage.removeItem("spotify_pending_taste");
+      } catch { /* ignore */ }
+    }
   }, []);
 
   const goNext = (delta = 1) => {
@@ -58,16 +78,27 @@ export default function Setup() {
 
   const handleLastFmContinue = async () => {
     if (lastFm.trim()) {
-      // Fire-and-forget cache warm — don't block navigation
       warmLastFmCache(lastFm.trim());
     }
     goNext();
+  };
+
+  const handleConnectSpotify = async () => {
+    setSpotifyConnecting(true);
+    try {
+      await initiateSpotifyAuth(); // redirects — won't reach below
+    } catch (e) {
+      console.error("Spotify auth error:", e);
+      setSpotifyConnecting(false);
+    }
   };
 
   const handleTierSelect = (t: Tier) => {
     const profile: UserProfile = {
       streamingService: platform as Platform,
       lastFmUsername: lastFm.trim() || undefined,
+      spotifyTopArtists: pendingSpotifyArtists || undefined,
+      spotifyTopTracks: pendingSpotifyTracks || undefined,
       calculatedTier: t,
     };
     saveProfile(profile);
@@ -167,10 +198,58 @@ export default function Setup() {
                         ) : (
                           <span className="text-2xl">🎵</span>
                         )}
-                        {p.name}
+                        <span className="flex-1">{p.name}</span>
+                        {p.name === "Spotify" && pendingSpotifyArtists && (
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">
+                            Connected ✓
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>
+
+                  {/* Spotify connect banner — shown if Spotify not yet connected */}
+                  {!pendingSpotifyArtists && (
+                    <div className="w-full rounded-2xl border border-foreground/10 bg-foreground/5 p-4 flex items-start gap-3">
+                      <span className="text-xl mt-0.5">🎵</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground">Personalise with Spotify</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Connect Spotify to tailor "Explore Next" recommendations to your actual taste.
+                        </p>
+                        <button
+                          onClick={handleConnectSpotify}
+                          disabled={spotifyConnecting}
+                          className="mt-3 flex items-center gap-2 rounded-xl bg-[#1DB954] px-4 py-2 text-xs font-bold text-black hover:opacity-90 transition-opacity disabled:opacity-60"
+                        >
+                          {spotifyConnecting ? (
+                            <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                            </svg>
+                          ) : (
+                            <img src={spotifyLogo} alt="" className="w-3.5 h-3.5 object-contain" />
+                          )}
+                          {spotifyConnecting ? "Connecting…" : "Connect Spotify"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {pendingSpotifyArtists && (
+                    <div className="w-full rounded-2xl border border-green-500/30 bg-green-500/10 p-4 flex items-start gap-3">
+                      <span className="text-xl mt-0.5">✓</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-green-400">Spotify connected</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Your taste profile is ready — top {pendingSpotifyArtists.length} artists imported.
+                        </p>
+                        <p className="text-[11px] text-foreground/40 mt-1 truncate">
+                          {pendingSpotifyArtists.slice(0, 5).join(", ")}{pendingSpotifyArtists.length > 5 ? "…" : ""}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </motion.div>
               )}
 
