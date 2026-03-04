@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft } from "lucide-react";
+import { useAccentColor } from "@/hooks/useAccentColor";
 import { QRCode } from "react-qrcode-logo";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -351,6 +352,9 @@ export default function Listen() {
 
   const progress = (currentTime / track.durationSec) * 100;
 
+  // Drive the global accent colour from this track's cover art
+  useAccentColor(track.coverArtUrl);
+
   return (
     <PageTransition>
       <div className="relative flex h-screen flex-col overflow-hidden">
@@ -413,7 +417,7 @@ export default function Listen() {
             aria-label={nerdActive ? "Turn off MusicNerd" : "Turn on MusicNerd"}
             style={{
               filter: nerdActive
-                ? "drop-shadow(0 0 8px hsl(330 90% 60% / 0.7)) drop-shadow(0 0 24px hsl(330 90% 60% / 0.35))"
+                ? "drop-shadow(0 0 8px hsl(var(--neon-glow) / 0.7)) drop-shadow(0 0 24px hsl(var(--neon-glow) / 0.35))"
                 : "grayscale(1) opacity(0.4)",
               transition: "filter 0.4s ease",
             }}

@@ -1,6 +1,9 @@
 import { useRef, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { extractDominantHsl, applyAccentColor } from "@/hooks/useAccentColor";
+
+const DEFAULT_HSL = "330 90% 60%";
 
 interface TileItem {
   id: string;
@@ -27,6 +30,8 @@ export default function TileRow({ label, items, tileSize = "md", focusedIndex = 
   const scrollRef = useRef<HTMLDivElement>(null);
   const tileRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const navigate = useNavigate();
+  // Cache extracted colours so we don't re-sample on every hover
+  const colorCache = useRef<Map<string, string>>(new Map());
 
   const scroll = useCallback((dir: number) => {
     scrollRef.current?.scrollBy({ left: dir * 320, behavior: "smooth" });
@@ -42,6 +47,28 @@ export default function TileRow({ label, items, tileSize = "md", focusedIndex = 
       });
     }
   }, [focusedIndex]);
+
+  const handleTileEnter = useCallback(async (item: TileItem, el: HTMLElement, isFocused: boolean) => {
+    if (isFocused) return; // D-pad focus already handled via focusedIndex
+    const cached = colorCache.current.get(item.imageUrl);
+    if (cached) {
+      applyAccentColor(cached);
+      el.style.boxShadow = `0 0 20px 6px hsl(${cached} / 0.5), 0 0 50px 12px hsl(${cached} / 0.2)`;
+    } else {
+      extractDominantHsl(item.imageUrl).then((hsl) => {
+        colorCache.current.set(item.imageUrl, hsl);
+        applyAccentColor(hsl);
+        el.style.boxShadow = `0 0 20px 6px hsl(${hsl} / 0.5), 0 0 50px 12px hsl(${hsl} / 0.2)`;
+      });
+    }
+  }, []);
+
+  const handleTileLeave = useCallback((el: HTMLElement, isFocused: boolean) => {
+    if (!isFocused) {
+      el.style.boxShadow = "";
+      applyAccentColor(DEFAULT_HSL);
+    }
+  }, []);
 
   if (items.length === 0) return null;
 
@@ -68,7 +95,6 @@ export default function TileRow({ label, items, tileSize = "md", focusedIndex = 
           className="flex gap-5 overflow-x-auto scroll-smooth px-10 scrollbar-hide"
           style={{
             scrollbarWidth: "none",
-            /* Extra padding so glow (50px spread) + scale aren't clipped */
             paddingTop: 64,
             paddingBottom: 64,
             marginTop: -52,
@@ -91,20 +117,11 @@ export default function TileRow({ label, items, tileSize = "md", focusedIndex = 
                 }`}
                 style={{
                   boxShadow: isFocused
-                    ? "0 0 20px 6px hsl(330 90% 60% / 0.5), 0 0 50px 12px hsl(330 90% 60% / 0.2)"
+                    ? `0 0 20px 6px hsl(var(--neon-glow) / 0.5), 0 0 50px 12px hsl(var(--neon-glow) / 0.2)`
                     : undefined,
                 }}
-                onMouseEnter={(e) => {
-                  if (focusedIndex === null) {
-                    (e.currentTarget as HTMLElement).style.boxShadow =
-                      "0 0 20px 6px hsl(330 90% 60% / 0.5), 0 0 50px 12px hsl(330 90% 60% / 0.2)";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isFocused) {
-                    (e.currentTarget as HTMLElement).style.boxShadow = "";
-                  }
-                }}
+                onMouseEnter={(e) => handleTileEnter(item, e.currentTarget, isFocused)}
+                onMouseLeave={(e) => handleTileLeave(e.currentTarget, isFocused)}
               >
                 <div className="absolute inset-0 rounded-xl overflow-hidden">
                   <img
