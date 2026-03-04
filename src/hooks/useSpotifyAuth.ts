@@ -42,7 +42,11 @@ async function generatePKCE(): Promise<{ verifier: string; challenge: string }> 
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export function getSpotifyRedirectUri(): string {
-  return `${window.location.origin}/spotify-callback`;
+  const { protocol, hostname, port } = window.location;
+  // Spotify rejects generic "localhost" — use explicit 127.0.0.1 for local dev
+  const host = hostname === "localhost" ? "127.0.0.1" : hostname;
+  const portSuffix = port ? `:${port}` : "";
+  return `${protocol}//${host}${portSuffix}/spotify-callback`;
 }
 
 export async function initiateSpotifyAuth(): Promise<void> {
