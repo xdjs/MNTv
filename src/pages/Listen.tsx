@@ -23,17 +23,55 @@ import type { Nugget, Source, AnimationStyle } from "@/mock/types";
 const HIDE_DELAY = 3000;
 
 export default function Listen() {
-  const { trackId } = useParams<{ trackId: string }>();
+  const { trackId: rawTrackId } = useParams<{ trackId: string }>();
   const navigate = useNavigate();
-  const track = getTrackById(trackId || "");
+
+  // ── Real track support ─────────────────────────────────────────────
+  // Real tracks are encoded as: real::<artist>::<title>::<album>
+  const isRealTrack = rawTrackId?.startsWith("real%3A%3A") || rawTrackId?.startsWith("real::");
+  const realTrackMeta = useMemo(() => {
+    if (!isRealTrack || !rawTrackId) return null;
+    const decoded = decodeURIComponent(rawTrackId);
+    const parts = decoded.split("::");
+    return {
+      artist: decodeURIComponent(parts[1] || ""),
+      title: decodeURIComponent(parts[2] || ""),
+      album: decodeURIComponent(parts[3] || "") || undefined,
+    };
+  }, [isRealTrack, rawTrackId]);
+
+  const trackId = rawTrackId || "";
+
+  const track = useMemo(() => {
+    if (isRealTrack && realTrackMeta) {
+      // Synthesise a Track-like object for real tracks
+      return {
+        id: trackId,
+        title: realTrackMeta.title,
+        artist: realTrackMeta.artist,
+        artistId: "",
+        albumId: "",
+        album: realTrackMeta.album,
+        durationSec: 300, // default 5 min
+        coverArtUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(realTrackMeta.artist + realTrackMeta.title)}&backgroundColor=111827&textColor=ffffff&fontSize=30`,
+        trackNumber: 1,
+      };
+    }
+    return getTrackById(trackId);
+  }, [isRealTrack, realTrackMeta, trackId]);
+
   const [shuffleOn, setShuffleOn] = useState(false);
   const [regenerateKey, setRegenerateKey] = useState(0);
-  const { prev, next } = useMemo(() => getAdjacentTrackIds(trackId || "", shuffleOn), [trackId, shuffleOn]);
+  const { prev, next } = useMemo(
+    () => isRealTrack ? { prev: null, next: null } : getAdjacentTrackIds(trackId, shuffleOn),
+    [isRealTrack, trackId, shuffleOn]
+  );
 
   const handleTrackEnd = useCallback(() => {
-    const { next: nextId } = getAdjacentTrackIds(trackId || "", shuffleOn);
+    if (isRealTrack) return;
+    const { next: nextId } = getAdjacentTrackIds(trackId, shuffleOn);
     if (nextId) navigate(`/listen/${nextId}`);
-  }, [trackId, shuffleOn, navigate]);
+  }, [isRealTrack, trackId, shuffleOn, navigate]);
 
   const { isPlaying, currentTime, fadingIn, play, pause, seek, toggle, pauseForOverlay, resumeWithFade } =
     usePlayback(track?.durationSec || 300, handleTrackEnd);
@@ -43,7 +81,7 @@ export default function Listen() {
 
   // AI-generated nuggets with real sources
   const { nuggets: aiNuggets, sources: aiSources, loading: aiLoading, listenCount } = useAINuggets(
-    trackId || "",
+    trackId,
     track?.artist || "",
     track?.title || "",
     track?.album,
@@ -53,7 +91,7 @@ export default function Listen() {
     artistData?.imageUrl
   );
 
-  const mockNuggets = useMemo(() => getNuggetsForTrack(trackId || ""), [trackId]);
+  const mockNuggets = useMemo(() => isRealTrack ? [] : getNuggetsForTrack(trackId), [isRealTrack, trackId]);
   const trackNuggets = aiLoading ? [] : (aiNuggets.length > 0 ? aiNuggets : mockNuggets);
 
   const [animStyle, setAnimStyle] = useState<AnimationStyle>("A");
@@ -344,8 +382,11 @@ export default function Listen() {
   if (!track) {
     return (
       <PageTransition>
-        <div className="flex min-h-screen items-center justify-center">
+        <div className="flex min-h-screen items-center justify-center flex-col gap-4">
           <p className="text-foreground">Track not found.</p>
+          <button onClick={() => navigate("/browse")} className="text-sm text-muted-foreground hover:text-foreground">
+            ← Back to Browse
+          </button>
         </div>
       </PageTransition>
     );
