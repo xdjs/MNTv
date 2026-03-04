@@ -7,6 +7,7 @@ import { useUserProfile, getStoredProfile } from "@/hooks/useMusicNerdState";
 import type { UserProfile } from "@/mock/types";
 import spotifyLogo from "@/assets/spotify-logo.png";
 import youtubeMusicLogo from "@/assets/youtube-music-logo.png";
+import { supabase } from "@/integrations/supabase/client";
 
 type Platform = "Spotify" | "YouTube Music" | "Apple Music";
 type Tier = "casual" | "curious" | "nerd";
@@ -24,6 +25,7 @@ export default function Setup() {
   const [direction, setDirection] = useState(1);
   const [platform, setPlatform] = useState<Platform | "">("");
   const [lastFm, setLastFm] = useState("");
+  const [lastFmSyncing, setLastFmSyncing] = useState(false);
 
   // Skip if profile already set
   useEffect(() => {
@@ -37,6 +39,28 @@ export default function Setup() {
 
   const handlePlatformSelect = (p: Platform) => {
     setPlatform(p);
+    goNext();
+  };
+
+  const warmLastFmCache = async (username: string) => {
+    if (!username.trim()) return;
+    setLastFmSyncing(true);
+    try {
+      await supabase.functions.invoke("lastfm-sync", {
+        body: { username: username.trim() },
+      });
+    } catch {
+      // Graceful degradation — cache warming failure is non-blocking
+    } finally {
+      setLastFmSyncing(false);
+    }
+  };
+
+  const handleLastFmContinue = async () => {
+    if (lastFm.trim()) {
+      // Fire-and-forget cache warm — don't block navigation
+      warmLastFmCache(lastFm.trim());
+    }
     goNext();
   };
 
@@ -181,10 +205,16 @@ export default function Setup() {
                       Skip
                     </button>
                     <button
-                      onClick={() => goNext()}
-                      className="flex-1 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
+                      onClick={handleLastFmContinue}
+                      className="flex-1 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
                     >
-                      Continue
+                      {lastFmSyncing && (
+                        <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                        </svg>
+                      )}
+                      {lastFmSyncing ? "Syncing…" : "Continue"}
                     </button>
                   </div>
                 </motion.div>
