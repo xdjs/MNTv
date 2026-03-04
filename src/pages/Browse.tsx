@@ -1,111 +1,30 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, LogOut } from "lucide-react";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import TileRow from "@/components/TileRow";
 import SearchOverlay from "@/components/SearchOverlay";
 import PageTransition from "@/components/PageTransition";
-import { artists as rawArtists, albums, tracks } from "@/mock/tracks";
-import { useArtistImages } from "@/hooks/useArtistImages";
 import { useUserProfile, tierGreeting, tierBadgeLabel, tierBadgeColor, tierGlowClass } from "@/hooks/useMusicNerdState";
+import { usePersonalizedCatalog } from "@/hooks/usePersonalizedCatalog";
 import { useTierAccent } from "@/hooks/useTierAccent";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Browse() {
   const [searchOpen, setSearchOpen] = useState(false);
   const navigate = useNavigate();
-  const artists = useArtistImages(rawArtists);
   const { profile, clearProfile } = useUserProfile();
   const tier = profile?.calculatedTier;
 
-  useTierAccent(); // lock --primary/--neon-glow/--ring to the user's tier color
+  useTierAccent();
 
-  const handleSignOut = () => {
+  const { rows: allRows } = usePersonalizedCatalog(profile);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut().catch(() => {});
     clearProfile();
     navigate("/", { replace: true });
   };
-
-  // Build tile data
-  const artistTiles = useMemo(() => artists.map((a) => ({
-    id: a.id,
-    imageUrl: a.imageUrl,
-    title: a.name,
-    subtitle: a.genres[0],
-    href: `/artist/${a.id}`,
-  })), [artists]);
-
-  const albumTiles = useMemo(() => albums.map((a) => {
-    const artist = artists.find((ar) => ar.id === a.artistId);
-    return {
-      id: a.id,
-      imageUrl: a.coverArtUrl,
-      title: a.title,
-      subtitle: artist?.name || "",
-      href: `/album/${a.id}`,
-    };
-  }), [artists]);
-
-  const recentTiles = useMemo(() => tracks.slice(0, 8).map((t) => ({
-    id: t.id,
-    imageUrl: t.coverArtUrl,
-    title: t.title,
-    subtitle: t.artist,
-    href: `/listen/${t.id}`,
-  })), []);
-
-  const genreSections = useMemo(() => {
-    const genres = [...new Set(albums.map((a) => a.genre))];
-    return genres.slice(0, 3).map((genre) => ({
-      genre,
-      tiles: albums
-        .filter((a) => a.genre === genre)
-        .map((a) => ({
-          id: a.id,
-          imageUrl: a.coverArtUrl,
-          title: a.title,
-          subtitle: artists.find((ar) => ar.id === a.artistId)?.name || "",
-          href: `/album/${a.id}`,
-        })),
-    }));
-  }, [artists]);
-
-  // Tier-aware deep cuts: shuffle albums to simulate "hidden gems" row
-  const deepCutTiles = useMemo(() => [...albumTiles].sort(() => Math.random() - 0.5).slice(0, 8), [albumTiles]);
-
-  // Build rows based on tier
-  const allRows = useMemo(() => {
-    const baseRows = [
-      { label: "Jump Back In", items: recentTiles, size: "md" as const },
-    ];
-
-    if (tier === "nerd") {
-      // Nerd: genre rows first, then artists, then deep cuts
-      return [
-        ...baseRows,
-        ...genreSections.map((gs) => ({ label: gs.genre, items: gs.tiles, size: "sm" as const })),
-        { label: "Artists", items: artistTiles, size: "lg" as const },
-        { label: "Deep Cuts", items: deepCutTiles, size: "md" as const },
-      ].filter((r) => r.items.length > 0);
-    }
-
-    if (tier === "curious") {
-      // Curious: standard + "Dig Deeper" hidden gems row
-      return [
-        ...baseRows,
-        { label: "Artists", items: artistTiles, size: "lg" as const },
-        { label: "Albums", items: albumTiles, size: "md" as const },
-        { label: "Dig Deeper", items: deepCutTiles, size: "sm" as const },
-        ...genreSections.map((gs) => ({ label: gs.genre, items: gs.tiles, size: "sm" as const })),
-      ].filter((r) => r.items.length > 0);
-    }
-
-    // Casual (default)
-    return [
-      ...baseRows,
-      { label: "Artists", items: artistTiles, size: "lg" as const },
-      { label: "Albums", items: albumTiles, size: "md" as const },
-      ...genreSections.map((gs) => ({ label: gs.genre, items: gs.tiles, size: "sm" as const })),
-    ].filter((r) => r.items.length > 0);
-  }, [recentTiles, artistTiles, albumTiles, genreSections, deepCutTiles, tier]);
 
   // Focus state: rowIndex (-1 = header), colIndex
   const [rowIndex, setRowIndex] = useState(-1);
@@ -139,57 +58,6 @@ export default function Browse() {
     return rect.left + rect.width / 2;
   }, [rowIndex, colIndex, allRows]);
 
-  useEffect(() => {
-    if (searchOpen) return;
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        const next = Math.min(rowIndex + 1, allRows.length - 1);
-        if (next !== rowIndex) {
-          const cx = getCurrentCenterX();
-          const targetLabel = allRows[next]?.label;
-          if (targetLabel) setColIndex(findClosestColByViewport(targetLabel, cx));
-          setRowIndex(next);
-        }
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        const next = Math.max(rowIndex - 1, -1);
-        if (next !== rowIndex) {
-          if (next === -1) {
-            const cx = getCurrentCenterX();
-            setColIndex(cx > window.innerWidth / 2 ? 1 : 0);
-          } else {
-            const cx = getCurrentCenterX();
-            const targetLabel = allRows[next]?.label;
-            if (targetLabel) setColIndex(findClosestColByViewport(targetLabel, cx));
-          }
-          setRowIndex(next);
-        }
-      } else if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        setColIndex((c) => Math.max(0, c - 1));
-      } else if (e.key === "ArrowRight") {
-        e.preventDefault();
-        setColIndex((c) => {
-          const max = rowIndex === -1 ? HEADER_ITEMS - 1 : (allRows[rowIndex]?.items.length || 1) - 1;
-          return Math.min(c + 1, max);
-        });
-      } else if (e.key === "Enter") {
-        e.preventDefault();
-        if (rowIndex === -1) {
-          if (colIndex === 1) setSearchOpen(true);
-        } else {
-          const item = allRows[rowIndex]?.items[colIndex];
-          if (item) navigate(item.href);
-        }
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [searchOpen, rowIndex, colIndex, allRows, navigate, getCurrentCenterX, findClosestColByViewport]);
-
   const focusGlow = "tv-focus-glow";
   const glowClass = tier ? tierGlowClass(tier) : "";
   const badgeColor = tier ? tierBadgeColor(tier) : "";
@@ -214,7 +82,7 @@ export default function Browse() {
             </button>
             <button
               onClick={handleSignOut}
-              title="Reset profile"
+              title="Sign out"
               className="flex h-10 w-10 items-center justify-center rounded-full bg-foreground/5 text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground"
             >
               <LogOut size={16} />
@@ -237,7 +105,11 @@ export default function Browse() {
               </span>
             )}
           </div>
-          <p className="mt-1 text-muted-foreground text-lg">What do you want to listen to?</p>
+          <p className="mt-1 text-muted-foreground text-lg">
+            {profile?.streamingService
+              ? `Listening via ${profile.streamingService}`
+              : "What do you want to listen to?"}
+          </p>
         </div>
 
         {/* Rows */}
