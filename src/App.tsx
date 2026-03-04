@@ -6,7 +6,6 @@ import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-route
 import { useEffect } from "react";
 import { AnimatePresence } from "framer-motion";
 import Onboarding from "./pages/Onboarding";
-import Setup from "./pages/Setup";
 import Connect from "./pages/Connect";
 import Browse from "./pages/Browse";
 import ArtistProfile from "./pages/ArtistProfile";
@@ -35,7 +34,6 @@ function AnimatedRoutes() {
       <AnimatePresence mode="wait">
         <Routes location={location} key={location.pathname}>
           <Route path="/" element={getStoredProfile() ? <Navigate to="/browse" replace /> : <Onboarding />} />
-          <Route path="/setup" element={<Setup />} />
           <Route path="/connect" element={<Connect />} />
           <Route path="/browse" element={<Browse />} />
           <Route path="/artist/:artistId" element={<ArtistProfile />} />
