@@ -775,16 +775,16 @@ export default function Listen() {
   return (
     <PageTransition>
       <div className="relative flex h-screen flex-col overflow-hidden">
-        {/* Background: cover art */}
+        {/* Background: ambient color wash */}
         <div className="absolute inset-0">
           <img
             src={effectiveCoverArt}
             alt=""
-            className="h-full w-full object-cover scale-110 transition-all duration-700 ease-out"
+            className="h-full w-full object-cover scale-[1.3] transition-all duration-1000 ease-out"
             style={{
               filter: barVisible
-                ? "blur(12px) brightness(0.4)"
-                : "blur(2px) brightness(0.85)",
+                ? "blur(64px) brightness(0.35) saturate(1.4)"
+                : "blur(48px) brightness(0.55) saturate(1.3)",
             }}
             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
@@ -880,8 +880,26 @@ export default function Listen() {
           </motion.div>
         )}
 
-        {/* Nugget cards — clickable for deep dive */}
+        {/* Content: album art + nuggets */}
         <div className="relative z-10 flex flex-1 items-center justify-end px-4 pb-24 md:px-10">
+          {/* Album art — left side, non-stretched */}
+          <motion.div
+            className="hidden md:flex flex-1 items-center justify-center"
+            animate={{ opacity: barVisible ? 0.9 : 1, scale: barVisible ? 0.95 : 1 }}
+            transition={{ duration: 0.7, ease: [0.4, 0, 0.2, 1] }}
+          >
+            <motion.img
+              key={effectiveCoverArt}
+              src={effectiveCoverArt}
+              alt={`${track.title} cover art`}
+              className="w-[320px] h-[320px] rounded-2xl object-cover shadow-2xl shadow-black/50"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+            />
+          </motion.div>
+
+          {/* Nuggets — right side */}
           <div className="w-full max-w-[520px] shrink-0">
             <AnimatePresence mode="wait">
               {activeNugget && (
