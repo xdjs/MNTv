@@ -38,7 +38,10 @@ export default function Browse() {
   const handleSignOut = () => {
     clearProfile();
     localStorage.removeItem("spotify_playback_token");
-    navigate("/", { replace: true });
+    // Hard navigate to avoid ProtectedRoute redirect race — clearProfile()
+    // triggers a re-render where ProtectedRoute redirects to /connect before
+    // React Router's navigate("/") takes effect.
+    window.location.href = "/";
   };
 
   // Focus state: rowIndex (-1 = header), colIndex
