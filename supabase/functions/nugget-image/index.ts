@@ -8,6 +8,22 @@ const corsHeaders = {
 
 const MB_USER_AGENT = "MusicNerd/1.0 (musicnerd-app)";
 
+// ── Provenance metadata for image-caption reconciliation ─────────────
+type ProvenanceSource = "spotify_artist" | "spotify_album" | "gemini_wikipedia" | "musicbrainz" | "wikimedia_commons";
+type MatchQuality = "exact" | "related" | "generic";
+
+interface Provenance {
+  source: ProvenanceSource;
+  articleTitle?: string;
+  imageFileName?: string;
+  matchQuality: MatchQuality;
+}
+
+interface ImageResult {
+  url: string;
+  provenance: Provenance;
+}
+
 async function fetchWithRetry(url: string, options?: RequestInit, retries = 2): Promise<Response> {
   for (let i = 0; i < retries; i++) {
     const controller = new AbortController();
@@ -66,7 +82,7 @@ async function getSpotifyToken(): Promise<string | null> {
   }
 }
 
-async function spotifyArtistImage(query: string): Promise<string | null> {
+async function spotifyArtistImage(query: string): Promise<ImageResult | null> {
   const token = await getSpotifyToken();
   if (!token) return null;
 
@@ -80,8 +96,6 @@ async function spotifyArtistImage(query: string): Promise<string | null> {
   const artists = data?.artists?.items || [];
   if (artists.length === 0) return null;
 
-  // Only return an exact (case-insensitive) match — never return a random first
-  // result, as that leads to wrong-person images for obscure names.
   const nameLower = artistName.toLowerCase();
   const exactMatch = artists.find((a: any) => a.name.toLowerCase() === nameLower);
   if (!exactMatch) {
@@ -89,14 +103,15 @@ async function spotifyArtistImage(query: string): Promise<string | null> {
     return null;
   }
   const images = exactMatch?.images || [];
-  return images[0]?.url || null;
+  const imgUrl = images[0]?.url;
+  if (!imgUrl) return null;
+  return { url: imgUrl, provenance: { source: "spotify_artist", articleTitle: exactMatch.name, matchQuality: "exact" } };
 }
 
-async function spotifyAlbumImage(query: string, trackArtist?: string): Promise<string | null> {
+async function spotifyAlbumImage(query: string, trackArtist?: string): Promise<ImageResult | null> {
   const token = await getSpotifyToken();
   if (!token) return null;
 
-  // Include artist in search for better results
   const searchQuery = trackArtist ? `${query} artist:${trackArtist}` : query;
   const url = `https://api.spotify.com/v1/search?type=album&limit=5&q=${encodeURIComponent(searchQuery)}`;
   const res = await fetchWithRetry(url, {
@@ -107,7 +122,6 @@ async function spotifyAlbumImage(query: string, trackArtist?: string): Promise<s
   const albums = data?.albums?.items || [];
   if (albums.length === 0) return null;
 
-  // If we know the track artist, only accept albums by that artist
   if (trackArtist) {
     const artistLower = trackArtist.toLowerCase();
     const match = albums.find((a: any) =>
@@ -115,14 +129,18 @@ async function spotifyAlbumImage(query: string, trackArtist?: string): Promise<s
     );
     if (match) {
       const images = match?.images || [];
-      return images[0]?.url || null;
+      const imgUrl = images[0]?.url;
+      if (!imgUrl) return null;
+      return { url: imgUrl, provenance: { source: "spotify_album", articleTitle: match.name, matchQuality: "exact" } };
     }
     console.log(`[nugget-image] Spotify album: no match for artist "${trackArtist}" in results for "${query}", skipping`);
     return null;
   }
 
   const images = albums[0]?.images || [];
-  return images[0]?.url || null;
+  const imgUrl = images[0]?.url;
+  if (!imgUrl) return null;
+  return { url: imgUrl, provenance: { source: "spotify_album", articleTitle: albums[0].name, matchQuality: "exact" } };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -188,7 +206,7 @@ async function getWikipediaArticleImages(articleTitle: string): Promise<{ title:
   }
 }
 
-async function geminiImageSearch(query: string, trackArtist?: string, trackTitle?: string): Promise<string | null> {
+async function geminiImageSearch(query: string, trackArtist?: string, trackTitle?: string): Promise<ImageResult | null> {
   if (!Deno.env.get("GOOGLE_AI_API_KEY")) return null;
 
   try {
@@ -219,10 +237,10 @@ Return ONLY valid JSON: {"articles": ["Article_Title_1", "Article_Title_2"]}`;
 
     if (articles.length === 0) return null;
 
-    // Step 2: Fetch images from all suggested articles in parallel
-    const allImages: { title: string; url: string }[] = [];
+    // Step 2: Fetch images from all suggested articles in parallel, tracking which article each image came from
+    const allImages: { title: string; url: string; articleTitle: string }[] = [];
     const imageResults = await Promise.allSettled(
-      articles.map((a) => getWikipediaArticleImages(a))
+      articles.map((a) => getWikipediaArticleImages(a).then(imgs => imgs.map(img => ({ ...img, articleTitle: a }))))
     );
     for (const result of imageResults) {
       if (result.status === "fulfilled") {
@@ -234,8 +252,8 @@ Return ONLY valid JSON: {"articles": ["Article_Title_1", "Article_Title_2"]}`;
 
     // Step 3: Ask Gemini to pick the best image from the available options
     const imageList = allImages
-      .slice(0, 25) // Limit to avoid huge prompts
-      .map((img, i) => `${i + 1}. ${img.title}`)
+      .slice(0, 25)
+      .map((img, i) => `${i + 1}. ${img.title} (from article: "${img.articleTitle}")`)
       .join("\n");
 
     const pickPrompt = `From these Wikipedia article images, pick the ONE most relevant for: "${query}"
@@ -252,12 +270,30 @@ Return ONLY the number of your pick as JSON: {"pick": 4}`;
     const pickText = await callGemini(pickPrompt);
     const pickCleaned = pickText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     const pickParsed = JSON.parse(pickCleaned);
-    const pickIndex = (pickParsed.pick || 1) - 1; // Convert 1-based to 0-based
+    const pickIndex = (pickParsed.pick || 1) - 1;
 
     const chosen = allImages[Math.min(pickIndex, allImages.length - 1)];
     if (chosen?.url) {
-      console.log(`[nugget-image] ✓ Gemini picked: "${chosen.title}" for "${query}"`);
-      return chosen.url;
+      console.log(`[nugget-image] ✓ Gemini picked: "${chosen.title}" from "${chosen.articleTitle}" for "${query}"`);
+
+      // Determine match quality: does the article directly match the query subject?
+      const queryLower = query.toLowerCase();
+      const articleLower = chosen.articleTitle.toLowerCase();
+      const artistLower = (trackArtist || "").toLowerCase();
+      const isExact = articleLower.includes(artistLower) && artistLower.length > 0
+        || queryLower.includes(articleLower)
+        || articleLower.includes(queryLower.split(" ")[0]);
+      const matchQuality: MatchQuality = isExact ? "exact" : "related";
+
+      return {
+        url: chosen.url,
+        provenance: {
+          source: "gemini_wikipedia",
+          articleTitle: chosen.articleTitle,
+          imageFileName: chosen.title,
+          matchQuality,
+        },
+      };
     }
 
     return null;
@@ -318,7 +354,7 @@ async function getArtistImageUrl(wikidataId: string, width = 500): Promise<strin
   return getCommonsImageUrl(filename, width);
 }
 
-async function resolveArtistMB(query: string, width: number): Promise<string | null> {
+async function resolveArtistMB(query: string, width: number): Promise<ImageResult | null> {
   const cleaned = extractArtistName(query);
   let mbid = await searchArtist(cleaned);
   if (!mbid && cleaned !== query) {
@@ -328,26 +364,29 @@ async function resolveArtistMB(query: string, width: number): Promise<string | n
   await new Promise((r) => setTimeout(r, 1100));
   const wikidataId = await getWikidataId(mbid);
   if (!wikidataId) return null;
-  return getArtistImageUrl(wikidataId, width);
+  const imgUrl = await getArtistImageUrl(wikidataId, width);
+  if (!imgUrl) return null;
+  return { url: imgUrl, provenance: { source: "musicbrainz", articleTitle: cleaned, matchQuality: "exact" } };
 }
 
-async function resolveAlbumMB(query: string): Promise<string | null> {
+async function resolveAlbumMB(query: string): Promise<ImageResult | null> {
   const url = `https://musicbrainz.org/ws/2/release-group/?query=${encodeURIComponent(query)}&fmt=json&limit=1`;
   const res = await fetchWithRetry(url, { headers: { "User-Agent": MB_USER_AGENT } });
   if (!res.ok) return null;
   const data = await res.json();
-  const mbid = data["release-groups"]?.[0]?.id;
+  const rg = data["release-groups"]?.[0];
+  const mbid = rg?.id;
   if (!mbid) return null;
 
   const caaUrl = `https://coverartarchive.org/release-group/${mbid}/front-500`;
   try {
     const caaRes = await fetch(caaUrl, { redirect: "follow" });
-    if (caaRes.ok) return caaRes.url;
+    if (caaRes.ok) return { url: caaRes.url, provenance: { source: "musicbrainz", articleTitle: rg.title || query, matchQuality: "exact" } };
   } catch { /* CAA can be flaky */ }
   return null;
 }
 
-async function resolveWikiCommons(query: string, width: number): Promise<string | null> {
+async function resolveWikiCommons(query: string, width: number): Promise<ImageResult | null> {
   const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrsearch=${encodeURIComponent(query)}&gsrlimit=3&prop=imageinfo&iiprop=url&iiurlwidth=${width}&format=json`;
   const res = await fetchWithRetry(url, { headers: { "User-Agent": MB_USER_AGENT } });
   if (!res.ok) return null;
@@ -357,7 +396,7 @@ async function resolveWikiCommons(query: string, width: number): Promise<string 
 
   for (const page of Object.values(pages) as any[]) {
     const thumbUrl = page?.imageinfo?.[0]?.thumburl;
-    if (thumbUrl) return thumbUrl;
+    if (thumbUrl) return { url: thumbUrl, provenance: { source: "wikimedia_commons", imageFileName: page.title, matchQuality: "generic" } };
   }
   return null;
 }
@@ -366,57 +405,49 @@ async function resolveWikiCommons(query: string, width: number): Promise<string 
 // Combined resolvers: Gemini → Spotify → MusicBrainz/Wikimedia
 // ═══════════════════════════════════════════════════════════════════════
 
-async function resolveArtist(query: string, width: number, trackArtist?: string, trackTitle?: string): Promise<string | null> {
+async function resolveArtist(query: string, width: number, trackArtist?: string, trackTitle?: string): Promise<ImageResult | null> {
   const label = extractArtistName(query);
 
-  // Tier 1: Gemini (contextual — finds the specific image the hint describes)
-  const geminiUrl = await geminiImageSearch(query, trackArtist, trackTitle);
-  if (geminiUrl) {
+  const geminiResult = await geminiImageSearch(query, trackArtist, trackTitle);
+  if (geminiResult) {
     console.log(`[nugget-image] ✓ Gemini artist: "${label}"`);
-    return geminiUrl;
+    return geminiResult;
   }
 
-  // Tier 2: Spotify (exact match only — prevents wrong-person images)
-  const spotifyUrl = await spotifyArtistImage(query);
-  if (spotifyUrl) {
+  const spotifyResult = await spotifyArtistImage(query);
+  if (spotifyResult) {
     console.log(`[nugget-image] ✓ Spotify artist: "${label}"`);
-    return spotifyUrl;
+    return spotifyResult;
   }
 
-  // Tier 3: MusicBrainz → Wikidata → Wikimedia Commons
   console.log(`[nugget-image] Trying MusicBrainz for "${label}"`);
   return resolveArtistMB(query, width);
 }
 
-async function resolveAlbum(query: string, trackArtist?: string): Promise<string | null> {
-  // Tier 1: Gemini (contextual — finds specific album art or related imagery)
-  const geminiUrl = await geminiImageSearch(`${query} album cover art`);
-  if (geminiUrl) {
+async function resolveAlbum(query: string, trackArtist?: string): Promise<ImageResult | null> {
+  const geminiResult = await geminiImageSearch(`${query} album cover art`);
+  if (geminiResult) {
     console.log(`[nugget-image] ✓ Gemini album: "${query}"`);
-    return geminiUrl;
+    return geminiResult;
   }
 
-  // Tier 2: Spotify (artist-validated album cover)
-  const spotifyUrl = await spotifyAlbumImage(query, trackArtist);
-  if (spotifyUrl) {
+  const spotifyResult = await spotifyAlbumImage(query, trackArtist);
+  if (spotifyResult) {
     console.log(`[nugget-image] ✓ Spotify album: "${query}"`);
-    return spotifyUrl;
+    return spotifyResult;
   }
 
-  // Tier 3: MusicBrainz → Cover Art Archive
   console.log(`[nugget-image] Trying MusicBrainz/CAA for "${query}"`);
   return resolveAlbumMB(query);
 }
 
-async function resolveWiki(query: string, width: number): Promise<string | null> {
-  // Tier 1: Gemini (best for instruments, studios, etc.)
-  const geminiUrl = await geminiImageSearch(query);
-  if (geminiUrl) {
+async function resolveWiki(query: string, width: number): Promise<ImageResult | null> {
+  const geminiResult = await geminiImageSearch(query);
+  if (geminiResult) {
     console.log(`[nugget-image] ✓ Gemini wiki: "${query}"`);
-    return geminiUrl;
+    return geminiResult;
   }
 
-  // Tier 2: Wikimedia Commons
   console.log(`[nugget-image] Trying Wikimedia Commons for "${query}"`);
   return resolveWikiCommons(query, width);
 }
@@ -439,27 +470,27 @@ serve(async (req) => {
       );
     }
 
-    let imageUrl: string | null = null;
+    let result: ImageResult | null = null;
 
     switch (type) {
       case "artist":
-        imageUrl = await resolveArtist(query, imgWidth, trackArtist, trackTitle);
+        result = await resolveArtist(query, imgWidth, trackArtist, trackTitle);
         break;
       case "album":
-        imageUrl = await resolveAlbum(query, trackArtist);
+        result = await resolveAlbum(query, trackArtist);
         break;
       case "wiki":
-        imageUrl = await resolveWiki(query, imgWidth);
+        result = await resolveWiki(query, imgWidth);
         break;
       default:
         return new Response(
-          JSON.stringify({ imageUrl: null, reason: `Unknown type: ${type}` }),
+          JSON.stringify({ imageUrl: null, provenance: null, reason: `Unknown type: ${type}` }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
     }
 
     return new Response(
-      JSON.stringify({ imageUrl }),
+      JSON.stringify({ imageUrl: result?.url || null, provenance: result?.provenance || null }),
       {
         headers: {
           ...corsHeaders,
@@ -471,7 +502,7 @@ serve(async (req) => {
   } catch (e) {
     console.warn("nugget-image error:", e instanceof Error ? e.message : e);
     return new Response(
-      JSON.stringify({ imageUrl: null, reason: "upstream error" }),
+      JSON.stringify({ imageUrl: null, provenance: null, reason: "upstream error" }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

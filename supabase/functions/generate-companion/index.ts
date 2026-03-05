@@ -59,25 +59,21 @@ function geminiUrl(model: string, apiKey: string): string {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 }
 
+const knownDomains: Record<string, string> = {
+  "pitchfork": "pitchfork.com", "rolling stone": "rollingstone.com",
+  "nme": "nme.com", "the guardian": "theguardian.com",
+  "consequence of sound": "consequenceofsound.net", "stereogum": "stereogum.com",
+  "billboard": "billboard.com", "spin": "spin.com",
+  "allmusic": "allmusic.com", "songfacts": "songfacts.com",
+  "discogs": "discogs.com", "musicbrainz": "musicbrainz.org",
+  "reddit": "reddit.com", "genius": "genius.com",
+  "bandcamp daily": "daily.bandcamp.com", "fact magazine": "factmag.com",
+  "the wire": "thewire.co.uk", "resident advisor": "ra.co",
+  "sound on sound": "soundonsound.com", "tape op": "tapeop.com",
+};
+
 function publisherDomain(publisher: string): string {
-  const map: Record<string, string> = {
-    "pitchfork": "pitchfork.com",
-    "rolling stone": "rollingstone.com",
-    "nme": "nme.com",
-    "the guardian": "theguardian.com",
-    "consequence of sound": "consequenceofsound.net",
-    "stereogum": "stereogum.com",
-    "billboard": "billboard.com",
-    "spin": "spin.com",
-    "allmusic": "allmusic.com",
-    "songfacts": "songfacts.com",
-    "discogs": "discogs.com",
-    "musicbrainz": "musicbrainz.org",
-    "reddit": "reddit.com",
-    "fact magazine": "factmag.com",
-    "the wire": "thewire.co.uk",
-  };
-  return map[publisher.toLowerCase()] || publisher.toLowerCase().replace(/\s+/g, "") + ".com";
+  return knownDomains[publisher.toLowerCase()] || publisher.toLowerCase().replace(/\s+/g, "") + ".com";
 }
 
 // Fetch Last.fm context from the lastfm-sync edge function (uses cache internally)
@@ -408,10 +404,19 @@ OUTPUT: Raw JSON only. No backticks.`;
         } else if (parsed.nuggets) {
           const now = Date.now();
           for (const n of parsed.nuggets) {
-            if (!n.sourceUrl || n.sourceUrl.includes("google.com/search")) {
-              const domain = publisherDomain(n.sourceName || "");
-              const q = encodeURIComponent(`${artist} ${title} ${n.sourceName || ""}`);
-              n.sourceUrl = `https://${domain}/search/?q=${q}`;
+            if (!n.sourceUrl || n.sourceUrl.includes("google.com/search?btnI")) {
+              // Use site-scoped Google search instead of guessing direct URLs
+              const pubLower = (n.sourceName || "").toLowerCase();
+              const domain = knownDomains[pubLower];
+              if (domain) {
+                const q = `site:${domain} ${artist} ${title}`;
+                n.sourceUrl = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+              } else if (pubLower && pubLower !== "unknown" && pubLower !== "general knowledge") {
+                const q = `"${n.sourceName}" ${artist} ${title}`;
+                n.sourceUrl = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+              } else {
+                n.sourceUrl = `https://www.google.com/search?q=${encodeURIComponent(`${artist} ${title}`)}`;
+              }
             }
             if (!n.id) n.id = crypto.randomUUID();
             if (!n.timestamp || typeof n.timestamp !== "number") {

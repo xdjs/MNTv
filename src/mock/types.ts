@@ -39,6 +39,7 @@ export type Source = {
   thumbnailUrl?: string;
   locator?: string;
   quoteSnippet?: string;
+  verified?: boolean;
 };
 
 export type Nugget = {

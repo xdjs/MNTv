@@ -6,6 +6,214 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const MB_USER_AGENT = "MusicNerd/1.0 (musicnerd-app)";
+
+// ── MusicBrainz / Discogs / Wikipedia context fetching ──────────────
+
+interface MusicContext {
+  mbRecording?: { title?: string; albumName?: string; releaseDate?: string; label?: string; mbid?: string };
+  mbArtist?: { name?: string; type?: string; origin?: string; beginYear?: string };
+  discogs?: DiscogsContext;
+  wikiArtist?: string;
+  wikiTrack?: string;
+}
+
+interface DiscogsContext {
+  producer?: string[];
+  engineer?: string[];
+  mixedBy?: string[];
+  masteredBy?: string[];
+  writtenBy?: string[];
+  notes?: string;
+  genres?: string[];
+  styles?: string[];
+  label?: string;
+  year?: number;
+}
+
+async function fetchMBRecording(artist: string, title: string): Promise<MusicContext["mbRecording"]> {
+  try {
+    const q = `recording:"${title}" AND artist:"${artist}"`;
+    const url = `https://musicbrainz.org/ws/2/recording/?query=${encodeURIComponent(q)}&fmt=json&limit=3`;
+    const res = await fetch(url, { headers: { "User-Agent": MB_USER_AGENT } });
+    if (!res.ok) return undefined;
+    const data = await res.json();
+    const rec = data.recordings?.[0];
+    if (!rec) return undefined;
+
+    const release = rec.releases?.[0];
+    return {
+      title: rec.title,
+      albumName: release?.title,
+      releaseDate: release?.date,
+      label: release?.["label-info"]?.[0]?.label?.name,
+      mbid: rec.id,
+    };
+  } catch (e) {
+    console.warn("[MusicContext] MusicBrainz recording fetch failed:", e);
+    return undefined;
+  }
+}
+
+async function fetchMBArtist(artist: string): Promise<MusicContext["mbArtist"]> {
+  try {
+    const url = `https://musicbrainz.org/ws/2/artist/?query=artist:"${encodeURIComponent(artist)}"&fmt=json&limit=1`;
+    const res = await fetch(url, { headers: { "User-Agent": MB_USER_AGENT } });
+    if (!res.ok) return undefined;
+    const data = await res.json();
+    const a = data.artists?.[0];
+    if (!a) return undefined;
+    return {
+      name: a.name,
+      type: a.type,
+      origin: a.area?.name || a["begin-area"]?.name,
+      beginYear: a["life-span"]?.begin?.slice(0, 4),
+    };
+  } catch (e) {
+    console.warn("[MusicContext] MusicBrainz artist fetch failed:", e);
+    return undefined;
+  }
+}
+
+async function fetchDiscogsRelease(artist: string, title: string): Promise<DiscogsContext | undefined> {
+  const discogsToken = Deno.env.get("DISCOGS_TOKEN");
+  if (!discogsToken) return undefined;
+
+  try {
+    const searchUrl = `https://api.discogs.com/database/search?release_title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}&type=release&per_page=3`;
+    const searchRes = await fetch(searchUrl, {
+      headers: {
+        "Authorization": `Discogs token=${discogsToken}`,
+        "User-Agent": MB_USER_AGENT,
+      },
+    });
+    if (!searchRes.ok) return undefined;
+    const searchData = await searchRes.json();
+    const releaseId = searchData.results?.[0]?.id;
+    if (!releaseId) return undefined;
+
+    const releaseRes = await fetch(`https://api.discogs.com/releases/${releaseId}`, {
+      headers: {
+        "Authorization": `Discogs token=${discogsToken}`,
+        "User-Agent": MB_USER_AGENT,
+      },
+    });
+    if (!releaseRes.ok) return undefined;
+    const release = await releaseRes.json();
+
+    const extraArtists = release.extraartists || [];
+    const byRole = (role: string) => extraArtists
+      .filter((ea: any) => (ea.role || "").toLowerCase().includes(role.toLowerCase()))
+      .map((ea: any) => ea.name);
+
+    return {
+      producer: byRole("Producer"),
+      engineer: byRole("Engineer"),
+      mixedBy: byRole("Mixed By"),
+      masteredBy: byRole("Mastered By"),
+      writtenBy: byRole("Written-By"),
+      notes: release.notes ? release.notes.slice(0, 500) : undefined,
+      genres: release.genres,
+      styles: release.styles,
+      label: release.labels?.[0]?.name,
+      year: release.year,
+    };
+  } catch (e) {
+    console.warn("[MusicContext] Discogs fetch failed:", e);
+    return undefined;
+  }
+}
+
+async function fetchWikiSummary(topic: string): Promise<string | undefined> {
+  try {
+    const encoded = encodeURIComponent(topic.replace(/ /g, "_"));
+    const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encoded}`;
+    const res = await fetch(url, { headers: { "User-Agent": MB_USER_AGENT } });
+    if (!res.ok) return undefined;
+    const data = await res.json();
+    return data.extract?.slice(0, 600);
+  } catch {
+    return undefined;
+  }
+}
+
+async function fetchMusicContext(artist: string, title: string): Promise<MusicContext> {
+  const [mbRecording, mbArtist, discogs, wikiArtist, wikiTrack] = await Promise.allSettled([
+    fetchMBRecording(artist, title),
+    fetchMBArtist(artist),
+    fetchDiscogsRelease(artist, title),
+    fetchWikiSummary(artist),
+    fetchWikiSummary(`${title} (song)`),
+  ]);
+
+  return {
+    mbRecording: mbRecording.status === "fulfilled" ? mbRecording.value : undefined,
+    mbArtist: mbArtist.status === "fulfilled" ? mbArtist.value : undefined,
+    discogs: discogs.status === "fulfilled" ? discogs.value : undefined,
+    wikiArtist: wikiArtist.status === "fulfilled" ? wikiArtist.value : undefined,
+    wikiTrack: wikiTrack.status === "fulfilled" ? wikiTrack.value : undefined,
+  };
+}
+
+function buildMusicContextBlock(ctx: MusicContext, artist: string, title: string): string {
+  const lines: string[] = [];
+  lines.push("VERIFIED REFERENCE DATA (from MusicBrainz, Discogs, Wikipedia -- use as factual foundation):\n");
+
+  if (ctx.mbRecording || ctx.mbArtist) {
+    lines.push("MusicBrainz:");
+    if (ctx.mbRecording) {
+      const r = ctx.mbRecording;
+      lines.push(`  Recording: "${r.title || title}" from "${r.albumName || "unknown album"}" (${r.releaseDate || "unknown date"}, ${r.label || "unknown label"})`);
+    }
+    if (ctx.mbArtist) {
+      const a = ctx.mbArtist;
+      lines.push(`  Artist: ${a.name || artist}, ${a.type || "unknown type"}, from ${a.origin || "unknown origin"}${a.beginYear ? `, active since ${a.beginYear}` : ""}`);
+    }
+  }
+
+  if (ctx.discogs) {
+    const d = ctx.discogs;
+    lines.push(`\nDiscogs credits for "${title}":`);
+    if (d.producer?.length) lines.push(`  Producer(s): ${d.producer.join(", ")}`);
+    if (d.engineer?.length) lines.push(`  Engineer(s): ${d.engineer.join(", ")}`);
+    if (d.mixedBy?.length) lines.push(`  Mixed By: ${d.mixedBy.join(", ")}`);
+    if (d.masteredBy?.length) lines.push(`  Mastered By: ${d.masteredBy.join(", ")}`);
+    if (d.writtenBy?.length) lines.push(`  Written By: ${d.writtenBy.join(", ")}`);
+    if (d.genres?.length || d.styles?.length) {
+      lines.push(`  Genres/Styles: ${(d.genres || []).join(", ")} / ${(d.styles || []).join(", ")}`);
+    }
+    if (d.label) lines.push(`  Label: ${d.label}${d.year ? ` (${d.year})` : ""}`);
+    if (d.notes) lines.push(`  Release notes: ${d.notes}`);
+  }
+
+  if (ctx.wikiArtist) {
+    lines.push(`\nWikipedia: ${ctx.wikiArtist}`);
+  }
+  if (ctx.wikiTrack) {
+    lines.push(`Song: ${ctx.wikiTrack}`);
+  }
+
+  if (lines.length <= 1) return ""; // Only the header, no actual data
+
+  lines.push(`
+SOURCING STRATEGY:
+- Use the VERIFIED DATA above as your factual foundation -- dates, credits, and personnel should match these when available.
+- For the INTERESTING narrative content, dig DEEP via Google Search. The best nuggets come from places casual fans never look:
+  * AllMusic reviews and editorial features (allmusic.com)
+  * Reddit AMAs, r/LetsTalkMusic, r/WeAreTheMusicMakers threads
+  * Production forums (Gearslutz/Gearspace, KVR, VI-Control)
+  * Tape Op, Sound on Sound, Recording magazine interviews
+  * Bandcamp Daily features and artist spotlights
+  * Fan wikis and lyric annotation sites (Genius annotations)
+  * Discogs community reviews and liner note transcriptions
+  * Podcast transcripts (Song Exploder, Broken Record, Dissect, Tape Notes)
+- When you find information from these sources, cite the ACTUAL source (not a generic publisher name).
+- If stating a specific fact NOT in the verified data or transcripts, hedge: "reportedly," "according to a [source] interview," "as discussed on [forum]"
+- NEVER invent specific studio names, gear model numbers, or personnel names -- if unsure, describe generally`);
+
+  return "\n" + lines.join("\n") + "\n";
+}
+
 // ── YouTube Data API search ──────────────────────────────────────────
 interface YTVideo {
   videoId: string;
@@ -177,7 +385,8 @@ async function generateWithGemini(
   previousNuggets: string[] = [],
   tier: Tier = "casual",
   userTopArtists: string[] = [],
-  userTopTracks: string[] = []
+  userTopTracks: string[] = [],
+  musicContext: MusicContext = {}
 ): Promise<{ nuggets: GeminiNugget[]; groundingChunks: any[] }> {
   const tierConfig = TIER_CONFIG[tier];
   const transcriptContext = videos
@@ -229,7 +438,7 @@ SOURCE EXPECTATIONS: Prefer sources from ${tierConfig.sourceExpectation}.
 
 ${videoListContext ? `Available YouTube videos:\n${videoListContext}\n` : ""}
 ${transcriptContext ? `Real transcript content:\n\n${transcriptContext}\n` : "No transcripts available — use your knowledge and Google Search to find real sources."}
-
+${buildMusicContextBlock(musicContext, artist, title)}
 STRUCTURE — always exactly 3 nuggets in this order:
 1. **Nugget 1 — kind: "artist"**: About the artist/band ${artist}. ${tierConfig.artistFocus}. listenFor: false.
 2. **Nugget 2 — kind: "track"**: About the song "${title}" by ${artist}. ${tierConfig.trackFocus}. listenFor: true.
@@ -249,6 +458,8 @@ CRITICAL RULES:
 - For article/interview sources: cite REAL publications with real article titles
 - Include locator (timestamp for videos, section for articles) when possible
 - Be factually accurate — do not fabricate quotes or facts
+- If you cannot find a specific real source for a fact, set publisher to "General Knowledge" — this is better than fabricating an article that doesn't exist
+- NEVER invent specific studio names, gear model numbers, or personnel names — if unsure, describe generally
 
 Return ONLY valid JSON:
 {
@@ -409,6 +620,72 @@ serve(async (req) => {
     // only if the dedicated key isn't set yet.
     const YOUTUBE_API_KEY = Deno.env.get("YOUTUBE_API_KEY") || GOOGLE_AI_API_KEY;
 
+    // ── Caption regeneration mode ───────────────────────────────────
+    if (body.mode === "captions") {
+      const { artist: capArtist, title: capTitle, items } = body;
+      if (!Array.isArray(items) || items.length === 0) {
+        return new Response(JSON.stringify({ captions: [] }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const itemList = items.slice(0, 10).map((item: any, i: number) => {
+        const artTitle = typeof item.articleTitle === "string" ? item.articleTitle : "unknown";
+        const fileName = typeof item.imageFileName === "string" ? item.imageFileName : "unknown";
+        const headline = typeof item.nuggetHeadline === "string" ? item.nuggetHeadline : "";
+        return `${i + 1}. Nugget: "${headline}"\n   Image from Wikipedia article: "${artTitle}", file: "${fileName}"`;
+      }).join("\n");
+
+      const captionPrompt = `Write a SHORT caption (6-12 words) for each image below. Each image accompanies a music fact about "${capTitle}" by ${capArtist}.
+
+RULES:
+- Describe what the image ACTUALLY shows based on the Wikipedia article it came from
+- Connect it to the music context, but do NOT claim the image depicts the specific artist or moment
+- Good: "A home studio setup -- where countless bedroom producers got their start"
+- Bad: "A young Artist X in the bedroom where it all started"
+- For images from "[Article Title]", the subject IS [Article Title] -- caption accordingly
+- Each caption must be a single line, no quotes
+
+Items:
+${itemList}
+
+Return ONLY valid JSON: {"captions": ["caption 1", "caption 2", ...]}`;
+
+      const captionRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GOOGLE_AI_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: captionPrompt }] }],
+            generationConfig: { temperature: 0.2, thinkingConfig: { thinkingBudget: 0 } },
+          }),
+        }
+      );
+
+      if (!captionRes.ok) {
+        console.error("Caption generation failed:", captionRes.status);
+        return new Response(JSON.stringify({ captions: [] }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const captionData = await captionRes.json();
+      const captionText = captionData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      try {
+        const cleaned = captionText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+        const parsed = JSON.parse(cleaned);
+        return new Response(JSON.stringify({ captions: parsed.captions || [] }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch {
+        console.error("Failed to parse caption response:", captionText.slice(0, 300));
+        return new Response(JSON.stringify({ captions: [] }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // ── Deep Dive mode ──────────────────────────────────────────────
     if (deepDive) {
       const deepDivePrompt = `You are a music historian having a fascinating conversation about "${title}" by ${artist}.
@@ -489,15 +766,28 @@ Return ONLY valid JSON:
     }
 
     // ── Standard nugget generation ──────────────────────────────────
-    // Step 1: Search YouTube (needs YouTube Data API v3 enabled)
+    // Step 1: Search YouTube + fetch MusicBrainz/Discogs/Wikipedia context in parallel
     let videos: YTVideo[] = [];
-    try {
-      const searchQuery = `"${artist}" "${title}" interview OR breakdown OR behind the scenes`;
-      videos = await searchYouTube(searchQuery, YOUTUBE_API_KEY);
-    } catch (e) {
-      console.warn("YouTube search skipped:", e);
-    }
+    let musicContext: MusicContext = {};
+
+    const [ytResult, contextResult] = await Promise.allSettled([
+      (async () => {
+        try {
+          const searchQuery = `"${artist}" "${title}" interview OR breakdown OR behind the scenes`;
+          return await searchYouTube(searchQuery, YOUTUBE_API_KEY);
+        } catch (e) {
+          console.warn("YouTube search skipped:", e);
+          return [];
+        }
+      })(),
+      fetchMusicContext(artist, title),
+    ]);
+
+    if (ytResult.status === "fulfilled") videos = ytResult.value;
+    if (contextResult.status === "fulfilled") musicContext = contextResult.value;
+
     console.log(`Found ${videos.length} YouTube videos for "${artist} - ${title}"`);
+    console.log(`[MusicContext] MB recording: ${!!musicContext.mbRecording}, MB artist: ${!!musicContext.mbArtist}, Discogs: ${!!musicContext.discogs}, Wiki artist: ${!!musicContext.wikiArtist}, Wiki track: ${!!musicContext.wikiTrack}`);
 
     // Step 2: Fetch transcripts in parallel (top 3)
     const transcripts = new Map<string, string>();
@@ -516,12 +806,12 @@ Return ONLY valid JSON:
     }
     console.log(`Fetched ${transcripts.size} transcripts`);
 
-    // Step 3: Generate nuggets with Gemini + Google Search grounding
+    // Step 3: Generate nuggets with Gemini + Google Search grounding + verified context
     let rawNuggets: any[];
     let groundingChunks: any[];
     try {
       const result = await generateWithGemini(
-        artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier, safeTopArtists, safeTopTracks
+        artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier, safeTopArtists, safeTopTracks, musicContext
       );
       rawNuggets = result.nuggets;
       groundingChunks = result.groundingChunks;
@@ -529,7 +819,7 @@ Return ONLY valid JSON:
       if (e instanceof RecitationError) {
         console.log("Retrying without transcripts to avoid RECITATION block...");
         const result = await generateWithGemini(
-          artist, title, album, videos, new Map(), GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier, safeTopArtists, safeTopTracks
+          artist, title, album, videos, new Map(), GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier, safeTopArtists, safeTopTracks, musicContext
         );
         rawNuggets = result.nuggets;
         groundingChunks = result.groundingChunks;
@@ -559,18 +849,18 @@ Return ONLY valid JSON:
         },
       };
 
-      // Attach real embedId for YouTube sources
+      // Attach real embedId for YouTube sources — these are verified
       if (source.type === "youtube" && source.videoIndex != null) {
         const video = videos[source.videoIndex];
         if (video) {
           result.source.embedId = video.videoId;
           result.source.url = `https://www.youtube.com/watch?v=${video.videoId}`;
+          result.source.verified = true;
         }
       }
 
-      // For non-YouTube sources, try to find a direct URL from Gemini's grounding chunks
+      // For non-YouTube sources, try to match against Gemini's grounding chunks
       if (!result.source.url && groundingChunks.length > 0) {
-        // Filter out purely internal grounding URLs (keep vertexaisearch proxy URLs — they redirect to real sources)
         const realChunks = groundingChunks.filter((chunk: any) => {
           const uri = (chunk?.web?.uri || "").toLowerCase();
           const chunkTitle = (chunk?.web?.title || "").toLowerCase();
@@ -580,45 +870,54 @@ Return ONLY valid JSON:
         });
 
         const pubLower = (source.publisher || "").toLowerCase();
-        const titleLower = (source.title || "").toLowerCase();
-        const artistLower = artist.toLowerCase();
 
-        // Try exact match on publisher or source title (match on title, not URI — URIs may be proxy URLs)
-        let match = realChunks.find((chunk: any) => {
-          const chunkTitle = (chunk?.web?.title || "").toLowerCase();
-          return (
-            (pubLower && pubLower !== "unknown" && chunkTitle.includes(pubLower)) ||
-            (titleLower && chunkTitle.includes(titleLower))
-          );
-        });
+        // Extract publisher domain for URI matching
+        const knownDomains: Record<string, string> = {
+          "pitchfork": "pitchfork.com", "rolling stone": "rollingstone.com",
+          "nme": "nme.com", "the guardian": "theguardian.com",
+          "billboard": "billboard.com", "allmusic": "allmusic.com",
+          "stereogum": "stereogum.com", "consequence of sound": "consequenceofsound.net",
+          "spin": "spin.com", "songfacts": "songfacts.com",
+          "sound on sound": "soundonsound.com", "tape op": "tapeop.com",
+          "discogs": "discogs.com", "musicbrainz": "musicbrainz.org",
+          "reddit": "reddit.com", "genius": "genius.com",
+          "bandcamp daily": "daily.bandcamp.com", "fact magazine": "factmag.com",
+          "the wire": "thewire.co.uk", "resident advisor": "ra.co",
+        };
+        const pubDomain = knownDomains[pubLower] || "";
 
-        // Broader match: chunk mentions the artist
-        if (!match) {
-          match = realChunks.find((chunk: any) => {
-            const chunkTitle = (chunk?.web?.title || "").toLowerCase();
-            return chunkTitle.includes(artistLower);
-          });
-        }
-
-        // Last resort: use the first real grounding chunk (Gemini thought it was relevant)
-        if (!match && realChunks.length > 0) {
-          match = realChunks[0];
-        }
+        // Strict match: grounding chunk URI domain matches the publisher
+        let match = pubDomain ? realChunks.find((chunk: any) => {
+          const uri = (chunk?.web?.uri || "").toLowerCase();
+          return uri.includes(pubDomain);
+        }) : null;
 
         if (match?.web?.uri) {
+          // Use the real grounding URL and title
           result.source.url = match.web.uri;
-          // Update publisher from grounding title if it was generic
-          // (grounding URIs may be proxy URLs, but title has the real publisher domain)
-          if (!pubLower || pubLower === "unknown") {
-            result.source.publisher = match.web.title || result.source.publisher;
+          if (match.web.title) result.source.title = match.web.title;
+          result.source.verified = true;
+        } else {
+          // No domain match — construct a targeted site search instead of fabricating
+          if (pubDomain) {
+            const q = `site:${pubDomain} ${artist} ${title}`;
+            result.source.url = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+          } else if (pubLower && pubLower !== "unknown" && pubLower !== "general knowledge") {
+            const q = `"${source.publisher}" ${artist} ${title}`;
+            result.source.url = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+          } else {
+            const q = `${artist} ${title}`;
+            result.source.url = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
           }
+          result.source.verified = false;
         }
       }
 
-      // Fallback: "I'm Feeling Lucky" Google search (goes directly to top result)
+      // Final fallback if no grounding chunks at all
       if (!result.source.url) {
-        const q = `"${source.title || title}" ${source.publisher || ""} ${artist}`.trim();
-        result.source.url = `https://www.google.com/search?btnI=1&q=${encodeURIComponent(q)}`;
+        const q = `${artist} ${title}`;
+        result.source.url = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+        result.source.verified = false;
       }
 
       return result;
