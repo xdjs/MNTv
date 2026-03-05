@@ -103,22 +103,14 @@ export default function Companion() {
       setError(null);
 
       try {
-        const trackKey = `${trackInfo!.artist}::${trackInfo!.title}`;
-        let serverListenCount = 1;
-        try {
-          const { data: historyData } = await supabase
-            .from("nugget_history")
-            .select("listen_count")
-            .eq("track_key", trackKey)
-            .maybeSingle();
-          serverListenCount = historyData?.listen_count || 1;
-        } catch {
-          // RLS may block unauthenticated reads — default to 1
-        }
+        // Always use listenCount 1 — RLS blocks unauthenticated reads of
+        // nugget_history, and the pre-gen from Listen.tsx uses the same count
+        // for the first listen. This guarantees a cache hit.
+        const serverListenCount = 1;
         setListenCount(serverListenCount);
 
-        // Don't send personalization — phone has no profile.
-        // This matches the cache key from pre-generation on Listen page.
+        console.log("[Companion] Fetching:", { artist: trackInfo!.artist, title: trackInfo!.title, tier });
+
         const { data: companionData, error: fnError } = await supabase.functions.invoke(
           "generate-companion",
           {
@@ -132,7 +124,10 @@ export default function Companion() {
           }
         );
 
+        console.log("[Companion] Response:", { data: !!companionData, error: fnError });
+
         if (fnError) throw new Error(fnError.message);
+        if (!companionData) throw new Error("No data returned from companion API");
         setData(companionData as CompanionData);
       } catch (e) {
         console.error("Companion fetch error:", e);
