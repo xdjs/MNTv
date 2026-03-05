@@ -8,6 +8,7 @@ import MusicNerdLogo from "@/components/MusicNerdLogo";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ExternalLink, Music, BookOpen, Play, Lock } from "lucide-react";
 import CompanionNuggetCard from "@/components/companion/CompanionNuggetCard";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import type { CompanionNugget } from "@/mock/types";
 
 interface CompanionData {
@@ -128,6 +129,7 @@ export default function Companion() {
 
         if (fnError) throw new Error(fnError.message);
         if (!companionData) throw new Error("No data returned from companion API");
+        if (companionData.error) throw new Error(companionData.error);
         setData(companionData as CompanionData);
       } catch (e) {
         console.error("Companion fetch error:", e);
@@ -262,7 +264,9 @@ export default function Companion() {
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${color}`}>{label}</span>
                   </div>
                   {visible.map((nugget) => (
-                    <CompanionNuggetCard key={nugget.id} nugget={nugget} />
+                    <ErrorBoundary key={nugget.id}>
+                      <CompanionNuggetCard nugget={nugget} />
+                    </ErrorBoundary>
                   ))}
                   {locked > 0 && (
                     <div className="flex items-center gap-2 px-4 py-3 rounded-xl border border-dashed border-foreground/15 text-muted-foreground text-xs">
@@ -302,7 +306,12 @@ export default function Companion() {
               </section>
             )}
           </div>
-        ) : null}
+        ) : (
+          <div className="apple-glass rounded-2xl p-6 text-center">
+            <p className="text-muted-foreground font-semibold">Content unavailable</p>
+            <p className="text-sm text-muted-foreground/70 mt-1">Try refreshing the page.</p>
+          </div>
+        )}
       </div>
     </div>
   );

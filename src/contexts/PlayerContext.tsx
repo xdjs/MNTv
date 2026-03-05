@@ -1,5 +1,6 @@
 import { createContext, useContext, useRef, useState, useCallback, useEffect, type ReactNode } from "react";
 import { useSpotifyToken } from "@/hooks/useSpotifyToken";
+import { useCurrentlyPlaying, type ExternalTrack } from "@/hooks/useCurrentlyPlaying";
 import type { Nugget, Source } from "@/mock/types";
 
 // ── In-memory nugget cache (survives navigation, not page refresh) ──
@@ -80,6 +81,10 @@ interface PlayerState {
   currentTrack: TrackMeta | null;
   /** Previous track route (for "go back" button). Null if no history. */
   prevTrackRoute: string | null;
+  /** Track playing on an external Spotify device (phone, etc.) */
+  externalPlayback: ExternalTrack | null;
+  /** True when user navigated from external playback — skip auto-play */
+  isExternalListenMode: boolean;
 }
 
 interface PlayerActions {
@@ -97,6 +102,8 @@ interface PlayerActions {
   stop: () => void;
   /** Ref to attach the YT player container div. Render this in the Listen page. */
   playerContainerRef: React.RefObject<HTMLDivElement>;
+  /** Toggle external listen mode (skip auto-play for external device playback) */
+  setExternalListenMode: (mode: boolean) => void;
   /** In-memory nugget cache — survives navigation between pages */
   getNuggetCache: (key: string) => CachedNuggets | undefined;
   setNuggetCache: (key: string, entry: CachedNuggets) => void;
@@ -143,6 +150,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [currentSpotifyUri, setCurrentSpotifyUri] = useState<string | null>(null);
   const [currentTrack, setCurrentTrack] = useState<TrackMeta | null>(null);
   const onEndedRef = useRef<(() => void) | null>(null);
+
+  // External playback detection
+  const [isExternalListenMode, setIsExternalListenMode] = useState(false);
+  const externalTrack = useCurrentlyPlaying({
+    suppressPolling: activePlayer !== "none",
+    ownDeviceId: spDeviceId,
+  });
+  const setExternalListenMode = useCallback((mode: boolean) => {
+    setIsExternalListenMode(mode);
+  }, []);
 
   // In-memory nugget cache (useRef — no re-renders)
   const nuggetCacheRef = useRef<Map<string, CachedNuggets>>(new Map());
@@ -456,6 +473,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     currentSpotifyUri,
     currentTrack,
     prevTrackRoute,
+    externalPlayback: externalTrack,
+    isExternalListenMode,
     setCurrentTrack,
     setOnEnded,
     pushTrackHistory,
@@ -466,6 +485,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     toggle,
     seek,
     stop,
+    setExternalListenMode,
     playerContainerRef: ytContainerRef,
     getNuggetCache,
     setNuggetCache,

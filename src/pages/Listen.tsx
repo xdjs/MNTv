@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Smartphone } from "lucide-react";
 import { useThemeSync } from "@/hooks/useThemeSync";
 import { QRCode } from "react-qrcode-logo";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
@@ -255,6 +255,7 @@ export default function Listen() {
 
   const {
     isPlaying, currentTime, duration: playerDuration, activePlayer, playerContainerRef,
+    isExternalListenMode, setExternalListenMode, externalPlayback,
   } = player;
   const realDuration = playerDuration > 0 ? playerDuration : (track?.durationSec || 300);
 
@@ -263,6 +264,11 @@ export default function Listen() {
     player.setOnEnded(handleTrackEnd);
     return () => player.setOnEnded(null);
   }, [handleTrackEnd]);
+
+  // Reset external listen mode when leaving the Listen page
+  useEffect(() => {
+    return () => setExternalListenMode(false);
+  }, [setExternalListenMode]);
 
   // Fading state for overlay transitions
   const [fadingIn, setFadingIn] = useState(false);
@@ -285,6 +291,8 @@ export default function Listen() {
   const lastLoadedTrackRef = useRef<string | null>(null);
 
   useEffect(() => {
+    // In external listen mode, don't steal playback from the external device
+    if (isExternalListenMode) return;
     if (!ytVideoId && !spotifyUri) return;
     // Already playing this exact track — don't re-load
     const alreadyPlaying =
@@ -300,7 +308,7 @@ export default function Listen() {
       spotifyUri: spotifyUri || undefined,
       spotifyAvailable: hasSpotifyToken,
     });
-  }, [ytVideoId, spotifyUri, hasSpotifyToken]);
+  }, [ytVideoId, spotifyUri, hasSpotifyToken, isExternalListenMode]);
 
   const play = player.play;
   const seek = player.seek;
@@ -580,7 +588,7 @@ export default function Listen() {
     return () => clearDwell();
   }, [activeNugget, clearDwell]);
 
-  useEffect(() => { play(); }, [play]);
+  useEffect(() => { if (!isExternalListenMode) play(); }, [play, isExternalListenMode]);
 
   useEffect(() => {
     setActiveNugget(null);
@@ -795,6 +803,32 @@ export default function Listen() {
             </p>
           )}
         </motion.div>
+
+        {/* External listen mode banner */}
+        {isExternalListenMode && externalPlayback && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="relative z-10 mx-10 mt-3"
+          >
+            <div className="flex items-center gap-3 rounded-xl bg-foreground/10 backdrop-blur-md px-4 py-2.5">
+              <Smartphone size={16} className="text-primary shrink-0" />
+              <p className="text-sm text-foreground/70 flex-1">
+                Playing on <span className="font-semibold text-foreground/90">{externalPlayback.deviceName}</span>
+              </p>
+              <button
+                onClick={() => {
+                  setExternalListenMode(false);
+                  lastLoadedTrackRef.current = null;
+                  // loadTrack + play will trigger from the effects
+                }}
+                className="px-3 py-1 rounded-full text-xs font-semibold bg-primary/20 text-primary hover:bg-primary/30 transition-colors"
+              >
+                Play here instead
+              </button>
+            </div>
+          </motion.div>
+        )}
 
         {/* Nugget cards — clickable for deep dive */}
         <div className="relative z-10 flex flex-1 items-center justify-end px-4 pb-24 md:px-10">
