@@ -142,6 +142,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const spPollRef = useRef<number | null>(null);
   const lastSpUriRef = useRef<string | null>(null);
   const spHasPlayedRef = useRef(false); // true once track has been unpaused at least once
+  const maxPositionRef = useRef(0); // highest position (ms) reached — prevents false onEnded
 
   // Active player tracking
   const [activePlayer, setActivePlayer] = useState<ActivePlayer>("none");
@@ -232,6 +233,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         setSpDuration(state.duration / 1000);
         if (!state.paused) {
           spHasPlayedRef.current = true;
+          maxPositionRef.current = Math.max(maxPositionRef.current, state.position);
           if (!spPollRef.current) {
             spPollRef.current = window.setInterval(async () => {
               const s = await spPlayerRef.current?.getCurrentState();
@@ -255,7 +257,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
             spotifyUri: ct.uri,
           });
         }
-        if (state.paused && state.position === 0 && ct.uri === lastSpUriRef.current && spHasPlayedRef.current) {
+        if (state.paused && state.position === 0 && ct.uri === lastSpUriRef.current && spHasPlayedRef.current && maxPositionRef.current > 5000) {
           lastSpUriRef.current = null;
           spHasPlayedRef.current = false;
           onEndedRef.current?.();
@@ -288,6 +290,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     lastSpUriRef.current = null;
     spHasPlayedRef.current = false;
     hasAutoPlayedRef.current = false;
+    maxPositionRef.current = 0;
     spPlayerRef.current?.pause();
     if (spPollRef.current) { clearInterval(spPollRef.current); spPollRef.current = null; }
     setSpTime(0);

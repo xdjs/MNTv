@@ -306,7 +306,10 @@ export function useAINuggets(
       });
 
       // ── Resolve images and apply visual rotation ──────────────────
-      const visualSlotIndex = trackId.charCodeAt(0) % 3;
+      // Hash entire trackId (not just first char) for better distribution
+      let hashSum = 0;
+      for (let c = 0; c < trackId.length; c++) hashSum += trackId.charCodeAt(c);
+      const visualSlotIndex = hashSum % 3;
 
       const imageResults = await Promise.allSettled(
         aiNuggets.map((n) =>
@@ -332,21 +335,20 @@ export function useAINuggets(
       }
 
       if (!visualAssigned) {
-        const fallbackIdx = visualSlotIndex % newNuggets.length;
-        const nugget = newNuggets[fallbackIdx];
-        if (nugget) {
-          const fallbackUrl = artistImageUrl || coverArtUrl;
-          if (fallbackUrl) {
+        // Only use cover art as fallback — skip profile artistImageUrl since it
+        // can map to the wrong artist. Don't use DiceBear placeholders either.
+        const fallbackUrl = coverArtUrl && !coverArtUrl.includes("dicebear.com") ? coverArtUrl : null;
+        if (fallbackUrl) {
+          const fallbackIdx = visualSlotIndex % newNuggets.length;
+          const nugget = newNuggets[fallbackIdx];
+          if (nugget) {
             nugget.imageUrl = fallbackUrl;
-            // Use generic caption for fallback images — the AI's imageHint caption
-            // describes a specific image that wasn't found, so it would be misleading.
             nugget.imageCaption = nugget.headline;
             nugget.visualOnly = true;
-            console.log("[NuggetVisual] Used fallback image for visual nugget:", fallbackUrl);
-          } else {
-            console.warn("[NuggetVisual] No fallback images available — all nuggets text-only");
+            console.log("[NuggetVisual] Used cover art fallback for visual nugget");
           }
         }
+        // If no real image available, all nuggets stay text-only — that's fine.
       }
 
       setNuggets(newNuggets);

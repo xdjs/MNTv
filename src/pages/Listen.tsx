@@ -259,22 +259,21 @@ export default function Listen() {
   }, [setExternalListenMode]);
 
   // Navigate when Spotify plays a different track (e.g. user changed song on phone).
-  // Only trigger when we KNOW what we loaded (currentSpotifyUri is set) and the SDK
-  // reports a genuinely different URI — prevents false triggers during initial load.
+  // IMPORTANT: Only depend on spotifyStateTrack changes, NOT player.currentSpotifyUri.
+  // Otherwise loadTrack (which sets currentSpotifyUri) causes the effect to fire while
+  // the SDK still reports the OLD track, creating a false "external skip" → bounce loop.
   useEffect(() => {
     if (!spotifyStateTrack) return;
-    // Skip if we're already navigating (track end, next/prev button)
     if (isNavigatingRef.current) return;
-    // Wait until we've actually loaded a Spotify track ourselves
     if (!player.currentSpotifyUri) return;
-    // Same URI we loaded — this is our own playback, not an external change
     if (spotifyStateTrack.spotifyUri === player.currentSpotifyUri) return;
-    // Navigate to the new track
+    // Also skip if the SDK is reporting what we're about to load (route resolved but loadTrack pending)
+    if (spotifyUri && spotifyStateTrack.spotifyUri === spotifyUri) return;
     console.log(`[Listen] Spotify track changed externally: "${spotifyStateTrack.artist} - ${spotifyStateTrack.title}"`);
     isNavigatingRef.current = true;
     const newRoute = `/listen/real::${encodeURIComponent(spotifyStateTrack.artist)}::${encodeURIComponent(spotifyStateTrack.title)}::${encodeURIComponent(spotifyStateTrack.album)}::${encodeURIComponent(spotifyStateTrack.spotifyUri)}`;
     navigate(newRoute);
-  }, [spotifyStateTrack?.spotifyUri, player.currentSpotifyUri]);
+  }, [spotifyStateTrack?.spotifyUri]);
 
   // Fading state for overlay transitions
   const [fadingIn, setFadingIn] = useState(false);
