@@ -178,7 +178,7 @@ export default function Companion() {
       </header>
 
       {/* Artist Hero */}
-      <div className="relative w-full aspect-[16/9] overflow-hidden">
+      <div className="relative w-full aspect-[3/1] max-h-[200px] overflow-hidden">
         {artistImage ? (
           <img
             src={artistImage}
