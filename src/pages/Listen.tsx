@@ -187,6 +187,7 @@ export default function Listen() {
   const [regenerateKey, setRegenerateKey] = useState(0);
   const [skipLoading, setSkipLoading] = useState(false);
 
+
   // Mock catalog adjacency
   const { prev: mockPrev, next: mockNext } = useMemo(
     () => isRealTrack ? { prev: null, next: null } : getAdjacentTrackIds(trackId, shuffleOn),
@@ -199,13 +200,27 @@ export default function Listen() {
     player.pushTrackHistory(`/listen/${rawTrackId}`);
   }, [rawTrackId]);
 
+  // If this track was completed in this session, force fresh nugget generation
+  useEffect(() => {
+    if (!track) return;
+    const key = `${track.artist}::${track.title}`;
+    if (player.isTrackCompleted(key)) {
+      player.clearTrackCompleted(key);
+      setRegenerateKey((k) => k + 1);
+    }
+  }, [trackId]);
+
   // For real tracks: next is always available (we fetch on demand), prev uses global history
   const hasPrev = isRealTrack ? !!player.prevTrackRoute : !!mockPrev;
   const hasNext = isRealTrack ? true : !!mockNext;
 
+  // Suppress external track detection during our own navigation (track end, next/prev)
+  const isNavigatingRef = useRef(false);
+
   // Fetch a related track from Spotify and navigate to it
   const navigateToRelated = useCallback(async () => {
     if (!track) return;
+    isNavigatingRef.current = true;
     setSkipLoading(true);
     try {
       const { data } = await supabase.functions.invoke("spotify-search", {
@@ -222,12 +237,14 @@ export default function Listen() {
       }
     } catch (err) {
       console.warn("[Listen] Skip next failed:", err);
+      isNavigatingRef.current = false;
     } finally {
       setSkipLoading(false);
     }
   }, [track?.artist, track?.title, navigate]);
 
   const handlePrev = useCallback(() => {
+    isNavigatingRef.current = true;
     if (!isRealTrack) {
       if (mockPrev) navigate(`/listen/${mockPrev}`);
       return;
@@ -237,6 +254,7 @@ export default function Listen() {
   }, [isRealTrack, mockPrev, navigate, player.popTrackHistory]);
 
   const handleNext = useCallback(() => {
+    isNavigatingRef.current = true;
     if (!isRealTrack) {
       if (mockNext) navigate(`/listen/${mockNext}`);
       return;
@@ -245,19 +263,32 @@ export default function Listen() {
   }, [isRealTrack, mockNext, navigate, navigateToRelated]);
 
   const handleTrackEnd = useCallback(() => {
+    // Mark track as completed so next visit triggers fresh nuggets
+    if (track) {
+      player.markTrackCompleted(`${track.artist}::${track.title}`);
+    }
+    isNavigatingRef.current = true;
     if (!isRealTrack) {
       const { next: nextId } = getAdjacentTrackIds(trackId, shuffleOn);
       if (nextId) navigate(`/listen/${nextId}`);
       return;
     }
     navigateToRelated();
-  }, [isRealTrack, trackId, shuffleOn, navigate, navigateToRelated]);
+  }, [isRealTrack, trackId, shuffleOn, navigate, navigateToRelated, track, player]);
 
   const {
     isPlaying, currentTime, duration: playerDuration, activePlayer, playerContainerRef,
-    isExternalListenMode, setExternalListenMode, externalPlayback,
+    isExternalListenMode, setExternalListenMode, externalPlayback, spotifyStateTrack,
   } = player;
   const realDuration = playerDuration > 0 ? playerDuration : (track?.durationSec || 300);
+
+  // Use Spotify SDK album art when available (better than DiceBear for externally-changed tracks)
+  const effectiveCoverArt = useMemo(() => {
+    if (spotifyStateTrack?.albumArtUrl && track?.coverArtUrl?.includes("dicebear.com")) {
+      return spotifyStateTrack.albumArtUrl;
+    }
+    return track?.coverArtUrl || "";
+  }, [spotifyStateTrack?.albumArtUrl, track?.coverArtUrl]);
 
   // Register track-end handler on the global player
   useEffect(() => {
@@ -270,6 +301,24 @@ export default function Listen() {
     return () => setExternalListenMode(false);
   }, [setExternalListenMode]);
 
+  // Navigate when Spotify plays a different track (e.g. user changed song on phone).
+  // Only trigger when we KNOW what we loaded (currentSpotifyUri is set) and the SDK
+  // reports a genuinely different URI — prevents false triggers during initial load.
+  useEffect(() => {
+    if (!spotifyStateTrack) return;
+    // Skip if we're already navigating (track end, next/prev button)
+    if (isNavigatingRef.current) return;
+    // Wait until we've actually loaded a Spotify track ourselves
+    if (!player.currentSpotifyUri) return;
+    // Same URI we loaded — this is our own playback, not an external change
+    if (spotifyStateTrack.spotifyUri === player.currentSpotifyUri) return;
+    // Navigate to the new track
+    console.log(`[Listen] Spotify track changed externally: "${spotifyStateTrack.artist} - ${spotifyStateTrack.title}"`);
+    isNavigatingRef.current = true;
+    const newRoute = `/listen/real::${encodeURIComponent(spotifyStateTrack.artist)}::${encodeURIComponent(spotifyStateTrack.title)}::${encodeURIComponent(spotifyStateTrack.album)}::${encodeURIComponent(spotifyStateTrack.spotifyUri)}`;
+    navigate(newRoute);
+  }, [spotifyStateTrack?.spotifyUri, player.currentSpotifyUri]);
+
   // Fading state for overlay transitions
   const [fadingIn, setFadingIn] = useState(false);
 
@@ -280,11 +329,11 @@ export default function Listen() {
       trackId,
       title: track.title,
       artist: track.artist,
-      coverArtUrl: track.coverArtUrl,
+      coverArtUrl: effectiveCoverArt,
       album: track.album,
       spotifyUri: spotifyUri || undefined,
     });
-  }, [track?.title, track?.artist, trackId, spotifyUri]);
+  }, [track?.title, track?.artist, trackId, spotifyUri, effectiveCoverArt]);
 
   // Load track into global player when sources resolve
   // Skip if the same track is already playing (e.g. returning from Browse via mini-player)
@@ -355,16 +404,49 @@ export default function Listen() {
     let cancelled = false;
     (async () => {
       try {
+        // Transform Listen page nuggets into CompanionNugget format so the
+        // companion page shows the exact same content — no separate Gemini call.
+        const kindToCategory: Record<string, string> = {
+          artist: "history",
+          track: "track",
+          discovery: "explore",
+        };
+        const now = Date.now();
+        const prebuiltNuggets = aiNuggets.map((n, i) => {
+          const source = aiSources.get(n.sourceId);
+          return {
+            id: n.id,
+            timestamp: now - i * 60000,
+            headline: n.headline || "",
+            text: n.text,
+            category: kindToCategory[n.kind] || "track",
+            listenUnlockLevel: 1,
+            sourceName: source?.publisher || "",
+            sourceUrl: source?.url || "",
+            imageUrl: n.imageUrl,
+            imageCaption: n.imageCaption,
+          };
+        });
+
+        // Accumulate nuggets across listens within this session
+        const trackKey = `${track.artist}::${track.title}`;
+        player.appendCompanionNuggets(trackKey, prebuiltNuggets);
+        const allAccumulatedNuggets = player.getCompanionNuggets(trackKey);
+
         // Pre-generate companion content so the QR companion page loads instantly.
-        // Always use listenCount 1 — the companion page also uses 1 (can't read
-        // nugget_history without auth), guaranteeing a cache key match.
+        // Always use listenCount 1 and tier "casual" — the companion page on mobile
+        // (unauthenticated QR scan) uses these same defaults, guaranteeing a cache hit.
+        // Pass image URLs so the companion page works for unauthenticated QR users.
         const { error } = await supabase.functions.invoke("generate-companion", {
           body: {
             artist: track.artist,
             title: track.title,
             album: track.album,
             listenCount: 1,
-            tier,
+            tier: "casual",
+            prebuiltNuggets: allAccumulatedNuggets,
+            coverArtUrl: effectiveCoverArt || undefined,
+            artistImage: artistData?.imageUrl || (profile?.spotifyArtistImages?.[track.artist]) || undefined,
           },
         });
         if (cancelled) return;
@@ -408,7 +490,7 @@ export default function Listen() {
       }
     })();
     return () => { cancelled = true; };
-  }, [aiLoading, aiNuggets.length, track?.artist, track?.title, tier]);
+  }, [aiLoading, aiNuggets, aiSources, track?.artist, track?.title, tier]);
 
   const mockNuggets = useMemo(() => isRealTrack ? [] : getNuggetsForTrack(trackId), [isRealTrack, trackId]);
   const trackNuggets = useMemo(
@@ -576,7 +658,12 @@ export default function Listen() {
       } else if (e.key === " ") {
         e.preventDefault();
         showBar();
-        toggle();
+        if (isExternalListenMode) {
+          setExternalListenMode(false);
+          lastLoadedTrackRef.current = null;
+        } else {
+          toggle();
+        }
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -591,8 +678,11 @@ export default function Listen() {
   useEffect(() => { if (!isExternalListenMode) play(); }, [play, isExternalListenMode]);
 
   useEffect(() => {
+    if (aiNuggets.length === 0) return;
     setActiveNugget(null);
     setNuggetQueue([]);
+    // Don't skip any nuggets on arrival — show all of them sequentially.
+    // The trigger logic below will fire them one by one via the queue.
     setShownNuggetIds(new Set());
   }, [aiNuggets]);
 
@@ -695,7 +785,7 @@ export default function Listen() {
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
   // Must be called unconditionally — before any early returns
-  useThemeSync(track?.coverArtUrl ?? "");
+  useThemeSync(effectiveCoverArt || "");
 
   if (!track) {
     return (
@@ -727,7 +817,7 @@ export default function Listen() {
           {/* Cover art fallback — shown when no backdrop motion or no video */}
           {(!backdropMotion || !ytVideoId) && (
             <img
-              src={track.coverArtUrl}
+              src={effectiveCoverArt}
               alt=""
               className="h-full w-full object-cover scale-110 transition-all duration-700 ease-out"
               style={{
@@ -891,7 +981,16 @@ export default function Listen() {
           shuffle={shuffleOn}
           nuggetMarkers={trackNuggets.map((n) => (n.timestampSec / effectiveDuration) * 100)}
           focusedIndex={focusZone === 'bar' ? barFocusIndex : null}
-          onToggle={() => { showBar(); toggle(); }}
+          onToggle={() => {
+            showBar();
+            // If in external listen mode, take over playback locally
+            if (isExternalListenMode) {
+              setExternalListenMode(false);
+              lastLoadedTrackRef.current = null;
+              return;
+            }
+            toggle();
+          }}
           onSeek={(pct) => { showBar(); handleSeek(pct * effectiveDuration); }}
           onPrev={handlePrev}
           onNext={handleNext}

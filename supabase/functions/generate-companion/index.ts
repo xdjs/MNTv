@@ -187,6 +187,9 @@ serve(async (req) => {
       spotifyTopArtists = null,
       spotifyTopTracks = null,
       streamingService = null,
+      prebuiltNuggets = null,
+      coverArtUrl = null,
+      artistImage = null,
     } = await req.json();
 
     // ── Input validation ────────────────────────────────────────────
@@ -250,6 +253,25 @@ serve(async (req) => {
       }
     }
 
+    // ── Validate prebuiltNuggets if provided ─────────────────────────
+    let validPrebuiltNuggets: any[] | null = null;
+    if (Array.isArray(prebuiltNuggets) && prebuiltNuggets.length > 0) {
+      const isValid = prebuiltNuggets.every(
+        (n: any) =>
+          n &&
+          typeof n.id === "string" &&
+          typeof n.text === "string" &&
+          typeof n.category === "string" &&
+          ["track", "history", "explore"].includes(n.category)
+      );
+      if (isValid) {
+        validPrebuiltNuggets = prebuiltNuggets;
+        console.log(`Using ${validPrebuiltNuggets.length} prebuilt nuggets from Listen page`);
+      } else {
+        console.warn("prebuiltNuggets failed validation, falling back to full generation");
+      }
+    }
+
     // Fetch Last.fm context (served from lastfm_cache, near-instant)
     const lastFmContext = lastFmUsername
       ? await getLastFmContext(lastFmUsername, supabaseUrl, supabaseKey)
@@ -258,19 +280,6 @@ serve(async (req) => {
     // Merge all taste signals into one context block
     const tasteContext = buildTasteContext(lastFmContext, safeSpotifyTopArtists, safeSpotifyTopTracks, safeStreamingService);
 
-    // Depth instruction based on listen count
-    let depthInstruction: string;
-    if (safeListenCount <= 1) {
-      depthInstruction = "First listen. Set the stage, introduce the world of this track.";
-    } else if (safeListenCount === 2) {
-      depthInstruction = "Second listen. Go deeper — production choices, lesser-known connections.";
-    } else {
-      depthInstruction = `Listen #${safeListenCount}. Maximum depth — obscure influences, technical breakdowns, unexpected connections.`;
-    }
-
-    const nuggetsPerCategory = Math.floor(tierConfig.nuggetCount / 3);
-    const now = Date.now();
-
     // Build streaming-service-aware external links hint
     const streamingLinkHint = safeStreamingService === "Apple Music"
       ? 'For external links, include Apple Music search instead of Spotify.'
@@ -278,7 +287,40 @@ serve(async (req) => {
       ? 'For external links, include YouTube Music search instead of Spotify.'
       : 'For external links, include Spotify search.';
 
-    const prompt = `You are a music historian API. Output ONLY a valid JSON object. No markdown, no prose, no explanation. Start with { end with }.
+    // ── Fast path: prebuilt nuggets — only generate summary + links ──
+    let prompt: string;
+    if (validPrebuiltNuggets) {
+      prompt = `You are a music historian API. Output ONLY a valid JSON object. No markdown, no prose, no explanation. Start with { end with }.
+
+Track: "${title}" by ${artist}${album ? ` from "${album}"` : ""}
+Tier: ${safeTier.toUpperCase()} — ${tierConfig.depthLabel}${tasteContext}
+
+Generate:
+1. "artistSummary": 2 punchy sentences capturing the artist's essence.
+2. "trackStory": 1 short paragraph (3-4 sentences) about this track's creation, meaning, cultural impact.
+3. "externalLinks": 3 useful links (Wikipedia, streaming service, YouTube Music).
+
+RULES:
+- ${streamingLinkHint}
+- Be factually accurate.
+
+OUTPUT: Raw JSON only. No backticks.`;
+    } else {
+      // ── Full path: generate everything including nuggets ──
+      // Depth instruction based on listen count
+      let depthInstruction: string;
+      if (safeListenCount <= 1) {
+        depthInstruction = "First listen. Set the stage, introduce the world of this track.";
+      } else if (safeListenCount === 2) {
+        depthInstruction = "Second listen. Go deeper — production choices, lesser-known connections.";
+      } else {
+        depthInstruction = `Listen #${safeListenCount}. Maximum depth — obscure influences, technical breakdowns, unexpected connections.`;
+      }
+
+      const nuggetsPerCategory = Math.floor(tierConfig.nuggetCount / 3);
+      const now = Date.now();
+
+      prompt = `You are a music historian API. Output ONLY a valid JSON object. No markdown, no prose, no explanation. Start with { end with }.
 
 Track: "${title}" by ${artist}${album ? ` from "${album}"` : ""}
 Tier: ${safeTier.toUpperCase()} — ${tierConfig.depthLabel}
@@ -298,7 +340,7 @@ NUGGET SCHEMA (each nugget):
   "headline": "1 curiosity-sparking sentence",
   "text": "2-3 sentences delivering rich detail",
   "category": "track" | "history" | "explore",
-  "listenUnlockLevel": 1 (for first ${Math.ceil(tierConfig.nuggetCount / 3)} nuggets), 2 (middle), or 3 (deepest),
+  "listenUnlockLevel": ${safeListenCount},
   "sourceName": "Real source name e.g. Pitchfork, Discogs, Reddit",
   "sourceUrl": "A DIRECT real URL to the source page — NOT a Google search URL. Use the actual domain."
 }
@@ -308,12 +350,13 @@ RULES:
 - If you cannot provide a direct URL, use the most targeted search on that source's own search (e.g. https://www.discogs.com/search/?q=...).
 - Be factually accurate. Cite REAL articles, real Reddit threads, real Discogs entries.
 - Each nugget covers a DIFFERENT angle — no two nuggets share the same fact.
-- "listenUnlockLevel" distribution: first ${Math.ceil(tierConfig.nuggetCount / 3)} nuggets = level 1, next = level 2, rest = level 3.
+- All nuggets in this set share the same "listenUnlockLevel": ${safeListenCount}. A fresh set of nuggets is generated for each listen count.
 - Timestamps must be staggered so reverse-chronological sort within each category works correctly.
 ${tasteContext ? "- Use the USER TASTE CONTEXT above to make 'explore' category recommendations genuinely relevant to this listener — not generic suggestions." : ""}
 - ${streamingLinkHint}
 
 OUTPUT: Raw JSON only. No backticks.`;
+    }
 
     const apiUrl = geminiUrl(tierConfig.model, GOOGLE_AI_API_KEY);
 
@@ -358,8 +401,12 @@ OUTPUT: Raw JSON only. No backticks.`;
           throw new Error("Failed to parse Gemini response");
         }
 
-        // Post-process nuggets
-        if (parsed.nuggets) {
+        // Merge prebuilt nuggets or post-process Gemini-generated ones
+        if (validPrebuiltNuggets) {
+          // Use Listen page nuggets directly — they have real grounded URLs
+          parsed.nuggets = validPrebuiltNuggets;
+        } else if (parsed.nuggets) {
+          const now = Date.now();
           for (const n of parsed.nuggets) {
             if (!n.sourceUrl || n.sourceUrl.includes("google.com/search")) {
               const domain = publisherDomain(n.sourceName || "");
@@ -406,6 +453,10 @@ OUTPUT: Raw JSON only. No backticks.`;
             ];
           }
         }
+
+        // Attach image URLs so companion page works for unauthenticated QR users
+        if (coverArtUrl && typeof coverArtUrl === "string") parsed.coverArtUrl = coverArtUrl;
+        if (artistImage && typeof artistImage === "string") parsed.artistImage = artistImage;
 
         // Cache only non-personalised responses
         if (!isPersonalised) {

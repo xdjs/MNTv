@@ -269,11 +269,15 @@ export function useAINuggets(
         };
         newSources.set(sourceId, source);
 
-        // Distribute nuggets across track duration
-        const earlyStart = 10;
-        const usableDuration = durationSec - 20;
-        const spacing = usableDuration / aiNuggets.length;
-        const timestampSec = Math.floor(earlyStart + spacing * i);
+        // Distribute nuggets across track duration.
+        // Start at 20s to give AI generation time to complete before the
+        // first nugget triggers, and end 15s before the track ends.
+        const earlyStart = 20;
+        const endBuffer = 15;
+        const usableDuration = Math.max(durationSec - earlyStart - endBuffer, 30);
+        // Space nuggets evenly: for 3 nuggets we want slots at ~1/4, 2/4, 3/4
+        const spacing = usableDuration / (aiNuggets.length + 1);
+        const timestampSec = Math.floor(earlyStart + spacing * (i + 1));
 
         return {
           id: nuggetId,

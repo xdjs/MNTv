@@ -93,6 +93,6 @@ export interface UserProfile {
   // Spotify image maps — artist name → image URL, track "title — artist" → album art URL
   spotifyArtistImages?: Record<string, string>;
   spotifyArtistIds?: Record<string, string>;   // artist name → Spotify artist ID
-  spotifyTrackImages?: { title: string; artist: string; imageUrl: string }[];
+  spotifyTrackImages?: { title: string; artist: string; imageUrl: string; uri?: string }[];
   calculatedTier: "casual" | "curious" | "nerd";
 }
