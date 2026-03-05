@@ -12,6 +12,7 @@ import ArtistProfile from "./pages/ArtistProfile";
 import AlbumDetail from "./pages/AlbumDetail";
 import Listen from "./pages/Listen";
 import Companion from "./pages/Companion";
+import CompanionShortRedirect from "./pages/CompanionShortRedirect";
 import SpotifyCallback from "./pages/SpotifyCallback";
 import NotFound from "./pages/NotFound";
 import { getStoredProfile } from "./hooks/useMusicNerdState";
@@ -41,14 +42,17 @@ function ScrollToTop() {
  */
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { session, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) return null;
 
+  const redirectTo = `/connect?redirect=${encodeURIComponent(location.pathname)}`;
+
   // Must be signed in
-  if (!session) return <Navigate to="/connect" replace />;
+  if (!session) return <Navigate to={redirectTo} replace />;
 
   // Must have completed onboarding (profile saved)
-  if (!getStoredProfile()) return <Navigate to="/connect" replace />;
+  if (!getStoredProfile()) return <Navigate to={redirectTo} replace />;
 
   return <>{children}</>;
 }
@@ -88,8 +92,9 @@ function AnimatedRoutes() {
           <Route path="/album/:albumId" element={<ProtectedRoute><AlbumDetail /></ProtectedRoute>} />
           <Route path="/listen/:trackId" element={<ProtectedRoute><Listen /></ProtectedRoute>} />
 
-          {/* Companion is a mobile QR-scan page — no auth required */}
-          <Route path="/companion/:trackId" element={<Companion />} />
+          {/* Companion — requires auth so cache key matches (tier/profile) */}
+          <Route path="/companion/:trackId" element={<ProtectedRoute><Companion /></ProtectedRoute>} />
+          <Route path="/c/:shortId" element={<ProtectedRoute><CompanionShortRedirect /></ProtectedRoute>} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>

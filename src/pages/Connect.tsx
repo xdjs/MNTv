@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import PageTransition from "@/components/PageTransition";
@@ -68,6 +68,8 @@ const Spinner = ({ className = "h-4 w-4" }: { className?: string }) => (
 
 export default function Connect() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectUrl = searchParams.get("redirect");
   const { saveProfile } = useUserProfile();
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
@@ -261,7 +263,7 @@ export default function Connect() {
       calculatedTier: t,
     };
     saveProfile(profile);
-    navigate("/browse");
+    navigate(redirectUrl || "/browse");
   };
 
   const tiers = [

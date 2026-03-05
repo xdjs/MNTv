@@ -336,8 +336,10 @@ export default function Listen() {
 
   // Pre-generate companion content so QR code only shows when ready
   const [companionReady, setCompanionReady] = useState(false);
+  const [shortId, setShortId] = useState<string | null>(null);
   useEffect(() => {
     setCompanionReady(false);
+    setShortId(null);
   }, [rawTrackId]);
 
   useEffect(() => {
@@ -345,6 +347,9 @@ export default function Listen() {
     let cancelled = false;
     (async () => {
       try {
+        // Pre-generate WITHOUT personalization so the result gets cached.
+        // The phone companion page requires login, so it will have the user's
+        // real tier — use the same tier here to guarantee a cache hit.
         const { error } = await supabase.functions.invoke("generate-companion", {
           body: {
             artist: track.artist,
@@ -352,13 +357,36 @@ export default function Listen() {
             album: track.album,
             listenCount: listenCount || 1,
             tier,
-            lastFmUsername: profile?.lastFmUsername || null,
-            spotifyTopArtists: profile?.spotifyTopArtists || null,
-            spotifyTopTracks: profile?.spotifyTopTracks || null,
-            streamingService: profile?.streamingService || null,
           },
         });
-        if (!cancelled && !error) setCompanionReady(true);
+        if (cancelled || error) return;
+
+        // Create or reuse a short URL for the QR code
+        const { data: existing } = await supabase
+          .from("companion_links")
+          .select("short_id")
+          .eq("artist", track.artist)
+          .eq("title", track.title)
+          .maybeSingle();
+
+        if (cancelled) return;
+
+        if (existing) {
+          setShortId(existing.short_id);
+        } else {
+          const arr = new Uint8Array(6);
+          crypto.getRandomValues(arr);
+          const newId = Array.from(arr, (b) => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"[b % 62]).join("");
+          await supabase.from("companion_links").insert({
+            short_id: newId,
+            artist: track.artist,
+            title: track.title,
+            album: track.album || null,
+          });
+          if (!cancelled) setShortId(newId);
+        }
+
+        if (!cancelled) setCompanionReady(true);
       } catch {
         // Companion pre-gen failed — QR just won't show
       }
@@ -826,19 +854,19 @@ export default function Listen() {
         />
 
         {/* QR Code — only shown once companion content is pre-generated */}
-        {companionReady && (
+        {companionReady && shortId && (
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 0.85, scale: 1 }}
             className="fixed bottom-6 left-6 z-10 hover:opacity-100 transition-opacity rounded-xl overflow-hidden"
           >
             <QRCode
-              value={`${window.location.origin}/companion/${trackId}`}
+              value={`${window.location.origin}/c/${shortId}`}
               size={140}
               qrStyle="dots"
               eyeRadius={8}
-              fgColor="#000000"
-              bgColor="#ffffff"
+              fgColor="#ffffff"
+              bgColor="transparent"
               ecLevel="H"
               quietZone={8}
             />

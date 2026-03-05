@@ -117,10 +117,8 @@ export default function Companion() {
         }
         setListenCount(serverListenCount);
 
-        // Use AbortController for timeout (30s)
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 30000);
-
+        // Don't send personalization — phone has no profile.
+        // This matches the cache key from pre-generation on Listen page.
         const { data: companionData, error: fnError } = await supabase.functions.invoke(
           "generate-companion",
           {
@@ -130,15 +128,10 @@ export default function Companion() {
               album: trackInfo!.album,
               listenCount: serverListenCount,
               tier,
-              lastFmUsername: profile?.lastFmUsername || null,
-              spotifyTopArtists: profile?.spotifyTopArtists || null,
-              spotifyTopTracks: profile?.spotifyTopTracks || null,
-              streamingService: profile?.streamingService || null,
             },
           }
         );
 
-        clearTimeout(timeout);
         if (fnError) throw new Error(fnError.message);
         setData(companionData as CompanionData);
       } catch (e) {
