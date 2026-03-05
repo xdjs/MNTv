@@ -27,6 +27,14 @@ export function useCurrentlyPlaying({ suppressPolling, ownDeviceId }: Options = 
   const [externalTrack, setExternalTrack] = useState<ExternalTrack | null>(null);
   const retryAfterRef = useRef<number>(0);
 
+  // Stabilize ownDeviceId so that the effect/callback deps don't fire every render
+  // when ownDeviceId is derived from a non-memoized expression. We only want the
+  // poll interval to restart when the actual string value changes.
+  const ownDeviceIdRef = useRef(ownDeviceId ?? null);
+  if (ownDeviceIdRef.current !== (ownDeviceId ?? null)) {
+    ownDeviceIdRef.current = ownDeviceId ?? null;
+  }
+
   const poll = useCallback(async () => {
     // Respect rate-limit backoff
     if (Date.now() < retryAfterRef.current) return;
@@ -67,9 +75,9 @@ export function useCurrentlyPlaying({ suppressPolling, ownDeviceId }: Options = 
         return;
       }
 
-      // Filter out our own Web Playback SDK device
+      // Filter out our own Web Playback SDK device (read from ref — stable reference)
       const deviceId = data.device?.id;
-      if (ownDeviceId && deviceId === ownDeviceId) {
+      if (ownDeviceIdRef.current && deviceId === ownDeviceIdRef.current) {
         setExternalTrack(null);
         return;
       }
@@ -89,7 +97,10 @@ export function useCurrentlyPlaying({ suppressPolling, ownDeviceId }: Options = 
     } catch (err) {
       console.error("[useCurrentlyPlaying] Poll error:", err);
     }
-  }, [getValidToken, ownDeviceId]);
+  }, [getValidToken]);
+  // NOTE: ownDeviceId intentionally omitted from poll's deps — it's read via
+  // ownDeviceIdRef.current so the callback stays stable across renders where
+  // ownDeviceId's reference changes but value stays the same.
 
   useEffect(() => {
     if (!hasSpotifyToken || suppressPolling) {

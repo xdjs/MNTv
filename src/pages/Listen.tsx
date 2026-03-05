@@ -12,6 +12,7 @@ import ReadingOverlay from "@/components/overlays/ReadingOverlay";
 import NuggetDeepDive from "@/components/overlays/NuggetDeepDive";
 import DevPanel from "@/components/DevPanel";
 import PlaybackBar from "@/components/PlaybackBar";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import { getTrackById, getNuggetsForTrack, getSourceById, getAdjacentTrackIds, getYouTubeSourceForTrack, getArtistById } from "@/mock/tracks";
 import { useAINuggets } from "@/hooks/useAINuggets";
 import { useSpotifyToken } from "@/hooks/useSpotifyToken";
@@ -954,14 +955,16 @@ export default function Listen() {
                   transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
                   style={{ pointerEvents: deepDiveNugget ? "none" : "auto" }}
                 >
-                  <NuggetCard
-                    nugget={activeNugget}
-                    animationStyle={animStyle}
-                    onSourceClick={() => handleSourceClick(activeNugget)}
-                    currentTime={formatTime(activeNugget.timestampSec)}
-                    sourceOverride={getSource(activeNugget.sourceId) || null}
-                    focused={nuggetFocused && !deepDiveNugget}
-                  />
+                  <ErrorBoundary>
+                    <NuggetCard
+                      nugget={activeNugget}
+                      animationStyle={animStyle}
+                      onSourceClick={() => handleSourceClick(activeNugget)}
+                      currentTime={formatTime(activeNugget.timestampSec)}
+                      sourceOverride={getSource(activeNugget.sourceId) || null}
+                      focused={nuggetFocused && !deepDiveNugget}
+                    />
+                  </ErrorBoundary>
                   {nuggetFocused && !deepDiveNugget && (
                     <motion.p
                       initial={{ opacity: 0 }}
@@ -1105,13 +1108,27 @@ export default function Listen() {
         </AnimatePresence>
         <AnimatePresence>
           {deepDiveNugget && (
-            <NuggetDeepDive
-              nugget={deepDiveNugget}
-              source={getSource(deepDiveNugget.sourceId) || null}
-              artist={track.artist}
-              trackTitle={track.title}
-              onClose={() => { setDeepDiveNugget(null); setFocusZone('bar'); setNuggetFocused(false); }}
-            />
+            <ErrorBoundary fallback={
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                <div className="apple-glass rounded-2xl p-6 text-center max-w-sm mx-4">
+                  <p className="text-sm text-muted-foreground mb-3">Couldn't load deep dive.</p>
+                  <button
+                    onClick={() => { setDeepDiveNugget(null); setFocusZone('bar'); }}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            }>
+              <NuggetDeepDive
+                nugget={deepDiveNugget}
+                source={getSource(deepDiveNugget.sourceId) || null}
+                artist={track.artist}
+                trackTitle={track.title}
+                onClose={() => { setDeepDiveNugget(null); setFocusZone('bar'); setNuggetFocused(false); }}
+              />
+            </ErrorBoundary>
           )}
         </AnimatePresence>
       </div>
