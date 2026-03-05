@@ -86,7 +86,9 @@ export function useAINuggets(
   regenerateKey: number = 0,
   coverArtUrl?: string,
   artistImageUrl?: string,
-  tier: "casual" | "curious" | "nerd" = "casual"
+  tier: "casual" | "curious" | "nerd" = "casual",
+  topArtists?: string[],
+  topTracks?: string[]
 ): UseAINuggetsResult {
   const [nuggets, setNuggets] = useState<Nugget[]>([]);
   const [sources, setSources] = useState<Map<string, Source>>(new Map());
@@ -239,7 +241,17 @@ export function useAINuggets(
 
       // ── Generate fresh nuggets via AI ─────────────────────────────
       const { data, error: fnError } = await supabase.functions.invoke("generate-nuggets", {
-        body: { artist, title, album, listenCount: currentListenCount, previousNuggets, tier },
+        body: {
+          artist,
+          title,
+          album,
+          listenCount: currentListenCount,
+          previousNuggets,
+          tier,
+          // Pass user's Spotify taste so AI can personalize connections + calibrate assumed knowledge
+          userTopArtists: topArtists?.slice(0, 10),
+          userTopTracks: topTracks?.slice(0, 10),
+        },
       });
 
       if (fnError) {
@@ -398,7 +410,7 @@ export function useAINuggets(
     } finally {
       setLoading(false);
     }
-  }, [trackId, artist, title, album, durationSec, coverArtUrl, artistImageUrl, tier, regenerateKey, getNuggetCache, setNuggetCache]);
+  }, [trackId, artist, title, album, durationSec, coverArtUrl, artistImageUrl, tier, regenerateKey, topArtists, topTracks, getNuggetCache, setNuggetCache]);
 
   useEffect(() => {
     generate();

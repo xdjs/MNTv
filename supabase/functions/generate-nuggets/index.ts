@@ -105,6 +105,7 @@ type Tier = "casual" | "curious" | "nerd";
 
 const TIER_CONFIG: Record<Tier, {
   tone: string;
+  assumedKnowledge: string;
   artistFocus: string;
   trackFocus: string;
   discoveryFocus: string;
@@ -113,29 +114,32 @@ const TIER_CONFIG: Record<Tier, {
   temperature: number;
 }> = {
   casual: {
-    tone: "Conversational, jargon-free, feel-good. Like texting a friend a fun fact.",
-    artistFocus: "Humanizing details, fun anecdotes, latest news. Relatable and interesting.",
-    trackFocus: "The vibe, a fun fact about how it was made. No music theory.",
-    discoveryFocus: "Similar vibe, easy to get into. 'If you like this, you'll love...'",
-    sourceExpectation: "Social media, mainstream interviews, YouTube, Wikipedia.",
+    tone: "Conversational, warm, jargon-free. Like a knowledgeable friend sharing something cool they just learned. Wikipedia-level facts are perfectly fine — the goal is to make someone feel more connected to the music.",
+    assumedKnowledge: "Assume the listener knows who this artist is but not much else. Introductory context is welcome.",
+    artistFocus: "Who this person is as a human — their origin story, a memorable personality moment, a relatable struggle or triumph, or a surprising personal detail. Make them feel like a real person, not a Wikipedia entry.",
+    trackFocus: "What this song FEELS like and one fun or surprising fact about how it was made — no technical jargon. If it has a great story behind it (the accident, the argument, the late-night session that changed everything), tell it simply and warmly.",
+    discoveryFocus: "One artist with a very similar vibe that they could play right now and instantly enjoy. Be warm and direct: 'If this track hits right, you'll love...' Avoid artists they likely already know well.",
+    sourceExpectation: "Wikipedia, mainstream music press (Rolling Stone, NME, Billboard), YouTube interviews, music documentaries.",
     model: "gemini-2.5-flash",
     temperature: 1.0,
   },
   curious: {
-    tone: "Engaging storytelling. Balanced depth — production details + cultural connections.",
-    artistFocus: "Career context, creative evolution, artistic tensions.",
-    trackFocus: "Production choices, songwriting process, cultural moment.",
-    discoveryFocus: "Genuine musical thread — shared producer, genre lineage, thematic connection.",
-    sourceExpectation: "Pitchfork, Rolling Stone, AllMusic, quality interviews.",
+    tone: "Engaging storytelling with genuine depth. Go one layer deeper than Wikipedia — find the production detail, the cultural moment, the artistic tension that makes this truly interesting.",
+    assumedKnowledge: "Assume some music knowledge. Don't reintroduce the artist from scratch. The listener wants context and backstory, not a biography summary.",
+    artistFocus: "A career turning point, creative evolution, or artistic philosophy that shaped who they became. What were the tensions, decisions, or collaborations that defined their sound? Name specific people and moments.",
+    trackFocus: "A specific production choice, songwriting decision, or cultural context that defined this track. Name the key collaborators, where it was recorded, what was happening in the artist's life or career at that moment.",
+    discoveryFocus: "An artist with a genuine musical thread connecting them — a shared producer, a genre lineage, an influence relationship, or a thematic connection. Explain specifically WHY the connection exists, not just that it does.",
+    sourceExpectation: "Pitchfork, Rolling Stone deeper features, AllMusic, quality podcast interviews (Zane Lowe, Broken Record, Song Exploder, Rolling Stone Music Now).",
     model: "gemini-2.5-flash",
     temperature: 0.9,
   },
   nerd: {
-    tone: "Authoritative, technical, maximum depth. Assume music terminology fluency.",
-    artistFocus: "Technical innovations, gear, influence chains, recording philosophy.",
-    trackFocus: "Production techniques, harmonic analysis, exact gear/studio/engineer details.",
-    discoveryFocus: "Obscure but connected — session musicians, sample sources, micro-history.",
-    sourceExpectation: "Sound on Sound, Tape Op, Discogs, MusicBrainz, Reddit deep dives.",
+    tone: "Authoritative and technical. Assume full music terminology fluency. Skip the handholding — go straight to the specific, obscure, or analytical detail that this person couldn't find by casually googling.",
+    assumedKnowledge: "Assume deep familiarity with the artist, their full catalog, and their genre/era. Skip biography entirely. Go to the technical, historical, or analytical layer that requires real knowledge to appreciate.",
+    artistFocus: "Technical innovations and signature approaches: specific gear (name the exact make/model/year), recording chain, studio methodology, influence chains with named records, relationships with specific engineers and producers. What is their sonic fingerprint and exactly how do they achieve it?",
+    trackFocus: "Production technique, harmonic or rhythmic analysis, specific studio and engineer details, specific take or edit decisions, what's happening in the mix that requires careful listening to notice. Be precise — name the exact gear, the exact technique, the specific moment in the track.",
+    discoveryFocus: "An obscure but precisely connected record: a session musician they share, a sample source, a specific B-side or deep cut that influenced this track, a micro-genre ancestor, or an engineer whose fingerprint appears on both. The connection should be something only a real fan would know.",
+    sourceExpectation: "Sound on Sound, Tape Op, Recording magazine, Discogs, MusicBrainz, academic music journals, specific Reddit communities (r/indieheads, r/LetsTalkMusic, r/audiophile), Resident Advisor (for electronic), gear wikis.",
     model: "gemini-2.5-pro",
     temperature: 0.8,
   },
@@ -171,7 +175,9 @@ async function generateWithGemini(
   apiKey: string,
   listenCount: number = 1,
   previousNuggets: string[] = [],
-  tier: Tier = "casual"
+  tier: Tier = "casual",
+  userTopArtists: string[] = [],
+  userTopTracks: string[] = []
 ): Promise<{ nuggets: GeminiNugget[]; groundingChunks: any[] }> {
   const tierConfig = TIER_CONFIG[tier];
   const transcriptContext = videos
@@ -200,13 +206,25 @@ async function generateWithGemini(
     ? `\n\nDO NOT repeat or closely rephrase any of these previously shown headlines:\n${previousNuggets.map((h) => `- "${h}"`).join("\n")}\nGenerate completely fresh angles.`
     : "";
 
+  // Build listener taste context for personalized connections
+  const tasteContext = userTopArtists.length > 0
+    ? `\nLISTENER PROFILE — use this to personalize your nuggets:
+This listener's top artists include: ${userTopArtists.slice(0, 8).join(", ")}.${userTopTracks.length > 0 ? `\nTheir top tracks include: ${userTopTracks.slice(0, 5).join(", ")}.` : ""}
+Use this to:
+- Draw genuine connections to artists they already love when relevant (not forced)
+- Calibrate assumed knowledge — if they already listen to this artist, skip basic biography
+- For the discovery nugget: recommend something adjacent to their existing taste that feels like an expert tip
+- Do NOT recommend artists already in their top artists list\n`
+    : "";
+
   const prompt = `You are a music historian and trivia expert. Generate exactly 3 fascinating nuggets about the song "${title}" by the artist/band ${artist}${album ? ` from the album "${album}"` : ""}.
 
 IMPORTANT DISAMBIGUATION: The ARTIST/BAND is "${artist}". The SONG/TRACK is "${title}". These are different — "${title}" is the song name, NOT a band. All nuggets must be about the artist "${artist}" and their song "${title}".
 
 DEPTH CONTEXT: ${depthInstruction}${nonRepeatInstruction}
-
+${tasteContext}
 TONE & STYLE: ${tierConfig.tone}
+ASSUMED KNOWLEDGE: ${tierConfig.assumedKnowledge}
 SOURCE EXPECTATIONS: Prefer sources from ${tierConfig.sourceExpectation}.
 
 ${videoListContext ? `Available YouTube videos:\n${videoListContext}\n` : ""}
@@ -347,7 +365,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, imageCaption, imageQuery, listenCount, previousNuggets, tier: rawTier } = body;
+    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, imageCaption, imageQuery, listenCount, previousNuggets, tier: rawTier, userTopArtists: rawTopArtists, userTopTracks: rawTopTracks } = body;
     const tier: Tier = (rawTier === "casual" || rawTier === "curious" || rawTier === "nerd") ? rawTier : "casual";
 
     // ── Input validation ────────────────────────────────────────────
@@ -375,6 +393,12 @@ serve(async (req) => {
     const safeSourcePublisher = typeof sourcePublisher === "string" ? sourcePublisher.slice(0, 200) : undefined;
     const safeImageCaption = typeof imageCaption === "string" ? imageCaption.slice(0, 300) : undefined;
     const safeImageQuery = typeof imageQuery === "string" ? imageQuery.slice(0, 300) : undefined;
+    const safeTopArtists: string[] = Array.isArray(rawTopArtists)
+      ? rawTopArtists.slice(0, 10).map((s: unknown) => (typeof s === "string" ? s.slice(0, 100) : "")).filter(Boolean)
+      : [];
+    const safeTopTracks: string[] = Array.isArray(rawTopTracks)
+      ? rawTopTracks.slice(0, 10).map((s: unknown) => (typeof s === "string" ? s.slice(0, 100) : "")).filter(Boolean)
+      : [];
 
     const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY");
     if (!GOOGLE_AI_API_KEY) {
@@ -497,7 +521,7 @@ Return ONLY valid JSON:
     let groundingChunks: any[];
     try {
       const result = await generateWithGemini(
-        artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier
+        artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier, safeTopArtists, safeTopTracks
       );
       rawNuggets = result.nuggets;
       groundingChunks = result.groundingChunks;
@@ -505,7 +529,7 @@ Return ONLY valid JSON:
       if (e instanceof RecitationError) {
         console.log("Retrying without transcripts to avoid RECITATION block...");
         const result = await generateWithGemini(
-          artist, title, album, videos, new Map(), GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier
+          artist, title, album, videos, new Map(), GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier, safeTopArtists, safeTopTracks
         );
         rawNuggets = result.nuggets;
         groundingChunks = result.groundingChunks;

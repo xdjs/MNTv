@@ -383,7 +383,9 @@ export default function Listen() {
     regenerateKey,
     track?.coverArtUrl,
     artistData?.imageUrl,
-    tier
+    tier,
+    profile?.spotifyTopArtists,
+    profile?.spotifyTopTracks
   );
 
   // Log AI nugget errors for debugging
