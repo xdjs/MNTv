@@ -161,6 +161,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [spDeviceId, setSpDeviceId] = useState<string | null>(null);
   const spPollRef = useRef<number | null>(null);
   const lastSpUriRef = useRef<string | null>(null);
+  const spHasPlayedRef = useRef(false); // true once track has been unpaused at least once
 
   // Active player tracking
   const [activePlayer, setActivePlayer] = useState<ActivePlayer>("none");
@@ -304,6 +305,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         setSpTime(state.position / 1000);
         setSpDuration(state.duration / 1000);
         if (!state.paused) {
+          spHasPlayedRef.current = true;
           if (!spPollRef.current) {
             spPollRef.current = window.setInterval(async () => {
               const s = await spPlayerRef.current?.getCurrentState();
@@ -329,8 +331,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
             spotifyUri: ct.uri,
           });
         }
-        if (state.paused && state.position === 0 && ct.uri === lastSpUriRef.current) {
+        if (state.paused && state.position === 0 && ct.uri === lastSpUriRef.current && spHasPlayedRef.current) {
           lastSpUriRef.current = null; // Prevent re-firing (avoid infinite skip loop)
+          spHasPlayedRef.current = false;
           onEndedRef.current?.();
         }
       });
@@ -364,6 +367,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
     // Stop existing playback
     lastSpUriRef.current = null; // Prevent stale end detection from old track
+    spHasPlayedRef.current = false; // Reset — new track hasn't played yet
     ytPlayerRef.current?.pauseVideo();
     spPlayerRef.current?.pause();
     stopYtPoll();
