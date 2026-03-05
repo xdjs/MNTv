@@ -493,10 +493,25 @@ export default function Listen() {
   }, [aiLoading, aiNuggets, aiSources, track?.artist, track?.title, tier]);
 
   const mockNuggets = useMemo(() => isRealTrack ? [] : getNuggetsForTrack(trackId), [isRealTrack, trackId]);
-  const trackNuggets = useMemo(
+  const rawTrackNuggets = useMemo(
     () => aiLoading ? [] : (aiNuggets.length > 0 ? aiNuggets : mockNuggets),
     [aiLoading, aiNuggets, mockNuggets]
   );
+
+  // Redistribute nugget timestamps based on actual player duration instead of
+  // the hardcoded 300s default. This ensures nuggets are evenly spaced across
+  // the real track length so all 3 show up even on short tracks.
+  const trackNuggets = useMemo(() => {
+    if (rawTrackNuggets.length === 0 || realDuration <= 0) return rawTrackNuggets;
+    const earlyStart = 10;
+    const endBuffer = 10;
+    const usable = Math.max(realDuration - earlyStart - endBuffer, 20);
+    const spacing = usable / (rawTrackNuggets.length + 1);
+    return rawTrackNuggets.map((n, i) => ({
+      ...n,
+      timestampSec: Math.floor(earlyStart + spacing * (i + 1)),
+    }));
+  }, [rawTrackNuggets, realDuration]);
 
   const [animStyle, setAnimStyle] = useState<AnimationStyle>("A");
   const [activeNugget, setActiveNugget] = useState<Nugget | null>(null);
