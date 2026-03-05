@@ -16,7 +16,7 @@ import CompanionShortRedirect from "./pages/CompanionShortRedirect";
 import SpotifyCallback from "./pages/SpotifyCallback";
 import NotFound from "./pages/NotFound";
 import { getStoredProfile } from "./hooks/useMusicNerdState";
-import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { AuthProvider } from "./contexts/AuthContext";
 import { PlayerProvider } from "./contexts/PlayerContext";
 import NowPlayingBar from "./components/NowPlayingBar";
 
@@ -30,52 +30,18 @@ function ScrollToTop() {
   return null;
 }
 
-/**
- * ProtectedRoute — requires a valid Supabase session AND a completed profile.
- *
- * No session  → /connect (sign in first)
- * No profile  → /connect (complete onboarding first)
- * Both ✓      → render children
- *
- * Renders nothing while the initial session check is in flight to avoid
- * a flash of the wrong screen.
- */
+/** ProtectedRoute — requires a completed profile (localStorage). */
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { session, loading } = useAuth();
   const location = useLocation();
-
-  if (loading) return null;
-
-  const redirectTo = `/connect?redirect=${encodeURIComponent(location.pathname)}`;
-
-  // Must be signed in
-  if (!session) return <Navigate to={redirectTo} replace />;
-
-  // Must have completed onboarding (profile saved)
-  if (!getStoredProfile()) return <Navigate to={redirectTo} replace />;
-
+  if (!getStoredProfile()) {
+    return <Navigate to={`/connect?redirect=${encodeURIComponent(location.pathname)}`} replace />;
+  }
   return <>{children}</>;
 }
 
-/**
- * RootRoute — decides between Onboarding and Browse.
- *
- * Signed-in + profile → /browse (skip onboarding)
- * Signed-in, no profile → /connect (finish setup)
- * Not signed in → Onboarding
- */
+/** RootRoute — profile exists → /browse, otherwise → Onboarding. */
 function RootRoute() {
-  const { session, loading } = useAuth();
-
-  if (loading) return null;
-
-  if (session) {
-    // Already set up → go straight to Browse
-    if (getStoredProfile()) return <Navigate to="/browse" replace />;
-    // Signed in but no profile → finish onboarding
-    return <Navigate to="/connect" replace />;
-  }
-
+  if (getStoredProfile()) return <Navigate to="/browse" replace />;
   return <Onboarding />;
 }
 
@@ -91,7 +57,7 @@ function AnimatedRoutes() {
           <Route path="/connect" element={<Connect />} />
           <Route path="/spotify-callback" element={<SpotifyCallback />} />
 
-          {/* Protected — requires Supabase session + completed onboarding */}
+          {/* Protected — requires completed profile */}
           <Route path="/browse" element={<ProtectedRoute><Browse /></ProtectedRoute>} />
           <Route path="/artist/:artistId" element={<ProtectedRoute><ArtistProfile /></ProtectedRoute>} />
           <Route path="/album/:albumId" element={<ProtectedRoute><AlbumDetail /></ProtectedRoute>} />
