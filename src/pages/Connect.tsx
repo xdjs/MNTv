@@ -69,7 +69,11 @@ const Spinner = ({ className = "h-4 w-4" }: { className?: string }) => (
 export default function Connect() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const redirectUrl = searchParams.get("redirect");
+  // Persist redirect URL in sessionStorage so it survives OAuth redirects
+  // (Supabase PKCE code exchange can strip query params from the URL)
+  const redirectParam = searchParams.get("redirect");
+  if (redirectParam) sessionStorage.setItem("musicnerd_redirect", redirectParam);
+  const redirectUrl = redirectParam || sessionStorage.getItem("musicnerd_redirect");
   const { saveProfile } = useUserProfile();
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
@@ -263,6 +267,7 @@ export default function Connect() {
       calculatedTier: t,
     };
     saveProfile(profile);
+    sessionStorage.removeItem("musicnerd_redirect");
     navigate(redirectUrl || "/browse");
   };
 
