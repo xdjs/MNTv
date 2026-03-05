@@ -446,7 +446,7 @@ export default function Listen() {
             tier: "casual",
             prebuiltNuggets: allAccumulatedNuggets,
             coverArtUrl: effectiveCoverArt || undefined,
-            artistImage: artistData?.imageUrl || (profile?.spotifyArtistImages?.[track.artist]) || undefined,
+            artistImage: artistData?.imageUrl || (profile?.spotifyArtistImages?.[track.artist]) || effectiveCoverArt || undefined,
           },
         });
         if (cancelled) return;
@@ -751,7 +751,7 @@ export default function Listen() {
   // Auto-dismiss nugget: quick swap if queued, otherwise fade after 8s
   useEffect(() => {
     if (!activeNugget || deepDiveNugget || nuggetFocused) return;
-    const delay = nuggetQueue.length > 0 ? 1500 : 8000;
+    const delay = nuggetQueue.length > 0 ? 6000 : 8000;
     const timer = setTimeout(() => setActiveNugget(null), delay);
     return () => clearTimeout(timer);
   }, [activeNugget, deepDiveNugget, nuggetFocused, nuggetQueue.length]);
