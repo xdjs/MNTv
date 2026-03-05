@@ -75,8 +75,27 @@ async function getArtistImageUrl(wikidataId: string, width = 500): Promise<strin
   return getCommonsImageUrl(filename, width);
 }
 
+// Extract just the artist/person name from verbose AI-generated queries like
+// "Gojira delivering their powerful metal sound live on stage" → "Gojira"
+function extractArtistName(query: string): string {
+  // Split on common action words / prepositions that follow the name
+  const stopWords = /\b(delivering|performing|playing|in|on|at|with|during|holding|behind|the\b.*\b(?:stage|studio|guitar|piano|drums|mic|booth))/i;
+  const match = query.split(stopWords)[0].trim();
+  // Also try splitting on " — " or " - " (common separator)
+  const dashSplit = match.split(/\s+[-—–]\s+/)[0].trim();
+  return dashSplit || query;
+}
+
 async function resolveArtist(query: string, width: number): Promise<string | null> {
-  const mbid = await searchArtist(query);
+  // Try full query first, then extracted name if that fails
+  let mbid = await searchArtist(query);
+  if (!mbid) {
+    const cleaned = extractArtistName(query);
+    if (cleaned !== query) {
+      console.log(`[nugget-image] Retrying artist search with cleaned name: "${cleaned}"`);
+      mbid = await searchArtist(cleaned);
+    }
+  }
   if (!mbid) return null;
   await new Promise((r) => setTimeout(r, 1100));
   const wikidataId = await getWikidataId(mbid);

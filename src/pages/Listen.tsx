@@ -196,11 +196,16 @@ export default function Listen() {
     isNavigatingRef.current = true;
     setSkipLoading(true);
     try {
+      // Use artist field filter so Spotify returns tracks BY this artist,
+      // not tracks with the artist's name in the title
       const { data } = await supabase.functions.invoke("spotify-search", {
-        body: { query: track.artist },
+        body: { query: `artist:${track.artist}` },
       });
+      const artistLower = track.artist.toLowerCase();
       const candidates = (data?.tracks as SpotifyTrackResult[] || []).filter(
-        (t) => t.title.toLowerCase() !== track.title.toLowerCase()
+        (t) =>
+          t.title.toLowerCase() !== track.title.toLowerCase() &&
+          t.artist.toLowerCase().includes(artistLower)
       );
       if (candidates.length > 0) {
         const pick = candidates[Math.floor(Math.random() * Math.min(candidates.length, 5))];

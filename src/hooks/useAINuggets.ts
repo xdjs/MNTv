@@ -311,11 +311,9 @@ export function useAINuggets(
       for (let c = 0; c < trackId.length; c++) hashSum += trackId.charCodeAt(c);
       const visualSlotIndex = hashSum % 3;
 
-      // Only resolve images for artist/track nuggets — skip discovery nuggets
-      // so we don't show other artists' album covers (confusing while listening)
       const imageResults = await Promise.allSettled(
         aiNuggets.map((n) =>
-          n.imageHint && n.kind !== "discovery" ? resolveImageHint(n.imageHint) : Promise.resolve(null)
+          n.imageHint ? resolveImageHint(n.imageHint) : Promise.resolve(null)
         )
       );
 
