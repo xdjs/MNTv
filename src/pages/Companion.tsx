@@ -1,7 +1,6 @@
 import { useParams } from "react-router-dom";
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { getTrackById, getArtistById } from "@/mock/tracks";
 import { useArtistImage } from "@/hooks/useArtistImage";
 import { useUserProfile, tierGlowClass } from "@/hooks/useMusicNerdState";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
@@ -30,9 +29,8 @@ export default function Companion() {
   const { trackId: rawTrackId } = useParams<{ trackId: string }>();
 
   // ── Real track support (same pattern as Listen.tsx) ──────────────
-  const isRealTrack = rawTrackId?.startsWith("real%3A%3A") || rawTrackId?.startsWith("real::");
   const realTrackMeta = useMemo(() => {
-    if (!isRealTrack || !rawTrackId) return null;
+    if (!rawTrackId?.startsWith("real%3A%3A") && !rawTrackId?.startsWith("real::")) return null;
     const decoded = decodeURIComponent(rawTrackId);
     const parts = decoded.split("::");
     return {
@@ -40,7 +38,7 @@ export default function Companion() {
       title: parts[2] || "",
       album: parts[3] || undefined,
     };
-  }, [isRealTrack, rawTrackId]);
+  }, [rawTrackId]);
 
   const { profile } = useUserProfile();
 
@@ -49,18 +47,7 @@ export default function Companion() {
   const [error, setError] = useState<string | null>(null);
 
   // Resolve track + artist data
-  const mockTrack = useMemo(() => getTrackById(rawTrackId || ""), [rawTrackId]);
-  const mockArtist = mockTrack ? getArtistById(mockTrack.artistId) : undefined;
-
   const trackInfo = useMemo(() => {
-    if (mockTrack) {
-      return {
-        title: mockTrack.title,
-        artist: mockTrack.artist,
-        album: mockTrack.album,
-        coverArtUrl: mockTrack.coverArtUrl,
-      };
-    }
     if (realTrackMeta) {
       // Try to get cover art: cached from companion data > profile > DiceBear fallback
       let coverArtUrl = data?.coverArtUrl || "";
@@ -86,13 +73,14 @@ export default function Companion() {
       };
     }
     return null;
-  }, [mockTrack, realTrackMeta, data?.coverArtUrl, profile?.spotifyTrackImages, profile?.spotifyArtistImages]);
+  }, [realTrackMeta, data?.coverArtUrl, profile?.spotifyTrackImages, profile?.spotifyArtistImages]);
 
   const artistName = trackInfo?.artist || "";
-  const artistFallbackImage = data?.artistImage || mockArtist?.imageUrl || profile?.spotifyArtistImages?.[artistName] || "";
+  const artistFallbackImage = data?.artistImage || profile?.spotifyArtistImages?.[artistName] || "";
   const artistImage = useArtistImage(artistName, artistFallbackImage);
-  const artistGenres = mockArtist?.genres || [];
-  const artistBio = mockArtist?.bio || "";
+
+  const artistGenres: string[] = [];
+  const artistBio = "";
 
   const tier = profile?.calculatedTier ?? "casual";
   const glowClass = tierGlowClass(tier);

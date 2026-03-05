@@ -1,7 +1,6 @@
 import { motion } from "framer-motion";
 import { Compass } from "lucide-react";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
-import { getSourceById } from "@/mock/tracks";
 import type { Nugget, AnimationStyle, Source } from "@/mock/types";
 
 interface Props {
@@ -67,8 +66,7 @@ const styleMap = {
   C: { card: cardC, logo: logoC },
 };
 
-export default function NuggetCard({ nugget, animationStyle, onSourceClick, currentTime, sourceOverride, focused }: Props) {
-  const source = sourceOverride !== undefined ? sourceOverride : getSourceById(nugget.sourceId);
+export default function NuggetCard({ nugget, animationStyle, onSourceClick, currentTime, focused }: Props) {
   const { card: cardVariants, logo: logoVariants } = styleMap[animationStyle];
 
   const isVisual = nugget.visualOnly && nugget.imageUrl;

@@ -12,7 +12,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { UserProfile } from "@/mock/types";
-import { artists as mockArtists, tracks as mockTracks } from "@/mock/tracks";
 
 // ── Artist image cache (persists across re-renders, cleared on page reload) ──
 const artistImageCache = new Map<string, string>();
@@ -44,10 +43,6 @@ function artistImageUrl(
   resolved?: Map<string, string>,
 ): string {
   if (spotifyImages?.[name]) return spotifyImages[name];
-  const found = mockArtists.find(
-    (a) => a.name.toLowerCase() === name.toLowerCase()
-  );
-  if (found) return found.imageUrl;
   const cached = resolved?.get(name) || artistImageCache.get(name);
   if (cached) return cached;
   return `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}&backgroundColor=1a1a2e&textColor=ffffff&fontSize=38`;
@@ -66,12 +61,6 @@ function trackCoverUrl(
     );
     if (match?.imageUrl) return match.imageUrl;
   }
-  const found = mockTracks.find(
-    (t) =>
-      t.title.toLowerCase() === trackName.toLowerCase() &&
-      t.artist.toLowerCase() === artistName.toLowerCase()
-  );
-  if (found) return found.coverArtUrl;
   return `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(artistName + trackName)}&backgroundColor=111827&textColor=ffffff&fontSize=30`;
 }
 
@@ -81,8 +70,6 @@ function realTrackHref(artist: string, title: string, album?: string, spotifyUri
 }
 
 function artistHref(name: string, spotifyId?: string): string {
-  const mock = mockArtists.find((a) => a.name.toLowerCase() === name.toLowerCase());
-  if (mock) return `/artist/${mock.id}`;
   if (spotifyId) return `/artist/spotify::${spotifyId}::${encodeURIComponent(name)}`;
   return `/artist/real::${encodeURIComponent(name)}`;
 }
@@ -98,23 +85,16 @@ function trackTile(
   spotifyTrackImages?: { title: string; artist: string; imageUrl: string; uri?: string }[],
 ): BrowseTile {
   const { trackTitle, artistName } = parseTrackString(t);
-  const mockTrack = mockTracks.find(
-    (m) =>
-      m.title.toLowerCase() === trackTitle.toLowerCase() &&
-      (!artistName || m.artist.toLowerCase() === artistName.toLowerCase())
-  );
   const trackInfo = spotifyTrackImages?.find(
     (img) => img.title.toLowerCase() === trackTitle.toLowerCase() && img.artist.toLowerCase() === artistName.toLowerCase()
   );
   return {
     id: `${idPrefix}-${t}`,
-    imageUrl: mockTrack?.coverArtUrl || trackCoverUrl(trackTitle, artistName, spotifyTrackImages),
+    imageUrl: trackCoverUrl(trackTitle, artistName, spotifyTrackImages),
     title: trackTitle,
     subtitle: artistName,
-    href: mockTrack
-      ? `/listen/${mockTrack.id}`
-      : realTrackHref(artistName, trackTitle, undefined, trackInfo?.uri),
-    isRealTrack: !mockTrack,
+    href: realTrackHref(artistName, trackTitle, undefined, trackInfo?.uri),
+    isRealTrack: true,
   };
 }
 
@@ -193,7 +173,6 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
       (name) =>
         !spotifyImages[name] &&
         !spotifyIds[name] &&
-        !mockArtists.find((a) => a.name.toLowerCase() === name.toLowerCase()) &&
         !artistImageCache.has(name) &&
         !pendingFetches.current.has(name)
     );
@@ -224,7 +203,7 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
   }, [profile, lastFmData, recommendations]);
 
   const rows = useMemo<BrowseRow[]>(() => {
-    if (!profile) return buildMockRows();
+    if (!profile) return [];
 
     const allRows: BrowseRow[] = [];
     const spotifyTracks = profile.spotifyTopTracks || [];
@@ -234,29 +213,21 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
     // ── 1. "Jump Back In" — recent tracks or top tracks ──────────────
     const recentTiles: BrowseTile[] = [];
 
-    if (lastFmData?.recentTracks?.length) {
-      lastFmData.recentTracks.slice(0, 10).forEach((t) => {
-        const mockTrack = mockTracks.find(
-          (m) =>
-            m.title.toLowerCase() === t.name.toLowerCase() &&
-            m.artist.toLowerCase() === t.artist.toLowerCase()
-        );
-        // Use Last.fm album art if available, then Spotify, then mock, then DiceBear
-        const image = t.imageUrl || trackCoverUrl(t.name, t.artist, spotifyTrackImgs);
-        const spotifyMatch = spotifyTrackImgs?.find(
-          (img) => img.title.toLowerCase() === t.name.toLowerCase() && img.artist.toLowerCase() === t.artist.toLowerCase()
-        );
-        recentTiles.push({
-          id: `recent-${t.artist}-${t.name}`,
-          imageUrl: image,
-          title: t.name,
-          subtitle: t.artist,
-          href: mockTrack
-            ? `/listen/${mockTrack.id}`
-            : realTrackHref(t.artist, t.name, t.album, spotifyMatch?.uri),
-          isRealTrack: !mockTrack,
+      if (lastFmData?.recentTracks?.length) {
+        lastFmData.recentTracks.slice(0, 10).forEach((t) => {
+          const image = t.imageUrl || trackCoverUrl(t.name, t.artist, spotifyTrackImgs);
+          const spotifyMatch = spotifyTrackImgs?.find(
+            (img) => img.title.toLowerCase() === t.name.toLowerCase() && img.artist.toLowerCase() === t.artist.toLowerCase()
+          );
+          recentTiles.push({
+            id: `recent-${t.artist}-${t.name}`,
+            imageUrl: image,
+            title: t.name,
+            subtitle: t.artist,
+            href: realTrackHref(t.artist, t.name, t.album, spotifyMatch?.uri),
+            isRealTrack: true,
+          });
         });
-      });
     } else if (spotifyTracks.length) {
       spotifyTracks.slice(0, 8).forEach((t) => {
         recentTiles.push(trackTile(t, "recent", spotifyTrackImgs));
@@ -340,35 +311,8 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
       }
     }
 
-    if (allRows.length === 0) return buildMockRows();
-
     return allRows;
   }, [profile, lastFmData, recommendations, topArtistNames, resolvedImages, resolvedIds]);
 
   return { rows, loading };
-}
-
-// ── Mock catalog fallback (guests only) ──────────────────────────────
-
-function buildMockRows(): BrowseRow[] {
-  const artistTiles: BrowseTile[] = mockArtists.map((a) => ({
-    id: a.id,
-    imageUrl: a.imageUrl,
-    title: a.name,
-    subtitle: a.genres[0],
-    href: `/artist/${a.id}`,
-  }));
-
-  const recentTiles: BrowseTile[] = mockTracks.slice(0, 8).map((t) => ({
-    id: t.id,
-    imageUrl: t.coverArtUrl,
-    title: t.title,
-    subtitle: t.artist,
-    href: `/listen/${t.id}`,
-  }));
-
-  return [
-    { label: "Jump Back In", items: recentTiles, size: "md" },
-    { label: "Artists", items: artistTiles, size: "lg" },
-  ];
 }

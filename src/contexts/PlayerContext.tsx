@@ -24,29 +24,6 @@ export interface CompanionNugget {
   imageCaption?: string;
 }
 
-// ── YouTube API singleton loader ──────────────────────────────────────
-
-let ytApiLoading = false;
-let ytApiReady = false;
-const ytReadyCallbacks: (() => void)[] = [];
-
-function loadYouTubeAPI(): Promise<void> {
-  if (ytApiReady) return Promise.resolve();
-  return new Promise((resolve) => {
-    ytReadyCallbacks.push(resolve);
-    if (ytApiLoading) return;
-    ytApiLoading = true;
-    window.onYouTubeIframeAPIReady = () => {
-      ytApiReady = true;
-      ytReadyCallbacks.forEach((cb) => cb());
-      ytReadyCallbacks.length = 0;
-    };
-    const script = document.createElement("script");
-    script.src = "https://www.youtube.com/iframe_api";
-    document.head.appendChild(script);
-  });
-}
-
 // ── Spotify SDK singleton loader ──────────────────────────────────────
 
 let sdkLoading = false;
@@ -72,7 +49,7 @@ function loadSpotifySDK(): Promise<void> {
 
 // ── Types ─────────────────────────────────────────────────────────────
 
-export type ActivePlayer = "spotify" | "youtube" | "none";
+export type ActivePlayer = "spotify" | "none";
 
 export interface TrackMeta {
   trackId: string;
@@ -97,9 +74,7 @@ interface PlayerState {
   currentTime: number;
   duration: number;
   activePlayer: ActivePlayer;
-  ytReady: boolean;
   spotifyReady: boolean;
-  currentVideoId: string | null;
   currentSpotifyUri: string | null;
   currentTrack: TrackMeta | null;
   /** Previous track route (for "go back" button). Null if no history. */
@@ -113,7 +88,7 @@ interface PlayerState {
 }
 
 interface PlayerActions {
-  loadTrack: (opts: { videoId?: string; spotifyUri?: string; spotifyAvailable?: boolean }) => void;
+  loadTrack: (opts: { spotifyUri?: string }) => void;
   setCurrentTrack: (meta: TrackMeta | null) => void;
   setOnEnded: (cb: (() => void) | null) => void;
   /** Push current route to history so prev button works across navigations. */
@@ -125,8 +100,6 @@ interface PlayerActions {
   toggle: () => void;
   seek: (seconds: number) => void;
   stop: () => void;
-  /** Ref to attach the YT player container div. Render this in the Listen page. */
-  playerContainerRef: React.RefObject<HTMLDivElement>;
   /** Toggle external listen mode (skip auto-play for external device playback) */
   setExternalListenMode: (mode: boolean) => void;
   /** In-memory nugget cache — survives navigation between pages */
@@ -157,15 +130,6 @@ export function usePlayer(): PlayerContextType {
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const { hasSpotifyToken, getValidToken } = useSpotifyToken();
 
-  // YouTube state
-  const ytPlayerRef = useRef<YT.Player | null>(null);
-  const ytContainerRef = useRef<HTMLDivElement>(null!);
-  const [ytReady, setYtReady] = useState(false);
-  const [ytPlaying, setYtPlaying] = useState(false);
-  const [ytTime, setYtTime] = useState(0);
-  const [ytDuration, setYtDuration] = useState(0);
-  const ytPollRef = useRef<number | null>(null);
-
   // Spotify state
   const spPlayerRef = useRef<Spotify.Player | null>(null);
   const [spReady, setSpReady] = useState(false);
@@ -179,7 +143,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   // Active player tracking
   const [activePlayer, setActivePlayer] = useState<ActivePlayer>("none");
-  const [currentVideoId, setCurrentVideoId] = useState<string | null>(null);
   const [currentSpotifyUri, setCurrentSpotifyUri] = useState<string | null>(null);
   const [currentTrack, setCurrentTrack] = useState<TrackMeta | null>(null);
   const [spotifyStateTrack, setSpotifyStateTrack] = useState<SpotifyStateTrack | null>(null);
@@ -223,73 +186,20 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const pushTrackHistory = useCallback((route: string) => {
     const history = trackHistoryRef.current;
-    // Don't push duplicates (same track)
     if (history[history.length - 1] !== route) {
       history.push(route);
     }
-    // Update prevTrackRoute state for reactivity
     setPrevTrackRoute(history.length > 1 ? history[history.length - 2] : null);
   }, []);
 
   const popTrackHistory = useCallback((): string | null => {
     const history = trackHistoryRef.current;
     if (history.length <= 1) return null;
-    history.pop(); // remove current
+    history.pop();
     const prev = history[history.length - 1] || null;
     setPrevTrackRoute(history.length > 1 ? history[history.length - 2] : null);
     return prev;
   }, []);
-
-  // ── YouTube helpers ────────────────────────────────────────────────
-
-  const startYtPoll = useCallback(() => {
-    if (ytPollRef.current) return;
-    ytPollRef.current = window.setInterval(() => {
-      const p = ytPlayerRef.current;
-      if (!p) return;
-      setYtTime(p.getCurrentTime());
-      const d = p.getDuration();
-      if (d > 0) setYtDuration(d);
-    }, 250);
-  }, []);
-
-  const stopYtPoll = useCallback(() => {
-    if (ytPollRef.current) { clearInterval(ytPollRef.current); ytPollRef.current = null; }
-  }, []);
-
-  const initYtPlayer = useCallback(async (videoId: string) => {
-    await loadYouTubeAPI();
-    if (ytPlayerRef.current) {
-      try { ytPlayerRef.current.destroy(); } catch { /* */ }
-      ytPlayerRef.current = null;
-    }
-    const container = ytContainerRef.current;
-    if (!container) return;
-
-    const div = document.createElement("div");
-    div.id = "yt-global-" + Date.now();
-    container.innerHTML = "";
-    container.appendChild(div);
-
-    ytPlayerRef.current = new YT.Player(div.id, {
-      height: "100%",
-      width: "100%",
-      videoId,
-      playerVars: { autoplay: 0, controls: 0, modestbranding: 1, rel: 0, showinfo: 0, disablekb: 1, fs: 0, iv_load_policy: 3, playsinline: 1 },
-      events: {
-        onReady: () => {
-          setYtReady(true);
-          const d = ytPlayerRef.current?.getDuration() || 0;
-          if (d > 0) setYtDuration(d);
-        },
-        onStateChange: (event) => {
-          if (event.data === YT.PlayerState.PLAYING) { setYtPlaying(true); startYtPoll(); }
-          else if (event.data === YT.PlayerState.PAUSED) { setYtPlaying(false); stopYtPoll(); }
-          else if (event.data === YT.PlayerState.ENDED) { setYtPlaying(false); stopYtPoll(); onEndedRef.current?.(); }
-        },
-      },
-    });
-  }, [startYtPoll, stopYtPoll]);
 
   // ── Spotify init (once, on mount if token available) ───────────────
 
@@ -333,8 +243,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           clearInterval(spPollRef.current);
           spPollRef.current = null;
         }
-        // Detect when Spotify plays a different track than what we loaded
-        // (e.g. user changed track on their phone via Spotify Connect)
         const ct = state.track_window.current_track;
         if (ct?.uri) {
           setSpotifyStateTrack({
@@ -346,7 +254,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           });
         }
         if (state.paused && state.position === 0 && ct.uri === lastSpUriRef.current && spHasPlayedRef.current) {
-          lastSpUriRef.current = null; // Prevent re-firing (avoid infinite skip loop)
+          lastSpUriRef.current = null;
           spHasPlayedRef.current = false;
           onEndedRef.current?.();
         }
@@ -370,88 +278,39 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   // ── loadTrack ─────────────────────────────────────────────────────
 
-  // Track whether user wants Spotify (persists across spReady changes)
-  const wantsSpotifyRef = useRef(false);
+  const loadTrack = useCallback(({ spotifyUri }: { spotifyUri?: string }) => {
+    // Don't reload if already playing this exact URI
+    if (spotifyUri && lastSpUriRef.current === spotifyUri) return;
 
-  const loadTrack = useCallback(({ videoId, spotifyUri, spotifyAvailable }: { videoId?: string; spotifyUri?: string; spotifyAvailable?: boolean }) => {
-    // Don't reload if Spotify is already playing this exact URI
-    if (spotifyUri && lastSpUriRef.current === spotifyUri) {
-      return;
-    }
-
-    // Stop existing playback
-    lastSpUriRef.current = null; // Prevent stale end detection from old track
-    spHasPlayedRef.current = false; // Reset — new track hasn't played yet
-    ytPlayerRef.current?.pauseVideo();
+    // Reset playback state
+    lastSpUriRef.current = null;
+    spHasPlayedRef.current = false;
     spPlayerRef.current?.pause();
-    stopYtPoll();
-    setYtTime(0);
-    setYtDuration(0);
+    if (spPollRef.current) { clearInterval(spPollRef.current); spPollRef.current = null; }
     setSpTime(0);
     setSpDuration(0);
-    setYtReady(false);
-    setYtPlaying(false);
     setSpPlaying(false);
 
-    setCurrentVideoId(videoId || null);
     setCurrentSpotifyUri(spotifyUri || null);
-    wantsSpotifyRef.current = !!(spotifyAvailable && spotifyUri);
-
-    // Determine which player to use right now
-    if (spotifyAvailable && spReady && spotifyUri) {
-      setActivePlayer("spotify");
-    } else if (videoId) {
-      setActivePlayer("youtube");
-    } else {
-      setActivePlayer("none");
-    }
-
-    // Load YouTube (always, for backdrop)
-    if (videoId) {
-      initYtPlayer(videoId);
-    }
-  }, [spReady, initYtPlayer, stopYtPoll]);
+    setActivePlayer(spReady && spotifyUri ? "spotify" : "none");
+  }, [spReady]);
 
   // ── Upgrade to Spotify when SDK becomes ready after loadTrack ─────
-  // If we wanted Spotify but it wasn't ready, switch when it connects.
   useEffect(() => {
-    if (spReady && wantsSpotifyRef.current && currentSpotifyUri && activePlayer !== "spotify") {
-      console.log("[Player] Spotify SDK ready — upgrading to Spotify from", activePlayer);
+    if (spReady && currentSpotifyUri && activePlayer !== "spotify") {
+      console.log("[Player] Spotify SDK ready — switching to Spotify");
       setActivePlayer("spotify");
-      hasAutoPlayedRef.current = false; // trigger auto-play for Spotify
+      hasAutoPlayedRef.current = false;
     }
   }, [spReady, currentSpotifyUri, activePlayer]);
 
-  // ── YouTube fallback when stuck on "none" ──────────────────────────
-  // If activePlayer is "none" and YouTube is ready, fall back to YouTube.
-  // If Spotify SDK connects later, the upgrade effect above will switch.
-  useEffect(() => {
-    if (activePlayer === "none" && currentVideoId && ytReady) {
-      console.log("[Player] Falling back to YouTube audio");
-      setActivePlayer("youtube");
-      hasAutoPlayedRef.current = false;
-    }
-  }, [activePlayer, currentVideoId, ytReady]);
-
-  // ── Auto-play when players become ready after loadTrack ───────────
+  // ── Auto-play when Spotify is active and ready ────────────────────
 
   const hasAutoPlayedRef = useRef(false);
 
   useEffect(() => {
-    if (activePlayer === "youtube" && ytReady && !hasAutoPlayedRef.current) {
-      hasAutoPlayedRef.current = true;
-      ytPlayerRef.current?.unMute();
-      ytPlayerRef.current?.playVideo();
-    }
-  }, [activePlayer, ytReady]);
-
-  useEffect(() => {
     if (activePlayer === "spotify" && spReady && currentSpotifyUri && !hasAutoPlayedRef.current) {
       hasAutoPlayedRef.current = true;
-      // Mute YT for backdrop only
-      ytPlayerRef.current?.mute();
-      ytPlayerRef.current?.playVideo();
-      // Play Spotify
       (async () => {
         const token = await getValidToken();
         if (!token || !spDeviceId) return;
@@ -465,83 +324,56 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [activePlayer, spReady, currentSpotifyUri, spDeviceId, getValidToken]);
 
-  // Reset autoplay flag on loadTrack
+  // Reset autoplay flag when URI changes
   useEffect(() => {
     hasAutoPlayedRef.current = false;
-  }, [currentVideoId, currentSpotifyUri]);
-
-  // Mute/unmute YouTube based on active player
-  useEffect(() => {
-    if (activePlayer === "youtube") ytPlayerRef.current?.unMute();
-    else ytPlayerRef.current?.mute();
-  }, [activePlayer]);
+  }, [currentSpotifyUri]);
 
   // ── Controls ──────────────────────────────────────────────────────
 
   const play = useCallback(() => {
-    if (activePlayer === "spotify") spPlayerRef.current?.resume();
-    else if (activePlayer === "youtube") ytPlayerRef.current?.playVideo();
-  }, [activePlayer]);
+    spPlayerRef.current?.resume();
+  }, []);
 
   const pause = useCallback(() => {
-    if (activePlayer === "spotify") spPlayerRef.current?.pause();
-    else if (activePlayer === "youtube") ytPlayerRef.current?.pauseVideo();
-  }, [activePlayer]);
+    spPlayerRef.current?.pause();
+  }, []);
 
   const toggle = useCallback(() => {
-    // If activePlayer is "none" but we have a URI, try to resume
     if (activePlayer === "none") {
       if (currentSpotifyUri && spReady) {
         setActivePlayer("spotify");
-        hasAutoPlayedRef.current = false; // trigger auto-play
-      } else if (currentVideoId) {
-        setActivePlayer("youtube");
         hasAutoPlayedRef.current = false;
       }
       return;
     }
-    const playing = activePlayer === "spotify" ? spPlaying : ytPlaying;
-    if (playing) pause(); else play();
-  }, [activePlayer, spPlaying, ytPlaying, pause, play, currentSpotifyUri, currentVideoId, spReady]);
+    if (spPlaying) pause(); else play();
+  }, [activePlayer, spPlaying, pause, play, currentSpotifyUri, spReady]);
 
   const seek = useCallback((seconds: number) => {
-    if (activePlayer === "spotify") {
-      spPlayerRef.current?.seek(seconds * 1000);
-      setSpTime(seconds);
-    } else if (activePlayer === "youtube") {
-      ytPlayerRef.current?.seekTo(seconds, true);
-      setYtTime(seconds);
-    }
-  }, [activePlayer]);
+    spPlayerRef.current?.seek(seconds * 1000);
+    setSpTime(seconds);
+  }, []);
 
   const setOnEnded = useCallback((cb: (() => void) | null) => {
     onEndedRef.current = cb;
   }, []);
 
   const stop = useCallback(() => {
-    ytPlayerRef.current?.pauseVideo();
     spPlayerRef.current?.pause();
-    stopYtPoll();
     if (spPollRef.current) { clearInterval(spPollRef.current); spPollRef.current = null; }
     setActivePlayer("none");
-    setCurrentVideoId(null);
     setCurrentSpotifyUri(null);
-  }, [stopYtPoll]);
+  }, []);
 
   // ── Unified state ─────────────────────────────────────────────────
 
-  const isPlaying = activePlayer === "spotify" ? spPlaying : activePlayer === "youtube" ? ytPlaying : false;
-  const currentTime = activePlayer === "spotify" ? spTime : activePlayer === "youtube" ? ytTime : 0;
-  const duration = activePlayer === "spotify" ? (spDuration || 0) : activePlayer === "youtube" ? (ytDuration || 0) : 0;
-
   const value: PlayerContextType = {
-    isPlaying,
-    currentTime,
-    duration,
+    isPlaying: spPlaying,
+    currentTime: spTime,
+    duration: spDuration || 0,
     activePlayer,
-    ytReady,
     spotifyReady: spReady,
-    currentVideoId,
     currentSpotifyUri,
     currentTrack,
     prevTrackRoute,
@@ -559,7 +391,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     seek,
     stop,
     setExternalListenMode,
-    playerContainerRef: ytContainerRef,
     getNuggetCache,
     setNuggetCache,
     clearNuggetCache,
@@ -572,12 +403,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   return (
     <PlayerContext.Provider value={value}>
-      {/* Hidden global YouTube container — portaled into Listen page when visible */}
-      <div
-        ref={ytContainerRef}
-        id="global-yt-player"
-        style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100%", zIndex: -1, pointerEvents: "none", opacity: 0 }}
-      />
       {children}
     </PlayerContext.Provider>
   );
