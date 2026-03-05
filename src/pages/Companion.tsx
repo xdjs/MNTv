@@ -110,7 +110,10 @@ export default function Companion() {
         // for the first listen. This guarantees a cache hit.
         const serverListenCount = 1;
 
-        console.log("[Companion] Fetching:", { artist: trackInfo!.artist, title: trackInfo!.title, tier });
+        // Always use tier "casual" to match the cache key from Listen.tsx pre-gen.
+        // This guarantees a cache hit with the exact same nuggets + embedded images.
+        const cacheTier = "casual";
+        console.log("[Companion] Fetching:", { artist: trackInfo!.artist, title: trackInfo!.title, tier: cacheTier });
 
         const { data: companionData, error: fnError } = await supabase.functions.invoke(
           "generate-companion",
@@ -120,7 +123,7 @@ export default function Companion() {
               title: trackInfo!.title,
               album: trackInfo!.album,
               listenCount: serverListenCount,
-              tier,
+              tier: cacheTier,
             },
           }
         );
@@ -141,7 +144,7 @@ export default function Companion() {
 
     fetchCompanion();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rawTrackId, tier]);
+  }, [rawTrackId]);
 
   if (!trackInfo) {
     return (
