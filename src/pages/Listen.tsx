@@ -376,7 +376,7 @@ export default function Listen() {
             headline: n.headline || "",
             text: n.text,
             category: kindToCategory[n.kind] || "track",
-            listenUnlockLevel: 1,
+            listenUnlockLevel: listenCount,
             sourceName: source?.publisher || "",
             sourceUrl: source?.url || "",
             imageUrl: n.imageUrl,
@@ -446,7 +446,7 @@ export default function Listen() {
       }
     })();
     return () => { cancelled = true; };
-  }, [aiLoading, aiNuggets, aiSources, track?.artist, track?.title, tier]);
+  }, [aiLoading, aiNuggets, aiSources, track?.artist, track?.title, tier, listenCount]);
 
   const rawTrackNuggets = useMemo(
     () => aiLoading ? [] : aiNuggets,

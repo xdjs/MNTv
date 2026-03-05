@@ -80,10 +80,15 @@ async function spotifyArtistImage(query: string): Promise<string | null> {
   const artists = data?.artists?.items || [];
   if (artists.length === 0) return null;
 
+  // Only return an exact (case-insensitive) match — never return a random first
+  // result, as that leads to wrong-person images for obscure names.
   const nameLower = artistName.toLowerCase();
   const exactMatch = artists.find((a: any) => a.name.toLowerCase() === nameLower);
-  const artist = exactMatch || artists[0];
-  const images = artist?.images || [];
+  if (!exactMatch) {
+    console.log(`[nugget-image] Spotify: no exact match for "${artistName}", skipping`);
+    return null;
+  }
+  const images = exactMatch?.images || [];
   return images[0]?.url || null;
 }
 
@@ -167,13 +172,16 @@ async function getWikipediaArticleImages(articleTitle: string): Promise<{ title:
   }
 }
 
-async function geminiImageSearch(query: string): Promise<string | null> {
+async function geminiImageSearch(query: string, trackArtist?: string, trackTitle?: string): Promise<string | null> {
   if (!Deno.env.get("GOOGLE_AI_API_KEY")) return null;
 
   try {
     // Step 1: Ask Gemini for the best Wikipedia article title(s) for this subject
+    const contextLine = trackArtist && trackTitle
+      ? `\nContext: This is for the song "${trackTitle}" by ${trackArtist}.\n`
+      : "";
     const prompt = `For an image search about: "${query}"
-
+${contextLine}
 Suggest 1-3 Wikipedia article titles that would contain the most relevant images.
 Think broadly — for "Prince performing Purple Rain guitar solo" you might suggest:
 - "Prince (musician)" (main article with performance photos)
@@ -183,6 +191,8 @@ Think broadly — for "Prince performing Purple Rain guitar solo" you might sugg
 For "Fender Stratocaster" you might suggest:
 - "Fender Stratocaster" (instrument photos)
 - "Jimi Hendrix" (famous player photos with the guitar)
+
+IMPORTANT: Only suggest Wikipedia articles that you are CONFIDENT exist. If the subject is an obscure or unknown person who is unlikely to have a Wikipedia article, return {"articles": []} — do NOT guess or suggest articles about different people with similar names.
 
 Return ONLY valid JSON: {"articles": ["Article_Title_1", "Article_Title_2"]}`;
 
@@ -340,17 +350,17 @@ async function resolveWikiCommons(query: string, width: number): Promise<string 
 // Combined resolvers: Gemini → Spotify → MusicBrainz/Wikimedia
 // ═══════════════════════════════════════════════════════════════════════
 
-async function resolveArtist(query: string, width: number): Promise<string | null> {
+async function resolveArtist(query: string, width: number, trackArtist?: string, trackTitle?: string): Promise<string | null> {
   const label = extractArtistName(query);
 
   // Tier 1: Gemini (contextual — finds the specific image the hint describes)
-  const geminiUrl = await geminiImageSearch(query);
+  const geminiUrl = await geminiImageSearch(query, trackArtist, trackTitle);
   if (geminiUrl) {
     console.log(`[nugget-image] ✓ Gemini artist: "${label}"`);
     return geminiUrl;
   }
 
-  // Tier 2: Spotify (generic artist headshot fallback)
+  // Tier 2: Spotify (exact match only — prevents wrong-person images)
   const spotifyUrl = await spotifyArtistImage(query);
   if (spotifyUrl) {
     console.log(`[nugget-image] ✓ Spotify artist: "${label}"`);
@@ -403,7 +413,7 @@ serve(async (req) => {
   }
 
   try {
-    const { type, query, width } = await req.json();
+    const { type, query, width, artist: trackArtist, title: trackTitle } = await req.json();
     const imgWidth = width || 500;
 
     if (!type || !query) {
@@ -417,7 +427,7 @@ serve(async (req) => {
 
     switch (type) {
       case "artist":
-        imageUrl = await resolveArtist(query, imgWidth);
+        imageUrl = await resolveArtist(query, imgWidth, trackArtist, trackTitle);
         break;
       case "album":
         imageUrl = await resolveAlbum(query);

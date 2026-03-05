@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import type { Nugget, Source } from "@/mock/types";
@@ -35,10 +35,10 @@ interface UseAINuggetsResult {
   listenCount: number;
 }
 
-async function resolveImageHint(hint: ImageHint): Promise<string | null> {
+async function resolveImageHint(hint: ImageHint, artist?: string, title?: string): Promise<string | null> {
   try {
     const { data, error } = await supabase.functions.invoke("nugget-image", {
-      body: { type: hint.type, query: hint.query, width: 500 },
+      body: { type: hint.type, query: hint.query, width: 500, artist, title },
     });
     if (error || !data?.imageUrl) return null;
     return data.imageUrl;
@@ -97,26 +97,23 @@ export function useAINuggets(
   const [listenCount, setListenCount] = useState(1);
 
   const { getNuggetCache, setNuggetCache } = usePlayer();
-  const lastRegenerateKeyRef = useRef(regenerateKey);
 
   const generate = useCallback(async () => {
     if (!artist || !title) return;
 
     // ── In-memory cache check ──────────────────────────────────────
-    const cacheKey = `${trackId}::${tier}`;
-    const isRegenerate = regenerateKey !== lastRegenerateKeyRef.current;
-    lastRegenerateKeyRef.current = regenerateKey;
+    // Include regenerateKey so repeat listens (which bump the key) always
+    // miss the cache and trigger fresh generation.
+    const cacheKey = `${trackId}::${tier}::${regenerateKey}`;
 
-    if (!isRegenerate) {
-      const cached = getNuggetCache(cacheKey);
-      if (cached) {
-        console.log("[NuggetMemCache] Serving from in-memory cache:", cacheKey);
-        setNuggets(cached.nuggets);
-        setSources(cached.sources);
-        setListenCount(cached.listenCount);
-        setLoading(false);
-        return;
-      }
+    const cached = getNuggetCache(cacheKey);
+    if (cached) {
+      console.log("[NuggetMemCache] Serving from in-memory cache:", cacheKey);
+      setNuggets(cached.nuggets);
+      setSources(cached.sources);
+      setListenCount(cached.listenCount);
+      setLoading(false);
+      return;
     }
 
     setLoading(true);
@@ -313,7 +310,7 @@ export function useAINuggets(
 
       const imageResults = await Promise.allSettled(
         aiNuggets.map((n) =>
-          n.imageHint ? resolveImageHint(n.imageHint) : Promise.resolve(null)
+          n.imageHint ? resolveImageHint(n.imageHint, artist, title) : Promise.resolve(null)
         )
       );
 

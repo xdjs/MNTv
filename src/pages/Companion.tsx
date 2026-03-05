@@ -5,7 +5,7 @@ import { useArtistImage } from "@/hooks/useArtistImage";
 import { useUserProfile, tierGlowClass } from "@/hooks/useMusicNerdState";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ExternalLink, Music, BookOpen, Play } from "lucide-react";
+import { ExternalLink, Music, BookOpen, Play, ChevronDown } from "lucide-react";
 import CompanionNuggetCard from "@/components/companion/CompanionNuggetCard";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import type { CompanionNugget } from "@/mock/types";
@@ -142,13 +142,28 @@ export default function Companion() {
     );
   }
 
-  // Filter + sort nuggets for a section
+  // Filter + sort nuggets for a section (newest first by listenUnlockLevel, then timestamp)
   function getSectionNuggets(category: CompanionNugget["category"]): CompanionNugget[] {
     if (!data?.nuggets) return [];
     return data.nuggets
       .filter((n) => n.category === category)
-      .sort((a, b) => b.timestamp - a.timestamp);
+      .sort((a, b) => {
+        const levelDiff = (b.listenUnlockLevel || 1) - (a.listenUnlockLevel || 1);
+        if (levelDiff !== 0) return levelDiff;
+        return b.timestamp - a.timestamp;
+      });
   }
+
+  // Track which sections have their "Previous insights" expanded
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const toggleSection = (key: string) => {
+    setExpandedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   return (
     <div className={`min-h-screen bg-background ${glowClass}`} style={{ fontFamily: "'Nunito Sans', sans-serif" }}>
@@ -245,20 +260,53 @@ export default function Companion() {
               </section>
             )}
 
-            {/* Three categorized sections */}
+            {/* Three categorized sections — latest nugget expanded, older collapsible */}
             {SECTIONS.map(({ key, label, color }) => {
               const visible = getSectionNuggets(key);
               if (visible.length === 0) return null;
+
+              // Highest listenUnlockLevel = latest listen's nuggets
+              const maxLevel = Math.max(...visible.map((n) => n.listenUnlockLevel || 1));
+              const latest = visible.filter((n) => (n.listenUnlockLevel || 1) === maxLevel);
+              const older = visible.filter((n) => (n.listenUnlockLevel || 1) < maxLevel);
+              const isExpanded = expandedSections.has(key);
+
               return (
                 <section key={key} className="space-y-3">
                   <div className="flex items-center gap-2">
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${color}`}>{label}</span>
+                    {older.length > 0 && (
+                      <span className="text-[10px] text-muted-foreground/60">Listen #{maxLevel}</span>
+                    )}
                   </div>
-                  {visible.map((nugget) => (
+                  {latest.map((nugget) => (
                     <ErrorBoundary key={nugget.id}>
                       <CompanionNuggetCard nugget={nugget} />
                     </ErrorBoundary>
                   ))}
+                  {older.length > 0 && (
+                    <>
+                      <button
+                        onClick={() => toggleSection(key)}
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground/70 hover:text-foreground/80 transition-colors py-1"
+                      >
+                        <ChevronDown
+                          size={14}
+                          className={`transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
+                        />
+                        Previous insights ({older.length})
+                      </button>
+                      {isExpanded && (
+                        <div className="space-y-3 max-h-[400px] overflow-y-auto pl-2 border-l-2 border-foreground/5">
+                          {older.map((nugget) => (
+                            <ErrorBoundary key={nugget.id}>
+                              <CompanionNuggetCard nugget={nugget} />
+                            </ErrorBoundary>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </section>
               );
             })}
