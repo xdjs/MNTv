@@ -26,7 +26,7 @@ export default function Browse() {
   useTierAccent();
 
   const { rows: allRows } = usePersonalizedCatalog(profile);
-  const userName = "";
+  const userName = profile?.spotifyDisplayName || "";
 
   const tierLogoGlow: Record<string, string> = {
     casual: "#22c55e",
@@ -38,6 +38,8 @@ export default function Browse() {
   const handleSignOut = () => {
     clearProfile();
     localStorage.removeItem("spotify_playback_token");
+    sessionStorage.removeItem("musicnerd_redirect");
+    sessionStorage.removeItem("spotify_pending_taste");
     // Hard navigate to avoid ProtectedRoute redirect race — clearProfile()
     // triggers a re-render where ProtectedRoute redirects to /connect before
     // React Router's navigate("/") takes effect.
@@ -48,7 +50,7 @@ export default function Browse() {
   const [rowIndex, setRowIndex] = useState(-1);
   const [colIndex, setColIndex] = useState(0);
 
-  const HEADER_ITEMS = 2;
+  const HEADER_ITEMS = 3;
 
   const findClosestColByViewport = useCallback((targetRowLabel: string, currentCenterX: number) => {
     const tiles = document.querySelectorAll<HTMLElement>(`[data-tile-row="${targetRowLabel}"]`);
@@ -126,6 +128,7 @@ export default function Browse() {
         if (rowIndex === -1) {
           if (colIndex === 0) cycleTier();
           else if (colIndex === 1) setSearchOpen(true);
+          else if (colIndex === 2) handleSignOut();
         } else {
           const item = allRows[rowIndex]?.items[colIndex];
           if (item) navigate(item.href);
@@ -166,7 +169,9 @@ export default function Browse() {
             <button
               onClick={handleSignOut}
               title="Sign out"
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-foreground/5 text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground"
+              className={`flex h-10 w-10 items-center justify-center rounded-full bg-foreground/5 text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground ${
+                rowIndex === -1 && colIndex === 2 ? focusGlow + " scale-105" : ""
+              }`}
             >
               <LogOut size={16} />
             </button>

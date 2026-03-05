@@ -380,6 +380,10 @@ serve(async (req) => {
     if (!GOOGLE_AI_API_KEY) {
       throw new Error("GOOGLE_AI_API_KEY is not configured");
     }
+    // YouTube Data API v3 requires a separate Google Cloud API key
+    // (different from the Gemini AI key). Falls back to GOOGLE_AI_API_KEY
+    // only if the dedicated key isn't set yet.
+    const YOUTUBE_API_KEY = Deno.env.get("YOUTUBE_API_KEY") || GOOGLE_AI_API_KEY;
 
     // ── Deep Dive mode ──────────────────────────────────────────────
     if (deepDive) {
@@ -465,7 +469,7 @@ Return ONLY valid JSON:
     let videos: YTVideo[] = [];
     try {
       const searchQuery = `"${artist}" "${title}" interview OR breakdown OR behind the scenes`;
-      videos = await searchYouTube(searchQuery, GOOGLE_AI_API_KEY);
+      videos = await searchYouTube(searchQuery, YOUTUBE_API_KEY);
     } catch (e) {
       console.warn("YouTube search skipped:", e);
     }

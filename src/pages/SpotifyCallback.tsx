@@ -66,6 +66,7 @@ export default function SpotifyCallback() {
         saveProfile({
           ...profile,
           streamingService: "Spotify",
+          spotifyDisplayName: taste.displayName || profile.spotifyDisplayName,
           spotifyTopArtists: taste.topArtists,
           spotifyTopTracks: taste.topTracks,
           spotifyArtistImages: taste.artistImages,
@@ -79,6 +80,7 @@ export default function SpotifyCallback() {
         sessionStorage.setItem(
           "spotify_pending_taste",
           JSON.stringify({
+            displayName: taste.displayName,
             topArtists: taste.topArtists,
             topTracks: taste.topTracks,
             artistImages: taste.artistImages,

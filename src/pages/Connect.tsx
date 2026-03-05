@@ -39,6 +39,7 @@ export default function Connect() {
   const [pendingArtistImages, setPendingArtistImages] = useState<Record<string, string>>({});
   const [pendingArtistIds, setPendingArtistIds] = useState<Record<string, string>>({});
   const [pendingTrackImages, setPendingTrackImages] = useState<{ title: string; artist: string; imageUrl: string }[]>([]);
+  const [pendingDisplayName, setPendingDisplayName] = useState<string | null>(null);
 
   // If already onboarded, redirect to browse
   useEffect(() => {
@@ -52,9 +53,10 @@ export default function Connect() {
     const raw = sessionStorage.getItem("spotify_pending_taste");
     if (raw) {
       try {
-        const { topArtists, topTracks, artistImages, artistIds, trackImages } = JSON.parse(raw);
+        const { displayName, topArtists, topTracks, artistImages, artistIds, trackImages } = JSON.parse(raw);
         setPendingSpotifyArtists(topArtists);
         setPendingSpotifyTracks(topTracks);
+        if (displayName) setPendingDisplayName(displayName);
         if (artistImages) setPendingArtistImages(artistImages);
         if (artistIds) setPendingArtistIds(artistIds);
         if (trackImages) setPendingTrackImages(trackImages);
@@ -76,6 +78,7 @@ export default function Connect() {
   const handleTierSelect = (t: Tier) => {
     const profile: UserProfile = {
       streamingService: pendingSpotifyArtists?.length ? "Spotify" : "",
+      spotifyDisplayName: pendingDisplayName || undefined,
       spotifyTopArtists: pendingSpotifyArtists || undefined,
       spotifyTopTracks: pendingSpotifyTracks || undefined,
       spotifyArtistImages: Object.keys(pendingArtistImages).length ? pendingArtistImages : undefined,

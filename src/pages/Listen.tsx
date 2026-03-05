@@ -198,7 +198,7 @@ export default function Listen() {
   const player = usePlayer();
   useEffect(() => {
     player.pushTrackHistory(`/listen/${rawTrackId}`);
-  }, [rawTrackId]);
+  }, [rawTrackId, player]);
 
   // If this track was completed in this session, force fresh nugget generation
   useEffect(() => {
@@ -208,7 +208,7 @@ export default function Listen() {
       player.clearTrackCompleted(key);
       setRegenerateKey((k) => k + 1);
     }
-  }, [trackId]);
+  }, [trackId, track, player]);
 
   // For real tracks: next is always available (we fetch on demand), prev uses global history
   const hasPrev = isRealTrack ? !!player.prevTrackRoute : !!mockPrev;
