@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Smartphone } from "lucide-react";
+import { ArrowLeft, Smartphone, Loader2, RefreshCw } from "lucide-react";
 import { useThemeSync } from "@/hooks/useThemeSync";
 import { QRCode } from "react-qrcode-logo";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
@@ -950,6 +950,53 @@ export default function Listen() {
         <div className="relative z-10 flex flex-1 items-center justify-end px-4 pb-24 md:px-10">
           <div className="w-full max-w-[520px] shrink-0">
             <AnimatePresence mode="wait">
+              {/* ── Skeleton: AI nuggets still loading ── */}
+              {aiLoading && !activeNugget && (
+                <motion.div
+                  key="nugget-skeleton"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.3 }}
+                  className="ml-2 apple-glass rounded-xl px-5 py-4 space-y-3"
+                >
+                  {/* Spinner row */}
+                  <div className="flex items-center gap-2 text-muted-foreground/60">
+                    <Loader2 size={14} className="animate-spin shrink-0" />
+                    <span className="text-xs uppercase tracking-wider">Generating nuggets…</span>
+                  </div>
+                  {/* Fake headline lines */}
+                  <div className="space-y-2">
+                    <div className="h-4 w-3/4 rounded-md bg-foreground/8 animate-pulse" />
+                    <div className="h-4 w-full rounded-md bg-foreground/8 animate-pulse" />
+                    <div className="h-4 w-2/3 rounded-md bg-foreground/8 animate-pulse" />
+                  </div>
+                </motion.div>
+              )}
+
+              {/* ── Error state: generation failed, no nuggets ── */}
+              {aiError && !aiLoading && aiNuggets.length === 0 && !activeNugget && (
+                <motion.div
+                  key="nugget-error"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.3 }}
+                  className="ml-2 apple-glass rounded-xl px-5 py-4 space-y-3"
+                >
+                  <p className="text-sm text-muted-foreground leading-snug">
+                    Couldn't load nuggets right now.
+                  </p>
+                  <button
+                    onClick={() => setRegenerateKey((k) => k + 1)}
+                    className="flex items-center gap-1.5 rounded-lg bg-primary/15 px-4 py-2 text-xs font-medium text-primary hover:bg-primary/25 transition-colors"
+                  >
+                    <RefreshCw size={12} />
+                    Retry
+                  </button>
+                </motion.div>
+              )}
+
               {activeNugget && (
                 <motion.div
                   key={activeNugget.id}
