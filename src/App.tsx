@@ -12,10 +12,11 @@ import ArtistProfile from "./pages/ArtistProfile";
 import AlbumDetail from "./pages/AlbumDetail";
 import Listen from "./pages/Listen";
 import Companion from "./pages/Companion";
+import CompanionShortRedirect from "./pages/CompanionShortRedirect";
 import SpotifyCallback from "./pages/SpotifyCallback";
 import NotFound from "./pages/NotFound";
 import { getStoredProfile } from "./hooks/useMusicNerdState";
-import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { AuthProvider } from "./contexts/AuthContext";
 import { PlayerProvider } from "./contexts/PlayerContext";
 import NowPlayingBar from "./components/NowPlayingBar";
 
@@ -29,44 +30,18 @@ function ScrollToTop() {
   return null;
 }
 
-/**
- * ProtectedRoute — requires a valid Supabase session AND a completed profile.
- *
- * No session  → /connect (sign in first)
- * No profile  → /connect (complete onboarding first)
- * Both ✓      → render children
- *
- * Renders nothing while the initial session check is in flight to avoid
- * a flash of the wrong screen.
- */
+/** ProtectedRoute — requires a completed profile (localStorage). */
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { session, loading } = useAuth();
-
-  if (loading) return null;
-
-  // Must be signed in
-  if (!session) return <Navigate to="/connect" replace />;
-
-  // Must have completed onboarding (profile saved)
-  if (!getStoredProfile()) return <Navigate to="/connect" replace />;
-
+  const location = useLocation();
+  if (!getStoredProfile()) {
+    return <Navigate to={`/connect?redirect=${encodeURIComponent(location.pathname)}`} replace />;
+  }
   return <>{children}</>;
 }
 
-/**
- * RootRoute — decides between Onboarding and Browse.
- *
- * Signed-in + profile → /browse (skip onboarding)
- * Otherwise           → show Onboarding
- */
+/** RootRoute — profile exists → /browse, otherwise → Onboarding. */
 function RootRoute() {
-  const { session, loading } = useAuth();
-
-  if (loading) return null;
-
-  // Always go through Connect so user can pick their tier/vibe
-  if (session) return <Navigate to="/connect" replace />;
-
+  if (getStoredProfile()) return <Navigate to="/browse" replace />;
   return <Onboarding />;
 }
 
@@ -82,14 +57,15 @@ function AnimatedRoutes() {
           <Route path="/connect" element={<Connect />} />
           <Route path="/spotify-callback" element={<SpotifyCallback />} />
 
-          {/* Protected — requires Supabase session + completed onboarding */}
+          {/* Protected — requires completed profile */}
           <Route path="/browse" element={<ProtectedRoute><Browse /></ProtectedRoute>} />
           <Route path="/artist/:artistId" element={<ProtectedRoute><ArtistProfile /></ProtectedRoute>} />
           <Route path="/album/:albumId" element={<ProtectedRoute><AlbumDetail /></ProtectedRoute>} />
           <Route path="/listen/:trackId" element={<ProtectedRoute><Listen /></ProtectedRoute>} />
 
-          {/* Companion is a mobile QR-scan page — no auth required */}
+          {/* Companion — public, no login required (scanned on phone via QR) */}
           <Route path="/companion/:trackId" element={<Companion />} />
+          <Route path="/c/:shortId" element={<CompanionShortRedirect />} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>

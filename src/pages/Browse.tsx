@@ -8,8 +8,6 @@ import PageTransition from "@/components/PageTransition";
 import { useUserProfile, tierGreeting, tierBadgeLabel, tierBadgeColor, tierGlowClass } from "@/hooks/useMusicNerdState";
 import { usePersonalizedCatalog } from "@/hooks/usePersonalizedCatalog";
 import { useTierAccent } from "@/hooks/useTierAccent";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
 
 export default function Browse() {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -28,8 +26,7 @@ export default function Browse() {
   useTierAccent();
 
   const { rows: allRows } = usePersonalizedCatalog(profile);
-  const { user, isGuest } = useAuth();
-  const userName = user?.user_metadata?.full_name || user?.user_metadata?.name || "";
+  const userName = "";
 
   const tierLogoGlow: Record<string, string> = {
     casual: "#22c55e",
@@ -38,17 +35,10 @@ export default function Browse() {
   };
 
 
-  const handleSignOut = async () => {
-    // Sign out of Supabase (best-effort — always clear local state afterward)
-    try {
-      await supabase.auth.signOut();
-    } catch (err) {
-      console.warn("Supabase sign-out error (ignored):", err);
-    } finally {
-      clearProfile();
-      localStorage.removeItem("spotify_playback_token");
-      navigate("/connect", { replace: true });
-    }
+  const handleSignOut = () => {
+    clearProfile();
+    localStorage.removeItem("spotify_playback_token");
+    navigate("/", { replace: true });
   };
 
   // Focus state: rowIndex (-1 = header), colIndex
