@@ -125,18 +125,18 @@ export function useAINuggets(
     try {
       const trackKey = `${artist}::${title}`;
 
-      // Auth is always required — session is checked by the ProtectedRoute before
-      // this page even renders, so we can safely read the session here.
+      // Use Supabase session userId if available, otherwise fall back to a
+      // stable anonymous ID so listen history still works without auth.
       const { data: { session } } = await supabase.auth.getSession();
-      const userId = session?.user?.id;
-
-      if (!userId) {
-        // Should never happen in practice (ProtectedRoute prevents unauthenticated access),
-        // but handle it gracefully just in case.
-        setError("You must be signed in to generate nuggets.");
-        setLoading(false);
-        return;
-      }
+      const userId = session?.user?.id ?? (() => {
+        const key = "musicnerd_anon_id";
+        let id = localStorage.getItem(key);
+        if (!id) {
+          id = crypto.randomUUID();
+          localStorage.setItem(key, id);
+        }
+        return id;
+      })();
 
       // ── Listen history ────────────────────────────────────────────
       let currentListenCount = 1;

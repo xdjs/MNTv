@@ -752,17 +752,22 @@ export default function Listen() {
               animate={{ opacity: 1 }}
               className="absolute left-1/2 -translate-x-1/2 top-14 text-xs text-muted-foreground"
             >
-              {topFocusIndex === 0 ? "Back" : nerdActive ? "Turn off MusicNerd" : "Turn on MusicNerd"}
+              {topFocusIndex === 0 ? "Back" : "Open Companion"}
             </motion.p>
           )}
           <button
-            onClick={() => setNerdActive((v) => !v)}
+            onClick={() => {
+              if (shortId) {
+                window.open(`${window.location.origin}/c/${shortId}`, "_blank");
+              }
+            }}
+            disabled={!shortId}
             className={`transition-all duration-300 outline-none rounded-full ${
               focusZone === 'top' && topFocusIndex === 1 ? "tv-focus-glow scale-110" : ""
             }`}
-            aria-label={nerdActive ? "Turn off MusicNerd" : "Turn on MusicNerd"}
+            aria-label="Open companion page"
             style={{
-              filter: nerdActive
+              filter: shortId
                 ? "drop-shadow(0 0 8px hsl(var(--neon-glow) / 0.7)) drop-shadow(0 0 24px hsl(var(--neon-glow) / 0.35))"
                 : "grayscale(1) opacity(0.4)",
               transition: "filter 0.4s ease",
