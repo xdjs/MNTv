@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Loader2 } from "lucide-react";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { getArtistById, getAlbumsForArtist, getTracksForArtist, artists } from "@/mock/tracks";
 import { supabase } from "@/integrations/supabase/client";
 import PageTransition from "@/components/PageTransition";
@@ -245,6 +245,7 @@ interface RealInnerProps {
 
 function RealArtistProfileInner({ artist, trackTiles, albumTiles, relatedTiles, navigate }: RealInnerProps) {
   const heroImage = useArtistImage(artist.name, artist.imageUrl);
+  const trackRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const tileRows = useMemo(() => {
     const rows: { label: string; items: typeof albumTiles; tileSize: "sm" | "md" | "lg" }[] = [];
@@ -256,6 +257,13 @@ function RealArtistProfileInner({ artist, trackTiles, albumTiles, relatedTiles, 
   type ZoneType = 'header' | 'tracks' | number;
   const [zone, setZone] = useState<ZoneType>('header');
   const [colIndex, setColIndex] = useState(0);
+
+  // Scroll focused track into view
+  useEffect(() => {
+    if (zone === 'tracks' && trackRefs.current[colIndex]) {
+      trackRefs.current[colIndex]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [zone, colIndex]);
 
   const zoneOrder = useMemo((): ZoneType[] => {
     const z: ZoneType[] = ['header'];
@@ -389,6 +397,7 @@ function RealArtistProfileInner({ artist, trackTiles, albumTiles, relatedTiles, 
             {trackTiles.map((t, i) => (
               <button
                 key={t.id}
+                ref={(el) => { trackRefs.current[i] = el; }}
                 onClick={() => {
                   const href = `/listen/real::${encodeURIComponent(t.artist)}::${encodeURIComponent(t.title)}::${encodeURIComponent(t.album)}::${encodeURIComponent(t.uri)}`;
                   navigate(href);
@@ -444,6 +453,7 @@ interface MockInnerProps {
 
 function MockArtistProfileInner({ artist, tracksData, albumTiles, relatedTiles, navigate }: MockInnerProps) {
   const heroImage = useArtistImage(artist.name, artist.imageUrl);
+  const trackRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const tileRows = useMemo(() => {
     const rows: { label: string; items: typeof albumTiles; tileSize: "sm" | "md" | "lg" }[] = [];
@@ -455,6 +465,13 @@ function MockArtistProfileInner({ artist, tracksData, albumTiles, relatedTiles, 
   type ZoneType = 'header' | 'tracks' | number;
   const [zone, setZone] = useState<ZoneType>('header');
   const [colIndex, setColIndex] = useState(0);
+
+  // Scroll focused track into view
+  useEffect(() => {
+    if (zone === 'tracks' && trackRefs.current[colIndex]) {
+      trackRefs.current[colIndex]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [zone, colIndex]);
 
   const zoneOrder = useMemo((): ZoneType[] => {
     const z: ZoneType[] = ['header'];
@@ -572,6 +589,7 @@ function MockArtistProfileInner({ artist, tracksData, albumTiles, relatedTiles, 
           {tracksData.map((t, i) => (
             <button
               key={t.id}
+              ref={(el) => { trackRefs.current[i] = el; }}
               onClick={() => navigate(`/listen/${t.id}`)}
               className={`flex w-full items-center gap-4 rounded-xl p-3 transition-all hover:bg-foreground/5 text-left ${
                 zone === 'tracks' && colIndex === i ? "tv-focus-glow bg-foreground/5" : ""

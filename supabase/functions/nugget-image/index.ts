@@ -92,11 +92,13 @@ async function spotifyArtistImage(query: string): Promise<string | null> {
   return images[0]?.url || null;
 }
 
-async function spotifyAlbumImage(query: string): Promise<string | null> {
+async function spotifyAlbumImage(query: string, trackArtist?: string): Promise<string | null> {
   const token = await getSpotifyToken();
   if (!token) return null;
 
-  const url = `https://api.spotify.com/v1/search?type=album&limit=3&q=${encodeURIComponent(query)}`;
+  // Include artist in search for better results
+  const searchQuery = trackArtist ? `${query} artist:${trackArtist}` : query;
+  const url = `https://api.spotify.com/v1/search?type=album&limit=5&q=${encodeURIComponent(searchQuery)}`;
   const res = await fetchWithRetry(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -104,6 +106,20 @@ async function spotifyAlbumImage(query: string): Promise<string | null> {
   const data = await res.json();
   const albums = data?.albums?.items || [];
   if (albums.length === 0) return null;
+
+  // If we know the track artist, only accept albums by that artist
+  if (trackArtist) {
+    const artistLower = trackArtist.toLowerCase();
+    const match = albums.find((a: any) =>
+      (a.artists || []).some((ar: any) => ar.name.toLowerCase() === artistLower)
+    );
+    if (match) {
+      const images = match?.images || [];
+      return images[0]?.url || null;
+    }
+    console.log(`[nugget-image] Spotify album: no match for artist "${trackArtist}" in results for "${query}", skipping`);
+    return null;
+  }
 
   const images = albums[0]?.images || [];
   return images[0]?.url || null;
@@ -372,7 +388,7 @@ async function resolveArtist(query: string, width: number, trackArtist?: string,
   return resolveArtistMB(query, width);
 }
 
-async function resolveAlbum(query: string): Promise<string | null> {
+async function resolveAlbum(query: string, trackArtist?: string): Promise<string | null> {
   // Tier 1: Gemini (contextual — finds specific album art or related imagery)
   const geminiUrl = await geminiImageSearch(`${query} album cover art`);
   if (geminiUrl) {
@@ -380,8 +396,8 @@ async function resolveAlbum(query: string): Promise<string | null> {
     return geminiUrl;
   }
 
-  // Tier 2: Spotify (generic album cover fallback)
-  const spotifyUrl = await spotifyAlbumImage(query);
+  // Tier 2: Spotify (artist-validated album cover)
+  const spotifyUrl = await spotifyAlbumImage(query, trackArtist);
   if (spotifyUrl) {
     console.log(`[nugget-image] ✓ Spotify album: "${query}"`);
     return spotifyUrl;
@@ -430,7 +446,7 @@ serve(async (req) => {
         imageUrl = await resolveArtist(query, imgWidth, trackArtist, trackTitle);
         break;
       case "album":
-        imageUrl = await resolveAlbum(query);
+        imageUrl = await resolveAlbum(query, trackArtist);
         break;
       case "wiki":
         imageUrl = await resolveWiki(query, imgWidth);
