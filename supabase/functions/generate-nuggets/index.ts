@@ -570,11 +570,11 @@ Return ONLY valid JSON:
 
       // For non-YouTube sources, try to find a direct URL from Gemini's grounding chunks
       if (!result.source.url && groundingChunks.length > 0) {
-        // Filter out Vertex/Google internal grounding URLs
+        // Filter out purely internal grounding URLs (keep vertexaisearch proxy URLs — they redirect to real sources)
         const realChunks = groundingChunks.filter((chunk: any) => {
           const uri = (chunk?.web?.uri || "").toLowerCase();
           const chunkTitle = (chunk?.web?.title || "").toLowerCase();
-          return uri && !uri.includes("vertexaisearch.cloud.google.com") &&
+          return uri &&
                  !chunkTitle.includes("vertex ai") &&
                  !chunkTitle.includes("grounding api");
         });
@@ -583,12 +583,11 @@ Return ONLY valid JSON:
         const titleLower = (source.title || "").toLowerCase();
         const artistLower = artist.toLowerCase();
 
-        // Try exact match on publisher or source title
+        // Try exact match on publisher or source title (match on title, not URI — URIs may be proxy URLs)
         let match = realChunks.find((chunk: any) => {
           const chunkTitle = (chunk?.web?.title || "").toLowerCase();
-          const chunkUri = (chunk?.web?.uri || "").toLowerCase();
           return (
-            (pubLower && pubLower !== "unknown" && (chunkTitle.includes(pubLower) || chunkUri.includes(pubLower))) ||
+            (pubLower && pubLower !== "unknown" && chunkTitle.includes(pubLower)) ||
             (titleLower && chunkTitle.includes(titleLower))
           );
         });
@@ -608,12 +607,10 @@ Return ONLY valid JSON:
 
         if (match?.web?.uri) {
           result.source.url = match.web.uri;
-          // Update publisher from grounding if it was generic
+          // Update publisher from grounding title if it was generic
+          // (grounding URIs may be proxy URLs, but title has the real publisher domain)
           if (!pubLower || pubLower === "unknown") {
-            try {
-              const hostname = new URL(match.web.uri).hostname.replace("www.", "");
-              result.source.publisher = hostname;
-            } catch { /* keep original */ }
+            result.source.publisher = match.web.title || result.source.publisher;
           }
         }
       }
