@@ -56,7 +56,7 @@ function artistImageUrl(
 function trackCoverUrl(
   trackName: string,
   artistName: string,
-  spotifyTrackImages?: { title: string; artist: string; imageUrl: string }[],
+  spotifyTrackImages?: { title: string; artist: string; imageUrl: string; uri?: string }[],
 ): string {
   if (spotifyTrackImages) {
     const match = spotifyTrackImages.find(
@@ -75,8 +75,8 @@ function trackCoverUrl(
   return `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(artistName + trackName)}&backgroundColor=111827&textColor=ffffff&fontSize=30`;
 }
 
-function realTrackHref(artist: string, title: string, album?: string): string {
-  const parts = ["real", artist, title, album || ""].map(encodeURIComponent);
+function realTrackHref(artist: string, title: string, album?: string, spotifyUri?: string): string {
+  const parts = ["real", artist, title, album || "", spotifyUri || ""].map(encodeURIComponent);
   return `/listen/${parts.join("::")}`;
 }
 
@@ -95,13 +95,16 @@ function parseTrackString(t: string): { trackTitle: string; artistName: string }
 function trackTile(
   t: string,
   idPrefix: string,
-  spotifyTrackImages?: { title: string; artist: string; imageUrl: string }[],
+  spotifyTrackImages?: { title: string; artist: string; imageUrl: string; uri?: string }[],
 ): BrowseTile {
   const { trackTitle, artistName } = parseTrackString(t);
   const mockTrack = mockTracks.find(
     (m) =>
       m.title.toLowerCase() === trackTitle.toLowerCase() &&
       (!artistName || m.artist.toLowerCase() === artistName.toLowerCase())
+  );
+  const trackInfo = spotifyTrackImages?.find(
+    (img) => img.title.toLowerCase() === trackTitle.toLowerCase() && img.artist.toLowerCase() === artistName.toLowerCase()
   );
   return {
     id: `${idPrefix}-${t}`,
@@ -110,7 +113,7 @@ function trackTile(
     subtitle: artistName,
     href: mockTrack
       ? `/listen/${mockTrack.id}`
-      : realTrackHref(artistName, trackTitle),
+      : realTrackHref(artistName, trackTitle, undefined, trackInfo?.uri),
     isRealTrack: !mockTrack,
   };
 }
@@ -240,6 +243,9 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
         );
         // Use Last.fm album art if available, then Spotify, then mock, then DiceBear
         const image = t.imageUrl || trackCoverUrl(t.name, t.artist, spotifyTrackImgs);
+        const spotifyMatch = spotifyTrackImgs?.find(
+          (img) => img.title.toLowerCase() === t.name.toLowerCase() && img.artist.toLowerCase() === t.artist.toLowerCase()
+        );
         recentTiles.push({
           id: `recent-${t.artist}-${t.name}`,
           imageUrl: image,
@@ -247,7 +253,7 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
           subtitle: t.artist,
           href: mockTrack
             ? `/listen/${mockTrack.id}`
-            : realTrackHref(t.artist, t.name, t.album),
+            : realTrackHref(t.artist, t.name, t.album, spotifyMatch?.uri),
           isRealTrack: !mockTrack,
         });
       });

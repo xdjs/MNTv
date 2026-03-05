@@ -6,15 +6,18 @@ import { useArtistImage } from "@/hooks/useArtistImage";
 import { useUserProfile, tierGlowClass } from "@/hooks/useMusicNerdState";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ExternalLink, Music, BookOpen, Play, Lock } from "lucide-react";
+import { ExternalLink, Music, BookOpen, Play } from "lucide-react";
 import CompanionNuggetCard from "@/components/companion/CompanionNuggetCard";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import type { CompanionNugget } from "@/mock/types";
 
 interface CompanionData {
   artistSummary: string;
   trackStory: string;
   nuggets: CompanionNugget[];
-  externalLinks: { label: string; url: string }[];
+  externalLinks: { label?: string; name?: string; url: string }[];
+  coverArtUrl?: string;
+  artistImage?: string;
 }
 
 const SECTIONS: { key: CompanionNugget["category"]; label: string; color: string }[] = [
@@ -41,6 +44,10 @@ export default function Companion() {
 
   const { profile } = useUserProfile();
 
+  const [data, setData] = useState<CompanionData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   // Resolve track + artist data
   const mockTrack = useMemo(() => getTrackById(rawTrackId || ""), [rawTrackId]);
   const mockArtist = mockTrack ? getArtistById(mockTrack.artistId) : undefined;
@@ -55,9 +62,9 @@ export default function Companion() {
       };
     }
     if (realTrackMeta) {
-      // Try to get cover art from profile
-      let coverArtUrl = "";
-      if (profile?.spotifyTrackImages) {
+      // Try to get cover art: cached from companion data > profile > DiceBear fallback
+      let coverArtUrl = data?.coverArtUrl || "";
+      if (!coverArtUrl && profile?.spotifyTrackImages) {
         const match = profile.spotifyTrackImages.find(
           (t) =>
             t.title.toLowerCase() === realTrackMeta.title.toLowerCase() &&
@@ -79,18 +86,13 @@ export default function Companion() {
       };
     }
     return null;
-  }, [mockTrack, realTrackMeta, profile?.spotifyTrackImages, profile?.spotifyArtistImages]);
+  }, [mockTrack, realTrackMeta, data?.coverArtUrl, profile?.spotifyTrackImages, profile?.spotifyArtistImages]);
 
   const artistName = trackInfo?.artist || "";
-  const artistFallbackImage = mockArtist?.imageUrl || profile?.spotifyArtistImages?.[artistName] || "";
+  const artistFallbackImage = data?.artistImage || mockArtist?.imageUrl || profile?.spotifyArtistImages?.[artistName] || "";
   const artistImage = useArtistImage(artistName, artistFallbackImage);
   const artistGenres = mockArtist?.genres || [];
   const artistBio = mockArtist?.bio || "";
-
-  const [listenCount, setListenCount] = useState(1);
-  const [data, setData] = useState<CompanionData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const tier = profile?.calculatedTier ?? "casual";
   const glowClass = tierGlowClass(tier);
@@ -107,7 +109,6 @@ export default function Companion() {
         // nugget_history, and the pre-gen from Listen.tsx uses the same count
         // for the first listen. This guarantees a cache hit.
         const serverListenCount = 1;
-        setListenCount(serverListenCount);
 
         console.log("[Companion] Fetching:", { artist: trackInfo!.artist, title: trackInfo!.title, tier });
 
@@ -128,6 +129,7 @@ export default function Companion() {
 
         if (fnError) throw new Error(fnError.message);
         if (!companionData) throw new Error("No data returned from companion API");
+        if (companionData.error) throw new Error(companionData.error);
         setData(companionData as CompanionData);
       } catch (e) {
         console.error("Companion fetch error:", e);
@@ -153,13 +155,8 @@ export default function Companion() {
   function getSectionNuggets(category: CompanionNugget["category"]): CompanionNugget[] {
     if (!data?.nuggets) return [];
     return data.nuggets
-      .filter((n) => n.category === category && n.listenUnlockLevel <= listenCount)
+      .filter((n) => n.category === category)
       .sort((a, b) => b.timestamp - a.timestamp);
-  }
-
-  function getLockedCount(category: CompanionNugget["category"]): number {
-    if (!data?.nuggets) return 0;
-    return data.nuggets.filter((n) => n.category === category && n.listenUnlockLevel > listenCount).length;
   }
 
   return (
@@ -234,6 +231,12 @@ export default function Companion() {
             <p className="text-sm text-muted-foreground mt-1">{error}</p>
           </div>
         ) : data ? (
+          <ErrorBoundary fallback={
+            <div className="apple-glass rounded-2xl p-6 text-center">
+              <p className="text-muted-foreground font-semibold">Something went wrong displaying content</p>
+              <p className="text-sm text-muted-foreground/70 mt-1">Try refreshing the page.</p>
+            </div>
+          }>
           <div className="space-y-8">
             {/* Artist Summary */}
             {data.artistSummary && (
@@ -254,22 +257,17 @@ export default function Companion() {
             {/* Three categorized sections */}
             {SECTIONS.map(({ key, label, color }) => {
               const visible = getSectionNuggets(key);
-              const locked = getLockedCount(key);
-              if (visible.length === 0 && locked === 0) return null;
+              if (visible.length === 0) return null;
               return (
                 <section key={key} className="space-y-3">
                   <div className="flex items-center gap-2">
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${color}`}>{label}</span>
                   </div>
                   {visible.map((nugget) => (
-                    <CompanionNuggetCard key={nugget.id} nugget={nugget} />
+                    <ErrorBoundary key={nugget.id}>
+                      <CompanionNuggetCard nugget={nugget} />
+                    </ErrorBoundary>
                   ))}
-                  {locked > 0 && (
-                    <div className="flex items-center gap-2 px-4 py-3 rounded-xl border border-dashed border-foreground/15 text-muted-foreground text-xs">
-                      <Lock size={12} className="shrink-0 opacity-50" />
-                      Listen again to unlock {locked} more insight{locked > 1 ? "s" : ""}
-                    </div>
-                  )}
                 </section>
               );
             })}
@@ -280,9 +278,10 @@ export default function Companion() {
                 <h3 className="text-lg font-bold text-foreground mb-3">Explore Further</h3>
                 <div className="space-y-2">
                   {data.externalLinks.map((link, i) => {
+                    const linkLabel = link.label || link.name || "Link";
                     const Icon =
-                      link.label.toLowerCase().includes("wiki") ? BookOpen :
-                      link.label.toLowerCase().includes("youtube") ? Play :
+                      linkLabel.toLowerCase().includes("wiki") ? BookOpen :
+                      linkLabel.toLowerCase().includes("youtube") ? Play :
                       Music;
                     return (
                       <a
@@ -293,7 +292,7 @@ export default function Companion() {
                         className="flex items-center gap-3 px-4 py-3 rounded-xl apple-glass hover:bg-foreground/10 transition-colors"
                       >
                         <Icon size={18} className="text-primary shrink-0" />
-                        <span className="text-sm font-semibold text-foreground/80">{link.label}</span>
+                        <span className="text-sm font-semibold text-foreground/80">{linkLabel}</span>
                         <ExternalLink size={14} className="ml-auto text-muted-foreground" />
                       </a>
                     );
@@ -302,7 +301,13 @@ export default function Companion() {
               </section>
             )}
           </div>
-        ) : null}
+          </ErrorBoundary>
+        ) : (
+          <div className="apple-glass rounded-2xl p-6 text-center">
+            <p className="text-muted-foreground font-semibold">Content unavailable</p>
+            <p className="text-sm text-muted-foreground/70 mt-1">Try refreshing the page.</p>
+          </div>
+        )}
       </div>
     </div>
   );

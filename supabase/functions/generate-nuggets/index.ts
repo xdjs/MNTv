@@ -200,7 +200,9 @@ async function generateWithGemini(
     ? `\n\nDO NOT repeat or closely rephrase any of these previously shown headlines:\n${previousNuggets.map((h) => `- "${h}"`).join("\n")}\nGenerate completely fresh angles.`
     : "";
 
-  const prompt = `You are a music historian and trivia expert. Generate exactly 3 fascinating nuggets about "${title}" by ${artist}${album ? ` from "${album}"` : ""}.
+  const prompt = `You are a music historian and trivia expert. Generate exactly 3 fascinating nuggets about the song "${title}" by the artist/band ${artist}${album ? ` from the album "${album}"` : ""}.
+
+IMPORTANT DISAMBIGUATION: The ARTIST/BAND is "${artist}". The SONG/TRACK is "${title}". These are different — "${title}" is the song name, NOT a band. All nuggets must be about the artist "${artist}" and their song "${title}".
 
 DEPTH CONTEXT: ${depthInstruction}${nonRepeatInstruction}
 
@@ -211,8 +213,8 @@ ${videoListContext ? `Available YouTube videos:\n${videoListContext}\n` : ""}
 ${transcriptContext ? `Real transcript content:\n\n${transcriptContext}\n` : "No transcripts available — use your knowledge and Google Search to find real sources."}
 
 STRUCTURE — always exactly 3 nuggets in this order:
-1. **Nugget 1 — kind: "artist"**: ${tierConfig.artistFocus}. listenFor: false.
-2. **Nugget 2 — kind: "track"**: ${tierConfig.trackFocus}. listenFor: true.
+1. **Nugget 1 — kind: "artist"**: About the artist/band ${artist}. ${tierConfig.artistFocus}. listenFor: false.
+2. **Nugget 2 — kind: "track"**: About the song "${title}" by ${artist}. ${tierConfig.trackFocus}. listenFor: true.
 3. **Nugget 3 — kind: "discovery"**: ${tierConfig.discoveryFocus}. Be opinionated and specific like a knowledgeable friend. listenFor: false.
 
 CRITICAL RULES:
@@ -462,7 +464,7 @@ Return ONLY valid JSON:
     // Step 1: Search YouTube (needs YouTube Data API v3 enabled)
     let videos: YTVideo[] = [];
     try {
-      const searchQuery = `${artist} ${title} interview OR breakdown OR behind the scenes`;
+      const searchQuery = `"${artist}" "${title}" interview OR breakdown OR behind the scenes`;
       videos = await searchYouTube(searchQuery, GOOGLE_AI_API_KEY);
     } catch (e) {
       console.warn("YouTube search skipped:", e);

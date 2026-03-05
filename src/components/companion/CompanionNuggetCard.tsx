@@ -31,20 +31,24 @@ export default function CompanionNuggetCard({ nugget, onDeepDive }: Props) {
         )}
 
         {/* Body */}
-        <p className="text-sm text-foreground/75 leading-relaxed">{nugget.text}</p>
+        {nugget.text && (
+          <p className="text-sm text-foreground/75 leading-relaxed">{nugget.text}</p>
+        )}
 
         {/* Actions row */}
         <div className="flex items-center gap-2 pt-1 flex-wrap">
           {/* Source pill */}
-          <a
-            href={nugget.sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-foreground/8 border border-foreground/10 text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-foreground/25 transition-colors"
-          >
-            <ExternalLink size={11} />
-            Source: {nugget.sourceName}
-          </a>
+          {nugget.sourceUrl && nugget.sourceName && (
+            <a
+              href={nugget.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-foreground/8 border border-foreground/10 text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-foreground/25 transition-colors"
+            >
+              <ExternalLink size={11} />
+              Source: {nugget.sourceName}
+            </a>
+          )}
 
           {/* Go Deeper */}
           {onDeepDive && (

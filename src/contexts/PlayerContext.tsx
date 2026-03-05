@@ -1,5 +1,6 @@
 import { createContext, useContext, useRef, useState, useCallback, useEffect, type ReactNode } from "react";
 import { useSpotifyToken } from "@/hooks/useSpotifyToken";
+import { useCurrentlyPlaying, type ExternalTrack } from "@/hooks/useCurrentlyPlaying";
 import type { Nugget, Source } from "@/mock/types";
 
 // ── In-memory nugget cache (survives navigation, not page refresh) ──
@@ -68,6 +69,15 @@ export interface TrackMeta {
   spotifyUri?: string;
 }
 
+/** Track info reported by the Spotify Web Playback SDK (from player_state_changed). */
+export interface SpotifyStateTrack {
+  title: string;
+  artist: string;
+  album: string;
+  albumArtUrl: string;
+  spotifyUri: string;
+}
+
 interface PlayerState {
   isPlaying: boolean;
   currentTime: number;
@@ -80,6 +90,12 @@ interface PlayerState {
   currentTrack: TrackMeta | null;
   /** Previous track route (for "go back" button). Null if no history. */
   prevTrackRoute: string | null;
+  /** Track playing on an external Spotify device (phone, etc.) */
+  externalPlayback: ExternalTrack | null;
+  /** True when user navigated from external playback — skip auto-play */
+  isExternalListenMode: boolean;
+  /** Track the Spotify SDK reports as currently playing (may differ from what we loaded). */
+  spotifyStateTrack: SpotifyStateTrack | null;
 }
 
 interface PlayerActions {
@@ -97,10 +113,19 @@ interface PlayerActions {
   stop: () => void;
   /** Ref to attach the YT player container div. Render this in the Listen page. */
   playerContainerRef: React.RefObject<HTMLDivElement>;
+  /** Toggle external listen mode (skip auto-play for external device playback) */
+  setExternalListenMode: (mode: boolean) => void;
   /** In-memory nugget cache — survives navigation between pages */
   getNuggetCache: (key: string) => CachedNuggets | undefined;
   setNuggetCache: (key: string, entry: CachedNuggets) => void;
   clearNuggetCache: () => void;
+  /** Track completion flags — set when onEnded fires */
+  markTrackCompleted: (key: string) => void;
+  isTrackCompleted: (key: string) => boolean;
+  clearTrackCompleted: (key: string) => void;
+  /** Accumulated companion nuggets per track (session-scoped) */
+  getCompanionNuggets: (key: string) => any[];
+  appendCompanionNuggets: (key: string, nuggets: any[]) => void;
 }
 
 type PlayerContextType = PlayerState & PlayerActions;
@@ -142,13 +167,40 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [currentVideoId, setCurrentVideoId] = useState<string | null>(null);
   const [currentSpotifyUri, setCurrentSpotifyUri] = useState<string | null>(null);
   const [currentTrack, setCurrentTrack] = useState<TrackMeta | null>(null);
+  const [spotifyStateTrack, setSpotifyStateTrack] = useState<SpotifyStateTrack | null>(null);
   const onEndedRef = useRef<(() => void) | null>(null);
+
+  // External playback detection
+  const [isExternalListenMode, setIsExternalListenMode] = useState(false);
+  const externalTrack = useCurrentlyPlaying({
+    suppressPolling: activePlayer !== "none",
+    ownDeviceId: spDeviceId,
+  });
+  const setExternalListenMode = useCallback((mode: boolean) => {
+    setIsExternalListenMode(mode);
+  }, []);
 
   // In-memory nugget cache (useRef — no re-renders)
   const nuggetCacheRef = useRef<Map<string, CachedNuggets>>(new Map());
   const getNuggetCache = useCallback((key: string) => nuggetCacheRef.current.get(key), []);
   const setNuggetCache = useCallback((key: string, entry: CachedNuggets) => { nuggetCacheRef.current.set(key, entry); }, []);
   const clearNuggetCache = useCallback(() => { nuggetCacheRef.current.clear(); }, []);
+
+  // Track completion flags (set when onEnded fires, cleared when new nuggets generate)
+  const trackCompletedRef = useRef<Set<string>>(new Set());
+  const markTrackCompleted = useCallback((key: string) => { trackCompletedRef.current.add(key); }, []);
+  const isTrackCompleted = useCallback((key: string) => trackCompletedRef.current.has(key), []);
+  const clearTrackCompleted = useCallback((key: string) => { trackCompletedRef.current.delete(key); }, []);
+
+  // Accumulated companion nuggets per track (session-scoped)
+  const companionAccRef = useRef<Map<string, any[]>>(new Map());
+  const getCompanionNuggets = useCallback((key: string) => companionAccRef.current.get(key) || [], []);
+  const appendCompanionNuggets = useCallback((key: string, nuggets: any[]) => {
+    const existing = companionAccRef.current.get(key) || [];
+    const existingIds = new Set(existing.map((n: any) => n.id));
+    const newOnes = nuggets.filter((n: any) => !existingIds.has(n.id));
+    companionAccRef.current.set(key, [...existing, ...newOnes]);
+  }, []);
 
   // Track history for prev button (persists across Listen re-mounts)
   const trackHistoryRef = useRef<string[]>([]);
@@ -265,7 +317,20 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           clearInterval(spPollRef.current);
           spPollRef.current = null;
         }
-        if (state.paused && state.position === 0 && state.track_window.current_track.uri === lastSpUriRef.current) {
+        // Detect when Spotify plays a different track than what we loaded
+        // (e.g. user changed track on their phone via Spotify Connect)
+        const ct = state.track_window.current_track;
+        if (ct?.uri) {
+          setSpotifyStateTrack({
+            title: ct.name || "",
+            artist: ct.artists?.map((a: any) => a.name).join(", ") || "",
+            album: ct.album?.name || "",
+            albumArtUrl: ct.album?.images?.[0]?.url || "",
+            spotifyUri: ct.uri,
+          });
+        }
+        if (state.paused && state.position === 0 && ct.uri === lastSpUriRef.current) {
+          lastSpUriRef.current = null; // Prevent re-firing (avoid infinite skip loop)
           onEndedRef.current?.();
         }
       });
@@ -292,7 +357,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const wantsSpotifyRef = useRef(false);
 
   const loadTrack = useCallback(({ videoId, spotifyUri, spotifyAvailable }: { videoId?: string; spotifyUri?: string; spotifyAvailable?: boolean }) => {
+    // Don't reload if Spotify is already playing this exact URI
+    if (spotifyUri && lastSpUriRef.current === spotifyUri) {
+      return;
+    }
+
     // Stop existing playback
+    lastSpUriRef.current = null; // Prevent stale end detection from old track
     ytPlayerRef.current?.pauseVideo();
     spPlayerRef.current?.pause();
     stopYtPoll();
@@ -456,6 +527,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     currentSpotifyUri,
     currentTrack,
     prevTrackRoute,
+    externalPlayback: externalTrack,
+    isExternalListenMode,
+    spotifyStateTrack,
     setCurrentTrack,
     setOnEnded,
     pushTrackHistory,
@@ -466,10 +540,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     toggle,
     seek,
     stop,
+    setExternalListenMode,
     playerContainerRef: ytContainerRef,
     getNuggetCache,
     setNuggetCache,
     clearNuggetCache,
+    markTrackCompleted,
+    isTrackCompleted,
+    clearTrackCompleted,
+    getCompanionNuggets,
+    appendCompanionNuggets,
   };
 
   return (

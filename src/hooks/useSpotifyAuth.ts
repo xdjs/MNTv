@@ -146,7 +146,7 @@ export async function fetchSpotifyTaste(accessToken: string): Promise<{
   topTracks: string[];
   artistImages: Record<string, string>;
   artistIds: Record<string, string>;
-  trackImages: { title: string; artist: string; imageUrl: string }[];
+  trackImages: { title: string; artist: string; imageUrl: string; uri?: string }[];
   displayName: string | null;
 } | null> {
   const { data, error } = await supabase.functions.invoke("spotify-taste", {
