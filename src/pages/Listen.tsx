@@ -21,6 +21,14 @@ import { useUserProfile } from "@/hooks/useMusicNerdState";
 import PageTransition from "@/components/PageTransition";
 import type { Nugget, Source, AnimationStyle } from "@/mock/types";
 
+/** Shape of a track result returned by the spotify-search edge function. */
+interface SpotifyTrackResult {
+  title: string;
+  artist: string;
+  album?: string;
+  uri?: string;
+}
+
 const HIDE_DELAY = 3000;
 
 export default function Listen() {
@@ -116,27 +124,27 @@ export default function Listen() {
         const artistLower = track!.artist.toLowerCase();
 
         // 1. Exact match (case-insensitive)
-        let match = tracks.find((t: any) =>
+        let match = (tracks as SpotifyTrackResult[]).find((t) =>
           t.title.toLowerCase() === titleLower &&
           t.artist.toLowerCase() === artistLower
         );
         // 2. Title contains match + artist match
         if (!match) {
-          match = tracks.find((t: any) =>
+          match = (tracks as SpotifyTrackResult[]).find((t) =>
             t.artist.toLowerCase() === artistLower &&
             (t.title.toLowerCase().includes(titleLower) || titleLower.includes(t.title.toLowerCase()))
           );
         }
         // 3. Partial artist match + exact title
         if (!match) {
-          match = tracks.find((t: any) =>
+          match = (tracks as SpotifyTrackResult[]).find((t) =>
             t.title.toLowerCase() === titleLower &&
             (t.artist.toLowerCase().includes(artistLower) || artistLower.includes(t.artist.toLowerCase()))
           );
         }
         // 4. Only fall back to first result if artist partially matches
         if (!match && tracks.length > 0) {
-          const firstTrack = tracks[0];
+          const firstTrack = tracks[0] as SpotifyTrackResult;
           if (firstTrack.artist.toLowerCase().includes(artistLower) || artistLower.includes(firstTrack.artist.toLowerCase())) {
             match = firstTrack;
           }
@@ -227,8 +235,8 @@ export default function Listen() {
       const { data } = await supabase.functions.invoke("spotify-search", {
         body: { query: track.artist },
       });
-      const candidates = (data?.tracks || []).filter(
-        (t: any) => t.title.toLowerCase() !== track.title.toLowerCase()
+      const candidates = (data?.tracks as SpotifyTrackResult[] || []).filter(
+        (t) => t.title.toLowerCase() !== track.title.toLowerCase()
       );
       if (candidates.length > 0) {
         const pick = candidates[Math.floor(Math.random() * Math.min(candidates.length, 5))];

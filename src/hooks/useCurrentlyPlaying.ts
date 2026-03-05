@@ -85,7 +85,7 @@ export function useCurrentlyPlaying({ suppressPolling, ownDeviceId }: Options = 
       const track = data.item;
       setExternalTrack({
         title: track.name || "",
-        artist: track.artists?.map((a: any) => a.name).join(", ") || "",
+        artist: track.artists?.map((a: { name: string }) => a.name).join(", ") || "",
         album: track.album?.name || "",
         albumArtUrl: track.album?.images?.[0]?.url || "",
         spotifyUri: track.uri || "",

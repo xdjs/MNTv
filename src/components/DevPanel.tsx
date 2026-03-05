@@ -13,7 +13,7 @@ interface Props {
   onResetHistory?: () => void;
   onResetAllHistory?: () => void;
   onIncrementListen?: () => void;
-  activePlayer?: "spotify" | "youtube" | "timer" | null;
+  activePlayer?: "spotify" | "youtube" | "none" | null;
   ytVideoId?: string | null;
   spotifyUri?: string | null;
 }

@@ -10,6 +10,20 @@ export interface CachedNuggets {
   listenCount: number;
 }
 
+// ── Companion nugget shape (session-accumulated per track) ─────────
+export interface CompanionNugget {
+  id: string;
+  timestamp: number;
+  headline: string;
+  text: string;
+  category: string;
+  listenUnlockLevel: number;
+  sourceName: string;
+  sourceUrl: string;
+  imageUrl?: string;
+  imageCaption?: string;
+}
+
 // ── YouTube API singleton loader ──────────────────────────────────────
 
 let ytApiLoading = false;
@@ -124,8 +138,8 @@ interface PlayerActions {
   isTrackCompleted: (key: string) => boolean;
   clearTrackCompleted: (key: string) => void;
   /** Accumulated companion nuggets per track (session-scoped) */
-  getCompanionNuggets: (key: string) => any[];
-  appendCompanionNuggets: (key: string, nuggets: any[]) => void;
+  getCompanionNuggets: (key: string) => CompanionNugget[];
+  appendCompanionNuggets: (key: string, nuggets: CompanionNugget[]) => void;
 }
 
 type PlayerContextType = PlayerState & PlayerActions;
@@ -194,12 +208,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const clearTrackCompleted = useCallback((key: string) => { trackCompletedRef.current.delete(key); }, []);
 
   // Accumulated companion nuggets per track (session-scoped)
-  const companionAccRef = useRef<Map<string, any[]>>(new Map());
+  const companionAccRef = useRef<Map<string, CompanionNugget[]>>(new Map());
   const getCompanionNuggets = useCallback((key: string) => companionAccRef.current.get(key) || [], []);
-  const appendCompanionNuggets = useCallback((key: string, nuggets: any[]) => {
+  const appendCompanionNuggets = useCallback((key: string, nuggets: CompanionNugget[]) => {
     const existing = companionAccRef.current.get(key) || [];
-    const existingIds = new Set(existing.map((n: any) => n.id));
-    const newOnes = nuggets.filter((n: any) => !existingIds.has(n.id));
+    const existingIds = new Set(existing.map((n: CompanionNugget) => n.id));
+    const newOnes = nuggets.filter((n: CompanionNugget) => !existingIds.has(n.id));
     companionAccRef.current.set(key, [...existing, ...newOnes]);
   }, []);
 
@@ -325,7 +339,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         if (ct?.uri) {
           setSpotifyStateTrack({
             title: ct.name || "",
-            artist: ct.artists?.map((a: any) => a.name).join(", ") || "",
+            artist: ct.artists?.map((a: { name: string }) => a.name).join(", ") || "",
             album: ct.album?.name || "",
             albumArtUrl: ct.album?.images?.[0]?.url || "",
             spotifyUri: ct.uri,
