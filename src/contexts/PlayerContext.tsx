@@ -89,6 +89,8 @@ interface PlayerState {
 
 interface PlayerActions {
   loadTrack: (opts: { spotifyUri?: string }) => void;
+  /** Sync state to match an externally-changed track (no pause/restart). */
+  syncExternalTrack: (spotifyUri: string) => void;
   setCurrentTrack: (meta: TrackMeta | null) => void;
   setOnEnded: (cb: (() => void) | null) => void;
   /** Push current route to history so prev button works across navigations. */
@@ -285,6 +287,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     // Reset playback state
     lastSpUriRef.current = null;
     spHasPlayedRef.current = false;
+    hasAutoPlayedRef.current = false;
     spPlayerRef.current?.pause();
     if (spPollRef.current) { clearInterval(spPollRef.current); spPollRef.current = null; }
     setSpTime(0);
@@ -294,6 +297,17 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setCurrentSpotifyUri(spotifyUri || null);
     setActivePlayer(spReady && spotifyUri ? "spotify" : "none");
   }, [spReady]);
+
+  /** Sync tracking state to match an externally-changed Spotify track.
+   *  Unlike loadTrack, this does NOT pause or restart playback — the SDK
+   *  is already playing the right track. */
+  const syncExternalTrack = useCallback((spotifyUri: string) => {
+    setCurrentSpotifyUri(spotifyUri);
+    lastSpUriRef.current = spotifyUri;
+    spHasPlayedRef.current = true;
+    hasAutoPlayedRef.current = true;
+    setActivePlayer("spotify");
+  }, []);
 
   // ── Upgrade to Spotify when SDK becomes ready after loadTrack ─────
   useEffect(() => {
@@ -323,11 +337,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       })();
     }
   }, [activePlayer, spReady, currentSpotifyUri, spDeviceId, getValidToken]);
-
-  // Reset autoplay flag when URI changes
-  useEffect(() => {
-    hasAutoPlayedRef.current = false;
-  }, [currentSpotifyUri]);
 
   // ── Controls ──────────────────────────────────────────────────────
 
@@ -385,6 +394,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     pushTrackHistory,
     popTrackHistory,
     loadTrack,
+    syncExternalTrack,
     play,
     pause,
     toggle,

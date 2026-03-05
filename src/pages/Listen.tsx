@@ -182,6 +182,13 @@ export default function Listen() {
 
   // Suppress external track detection during our own navigation (track end, next/prev)
   const isNavigatingRef = useRef(false);
+  const lastLoadedTrackRef = useRef<string | null>(null);
+
+  // Reset navigation lock + load guard when the route changes (new track mounted)
+  useEffect(() => {
+    isNavigatingRef.current = false;
+    lastLoadedTrackRef.current = null;
+  }, [rawTrackId]);
 
   // Fetch a related track from Spotify and navigate to it
   const navigateToRelated = useCallback(async () => {
@@ -287,14 +294,20 @@ export default function Listen() {
 
   // Load track into global player when sources resolve
   // Skip if the same track is already playing (e.g. returning from Browse via mini-player)
-  const lastLoadedTrackRef = useRef<string | null>(null);
-
   useEffect(() => {
     if (isExternalListenMode) return;
     if (!spotifyUri) return;
     if (player.currentSpotifyUri === spotifyUri) return;
     if (lastLoadedTrackRef.current === spotifyUri) return;
     lastLoadedTrackRef.current = spotifyUri;
+
+    // If the SDK is already playing this track (external skip on Spotify),
+    // just sync state — don't pause and restart playback.
+    if (spotifyStateTrack?.spotifyUri === spotifyUri) {
+      player.syncExternalTrack(spotifyUri);
+      return;
+    }
+
     player.loadTrack({ spotifyUri });
   }, [spotifyUri, isExternalListenMode]);
 

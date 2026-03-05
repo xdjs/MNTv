@@ -338,7 +338,9 @@ export function useAINuggets(
           const fallbackUrl = artistImageUrl || coverArtUrl;
           if (fallbackUrl) {
             nugget.imageUrl = fallbackUrl;
-            nugget.imageCaption = nugget.imageCaption || nugget.headline;
+            // Use generic caption for fallback images — the AI's imageHint caption
+            // describes a specific image that wasn't found, so it would be misleading.
+            nugget.imageCaption = nugget.headline;
             nugget.visualOnly = true;
             console.log("[NuggetVisual] Used fallback image for visual nugget:", fallbackUrl);
           } else {
