@@ -103,17 +103,50 @@ export default function Listen() {
     let cancelled = false;
     async function findSpotifyUri() {
       try {
+        // Pass artist + title separately for precise Spotify field filtering
         const { data, error } = await supabase.functions.invoke("spotify-search", {
-          body: { query: `${track!.artist} ${track!.title}` },
+          body: { artist: track!.artist, title: track!.title },
         });
         if (cancelled) return;
         if (error) { console.error("[Listen] Spotify search error:", error); return; }
-        // Find the best matching track
-        const match = data?.tracks?.find((t: any) =>
-          t.title.toLowerCase() === track!.title.toLowerCase() &&
-          t.artist.toLowerCase() === track!.artist.toLowerCase()
-        ) || data?.tracks?.[0];
-        if (match?.uri) setSpotifyUri(match.uri);
+
+        const tracks = data?.tracks || [];
+        const titleLower = track!.title.toLowerCase();
+        const artistLower = track!.artist.toLowerCase();
+
+        // 1. Exact match (case-insensitive)
+        let match = tracks.find((t: any) =>
+          t.title.toLowerCase() === titleLower &&
+          t.artist.toLowerCase() === artistLower
+        );
+        // 2. Title contains match + artist match
+        if (!match) {
+          match = tracks.find((t: any) =>
+            t.artist.toLowerCase() === artistLower &&
+            (t.title.toLowerCase().includes(titleLower) || titleLower.includes(t.title.toLowerCase()))
+          );
+        }
+        // 3. Partial artist match + exact title
+        if (!match) {
+          match = tracks.find((t: any) =>
+            t.title.toLowerCase() === titleLower &&
+            (t.artist.toLowerCase().includes(artistLower) || artistLower.includes(t.artist.toLowerCase()))
+          );
+        }
+        // 4. Only fall back to first result if artist partially matches
+        if (!match && tracks.length > 0) {
+          const firstTrack = tracks[0];
+          if (firstTrack.artist.toLowerCase().includes(artistLower) || artistLower.includes(firstTrack.artist.toLowerCase())) {
+            match = firstTrack;
+          }
+        }
+
+        if (match?.uri) {
+          console.log(`[Listen] Spotify match: "${match.artist} - ${match.title}" for "${track!.artist} - ${track!.title}"`);
+          setSpotifyUri(match.uri);
+        } else {
+          console.warn(`[Listen] No Spotify match for "${track!.artist} - ${track!.title}"`);
+        }
       } catch (err) {
         console.error("[Listen] Spotify URI search failed:", err);
       }
@@ -796,18 +829,18 @@ export default function Listen() {
         {companionReady && (
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 0.5, scale: 1 }}
-            className="fixed bottom-6 left-6 z-10 hover:opacity-90 transition-opacity"
+            animate={{ opacity: 0.85, scale: 1 }}
+            className="fixed bottom-6 left-6 z-10 hover:opacity-100 transition-opacity rounded-xl overflow-hidden"
           >
             <QRCode
               value={`${window.location.origin}/companion/${trackId}`}
-              size={80}
+              size={140}
               qrStyle="dots"
               eyeRadius={8}
-              fgColor="#ffffff"
-              bgColor="transparent"
-              ecLevel="M"
-              quietZone={0}
+              fgColor="#000000"
+              bgColor="#ffffff"
+              ecLevel="H"
+              quietZone={8}
             />
           </motion.div>
         )}

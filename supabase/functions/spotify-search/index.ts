@@ -45,8 +45,8 @@ serve(async (req) => {
   }
 
   try {
-    const { query } = await req.json();
-    if (!query || typeof query !== "string" || query.trim().length === 0) {
+    const { query, artist, title } = await req.json();
+    if ((!query && !title) || (query && typeof query !== "string")) {
       return new Response(
         JSON.stringify({ artists: [], tracks: [] }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -54,8 +54,16 @@ serve(async (req) => {
     }
 
     const token = await getAppToken();
-    const q = encodeURIComponent(query.trim());
-    const url = `https://api.spotify.com/v1/search?type=artist,track&limit=8&q=${q}`;
+
+    // Build a precise query using Spotify's field filters when artist+title are provided
+    let q: string;
+    if (artist && title) {
+      // Use Spotify's search field filters for precise matching
+      q = encodeURIComponent(`artist:${artist} track:${title}`);
+    } else {
+      q = encodeURIComponent((query || "").trim());
+    }
+    const url = `https://api.spotify.com/v1/search?type=artist,track&limit=20&q=${q}`;
 
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
