@@ -8,7 +8,6 @@ const corsHeaders = {
 
 const MB_USER_AGENT = "MusicNerd/1.0 (musicnerd-app)";
 
-
 async function fetchWithRetry(url: string, options?: RequestInit, retries = 2): Promise<Response> {
   for (let i = 0; i < retries; i++) {
     const controller = new AbortController();
@@ -26,7 +25,125 @@ async function fetchWithRetry(url: string, options?: RequestInit, retries = 2): 
   throw new Error("Unreachable");
 }
 
-// ── Artist pipeline: MusicBrainz → Wikidata → Wikimedia Commons ─────
+// ── Helper: extract artist name from verbose AI queries ──────────────
+function extractArtistName(query: string): string {
+  const stopWords = /\b(delivering|performing|playing|in|on|at|with|during|holding|behind|live|the\b.*\b(?:stage|studio|guitar|piano|drums|mic|booth))/i;
+  const match = query.split(stopWords)[0].trim();
+  const dashSplit = match.split(/\s+[-—–]\s+/)[0].trim();
+  return dashSplit || query;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// TIER 1: Spotify API (fast, accurate for artists & albums)
+// ═══════════════════════════════════════════════════════════════════════
+
+let spotifyToken: string | null = null;
+let spotifyTokenExpiry = 0;
+
+async function getSpotifyToken(): Promise<string | null> {
+  if (spotifyToken && Date.now() < spotifyTokenExpiry) return spotifyToken;
+
+  const clientId = Deno.env.get("VITE_SPOTIFY_CLIENT_ID");
+  const clientSecret = Deno.env.get("SPOTIFY_CLIENT_SECRET");
+  if (!clientId || !clientSecret) return null;
+
+  try {
+    const res = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      },
+      body: "grant_type=client_credentials",
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    spotifyToken = data.access_token;
+    spotifyTokenExpiry = Date.now() + (data.expires_in - 60) * 1000;
+    return spotifyToken;
+  } catch {
+    return null;
+  }
+}
+
+async function spotifyArtistImage(query: string): Promise<string | null> {
+  const token = await getSpotifyToken();
+  if (!token) return null;
+
+  const artistName = extractArtistName(query);
+  const url = `https://api.spotify.com/v1/search?type=artist&limit=3&q=${encodeURIComponent(artistName)}`;
+  const res = await fetchWithRetry(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const artists = data?.artists?.items || [];
+  if (artists.length === 0) return null;
+
+  const nameLower = artistName.toLowerCase();
+  const exactMatch = artists.find((a: any) => a.name.toLowerCase() === nameLower);
+  const artist = exactMatch || artists[0];
+  const images = artist?.images || [];
+  return images[0]?.url || null;
+}
+
+async function spotifyAlbumImage(query: string): Promise<string | null> {
+  const token = await getSpotifyToken();
+  if (!token) return null;
+
+  const url = `https://api.spotify.com/v1/search?type=album&limit=3&q=${encodeURIComponent(query)}`;
+  const res = await fetchWithRetry(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const albums = data?.albums?.items || [];
+  if (albums.length === 0) return null;
+
+  const images = albums[0]?.images || [];
+  return images[0]?.url || null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// TIER 2: Google Custom Search Images (broad, relevant for anything)
+// ═══════════════════════════════════════════════════════════════════════
+
+async function googleImageSearch(query: string): Promise<string | null> {
+  const apiKey = Deno.env.get("GOOGLE_AI_API_KEY");
+  const cx = Deno.env.get("GOOGLE_CSE_CX");
+  if (!apiKey || !cx) return null;
+
+  try {
+    const url = new URL("https://www.googleapis.com/customsearch/v1");
+    url.searchParams.set("key", apiKey);
+    url.searchParams.set("cx", cx);
+    url.searchParams.set("q", query);
+    url.searchParams.set("searchType", "image");
+    url.searchParams.set("num", "3");
+    url.searchParams.set("safe", "active");
+    // Prefer medium-large images, exclude tiny icons
+    url.searchParams.set("imgSize", "LARGE");
+
+    const res = await fetchWithRetry(url.toString());
+    if (!res.ok) {
+      console.warn(`[nugget-image] Google CSE error: ${res.status}`);
+      return null;
+    }
+    const data = await res.json();
+    const items = data?.items || [];
+    if (items.length === 0) return null;
+
+    // Return the first image link
+    return items[0]?.link || null;
+  } catch (e) {
+    console.warn("[nugget-image] Google CSE failed:", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// TIER 3: MusicBrainz / Wikimedia Commons (free, open-source fallback)
+// ═══════════════════════════════════════════════════════════════════════
 
 async function searchArtist(name: string): Promise<string | null> {
   const url = `https://musicbrainz.org/ws/2/artist/?query=artist:${encodeURIComponent(name)}&fmt=json&limit=1`;
@@ -75,26 +192,11 @@ async function getArtistImageUrl(wikidataId: string, width = 500): Promise<strin
   return getCommonsImageUrl(filename, width);
 }
 
-// Extract just the artist/person name from verbose AI-generated queries like
-// "Gojira delivering their powerful metal sound live on stage" → "Gojira"
-function extractArtistName(query: string): string {
-  // Split on common action words / prepositions that follow the name
-  const stopWords = /\b(delivering|performing|playing|in|on|at|with|during|holding|behind|the\b.*\b(?:stage|studio|guitar|piano|drums|mic|booth))/i;
-  const match = query.split(stopWords)[0].trim();
-  // Also try splitting on " — " or " - " (common separator)
-  const dashSplit = match.split(/\s+[-—–]\s+/)[0].trim();
-  return dashSplit || query;
-}
-
-async function resolveArtist(query: string, width: number): Promise<string | null> {
-  // Try full query first, then extracted name if that fails
-  let mbid = await searchArtist(query);
-  if (!mbid) {
-    const cleaned = extractArtistName(query);
-    if (cleaned !== query) {
-      console.log(`[nugget-image] Retrying artist search with cleaned name: "${cleaned}"`);
-      mbid = await searchArtist(cleaned);
-    }
+async function resolveArtistMB(query: string, width: number): Promise<string | null> {
+  const cleaned = extractArtistName(query);
+  let mbid = await searchArtist(cleaned);
+  if (!mbid && cleaned !== query) {
+    mbid = await searchArtist(query);
   }
   if (!mbid) return null;
   await new Promise((r) => setTimeout(r, 1100));
@@ -103,9 +205,7 @@ async function resolveArtist(query: string, width: number): Promise<string | nul
   return getArtistImageUrl(wikidataId, width);
 }
 
-// ── Album pipeline: MusicBrainz → Cover Art Archive ─────────────────
-
-async function resolveAlbum(query: string): Promise<string | null> {
+async function resolveAlbumMB(query: string): Promise<string | null> {
   const url = `https://musicbrainz.org/ws/2/release-group/?query=${encodeURIComponent(query)}&fmt=json&limit=1`;
   const res = await fetchWithRetry(url, { headers: { "User-Agent": MB_USER_AGENT } });
   if (!res.ok) return null;
@@ -117,15 +217,11 @@ async function resolveAlbum(query: string): Promise<string | null> {
   try {
     const caaRes = await fetch(caaUrl, { redirect: "follow" });
     if (caaRes.ok) return caaRes.url;
-  } catch {
-    // CAA can be flaky
-  }
+  } catch { /* CAA can be flaky */ }
   return null;
 }
 
-// ── Wiki pipeline: Wikimedia Commons search ─────────────────────────
-
-async function resolveWiki(query: string, width: number): Promise<string | null> {
+async function resolveWikiCommons(query: string, width: number): Promise<string | null> {
   const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrsearch=${encodeURIComponent(query)}&gsrlimit=3&prop=imageinfo&iiprop=url&iiurlwidth=${width}&format=json`;
   const res = await fetchWithRetry(url, { headers: { "User-Agent": MB_USER_AGENT } });
   if (!res.ok) return null;
@@ -138,6 +234,65 @@ async function resolveWiki(query: string, width: number): Promise<string | null>
     if (thumbUrl) return thumbUrl;
   }
   return null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Combined resolvers: Spotify → Google → MusicBrainz/Wikimedia
+// ═══════════════════════════════════════════════════════════════════════
+
+async function resolveArtist(query: string, width: number): Promise<string | null> {
+  const label = extractArtistName(query);
+
+  // Tier 1: Spotify (fast, accurate)
+  const spotifyUrl = await spotifyArtistImage(query);
+  if (spotifyUrl) {
+    console.log(`[nugget-image] ✓ Spotify artist: "${label}"`);
+    return spotifyUrl;
+  }
+
+  // Tier 2: Google Custom Search Images
+  const googleUrl = await googleImageSearch(`${label} musician artist photo`);
+  if (googleUrl) {
+    console.log(`[nugget-image] ✓ Google artist: "${label}"`);
+    return googleUrl;
+  }
+
+  // Tier 3: MusicBrainz → Wikidata → Wikimedia Commons
+  console.log(`[nugget-image] Trying MusicBrainz for "${label}"`);
+  return resolveArtistMB(query, width);
+}
+
+async function resolveAlbum(query: string): Promise<string | null> {
+  // Tier 1: Spotify
+  const spotifyUrl = await spotifyAlbumImage(query);
+  if (spotifyUrl) {
+    console.log(`[nugget-image] ✓ Spotify album: "${query}"`);
+    return spotifyUrl;
+  }
+
+  // Tier 2: Google Custom Search Images
+  const googleUrl = await googleImageSearch(`${query} album cover art`);
+  if (googleUrl) {
+    console.log(`[nugget-image] ✓ Google album: "${query}"`);
+    return googleUrl;
+  }
+
+  // Tier 3: MusicBrainz → Cover Art Archive
+  console.log(`[nugget-image] Trying MusicBrainz/CAA for "${query}"`);
+  return resolveAlbumMB(query);
+}
+
+async function resolveWiki(query: string, width: number): Promise<string | null> {
+  // Tier 1: Google Custom Search Images (best for instruments, studios, etc.)
+  const googleUrl = await googleImageSearch(query);
+  if (googleUrl) {
+    console.log(`[nugget-image] ✓ Google wiki: "${query}"`);
+    return googleUrl;
+  }
+
+  // Tier 2: Wikimedia Commons
+  console.log(`[nugget-image] Trying Wikimedia Commons for "${query}"`);
+  return resolveWikiCommons(query, width);
 }
 
 // ── Main handler ────────────────────────────────────────────────────
