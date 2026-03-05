@@ -9,6 +9,65 @@ const corsHeaders = {
 
 const MB_USER_AGENT = "MusicNerd/1.0 (musicnerd-app)";
 
+// ── Spotify client credentials (fastest, most reliable for artist photos) ──
+
+let spotifyToken: string | null = null;
+let spotifyTokenExpiry = 0;
+
+async function getSpotifyToken(): Promise<string | null> {
+  if (spotifyToken && Date.now() < spotifyTokenExpiry) return spotifyToken;
+
+  const clientId = Deno.env.get("VITE_SPOTIFY_CLIENT_ID");
+  const clientSecret = Deno.env.get("SPOTIFY_CLIENT_SECRET");
+  if (!clientId || !clientSecret) return null;
+
+  try {
+    const res = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      },
+      body: "grant_type=client_credentials",
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    spotifyToken = data.access_token;
+    spotifyTokenExpiry = Date.now() + (data.expires_in - 60) * 1000;
+    return spotifyToken;
+  } catch {
+    return null;
+  }
+}
+
+async function spotifyArtistImage(name: string): Promise<string | null> {
+  const token = await getSpotifyToken();
+  if (!token) return null;
+
+  try {
+    const url = `https://api.spotify.com/v1/search?type=artist&limit=3&q=${encodeURIComponent(name)}`;
+    const res = await fetchWithRetry(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const artists = data?.artists?.items || [];
+    if (artists.length === 0) return null;
+
+    // Exact match only — prevents wrong-person images for common names
+    const nameLower = name.toLowerCase();
+    const exactMatch = artists.find((a: any) => a.name.toLowerCase() === nameLower);
+    if (!exactMatch) {
+      console.log(`[artist-image] Spotify: no exact match for "${name}", skipping`);
+      return null;
+    }
+    const images = exactMatch?.images || [];
+    return images[0]?.url || null;
+  } catch {
+    return null;
+  }
+}
+
 async function requireAuth(req: Request): Promise<{ userId: string } | Response> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
@@ -179,11 +238,27 @@ serve(async (req) => {
 
     const imgWidth = width || 600;
 
-    // Step 1: Search MusicBrainz
+    // Tier 1: Spotify (fastest, most reliable for artist photos)
+    const spotifyUrl = await spotifyArtistImage(artist);
+    if (spotifyUrl) {
+      console.log(`[artist-image] ✓ Spotify: "${artist}"`);
+      return new Response(
+        JSON.stringify({ imageUrl: spotifyUrl, source: "spotify" }),
+        {
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+            "Cache-Control": "public, max-age=86400",
+          },
+        }
+      );
+    }
+
+    // Tier 2: MusicBrainz → Wikidata → Wikimedia Commons
     const mbid = await searchArtist(artist);
     if (!mbid) {
       return new Response(
-        JSON.stringify({ imageUrl: null, reason: "Artist not found on MusicBrainz" }),
+        JSON.stringify({ imageUrl: null, reason: "Artist not found on MusicBrainz or Spotify" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -191,7 +266,6 @@ serve(async (req) => {
     // MusicBrainz rate limit: 1 req/sec
     await new Promise((r) => setTimeout(r, 1100));
 
-    // Step 2: Get Wikidata ID
     const wikidataId = await getWikidataId(mbid);
     if (!wikidataId) {
       return new Response(
@@ -200,16 +274,15 @@ serve(async (req) => {
       );
     }
 
-    // Step 3: Get image URL from Wikidata → Wikimedia Commons
     const imageUrl = await getArtistImageUrl(wikidataId, imgWidth);
 
     return new Response(
-      JSON.stringify({ imageUrl, mbid, wikidataId }),
+      JSON.stringify({ imageUrl, mbid, wikidataId, source: "wikimedia" }),
       {
         headers: {
           ...corsHeaders,
           "Content-Type": "application/json",
-          "Cache-Control": "public, max-age=86400", // Cache for 24h
+          "Cache-Control": "public, max-age=86400",
         },
       }
     );

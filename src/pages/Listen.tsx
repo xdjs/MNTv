@@ -835,10 +835,10 @@ export default function Listen() {
           </button>
         </div>
 
-        {/* Track info */}
+        {/* Track info — fixed bottom-left, visible when playback bar is hidden */}
         <motion.div
-          className="relative z-10 px-10 mt-4"
-          animate={{ opacity: barVisible ? 1 : 0, y: barVisible ? 0 : -10 }}
+          className={`fixed bottom-8 left-6 md:left-10 z-10 ${barVisible ? 'pointer-events-none' : ''}`}
+          animate={{ opacity: barVisible ? 0 : 1, y: barVisible ? 10 : 0 }}
           transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
         >
           <h1 className="text-2xl font-black text-foreground/80 leading-tight tracking-tight md:text-3xl" style={{ fontFamily: "'Nunito Sans', sans-serif" }}>
@@ -983,7 +983,7 @@ export default function Listen() {
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 0.85, scale: 1 }}
-            className="fixed bottom-6 left-6 z-10 hover:opacity-100 transition-opacity rounded-xl overflow-hidden"
+            className="fixed bottom-6 right-6 z-10 hover:opacity-100 transition-opacity rounded-xl overflow-hidden"
           >
             <QRCode
               value={`${window.location.origin}/c/${shortId}`}
