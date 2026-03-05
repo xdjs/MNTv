@@ -40,6 +40,8 @@ export default function Connect() {
   const [pendingArtistIds, setPendingArtistIds] = useState<Record<string, string>>({});
   const [pendingTrackImages, setPendingTrackImages] = useState<{ title: string; artist: string; imageUrl: string }[]>([]);
   const [pendingDisplayName, setPendingDisplayName] = useState<string | null>(null);
+  const [lastFmUsername, setLastFmUsername] = useState("");
+  const [showLastFm, setShowLastFm] = useState(false);
 
   // If already onboarded, redirect to browse
   useEffect(() => {
@@ -84,6 +86,7 @@ export default function Connect() {
       spotifyArtistImages: Object.keys(pendingArtistImages).length ? pendingArtistImages : undefined,
       spotifyArtistIds: Object.keys(pendingArtistIds).length ? pendingArtistIds : undefined,
       spotifyTrackImages: pendingTrackImages.length ? pendingTrackImages : undefined,
+      lastFmUsername: lastFmUsername.trim() || undefined,
       calculatedTier: t,
     };
     saveProfile(profile);
@@ -143,6 +146,29 @@ export default function Connect() {
                         <span className="text-xs font-semibold text-green-400">✓</span>
                       </div>
                     )}
+
+                    {/* Last.fm — optional username */}
+                    <div className="w-full">
+                      <button
+                        type="button"
+                        onClick={() => setShowLastFm(!showLastFm)}
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors px-1 py-1"
+                      >
+                        {showLastFm ? "Hide" : "Have a Last.fm account?"} {showLastFm ? "▲" : "▼"}
+                      </button>
+                      {showLastFm && (
+                        <div className="mt-2 flex items-center gap-3 w-full rounded-2xl border bg-foreground/5 px-5 py-3 border-red-500/30">
+                          <span className="text-lg">🎧</span>
+                          <input
+                            type="text"
+                            value={lastFmUsername}
+                            onChange={(e) => setLastFmUsername(e.target.value)}
+                            placeholder="Last.fm username (optional)"
+                            className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/50 outline-none"
+                          />
+                        </div>
+                      )}
+                    </div>
 
                     {/* Apple Music — coming soon */}
                     <div className="flex items-center gap-4 w-full rounded-2xl border bg-foreground/5 px-5 py-4 text-left font-semibold text-foreground/40 border-foreground/10 cursor-not-allowed">
