@@ -359,31 +359,39 @@ export default function Listen() {
             tier,
           },
         });
-        if (cancelled || error) return;
-
-        // Create or reuse a short URL for the QR code
-        const { data: existing } = await supabase
-          .from("companion_links")
-          .select("short_id")
-          .eq("artist", track.artist)
-          .eq("title", track.title)
-          .maybeSingle();
-
         if (cancelled) return;
+        if (error) console.warn("[Listen] Companion pre-gen error:", error);
 
-        if (existing) {
-          setShortId(existing.short_id);
-        } else {
-          const arr = new Uint8Array(6);
-          crypto.getRandomValues(arr);
-          const newId = Array.from(arr, (b) => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"[b % 62]).join("");
-          await supabase.from("companion_links").insert({
-            short_id: newId,
-            artist: track.artist,
-            title: track.title,
-            album: track.album || null,
-          });
-          if (!cancelled) setShortId(newId);
+        // Create or reuse a short URL for the QR code (even if pre-gen failed,
+        // the companion page will generate on demand)
+        try {
+          const { data: existing, error: selErr } = await supabase
+            .from("companion_links")
+            .select("short_id")
+            .eq("artist", track.artist)
+            .eq("title", track.title)
+            .maybeSingle();
+
+          if (cancelled) return;
+          if (selErr) console.warn("[Listen] companion_links select error:", selErr);
+
+          if (existing) {
+            setShortId(existing.short_id);
+          } else {
+            const arr = new Uint8Array(6);
+            crypto.getRandomValues(arr);
+            const newId = Array.from(arr, (b) => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"[b % 62]).join("");
+            const { error: insErr } = await supabase.from("companion_links").insert({
+              short_id: newId,
+              artist: track.artist,
+              title: track.title,
+              album: track.album || null,
+            });
+            if (insErr) console.warn("[Listen] companion_links insert error:", insErr);
+            if (!cancelled && !insErr) setShortId(newId);
+          }
+        } catch (linkErr) {
+          console.warn("[Listen] Short link creation failed:", linkErr);
         }
 
         if (!cancelled) setCompanionReady(true);

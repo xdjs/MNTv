@@ -61,15 +61,20 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
  * RootRoute — decides between Onboarding and Browse.
  *
  * Signed-in + profile → /browse (skip onboarding)
- * Otherwise           → show Onboarding
+ * Signed-in, no profile → /connect (finish setup)
+ * Not signed in → Onboarding
  */
 function RootRoute() {
   const { session, loading } = useAuth();
 
   if (loading) return null;
 
-  // Always go through Connect so user can pick their tier/vibe
-  if (session) return <Navigate to="/connect" replace />;
+  if (session) {
+    // Already set up → go straight to Browse
+    if (getStoredProfile()) return <Navigate to="/browse" replace />;
+    // Signed in but no profile → finish onboarding
+    return <Navigate to="/connect" replace />;
+  }
 
   return <Onboarding />;
 }
