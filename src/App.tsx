@@ -92,9 +92,9 @@ function AnimatedRoutes() {
           <Route path="/album/:albumId" element={<ProtectedRoute><AlbumDetail /></ProtectedRoute>} />
           <Route path="/listen/:trackId" element={<ProtectedRoute><Listen /></ProtectedRoute>} />
 
-          {/* Companion — requires auth so cache key matches (tier/profile) */}
-          <Route path="/companion/:trackId" element={<ProtectedRoute><Companion /></ProtectedRoute>} />
-          <Route path="/c/:shortId" element={<ProtectedRoute><CompanionShortRedirect /></ProtectedRoute>} />
+          {/* Companion — public, no login required (scanned on phone via QR) */}
+          <Route path="/companion/:trackId" element={<Companion />} />
+          <Route path="/c/:shortId" element={<CompanionShortRedirect />} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>
