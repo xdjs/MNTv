@@ -105,38 +105,138 @@ async function spotifyAlbumImage(query: string): Promise<string | null> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// TIER 2: Google Custom Search Images (broad, relevant for anything)
+// TIER 2: Gemini AI image search (Wikipedia article images + Commons)
 // ═══════════════════════════════════════════════════════════════════════
 
-async function googleImageSearch(query: string): Promise<string | null> {
+async function callGemini(prompt: string): Promise<string> {
   const apiKey = Deno.env.get("GOOGLE_AI_API_KEY");
-  const cx = Deno.env.get("GOOGLE_CSE_CX");
-  if (!apiKey || !cx) return null;
+  if (!apiKey) throw new Error("no API key");
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.2,
+          thinkingConfig: { thinkingBudget: 0 },
+        },
+      }),
+    }
+  );
+
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+  const data = await res.json();
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  const textPart = parts.find((p: any) => typeof p.text === "string");
+  return textPart?.text || "";
+}
+
+// Fetch all images from a Wikipedia article via the REST API
+async function getWikipediaArticleImages(articleTitle: string): Promise<{ title: string; url: string }[]> {
+  const encoded = encodeURIComponent(articleTitle.replace(/ /g, "_"));
+  const url = `https://en.wikipedia.org/api/rest_v1/page/media-list/${encoded}`;
+  try {
+    const res = await fetchWithRetry(url, { headers: { "User-Agent": MB_USER_AGENT } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const items = data.items || [];
+    return items
+      .filter((item: any) => {
+        const t = (item.title || "").toLowerCase();
+        // Skip SVGs, logos, icons, flags, maps
+        return !t.endsWith(".svg") && !t.includes("logo") && !t.includes("icon")
+          && !t.includes("flag_of") && !t.includes("map_of");
+      })
+      .map((item: any) => {
+        const srcset = item.srcset || [];
+        // Pick the largest available size
+        const best = srcset.reduce((a: any, b: any) => (b.scale || 1) > (a.scale || 1) ? b : a, srcset[0] || {});
+        const src = best?.src || "";
+        return {
+          title: item.title || "",
+          url: src.startsWith("//") ? `https:${src}` : src,
+        };
+      })
+      .filter((item: any) => item.url);
+  } catch {
+    return [];
+  }
+}
+
+async function geminiImageSearch(query: string): Promise<string | null> {
+  if (!Deno.env.get("GOOGLE_AI_API_KEY")) return null;
 
   try {
-    const url = new URL("https://www.googleapis.com/customsearch/v1");
-    url.searchParams.set("key", apiKey);
-    url.searchParams.set("cx", cx);
-    url.searchParams.set("q", query);
-    url.searchParams.set("searchType", "image");
-    url.searchParams.set("num", "3");
-    url.searchParams.set("safe", "active");
-    // Prefer medium-large images, exclude tiny icons
-    url.searchParams.set("imgSize", "LARGE");
+    // Step 1: Ask Gemini for the best Wikipedia article title(s) for this subject
+    const prompt = `For an image search about: "${query}"
 
-    const res = await fetchWithRetry(url.toString());
-    if (!res.ok) {
-      console.warn(`[nugget-image] Google CSE error: ${res.status}`);
-      return null;
+Suggest 1-3 Wikipedia article titles that would contain the most relevant images.
+Think broadly — for "Prince performing Purple Rain guitar solo" you might suggest:
+- "Prince (musician)" (main article with performance photos)
+- "Purple Rain (album)" (album-specific imagery)
+- "Purple Rain (film)" (film stills)
+
+For "Fender Stratocaster" you might suggest:
+- "Fender Stratocaster" (instrument photos)
+- "Jimi Hendrix" (famous player photos with the guitar)
+
+Return ONLY valid JSON: {"articles": ["Article_Title_1", "Article_Title_2"]}`;
+
+    const text = await callGemini(prompt);
+    const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    const parsed = JSON.parse(cleaned);
+    const articles: string[] = parsed.articles || [];
+
+    if (articles.length === 0) return null;
+
+    // Step 2: Fetch images from all suggested articles in parallel
+    const allImages: { title: string; url: string }[] = [];
+    const imageResults = await Promise.allSettled(
+      articles.map((a) => getWikipediaArticleImages(a))
+    );
+    for (const result of imageResults) {
+      if (result.status === "fulfilled") {
+        allImages.push(...result.value);
+      }
     }
-    const data = await res.json();
-    const items = data?.items || [];
-    if (items.length === 0) return null;
 
-    // Return the first image link
-    return items[0]?.link || null;
+    if (allImages.length === 0) return null;
+
+    // Step 3: Ask Gemini to pick the best image from the available options
+    const imageList = allImages
+      .slice(0, 25) // Limit to avoid huge prompts
+      .map((img, i) => `${i + 1}. ${img.title}`)
+      .join("\n");
+
+    const pickPrompt = `From these Wikipedia article images, pick the ONE most relevant for: "${query}"
+
+Available images:
+${imageList}
+
+Pick the image that best matches the specific context of the query.
+- Prefer action/performance/contextual photos over headshots or logos
+- If the query mentions a specific era, instrument, or event, pick an image that matches
+
+Return ONLY the number of your pick as JSON: {"pick": 4}`;
+
+    const pickText = await callGemini(pickPrompt);
+    const pickCleaned = pickText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    const pickParsed = JSON.parse(pickCleaned);
+    const pickIndex = (pickParsed.pick || 1) - 1; // Convert 1-based to 0-based
+
+    const chosen = allImages[Math.min(pickIndex, allImages.length - 1)];
+    if (chosen?.url) {
+      console.log(`[nugget-image] ✓ Gemini picked: "${chosen.title}" for "${query}"`);
+      return chosen.url;
+    }
+
+    return null;
   } catch (e) {
-    console.warn("[nugget-image] Google CSE failed:", e instanceof Error ? e.message : e);
+    console.warn("[nugget-image] Gemini image search failed:", e instanceof Error ? e.message : e);
     return null;
   }
 }
@@ -237,24 +337,24 @@ async function resolveWikiCommons(query: string, width: number): Promise<string 
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Combined resolvers: Spotify → Google → MusicBrainz/Wikimedia
+// Combined resolvers: Gemini → Spotify → MusicBrainz/Wikimedia
 // ═══════════════════════════════════════════════════════════════════════
 
 async function resolveArtist(query: string, width: number): Promise<string | null> {
   const label = extractArtistName(query);
 
-  // Tier 1: Spotify (fast, accurate)
+  // Tier 1: Gemini (contextual — finds the specific image the hint describes)
+  const geminiUrl = await geminiImageSearch(query);
+  if (geminiUrl) {
+    console.log(`[nugget-image] ✓ Gemini artist: "${label}"`);
+    return geminiUrl;
+  }
+
+  // Tier 2: Spotify (generic artist headshot fallback)
   const spotifyUrl = await spotifyArtistImage(query);
   if (spotifyUrl) {
     console.log(`[nugget-image] ✓ Spotify artist: "${label}"`);
     return spotifyUrl;
-  }
-
-  // Tier 2: Google Custom Search Images
-  const googleUrl = await googleImageSearch(`${label} musician artist photo`);
-  if (googleUrl) {
-    console.log(`[nugget-image] ✓ Google artist: "${label}"`);
-    return googleUrl;
   }
 
   // Tier 3: MusicBrainz → Wikidata → Wikimedia Commons
@@ -263,18 +363,18 @@ async function resolveArtist(query: string, width: number): Promise<string | nul
 }
 
 async function resolveAlbum(query: string): Promise<string | null> {
-  // Tier 1: Spotify
+  // Tier 1: Gemini (contextual — finds specific album art or related imagery)
+  const geminiUrl = await geminiImageSearch(`${query} album cover art`);
+  if (geminiUrl) {
+    console.log(`[nugget-image] ✓ Gemini album: "${query}"`);
+    return geminiUrl;
+  }
+
+  // Tier 2: Spotify (generic album cover fallback)
   const spotifyUrl = await spotifyAlbumImage(query);
   if (spotifyUrl) {
     console.log(`[nugget-image] ✓ Spotify album: "${query}"`);
     return spotifyUrl;
-  }
-
-  // Tier 2: Google Custom Search Images
-  const googleUrl = await googleImageSearch(`${query} album cover art`);
-  if (googleUrl) {
-    console.log(`[nugget-image] ✓ Google album: "${query}"`);
-    return googleUrl;
   }
 
   // Tier 3: MusicBrainz → Cover Art Archive
@@ -283,11 +383,11 @@ async function resolveAlbum(query: string): Promise<string | null> {
 }
 
 async function resolveWiki(query: string, width: number): Promise<string | null> {
-  // Tier 1: Google Custom Search Images (best for instruments, studios, etc.)
-  const googleUrl = await googleImageSearch(query);
-  if (googleUrl) {
-    console.log(`[nugget-image] ✓ Google wiki: "${query}"`);
-    return googleUrl;
+  // Tier 1: Gemini (best for instruments, studios, etc.)
+  const geminiUrl = await geminiImageSearch(query);
+  if (geminiUrl) {
+    console.log(`[nugget-image] ✓ Gemini wiki: "${query}"`);
+    return geminiUrl;
   }
 
   // Tier 2: Wikimedia Commons
