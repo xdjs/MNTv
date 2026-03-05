@@ -15,7 +15,7 @@ interface CompanionData {
   artistSummary: string;
   trackStory: string;
   nuggets: CompanionNugget[];
-  externalLinks: { label: string; url: string }[];
+  externalLinks: { label?: string; name?: string; url: string }[];
 }
 
 const SECTIONS: { key: CompanionNugget["category"]; label: string; color: string }[] = [
@@ -236,6 +236,12 @@ export default function Companion() {
             <p className="text-sm text-muted-foreground mt-1">{error}</p>
           </div>
         ) : data ? (
+          <ErrorBoundary fallback={
+            <div className="apple-glass rounded-2xl p-6 text-center">
+              <p className="text-muted-foreground font-semibold">Something went wrong displaying content</p>
+              <p className="text-sm text-muted-foreground/70 mt-1">Try refreshing the page.</p>
+            </div>
+          }>
           <div className="space-y-8">
             {/* Artist Summary */}
             {data.artistSummary && (
@@ -284,9 +290,10 @@ export default function Companion() {
                 <h3 className="text-lg font-bold text-foreground mb-3">Explore Further</h3>
                 <div className="space-y-2">
                   {data.externalLinks.map((link, i) => {
+                    const linkLabel = link.label || link.name || "Link";
                     const Icon =
-                      link.label.toLowerCase().includes("wiki") ? BookOpen :
-                      link.label.toLowerCase().includes("youtube") ? Play :
+                      linkLabel.toLowerCase().includes("wiki") ? BookOpen :
+                      linkLabel.toLowerCase().includes("youtube") ? Play :
                       Music;
                     return (
                       <a
@@ -297,7 +304,7 @@ export default function Companion() {
                         className="flex items-center gap-3 px-4 py-3 rounded-xl apple-glass hover:bg-foreground/10 transition-colors"
                       >
                         <Icon size={18} className="text-primary shrink-0" />
-                        <span className="text-sm font-semibold text-foreground/80">{link.label}</span>
+                        <span className="text-sm font-semibold text-foreground/80">{linkLabel}</span>
                         <ExternalLink size={14} className="ml-auto text-muted-foreground" />
                       </a>
                     );
@@ -306,6 +313,7 @@ export default function Companion() {
               </section>
             )}
           </div>
+          </ErrorBoundary>
         ) : (
           <div className="apple-glass rounded-2xl p-6 text-center">
             <p className="text-muted-foreground font-semibold">Content unavailable</p>

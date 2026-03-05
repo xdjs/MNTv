@@ -373,6 +373,16 @@ OUTPUT: Raw JSON only. No backticks.`;
           }
         }
 
+        // Normalize externalLinks field names (Gemini sometimes uses "name" instead of "label")
+        if (parsed.externalLinks?.length) {
+          for (const link of parsed.externalLinks) {
+            if (!link.label && link.name) {
+              link.label = link.name;
+              delete link.name;
+            }
+          }
+        }
+
         // Build service-appropriate external links fallback
         if (!parsed.externalLinks?.length) {
           const encodedQuery = encodeURIComponent(`${artist} ${title}`);

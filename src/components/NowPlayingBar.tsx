@@ -8,12 +8,14 @@ export default function NowPlayingBar() {
   const location = useLocation();
   const { isPlaying, currentTrack, currentTime, duration, toggle, externalPlayback, setExternalListenMode } = usePlayer();
 
-  // Don't show on the Listen page (it has its own full playback bar)
-  const isListenPage = location.pathname.startsWith("/listen/");
+  // Don't show on Listen page (has its own bar) or companion pages (phone QR experience)
+  const hiddenRoute = location.pathname.startsWith("/listen/")
+    || location.pathname.startsWith("/companion/")
+    || location.pathname.startsWith("/c/");
 
   // Show if there's a loaded track OR external playback detected
-  const showExternal = !isListenPage && !currentTrack && !!externalPlayback;
-  const showLocal = !isListenPage && !!currentTrack;
+  const showExternal = !hiddenRoute && !currentTrack && !!externalPlayback;
+  const showLocal = !hiddenRoute && !!currentTrack;
   const visible = showLocal || showExternal;
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
