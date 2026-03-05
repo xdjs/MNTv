@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      companion_links: {
+        Row: {
+          id: string
+          short_id: string
+          artist: string
+          title: string
+          album: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          short_id: string
+          artist: string
+          title: string
+          album?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          short_id?: string
+          artist?: string
+          title?: string
+          album?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       companion_cache: {
         Row: {
           content: Json

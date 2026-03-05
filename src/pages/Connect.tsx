@@ -213,7 +213,7 @@ export default function Connect() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/connect`,
+          redirectTo: `${window.location.origin}/connect${redirectUrl ? `?redirect=${encodeURIComponent(redirectUrl)}` : ""}`,
           scopes: "openid email profile",
         },
       });
