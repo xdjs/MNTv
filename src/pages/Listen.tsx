@@ -880,26 +880,25 @@ export default function Listen() {
           </motion.div>
         )}
 
-        {/* Content: album art + nuggets */}
-        <div className="relative z-10 flex flex-1 items-center justify-end px-4 pb-24 md:px-10">
-          {/* Album art — left side, non-stretched */}
-          <motion.div
-            className="hidden md:flex flex-1 items-center justify-center"
-            animate={{ opacity: barVisible ? 0.9 : 1, scale: barVisible ? 0.95 : 1 }}
-            transition={{ duration: 0.7, ease: [0.4, 0, 0.2, 1] }}
-          >
-            <motion.img
-              key={effectiveCoverArt}
-              src={effectiveCoverArt}
-              alt={`${track.title} cover art`}
-              className="w-[320px] h-[320px] rounded-2xl object-cover shadow-2xl shadow-black/50"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-            />
-          </motion.div>
+        {/* Centered album art */}
+        <motion.div
+          className="hidden md:flex absolute inset-0 z-[5] items-center justify-center pointer-events-none"
+          animate={{ opacity: barVisible ? 0.85 : 1, scale: barVisible ? 0.95 : 1 }}
+          transition={{ duration: 0.7, ease: [0.4, 0, 0.2, 1] }}
+        >
+          <motion.img
+            key={effectiveCoverArt}
+            src={effectiveCoverArt}
+            alt={`${track.title} cover art`}
+            className="w-[400px] h-[400px] rounded-2xl object-cover shadow-2xl shadow-black/50"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+          />
+        </motion.div>
 
-          {/* Nuggets — right side */}
+        {/* Nugget cards */}
+        <div className="relative z-10 flex flex-1 items-center justify-end px-4 pb-24 md:px-10">
           <div className="w-full max-w-[520px] shrink-0">
             <AnimatePresence mode="wait">
               {activeNugget && (
