@@ -347,15 +347,15 @@ export default function Listen() {
     let cancelled = false;
     (async () => {
       try {
-        // Pre-generate WITHOUT personalization so the result gets cached.
-        // The phone companion page requires login, so it will have the user's
-        // real tier — use the same tier here to guarantee a cache hit.
+        // Pre-generate companion content so the QR companion page loads instantly.
+        // Always use listenCount 1 — the companion page also uses 1 (can't read
+        // nugget_history without auth), guaranteeing a cache key match.
         const { error } = await supabase.functions.invoke("generate-companion", {
           body: {
             artist: track.artist,
             title: track.title,
             album: track.album,
-            listenCount: listenCount || 1,
+            listenCount: 1,
             tier,
           },
         });
