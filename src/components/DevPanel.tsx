@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { X } from "lucide-react";
 import type { AnimationStyle } from "@/mock/types";
 
 interface Props {
@@ -15,17 +16,25 @@ interface Props {
   spotifyUri?: string | null;
   currentTier?: "casual" | "curious" | "nerd";
   onTierChange?: (tier: "casual" | "curious" | "nerd") => void;
+  onClose?: () => void;
 }
 
-export default function DevPanel({ animStyle, setAnimStyle, onJumpToNugget, nuggetCount, listenCount, trackKey, onResetHistory, onResetAllHistory, onIncrementListen, activePlayer, spotifyUri, currentTier, onTierChange }: Props) {
+export default function DevPanel({ animStyle, setAnimStyle, onJumpToNugget, nuggetCount, listenCount, trackKey, onResetHistory, onResetAllHistory, onIncrementListen, activePlayer, spotifyUri, currentTier, onTierChange, onClose }: Props) {
   return (
     <motion.div
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="glass-panel fixed top-14 right-4 z-50 rounded-xl p-4 w-56"
+      className="glass-panel fixed top-24 right-4 z-50 rounded-xl p-4 w-56"
     >
-      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Dev Panel</p>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Dev Panel</p>
+        {onClose && (
+          <button onClick={onClose} className="text-muted-foreground/50 hover:text-foreground transition-colors">
+            <X size={14} />
+          </button>
+        )}
+      </div>
 
       {/* Tier Switcher */}
       {currentTier && onTierChange && (

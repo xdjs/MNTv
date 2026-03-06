@@ -1038,6 +1038,7 @@ export default function Listen() {
               nuggetCount={trackNuggets.length}
               listenCount={listenCount}
               trackKey={track ? `${track.artist}::${track.title}` : undefined}
+              onClose={() => setDevOpen(false)}
               currentTier={tier}
               onTierChange={(newTier) => {
                 if (profile) {
