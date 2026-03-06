@@ -138,10 +138,18 @@ export function useAINuggets(
         previousNuggets = (historyRow.previous_nuggets as string[]) || [];
       }
 
+      // If regenerateKey > 0, the user completed the track and is re-listening.
+      // Ensure listen count is at least regenerateKey + 1 even if DB hasn't caught up.
+      if (regenerateKey > 0 && currentListenCount <= regenerateKey) {
+        currentListenCount = regenerateKey + 1;
+      }
+
       setListenCount(currentListenCount);
 
       // ── Check nugget_cache for first listen ──────────────────────
-      if (currentListenCount <= 1) {
+      // Skip DB cache when regenerateKey > 0 — that means the track was
+      // completed and the user is re-listening; always generate fresh.
+      if (currentListenCount <= 1 && regenerateKey === 0) {
         const { data: cached } = await supabase
           .from("nugget_cache")
           .select("nuggets, sources, status")
@@ -368,7 +376,7 @@ export function useAINuggets(
           .insert({
             track_key: trackKey,
             user_id: userId,
-            listen_count: 1,
+            listen_count: currentListenCount + 1,
             previous_nuggets: newHeadlines as Json,
           });
       }
