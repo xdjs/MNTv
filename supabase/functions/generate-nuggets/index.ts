@@ -716,42 +716,48 @@ Return ONLY valid JSON:
         }
       }
 
-      // For non-YouTube sources, resolve URL from Gemini's sourceUrl + grounding chunks
+      // For non-YouTube sources, resolve URL from grounding chunks (trusted) first,
+      // then Gemini's sourceUrl only if it matches grounding. Never serve unverified Gemini URLs.
       if (!result.source.url) {
         const geminiUrl = source.sourceUrl || "";
+        let geminiHost = "";
+        try { if (geminiUrl) geminiHost = new URL(geminiUrl).hostname; } catch { /* invalid */ }
 
-        // If Gemini returned a real URL, check it against grounding chunks
-        if (geminiUrl && /^https?:\/\//.test(geminiUrl)) {
-          try {
-            const geminiHost = new URL(geminiUrl).hostname;
-            const match = realChunks.find((chunk: any) => {
-              try { return new URL(chunk.web.uri).hostname === geminiHost; } catch { return false; }
-            });
-            if (match) {
-              // Gemini's URL domain appears in grounding — use grounding chunk URL (more reliable)
-              result.source.url = match.web.uri;
-              if (match.web.title) result.source.title = match.web.title;
-              result.source.verified = true;
-            } else {
-              // Gemini gave a URL but it's not in grounding — use it unverified
-              result.source.url = geminiUrl;
-              result.source.verified = false;
-            }
-          } catch {
-            // Invalid URL from Gemini — fall through to grounding fallback
+        // Try to match Gemini's URL domain against grounding chunks
+        if (geminiHost) {
+          const match = realChunks.find((chunk: any) => {
+            try { return new URL(chunk.web.uri).hostname === geminiHost; } catch { return false; }
+          });
+          if (match) {
+            result.source.url = match.web.uri;
+            if (match.web.title) result.source.title = match.web.title;
+            result.source.verified = true;
           }
         }
 
-        // No usable Gemini URL — pick best grounding chunk
+        // No domain match — use best grounding chunk (real URL from Google Search)
         if (!result.source.url && realChunks.length > 0) {
-          result.source.url = realChunks[0].web.uri;
-          if (realChunks[0].web.title) result.source.title = realChunks[0].web.title;
+          // Try to find a grounding chunk whose title/URL relates to this nugget's publisher
+          const pubLower = (source.publisher || "").toLowerCase();
+          const relevantChunk = realChunks.find((chunk: any) => {
+            const chunkTitle = (chunk?.web?.title || "").toLowerCase();
+            const chunkUri = (chunk?.web?.uri || "").toLowerCase();
+            return pubLower && (chunkTitle.includes(pubLower) || chunkUri.includes(pubLower));
+          }) || realChunks.find((chunk: any) => {
+            // Fall back to any chunk mentioning the artist or title
+            const chunkTitle = (chunk?.web?.title || "").toLowerCase();
+            return chunkTitle.includes(artist.toLowerCase()) || chunkTitle.includes(title.toLowerCase());
+          }) || realChunks[0];
+
+          result.source.url = relevantChunk.web.uri;
+          if (relevantChunk.web.title) result.source.title = relevantChunk.web.title;
           result.source.verified = true;
         }
 
-        // Final fallback — Google Search
+        // Final fallback — targeted Google Search so the user can find the real page
         if (!result.source.url) {
-          result.source.url = `https://www.google.com/search?q=${encodeURIComponent(`${artist} ${title}`)}`;
+          const q = `${source.title || ""} ${source.publisher || ""} ${artist} ${title}`.trim();
+          result.source.url = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
           result.source.verified = false;
         }
       }
