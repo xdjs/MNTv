@@ -34,14 +34,14 @@ export default function Browse() {
       imageUrl: "https://i.scdn.co/image/ab67616d0000b2738ac778cc7d88779f74d33311",
       title: "Around the World",
       subtitle: "Daft Punk",
-      href: "/listen/real::Daft%20Punk::Around%20the%20World::Homework::spotify:track:1pKYYY0dkg23sQQXi0Q5zN",
+      href: "/listen/real::Daft%20Punk::Around%20the%20World::Homework::spotify:track:1pKYYY0dkg23sQQXi0Q5zN?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b2738ac778cc7d88779f74d33311",
     },
     {
       id: "demo-weird-fishes",
       imageUrl: "https://i.scdn.co/image/ab67616d0000b273de3c04b5fc750b68899b20a9",
       title: "Weird Fishes/Arpeggi",
       subtitle: "Radiohead",
-      href: "/listen/real::Radiohead::Weird%20Fishes%2FArpeggi::In%20Rainbows::spotify:track:4tha3dahOS9LhTxKn4JYLC",
+      href: "/listen/real::Radiohead::Weird%20Fishes%2FArpeggi::In%20Rainbows::spotify:track:4tha3dahOS9LhTxKn4JYLC?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b273de3c04b5fc750b68899b20a9",
     },
   ];
 

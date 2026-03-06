@@ -52,11 +52,17 @@ export default function Listen() {
 
   const trackId = rawTrackId || "";
 
+  // Read cover art from URL query param (set by Browse demo tiles)
+  const urlArt = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("art") || "";
+  }, []);
+
   const track = useMemo(() => {
     if (!realTrackMeta) return null;
-    // Try to find Spotify album art from the user's profile
-    let coverArtUrl = "";
-    if (profile?.spotifyTrackImages) {
+    // Try URL query param first (demo tiles pass ?art=), then profile, then DiceBear
+    let coverArtUrl = urlArt;
+    if (!coverArtUrl && profile?.spotifyTrackImages) {
       const match = profile.spotifyTrackImages.find(
         (t) =>
           t.title.toLowerCase() === realTrackMeta.title.toLowerCase() &&
@@ -81,7 +87,7 @@ export default function Listen() {
       coverArtUrl,
       trackNumber: 1,
     };
-  }, [realTrackMeta, trackId, profile?.spotifyTrackImages, profile?.spotifyArtistImages]);
+  }, [realTrackMeta, trackId, urlArt, profile?.spotifyTrackImages, profile?.spotifyArtistImages]);
 
   // ── Playback source resolution ───────────────────────────────────────
   const { hasSpotifyToken } = useSpotifyToken();

@@ -1,1 +1,49 @@
-{"nuggets":[{"headline":"Before they became global rock icons, Radiohead started as a humble school band that almost went by a different name!","text":"The members of Radiohead, including frontman Thom Yorke and the Greenwood brothers, met while attending Abingdon School in Oxfordshire. They initially formed under the name 'On a Friday,' a nod to the only day they were allowed to rehearse. However, upon signing with EMI, the label requested a name change, leading them to adopt 'Radiohead' after a song by Talking Heads.","kind":"artist","listenFor":false,"source":{"type":"article","title":"Thom Yorke - Wikipedia","publisher":"Wikipedia","quoteSnippet":"In 1985, they formed a band, On a Friday, named after the only day they were allowed to practice. ... At EMI's request, they changed their name; 'Radiohead' was taken from the song 'Radio Head' on the Talking Heads album True Stories (1986).","locator":"1985–1991: On a Friday","url":"https://en.wikipedia.org/wiki/Thom_Yorke","verified":false}},{"headline":"The seemingly simple, flowing feel of 'Weird Fishes/Arpeggi' hides a fascinating, intricate musical secret in its construction!","text":"While the track feels like a continuous, immersive experience, its momentum isn't built on traditional song sections. Instead, Radiohead masterfully crafts a rich, 'oceanic soundscape' through multiple layers of arpeggiated guitars, where different rhythmic patterns subtly interweave and build upon a consistent drum groove, creating a truly hypnotic effect.","kind":"track","listenFor":true,"source":{"type":"article","title":"A Harmonic Analysis of Radiohead’s “Weird Fishes/Arpeggi” - Flypaper - Soundfly","publisher":"Soundfly","quoteSnippet":"The track starts with a solid drum groove, which will stay the same throughout most of the song. ... Alternatively, the way Radiohead create momentum is done in a textural way: the density of the arrangement increases with the addition of several layers which form an interesting rhythmical and contrapuntal effect. This is evident in the guitar parts especially.","locator":"Breaking Down Radiohead's Arrangement","url":"https://flypaper.soundfly.com/write-music/a-harmonic-analysis-of-radioheads-weird-fishes-arpeggi/","verified":false}},{"headline":"If the intricate, atmospheric sound of 'Weird Fishes/Arpeggi' resonated with you, then you absolutely need to dive into Grizzly Bear!","text":"Their albums, especially 'Veckatimest' or 'Shields,' offer a similar blend of lush, layered instrumentation, complex vocal harmonies, and an often ethereal, deeply textured sound that can feel both expansive and intimately melancholic. It's perfect for when you're seeking that same kind of immersive, art-rock experience.","kind":"discovery","listenFor":false,"source":{"type":"article","title":"Albums like In Rainbows : r/radiohead - Reddit","publisher":"Reddit","quoteSnippet":"Grizzly Bear - Veckatimest and Shields.","locator":"Comments Section","url":"https://www.reddit.com/r/radiohead/comments/16i9064/albums_like_in_rainbows/","verified":false}}]}
+{
+  "nuggets": [
+    {
+      "headline": "Before they became global rock icons, Radiohead started as a humble school band that almost went by a different name!",
+      "text": "The members of Radiohead, including frontman Thom Yorke and the Greenwood brothers, met while attending Abingdon School in Oxfordshire. They initially formed under the name 'On a Friday,' a nod to the only day they were allowed to rehearse. However, upon signing with EMI, the label requested a name change, leading them to adopt 'Radiohead' after a song by Talking Heads.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Thom Yorke - Wikipedia",
+        "publisher": "Wikipedia",
+        "quoteSnippet": "In 1985, they formed a band, On a Friday, named after the only day they were allowed to practice. ... At EMI's request, they changed their name; 'Radiohead' was taken from the song 'Radio Head' on the Talking Heads album True Stories (1986).",
+        "locator": "1985–1991: On a Friday",
+        "url": "https://en.wikipedia.org/wiki/Thom_Yorke",
+        "verified": false
+      }
+    },
+    {
+      "headline": "The seemingly simple, flowing feel of 'Weird Fishes/Arpeggi' hides a fascinating, intricate musical secret in its construction!",
+      "text": "While the track feels like a continuous, immersive experience, its momentum isn't built on traditional song sections. Instead, Radiohead masterfully crafts a rich, 'oceanic soundscape' through multiple layers of arpeggiated guitars, where different rhythmic patterns subtly interweave and build upon a consistent drum groove, creating a truly hypnotic effect.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "A Harmonic Analysis of Radiohead’s “Weird Fishes/Arpeggi” - Flypaper - Soundfly",
+        "publisher": "Soundfly",
+        "quoteSnippet": "The track starts with a solid drum groove, which will stay the same throughout most of the song. ... Alternatively, the way Radiohead create momentum is done in a textural way: the density of the arrangement increases with the addition of several layers which form an interesting rhythmical and contrapuntal effect. This is evident in the guitar parts especially.",
+        "locator": "Breaking Down Radiohead's Arrangement",
+        "url": "https://flypaper.soundfly.com/write-music/a-harmonic-analysis-of-radioheads-weird-fishes-arpeggi/",
+        "verified": false
+      }
+    },
+    {
+      "headline": "If the intricate, atmospheric sound of 'Weird Fishes/Arpeggi' resonated with you, then you absolutely need to dive into Grizzly Bear!",
+      "text": "Their albums, especially 'Veckatimest' or 'Shields,' offer a similar blend of lush, layered instrumentation, complex vocal harmonies, and an often ethereal, deeply textured sound that can feel both expansive and intimately melancholic. It's perfect for when you're seeking that same kind of immersive, art-rock experience.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Albums like In Rainbows : r/radiohead - Reddit",
+        "publisher": "Reddit",
+        "quoteSnippet": "Grizzly Bear - Veckatimest and Shields.",
+        "locator": "Comments Section",
+        "url": "https://www.reddit.com/r/radiohead/comments/16i9064/albums_like_in_rainbows/",
+        "verified": false
+      }
+    }
+  ]
+}

@@ -1,1 +1,46 @@
-{"nuggets":[{"headline":"Daft Punk's 'Homework' was recorded with a surprisingly lo-fi and unconventional multi-step process that involved recording to tape, sampling themselves, and then re-sequencing.","text":"For their debut album, Daft Punk first recorded their hardware instruments through a Mackie mixer and an Alesis 3630 compressor onto a Panasonic SV-3700 DAT machine. They would then sample these recordings into a Roland S-760 sampler, where they would chop up the audio. The final tracks were sequenced from the S-760 using a Mac and recorded back to the DAT machine.","kind":"artist","listenFor":false,"source":{"type":"article","title":"Here's a list of all the gear Daft Punk used to make 'Homework'","publisher":"Mixmag.net","quoteSnippet":"“The second step is directly putting the sounds from the DAT into the S-760 sampler and editing/cutting the two tracks into however many pieces, like hard disk recording. “Lastly, we recorded it directly from the S-760 to the DAT. From here we do the rest with the Macintosh.”","url":"https://mixmag.net/feature/daft-punk-homework-gear-list","verified":false}},{"headline":"The track's iconic robotic vocal wasn't a vocoder, but a talk box, and the filtered, underwater-like intro was likely created using the built-in effects of their sampler.","text":"The phrase \"around the world\" is processed through a talk box, an effects pedal that allows a musician to shape the sound of an instrument with their mouth. This technique was heavily influenced by the '80s funk artist Roger Troutman of Zapp. The muffled, low-pass filter effect heard in the song's introduction is thought to have been created using the onboard filter of the Roland S-760 sampler during the recording process.","kind":"track","listenFor":true,"source":{"type":"article","title":"How Daft Punk made \"Homework\": A layman-friendly walkthrough of the tools and techniques that made Daft Punk's first album","publisher":"Reddit","quoteSnippet":"At times, they also used the S-760's built in filter, as it was recording to tape. You can hear this on Revolution 909 and the intro to Around the World for sure.","url":"https://www.reddit.com/r/DaftPunk/comments/p8z7eb/how_daft_punk_made_homework_a_laymanfriendly/","verified":false},"imageUrl":"https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/Peter_Frampton%27s_Talk_Box-3-2.jpg/500px-Peter_Frampton%27s_Talk_Box-3-2.jpg","imageCaption":"A vintage talk box similar to what Daft Punk would have used."},{"headline":"If the raw, jacking pulse of 'Homework' speaks to you, then you need to dig into the work of Chicago house pioneer Paul Johnson.","text":"Paul Johnson is the very first artist Daft Punk name-check in their tribute track 'Teachers'. His raw, rhythm-driven tracks released on labels like Dance Mania, featuring pummeling kicks and chopped-up samples, were a clear blueprint for Daft Punk's early sound. Listening to Johnson's 1996 track 'Hear the Music' feels like hearing a direct ancestor of the repetitive, hypnotic grooves found all over 'Homework'.","kind":"discovery","listenFor":false,"source":{"type":"article","title":"Paul Johnson (producer) - Wikipedia","publisher":"Wikipedia","quoteSnippet":"Paul Johnson is the first name mentioned in the Daft Punk song \"Teachers\", a tribute to several of Guy-Manuel de Homem-Christo and Thomas Bangalter's house music influences.","url":"https://en.wikipedia.org/wiki/Paul_Johnson_(producer)","verified":false},"imageUrl":"https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Columbia_Records_logo.svg/500px-Columbia_Records_logo.svg.png","imageCaption":"The record sleeve for Paul Johnson's influential house track."}]}
+{
+  "nuggets": [
+    {
+      "headline": "Daft Punk's 'Homework' was recorded with a surprisingly lo-fi and unconventional multi-step process that involved recording to tape, sampling themselves, and then re-sequencing.",
+      "text": "For their debut album, Daft Punk first recorded their hardware instruments through a Mackie mixer and an Alesis 3630 compressor onto a Panasonic SV-3700 DAT machine. They would then sample these recordings into a Roland S-760 sampler, where they would chop up the audio. The final tracks were sequenced from the S-760 using a Mac and recorded back to the DAT machine.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Here's a list of all the gear Daft Punk used to make 'Homework'",
+        "publisher": "Mixmag.net",
+        "quoteSnippet": "“The second step is directly putting the sounds from the DAT into the S-760 sampler and editing/cutting the two tracks into however many pieces, like hard disk recording. “Lastly, we recorded it directly from the S-760 to the DAT. From here we do the rest with the Macintosh.”",
+        "url": "https://mixmag.net/feature/daft-punk-homework-gear-list",
+        "verified": false
+      }
+    },
+    {
+      "headline": "The track's iconic robotic vocal wasn't a vocoder, but a talk box, and the filtered, underwater-like intro was likely created using the built-in effects of their sampler.",
+      "text": "The phrase \"around the world\" is processed through a talk box, an effects pedal that allows a musician to shape the sound of an instrument with their mouth. This technique was heavily influenced by the '80s funk artist Roger Troutman of Zapp. The muffled, low-pass filter effect heard in the song's introduction is thought to have been created using the onboard filter of the Roland S-760 sampler during the recording process.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "How Daft Punk made \"Homework\": A layman-friendly walkthrough of the tools and techniques that made Daft Punk's first album",
+        "publisher": "Reddit",
+        "quoteSnippet": "At times, they also used the S-760's built in filter, as it was recording to tape. You can hear this on Revolution 909 and the intro to Around the World for sure.",
+        "url": "https://www.reddit.com/r/DaftPunk/comments/p8z7eb/how_daft_punk_made_homework_a_laymanfriendly/",
+        "verified": false
+      }
+    },
+    {
+      "headline": "If the raw, jacking pulse of 'Homework' speaks to you, then you need to dig into the work of Chicago house pioneer Paul Johnson.",
+      "text": "Paul Johnson is the very first artist Daft Punk name-check in their tribute track 'Teachers'. His raw, rhythm-driven tracks released on labels like Dance Mania, featuring pummeling kicks and chopped-up samples, were a clear blueprint for Daft Punk's early sound. Listening to Johnson's 1996 track 'Hear the Music' feels like hearing a direct ancestor of the repetitive, hypnotic grooves found all over 'Homework'.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Paul Johnson (producer) - Wikipedia",
+        "publisher": "Wikipedia",
+        "quoteSnippet": "Paul Johnson is the first name mentioned in the Daft Punk song \"Teachers\", a tribute to several of Guy-Manuel de Homem-Christo and Thomas Bangalter's house music influences.",
+        "url": "https://en.wikipedia.org/wiki/Paul_Johnson_(producer)",
+        "verified": false
+      }
+    }
+  ]
+}

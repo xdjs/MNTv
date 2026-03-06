@@ -1,1 +1,47 @@
-{"nuggets":[{"headline":"Imagine leaving a major record label and then hitting a creative wall so hard, you almost break up. That was Radiohead's reality before 'In Rainbows'.","text":"After fulfilling their contract with EMI, Radiohead embarked on creating their seventh album in 2005 with a desire to shake things up, initially attempting to record without their long-time producer Nigel Godrich. These early sessions proved 'frustrating and fruitless,' with Thom Yorke admitting they spent a long time 'just not going anywhere'. It was only after touring with embryonic versions of the songs and re-enlisting Godrich—who, according to Yorke, gave them a 'walloping kick up the arse'—that the band found its direction and regained confidence, leading to the groundbreaking self-release of *In Rainbows* with its 'pay-what-you-want' model.","kind":"artist","listenFor":false,"source":{"type":"article","title":"xsnoize.com","publisher":"Wikipedia","quoteSnippet":"","url":"https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHJ9fpwTBszzkiv6zerf3KwSMOY3UWhw5tYf9UkuMK8rzuXdbWpfdXZmr0Yxo4FcH7vOzeDdk9jlP51h-sSC6pj3_LTrQ65bHa1bwy7wp_t397hCK6BGvmK_js6f9fiDL6Rj_GqyVZUHzaB_cBfYgfJjVXHvq_5W-pSBLKcziKTKw==","verified":true}},{"headline":"The mesmerising 'underwater' feel of 'Weird Fishes/Arpeggi' isn't just atmospheric; it's a deliberate rhythmic puzzle crafted by the band.","text":"The song's distinctive texture comes from its intricate, layered arpeggios, particularly the guitar parts played in groups of 3/8 notes, which intentionally create a rhythmic dissonance against the steady 4/4 drum beat. This polyrhythmic complexity, combined with the poetic lyrics by Thom Yorke that explore themes of hopelessness and escape by likening the mind to a deep ocean, truly immerses the listener in a unique sonic world. Notably, an early orchestral version of 'Arpeggi' was performed in 2005 with the London Sinfonietta, featuring Jonny Greenwood on the Ondes Martenot.","kind":"track","listenFor":true,"source":{"type":"youtube","title":"xsnoize.com","publisher":"Musixmatch Podcasts","quoteSnippet":"The arpeggios in Weird Fishes are played from high to low in groups of 3/8 notes, creating rhythmic dissonance with the drum part.","locator":"2:00","url":"https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHJ9fpwTBszzkiv6zerf3KwSMOY3UWhw5tYf9UkuMK8rzuXdbWpfdXZmr0Yxo4FcH7vOzeDdk9jlP51h-sSC6pj3_LTrQ65bHa1bwy7wp_t397hCK6BGvmK_js6f9fiDL6Rj_GqyVZUHzaB_cBfYgfJjVXHvq_5W-pSBLKcziKTKw==","verified":true}},{"headline":"If the layered, ethereal soundscapes and intricate rhythms of 'Weird Fishes/Arpeggi' resonated with you, then you absolutely need to dive into Grizzly Bear's album, 'Veckatimest'.","text":"Grizzly Bear's 2009 album, *Veckatimest*, offers a similar tapestry of lush, atmospheric soundscapes and complex arrangements that echo Radiohead's craftsmanship on *In Rainbows*. Their music shares a delicate balance between intricate instrumentation, often featuring interwoven vocal harmonies, and a powerful emotional resonance that makes for a truly immersive listening experience, much like the track you just heard. Some fans even describe it as a 'heavier In Rainbows' due to its rich, expansive sound.","kind":"discovery","listenFor":false,"source":{"type":"article","title":"xsnoize.com","publisher":"Reddit","quoteSnippet":"Their album Veckatimest is kinda like a heavier In Rainbows in some ways. Just as full of beautiful, lush, spacious soundscapes but with a little more “oomph” to it.","url":"https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHJ9fpwTBszzkiv6zerf3KwSMOY3UWhw5tYf9UkuMK8rzuXdbWpfdXZmr0Yxo4FcH7vOzeDdk9jlP51h-sSC6pj3_LTrQ65bHa1bwy7wp_t397hCK6BGvmK_js6f9fiDL6Rj_GqyVZUHzaB_cBfYgfJjVXHvq_5W-pSBLKcziKTKw==","verified":true}}]}
+{
+  "nuggets": [
+    {
+      "headline": "Imagine leaving a major record label and then hitting a creative wall so hard, you almost break up. That was Radiohead's reality before 'In Rainbows'.",
+      "text": "After fulfilling their contract with EMI, Radiohead embarked on creating their seventh album in 2005 with a desire to shake things up, initially attempting to record without their long-time producer Nigel Godrich. These early sessions proved 'frustrating and fruitless,' with Thom Yorke admitting they spent a long time 'just not going anywhere'. It was only after touring with embryonic versions of the songs and re-enlisting Godrich—who, according to Yorke, gave them a 'walloping kick up the arse'—that the band found its direction and regained confidence, leading to the groundbreaking self-release of *In Rainbows* with its 'pay-what-you-want' model.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "xsnoize.com",
+        "publisher": "Wikipedia",
+        "quoteSnippet": "",
+        "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHJ9fpwTBszzkiv6zerf3KwSMOY3UWhw5tYf9UkuMK8rzuXdbWpfdXZmr0Yxo4FcH7vOzeDdk9jlP51h-sSC6pj3_LTrQ65bHa1bwy7wp_t397hCK6BGvmK_js6f9fiDL6Rj_GqyVZUHzaB_cBfYgfJjVXHvq_5W-pSBLKcziKTKw==",
+        "verified": true
+      }
+    },
+    {
+      "headline": "The mesmerising 'underwater' feel of 'Weird Fishes/Arpeggi' isn't just atmospheric; it's a deliberate rhythmic puzzle crafted by the band.",
+      "text": "The song's distinctive texture comes from its intricate, layered arpeggios, particularly the guitar parts played in groups of 3/8 notes, which intentionally create a rhythmic dissonance against the steady 4/4 drum beat. This polyrhythmic complexity, combined with the poetic lyrics by Thom Yorke that explore themes of hopelessness and escape by likening the mind to a deep ocean, truly immerses the listener in a unique sonic world. Notably, an early orchestral version of 'Arpeggi' was performed in 2005 with the London Sinfonietta, featuring Jonny Greenwood on the Ondes Martenot.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "youtube",
+        "title": "xsnoize.com",
+        "publisher": "Musixmatch Podcasts",
+        "quoteSnippet": "The arpeggios in Weird Fishes are played from high to low in groups of 3/8 notes, creating rhythmic dissonance with the drum part.",
+        "locator": "2:00",
+        "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHJ9fpwTBszzkiv6zerf3KwSMOY3UWhw5tYf9UkuMK8rzuXdbWpfdXZmr0Yxo4FcH7vOzeDdk9jlP51h-sSC6pj3_LTrQ65bHa1bwy7wp_t397hCK6BGvmK_js6f9fiDL6Rj_GqyVZUHzaB_cBfYgfJjVXHvq_5W-pSBLKcziKTKw==",
+        "verified": true
+      }
+    },
+    {
+      "headline": "If the layered, ethereal soundscapes and intricate rhythms of 'Weird Fishes/Arpeggi' resonated with you, then you absolutely need to dive into Grizzly Bear's album, 'Veckatimest'.",
+      "text": "Grizzly Bear's 2009 album, *Veckatimest*, offers a similar tapestry of lush, atmospheric soundscapes and complex arrangements that echo Radiohead's craftsmanship on *In Rainbows*. Their music shares a delicate balance between intricate instrumentation, often featuring interwoven vocal harmonies, and a powerful emotional resonance that makes for a truly immersive listening experience, much like the track you just heard. Some fans even describe it as a 'heavier In Rainbows' due to its rich, expansive sound.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "xsnoize.com",
+        "publisher": "Reddit",
+        "quoteSnippet": "Their album Veckatimest is kinda like a heavier In Rainbows in some ways. Just as full of beautiful, lush, spacious soundscapes but with a little more “oomph” to it.",
+        "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHJ9fpwTBszzkiv6zerf3KwSMOY3UWhw5tYf9UkuMK8rzuXdbWpfdXZmr0Yxo4FcH7vOzeDdk9jlP51h-sSC6pj3_LTrQ65bHa1bwy7wp_t397hCK6BGvmK_js6f9fiDL6Rj_GqyVZUHzaB_cBfYgfJjVXHvq_5W-pSBLKcziKTKw==",
+        "verified": true
+      }
+    }
+  ]
+}

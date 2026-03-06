@@ -1,1 +1,46 @@
-{"nuggets":[{"headline":"For 'In Rainbows,' Radiohead's sonic warmth comes not just from their performances, but from a classic piece of analog gear: the EMT 140 plate reverb.","text":"Producer Nigel Godrich is known for his love of vintage equipment, and the EMT 140 plate reverb is a key component of his sound. This massive piece of gear, literally a large metal plate suspended in a wooden box, imparts a natural and spacious reverberation that digital plugins struggle to replicate. On 'In Rainbows,' this reverb is used to create a sense of depth and warmth, particularly on Thom Yorke's vocals and Phil Selway's drums, contributing to the album's intimate and organic feel.","kind":"artist","listenFor":false,"source":{"type":"article","title":"Deep Cuts: The Making of OK Computer - Audio Media International","publisher":"Audio Media International","quoteSnippet":"To further expand the spacious ambience, Radiohead’s producer brought along his EMT 140 Plate Reverb.","url":"https://www.audiomediainternational.com/deep-cuts-the-making-of-ok-computer/","verified":false}},{"headline":"The hypnotic, tumbling quality of \"Weird Fishes/Arpeggi\" is achieved through a rhythmic illusion: the guitars are playing in a different time signature than the drums.","text":"Phil Selway's drumming provides a steady, unambiguous 4/4 pulse throughout the song. Against this, the interlocking guitar arpeggios of Jonny Greenwood and Ed O'Brien are played in groups of three eighth notes, creating a 3-against-4 polyrhythm. This rhythmic dissonance is what gives the track its signature feeling of perpetual motion and unresolved tension, as the guitar patterns continually shift their alignment with the underlying beat.","kind":"track","listenFor":true,"source":{"type":"article","title":"S11E5 - Weird Fishes / Arpeggi by Radiohead Transcript - Dissect","publisher":"Musixmatch Podcasts","quoteSnippet":"But because the guitar is playing in groups of three and the drums are playing in groups of four. We get a three against four grouping, dissonant.","url":"https://www.musixmatch.com/podcast/s11e5-weird-fishes-arpeggi-by-radiohead-transcript-dissect-t-105263673","verified":false}},{"headline":"If the grand, layered soundscapes of 'In Rainbows' resonate with you, you owe it to yourself to explore Spiritualized's 1997 masterpiece, 'Ladies and Gentlemen We Are Floating in Space'.","text":"While sonically distinct, both albums share a commitment to creating immersive, emotionally resonant worlds through lush instrumentation and ambitious production. Spiritualized, led by Jason Pierce, took a 'more is more' approach, employing a gospel choir and orchestra to build a wall of sound that is simultaneously intimate and epic. For a taste of this, start with the title track and then move on to \"Come Together\" to hear a different, yet equally compelling, take on creating a grand sonic tapestry.","kind":"discovery","listenFor":false,"source":{"type":"article","title":"Ladies and Gentlemen We Are Floating in Space - Wikipedia","publisher":"Wikipedia","quoteSnippet":"The album features guest appearances from the Balanescu Quartet, the London Community Gospel Choir and Dr. John.","url":"https://en.wikipedia.org/wiki/Ladies_and_Gentlemen_We_Are_Floating_in_Space","verified":false}}]}
+{
+  "nuggets": [
+    {
+      "headline": "For 'In Rainbows,' Radiohead's sonic warmth comes not just from their performances, but from a classic piece of analog gear: the EMT 140 plate reverb.",
+      "text": "Producer Nigel Godrich is known for his love of vintage equipment, and the EMT 140 plate reverb is a key component of his sound. This massive piece of gear, literally a large metal plate suspended in a wooden box, imparts a natural and spacious reverberation that digital plugins struggle to replicate. On 'In Rainbows,' this reverb is used to create a sense of depth and warmth, particularly on Thom Yorke's vocals and Phil Selway's drums, contributing to the album's intimate and organic feel.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Deep Cuts: The Making of OK Computer - Audio Media International",
+        "publisher": "Audio Media International",
+        "quoteSnippet": "To further expand the spacious ambience, Radiohead’s producer brought along his EMT 140 Plate Reverb.",
+        "url": "https://www.audiomediainternational.com/deep-cuts-the-making-of-ok-computer/",
+        "verified": false
+      }
+    },
+    {
+      "headline": "The hypnotic, tumbling quality of \"Weird Fishes/Arpeggi\" is achieved through a rhythmic illusion: the guitars are playing in a different time signature than the drums.",
+      "text": "Phil Selway's drumming provides a steady, unambiguous 4/4 pulse throughout the song. Against this, the interlocking guitar arpeggios of Jonny Greenwood and Ed O'Brien are played in groups of three eighth notes, creating a 3-against-4 polyrhythm. This rhythmic dissonance is what gives the track its signature feeling of perpetual motion and unresolved tension, as the guitar patterns continually shift their alignment with the underlying beat.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "S11E5 - Weird Fishes / Arpeggi by Radiohead Transcript - Dissect",
+        "publisher": "Musixmatch Podcasts",
+        "quoteSnippet": "But because the guitar is playing in groups of three and the drums are playing in groups of four. We get a three against four grouping, dissonant.",
+        "url": "https://www.musixmatch.com/podcast/s11e5-weird-fishes-arpeggi-by-radiohead-transcript-dissect-t-105263673",
+        "verified": false
+      }
+    },
+    {
+      "headline": "If the grand, layered soundscapes of 'In Rainbows' resonate with you, you owe it to yourself to explore Spiritualized's 1997 masterpiece, 'Ladies and Gentlemen We Are Floating in Space'.",
+      "text": "While sonically distinct, both albums share a commitment to creating immersive, emotionally resonant worlds through lush instrumentation and ambitious production. Spiritualized, led by Jason Pierce, took a 'more is more' approach, employing a gospel choir and orchestra to build a wall of sound that is simultaneously intimate and epic. For a taste of this, start with the title track and then move on to \"Come Together\" to hear a different, yet equally compelling, take on creating a grand sonic tapestry.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Ladies and Gentlemen We Are Floating in Space - Wikipedia",
+        "publisher": "Wikipedia",
+        "quoteSnippet": "The album features guest appearances from the Balanescu Quartet, the London Community Gospel Choir and Dr. John.",
+        "url": "https://en.wikipedia.org/wiki/Ladies_and_Gentlemen_We_Are_Floating_in_Space",
+        "verified": false
+      }
+    }
+  ]
+}
