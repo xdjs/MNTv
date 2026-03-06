@@ -36,7 +36,7 @@ call_nuggets() {
   local artist="$1" title="$2" album="$3" tier="$4" listen_count="$5"
   local previous_nuggets="$6"  # JSON array string
 
-  echo "  [nuggets] $artist — $title | tier=$tier listen=$listen_count"
+  echo "  [nuggets] $artist — $title | tier=$tier listen=$listen_count" >&2
 
   curl -sS "$NUGGETS_URL" \
     -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
@@ -56,7 +56,7 @@ call_nuggets() {
 call_companion() {
   local artist="$1" title="$2" album="$3" tier="$4" prebuilt_nuggets="$5"
 
-  echo "  [companion] $artist — $title | tier=$tier ($(echo "$prebuilt_nuggets" | jq 'length') nuggets)"
+  echo "  [companion] $artist — $title | tier=$tier ($(echo "$prebuilt_nuggets" | jq 'length') nuggets)" >&2
 
   curl -sS "$COMPANION_URL" \
     -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
@@ -188,8 +188,9 @@ for i in "${!ARTISTS[@]}"; do
       total_calls=$((total_calls + 1))
 
       # Check for errors
-      if echo "$nuggets_response" | jq -e '.error' > /dev/null 2>&1; then
-        echo "    ⚠ Error: $(echo "$nuggets_response" | jq -r '.error')"
+      error_msg=$(echo "$nuggets_response" | jq -r '.error // empty' 2>/dev/null || true)
+      if [ -n "$error_msg" ]; then
+        echo "    ⚠ Error: $error_msg"
         continue
       fi
 
@@ -199,14 +200,15 @@ for i in "${!ARTISTS[@]}"; do
       fi
 
       # Extract headlines for dedup in next listen
-      new_headlines=$(echo "$nuggets_response" | jq '[.nuggets[]?.headline // empty]')
-      previous_headlines=$(echo "$previous_headlines $new_headlines" | jq -s 'add')
+      new_headlines=$(echo "$nuggets_response" | jq '[.nuggets[]?.headline // empty]' 2>/dev/null || echo '[]')
+      previous_headlines=$(echo "$previous_headlines $new_headlines" | jq -s 'add' 2>/dev/null || echo '[]')
 
       # Transform to companion format
-      companion_batch=$(transform_to_companion "$nuggets_response" "$listen")
-      all_companion_nuggets=$(echo "$all_companion_nuggets $companion_batch" | jq -s 'add')
+      companion_batch=$(transform_to_companion "$nuggets_response" "$listen" 2>/dev/null || echo '[]')
+      all_companion_nuggets=$(echo "$all_companion_nuggets $companion_batch" | jq -s 'add' 2>/dev/null || echo '[]')
 
-      echo "    ✓ Listen #$listen: $(echo "$nuggets_response" | jq '.nuggets | length') nuggets"
+      nugget_count=$(echo "$nuggets_response" | jq '.nuggets | length' 2>/dev/null || echo '?')
+      echo "    ✓ Listen #$listen: $nugget_count nuggets"
 
       # Small delay to avoid rate limiting
       sleep 2
