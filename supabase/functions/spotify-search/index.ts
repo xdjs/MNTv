@@ -45,7 +45,39 @@ serve(async (req) => {
   }
 
   try {
-    const { query, artist, title } = await req.json();
+    const { query, artist, title, recommend } = await req.json();
+
+    const token = await getAppToken();
+
+    // ── Recommendations mode: seed by track ID ──────────────────────
+    if (recommend) {
+      // Accept a Spotify URI (spotify:track:ABC) or bare track ID
+      const trackId = recommend.replace("spotify:track:", "");
+      const url = `https://api.spotify.com/v1/recommendations?seed_tracks=${encodeURIComponent(trackId)}&limit=20`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        if (res.status === 401) {
+          cachedToken = null;
+          tokenExpiresAt = 0;
+          const retryToken = await getAppToken();
+          const retryRes = await fetch(url, { headers: { Authorization: `Bearer ${retryToken}` } });
+          if (!retryRes.ok) throw new Error(`Spotify recommendations failed: ${retryRes.status}`);
+          const retryData = await retryRes.json();
+          return new Response(JSON.stringify({ tracks: normalizeRecommendations(retryData) }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        throw new Error(`Spotify recommendations failed: ${res.status}`);
+      }
+      const data = await res.json();
+      return new Response(JSON.stringify({ tracks: normalizeRecommendations(data) }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── Search mode ─────────────────────────────────────────────────
     if ((!query && !title) || (query && typeof query !== "string")) {
       return new Response(
         JSON.stringify({ artists: [], tracks: [] }),
@@ -53,12 +85,9 @@ serve(async (req) => {
       );
     }
 
-    const token = await getAppToken();
-
     // Build a precise query using Spotify's field filters when artist+title are provided
     let q: string;
     if (artist && title) {
-      // Use Spotify's search field filters for precise matching
       q = encodeURIComponent(`artist:${artist} track:${title}`);
     } else {
       q = encodeURIComponent((query || "").trim());
@@ -70,7 +99,6 @@ serve(async (req) => {
     });
 
     if (!res.ok) {
-      // If token expired mid-flight, clear cache and retry once
       if (res.status === 401) {
         cachedToken = null;
         tokenExpiresAt = 0;
@@ -99,6 +127,18 @@ serve(async (req) => {
     );
   }
 });
+
+function normalizeRecommendations(data: any) {
+  return (data.tracks || [])
+    .filter((t: any) => !t.artists?.[0]?.name?.toLowerCase().includes(" - topic"))
+    .map((t: any) => ({
+      title: t.name,
+      artist: t.artists?.[0]?.name || "Unknown",
+      album: t.album?.name || "",
+      imageUrl: t.album?.images?.[0]?.url || t.album?.images?.[1]?.url || "",
+      uri: t.uri || "",
+    }));
+}
 
 function normalize(data: any) {
   const artists = (data.artists?.items || [])

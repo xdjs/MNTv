@@ -197,48 +197,39 @@ export default function Listen() {
     setSkipLoading(true);
     try {
       const titleLower = track.title.toLowerCase();
-      const artistLower = track.artist.toLowerCase();
 
-      const pickAndNavigate = (tracks: SpotifyTrackResult[]) => {
-        const filtered = tracks.filter(
-          (t) =>
-            t.title.toLowerCase() !== titleLower &&
-            t.artist.toLowerCase().includes(artistLower)
-        );
-        if (filtered.length > 0) {
-          const pick = filtered[Math.floor(Math.random() * Math.min(filtered.length, 5))];
-          navigate(
-            `/listen/real::${encodeURIComponent(pick.artist)}::${encodeURIComponent(pick.title)}::${encodeURIComponent(pick.album || "")}::${encodeURIComponent(pick.uri || "")}`
-          );
-          return true;
-        }
-        return false;
-      };
-
-      // Attempt 1: artist field filter (most precise)
-      const { data } = await supabase.functions.invoke("spotify-search", {
-        body: { query: `artist:${track.artist}` },
-      });
-      if (pickAndNavigate(data?.tracks || [])) return;
-
-      // Attempt 2: broader search without field filter
-      const { data: data2 } = await supabase.functions.invoke("spotify-search", {
-        body: { query: track.artist },
-      });
-      if (pickAndNavigate(data2?.tracks || [])) return;
-
-      // Attempt 3: search by artist + title (find similar music)
-      const { data: data3 } = await supabase.functions.invoke("spotify-search", {
-        body: { query: `${track.artist} ${track.title}` },
-      });
-      const anyTrack = (data3?.tracks as SpotifyTrackResult[] || []).filter(
-        (t) => t.title.toLowerCase() !== titleLower
-      );
-      if (anyTrack.length > 0) {
-        const pick = anyTrack[Math.floor(Math.random() * Math.min(anyTrack.length, 5))];
+      const navigateTo = (pick: SpotifyTrackResult) => {
         navigate(
           `/listen/real::${encodeURIComponent(pick.artist)}::${encodeURIComponent(pick.title)}::${encodeURIComponent(pick.album || "")}::${encodeURIComponent(pick.uri || "")}`
         );
+      };
+
+      // Attempt 1: Spotify Recommendations (best — returns related artists + tracks)
+      if (spotifyUri) {
+        const { data: recData } = await supabase.functions.invoke("spotify-search", {
+          body: { recommend: spotifyUri },
+        });
+        const recs = (recData?.tracks as SpotifyTrackResult[] || []).filter(
+          (t) => t.title.toLowerCase() !== titleLower
+        );
+        if (recs.length > 0) {
+          navigateTo(recs[Math.floor(Math.random() * Math.min(recs.length, 5))]);
+          return;
+        }
+      }
+
+      // Attempt 2: search for more tracks by same artist
+      const { data } = await supabase.functions.invoke("spotify-search", {
+        body: { query: track.artist },
+      });
+      const artistLower = track.artist.toLowerCase();
+      const sameArtist = (data?.tracks as SpotifyTrackResult[] || []).filter(
+        (t) =>
+          t.title.toLowerCase() !== titleLower &&
+          t.artist.toLowerCase().includes(artistLower)
+      );
+      if (sameArtist.length > 0) {
+        navigateTo(sameArtist[Math.floor(Math.random() * Math.min(sameArtist.length, 5))]);
         return;
       }
 
@@ -251,7 +242,7 @@ export default function Listen() {
     } finally {
       setSkipLoading(false);
     }
-  }, [track?.artist, track?.title, navigate]);
+  }, [track?.artist, track?.title, spotifyUri, navigate]);
 
   const handlePrev = useCallback(() => {
     isNavigatingRef.current = true;
