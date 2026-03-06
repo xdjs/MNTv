@@ -835,26 +835,34 @@ export default function Listen() {
               {topFocusIndex === 0 ? "Back" : "Open Companion"}
             </motion.p>
           )}
-          <button
-            onClick={() => {
-              if (shortId) {
-                window.open(`${window.location.origin}/c/${shortId}`, "_blank");
-              }
-            }}
-            disabled={!shortId}
-            className={`transition-all duration-300 outline-none rounded-full ${
-              focusZone === 'top' && topFocusIndex === 1 ? "tv-focus-glow scale-110" : ""
-            }`}
-            aria-label="Open companion page"
-            style={{
-              filter: shortId
-                ? "drop-shadow(0 0 8px hsl(var(--neon-glow) / 0.7)) drop-shadow(0 0 24px hsl(var(--neon-glow) / 0.35))"
-                : "grayscale(1) opacity(0.4)",
-              transition: "filter 0.4s ease",
-            }}
-          >
-            <MusicNerdLogo size={40} glow={false} />
-          </button>
+          <div className="flex flex-col items-center gap-1.5">
+            <button
+              onClick={() => {
+                if (shortId) {
+                  window.open(`${window.location.origin}/c/${shortId}`, "_blank");
+                }
+              }}
+              disabled={!shortId}
+              className={`transition-all duration-300 outline-none rounded-full ${
+                focusZone === 'top' && topFocusIndex === 1 ? "tv-focus-glow scale-110" : ""
+              }`}
+              aria-label="Open companion page"
+              style={{
+                filter: shortId
+                  ? "drop-shadow(0 0 8px hsl(var(--neon-glow) / 0.7)) drop-shadow(0 0 24px hsl(var(--neon-glow) / 0.35))"
+                  : "grayscale(1) opacity(0.4)",
+                transition: "filter 0.4s ease",
+              }}
+            >
+              <MusicNerdLogo size={40} glow={false} />
+            </button>
+            <button
+              onClick={() => setDevOpen((o) => !o)}
+              className="rounded-md bg-foreground/5 px-2.5 py-0.5 text-[10px] text-muted-foreground/50 hover:bg-foreground/10 hover:text-muted-foreground transition-colors"
+            >
+              DEV
+            </button>
+          </div>
         </div>
 
         {/* Track info — fixed bottom-left, visible when playback bar is hidden */}
@@ -1021,13 +1029,6 @@ export default function Listen() {
         )}
 
         {/* Dev panel */}
-        <button
-          onClick={() => setDevOpen((o) => !o)}
-          className="fixed top-4 right-4 z-50 rounded-lg bg-foreground/5 px-3 py-1.5 text-xs text-muted-foreground hover:bg-foreground/10 transition-colors"
-        >
-          DEV
-        </button>
-
         <AnimatePresence>
           {devOpen && (
             <DevPanel

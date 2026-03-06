@@ -31,14 +31,14 @@ export default function Browse() {
   const demoItems = [
     {
       id: "demo-around-the-world",
-      imageUrl: "https://i.scdn.co/image/ab67616d0000b273286a4dca354e36e2e5c95e4a",
+      imageUrl: "https://i.scdn.co/image/ab67616d0000b2738ac778cc7d88779f74d33311",
       title: "Around the World",
       subtitle: "Daft Punk",
       href: "/listen/real::Daft%20Punk::Around%20the%20World::Homework::spotify:track:1pKYYY0dkg23sQQXi0Q5zN",
     },
     {
       id: "demo-weird-fishes",
-      imageUrl: "https://i.scdn.co/image/ab67616d0000b2731a84d71391df7469c5ab8539",
+      imageUrl: "https://i.scdn.co/image/ab67616d0000b273de3c04b5fc750b68899b20a9",
       title: "Weird Fishes/Arpeggi",
       subtitle: "Radiohead",
       href: "/listen/real::Radiohead::Weird%20Fishes%2FArpeggi::In%20Rainbows::spotify:track:4tha3dahOS9LhTxKn4JYLC",

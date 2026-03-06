@@ -24,8 +24,8 @@ declare -a ARTISTS=("Daft Punk"         "Radiohead")
 declare -a TITLES=("Around the World"   "Weird Fishes/Arpeggi")
 declare -a ALBUMS=("Homework"           "In Rainbows")
 declare -a TRACK_IDS=(
-  "real::Daft%20Punk::Around%20the%20World::Homework::spotify:track:1pKYYY0dkg23sQQXi0Q5zN"
-  "real::Radiohead::Weird%20Fishes%2FArpeggi::In%20Rainbows::spotify:track:4tha3dahOS9LhTxKn4JYLC"
+  "real::Daft Punk::Around the World::Homework::spotify:track:1pKYYY0dkg23sQQXi0Q5zN"
+  "real::Radiohead::Weird Fishes/Arpeggi::In Rainbows::spotify:track:4tha3dahOS9LhTxKn4JYLC"
 )
 
 TIERS=("casual" "curious" "nerd")
