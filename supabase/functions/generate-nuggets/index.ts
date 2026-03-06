@@ -100,6 +100,71 @@ class RecitationError extends Error {
   constructor() { super("RECITATION"); this.name = "RecitationError"; }
 }
 
+// ── Wikipedia / Wikimedia Commons image search ──────────────────────
+// Primary: Wikipedia search → lead image of top result
+async function searchWikipediaImage(query: string): Promise<{ url: string; title: string } | null> {
+  try {
+    const url = new URL("https://en.wikipedia.org/w/api.php");
+    url.searchParams.set("action", "query");
+    url.searchParams.set("generator", "search");
+    url.searchParams.set("gsrsearch", query);
+    url.searchParams.set("gsrlimit", "1");
+    url.searchParams.set("prop", "pageimages");
+    url.searchParams.set("piprop", "thumbnail");
+    url.searchParams.set("pithumbsize", "500");
+    url.searchParams.set("format", "json");
+    url.searchParams.set("origin", "*");
+
+    const res = await fetch(url.toString());
+    if (!res.ok) return null;
+    const data = await res.json();
+    const pages = data.query?.pages;
+    if (!pages) return null;
+    const page = Object.values(pages)[0] as any;
+    const thumb = page?.thumbnail?.source;
+    if (!thumb) return null;
+    return { url: thumb, title: page.title || query };
+  } catch {
+    return null;
+  }
+}
+
+// Fallback: Wikimedia Commons direct file search
+async function searchCommonsImage(query: string): Promise<string | null> {
+  try {
+    const url = new URL("https://commons.wikimedia.org/w/api.php");
+    url.searchParams.set("action", "query");
+    url.searchParams.set("generator", "search");
+    url.searchParams.set("gsrnamespace", "6");
+    url.searchParams.set("gsrsearch", query);
+    url.searchParams.set("gsrlimit", "1");
+    url.searchParams.set("prop", "imageinfo");
+    url.searchParams.set("iiprop", "url");
+    url.searchParams.set("iiurlwidth", "500");
+    url.searchParams.set("format", "json");
+    url.searchParams.set("origin", "*");
+
+    const res = await fetch(url.toString());
+    if (!res.ok) return null;
+    const data = await res.json();
+    const pages = data.query?.pages;
+    if (!pages) return null;
+    const page = Object.values(pages)[0] as any;
+    return page?.imageinfo?.[0]?.thumburl || page?.imageinfo?.[0]?.url || null;
+  } catch {
+    return null;
+  }
+}
+
+// Resolve image for a single nugget's search query
+async function resolveNuggetImage(query: string): Promise<{ url: string; title: string } | null> {
+  const wiki = await searchWikipediaImage(query);
+  if (wiki) return wiki;
+  const commons = await searchCommonsImage(query);
+  if (commons) return { url: commons, title: query };
+  return null;
+}
+
 // ── Tier configuration ──────────────────────────────────────────────
 type Tier = "casual" | "curious" | "nerd";
 
@@ -151,6 +216,8 @@ interface GeminiNugget {
   text: string;
   kind: "artist" | "track" | "discovery";
   listenFor: boolean;
+  imageSearchQuery?: string;
+  imageCaption?: string;
   source: {
     type: "youtube" | "article" | "interview";
     title: string;
@@ -241,6 +308,14 @@ CRITICAL RULES:
 - Be factually accurate — do not fabricate quotes or facts
 - If you cannot find a specific real source for a fact, set publisher to "General Knowledge" — this is better than fabricating an article that doesn't exist
 - NEVER invent specific studio names, gear model numbers, or personnel names — if unsure, describe generally
+- Optionally include "imageSearchQuery" and "imageCaption" when the nugget references something visually interesting BEYOND the main artist or album cover:
+  - A TV show, film, or cultural event the song appeared in
+  - A specific instrument, piece of gear, or studio
+  - A notable collaborator, producer, or featured artist
+  - A specific album cover from a different release
+  - Examples: "HBO Insecure TV show", "Moog Minimoog synthesizer", "Abbey Road Studios London"
+  - "imageCaption": short (6-12 words) explaining the image's relevance to the nugget
+  - Do NOT include this for generic artist/track facts — we already have the album art for those
 
 Return ONLY valid JSON:
 {
@@ -250,6 +325,8 @@ Return ONLY valid JSON:
       "text": "2-3 sentences of surprising music trivia with full detail",
       "kind": "artist|track|discovery",
       "listenFor": false,
+      "imageSearchQuery": "HBO Insecure TV show",
+      "imageCaption": "The HBO series that featured this track",
       "source": {
         "type": "youtube|article|interview",
         "title": "Real source title",
@@ -474,33 +551,40 @@ Return ONLY valid JSON:
     }
 
     // ── Standard nugget generation ──────────────────────────────────
-    // Step 1: Search YouTube for interviews/breakdowns
+    // YouTube search + transcripts only on repeat listens (listenCount >= 2).
+    // First listen uses Gemini + Google Search grounding alone (saves 3-5s).
     let videos: YTVideo[] = [];
-    try {
-      const searchQuery = `"${artist}" "${title}" interview OR breakdown OR behind the scenes`;
-      videos = await searchYouTube(searchQuery, YOUTUBE_API_KEY);
-    } catch (e) {
-      console.warn("YouTube search skipped:", e);
-    }
-
-    console.log(`Found ${videos.length} YouTube videos for "${artist} - ${title}"`);
-
-    // Step 2: Fetch transcripts in parallel (top 3)
     const transcripts = new Map<string, string>();
-    if (videos.length > 0) {
-      const results = await Promise.allSettled(
-        videos.slice(0, 3).map(async (v) => {
-          const t = await fetchTranscript(v.videoId);
-          return { videoId: v.videoId, transcript: t };
-        })
-      );
-      for (const r of results) {
-        if (r.status === "fulfilled" && r.value.transcript) {
-          transcripts.set(r.value.videoId, r.value.transcript);
+
+    if (safeListenCount >= 2) {
+      // Step 1: Search YouTube for interviews/breakdowns
+      try {
+        const searchQuery = `"${artist}" "${title}" interview OR breakdown OR behind the scenes`;
+        videos = await searchYouTube(searchQuery, YOUTUBE_API_KEY);
+      } catch (e) {
+        console.warn("YouTube search skipped:", e);
+      }
+
+      console.log(`Found ${videos.length} YouTube videos for "${artist} - ${title}"`);
+
+      // Step 2: Fetch transcripts in parallel (top 3)
+      if (videos.length > 0) {
+        const results = await Promise.allSettled(
+          videos.slice(0, 3).map(async (v) => {
+            const t = await fetchTranscript(v.videoId);
+            return { videoId: v.videoId, transcript: t };
+          })
+        );
+        for (const r of results) {
+          if (r.status === "fulfilled" && r.value.transcript) {
+            transcripts.set(r.value.videoId, r.value.transcript);
+          }
         }
       }
+      console.log(`Fetched ${transcripts.size} transcripts`);
+    } else {
+      console.log(`First listen — skipping YouTube search, Gemini + grounding only`);
     }
-    console.log(`Fetched ${transcripts.size} transcripts`);
 
     // Step 3: Generate nuggets with Gemini + Google Search grounding
     let rawNuggets: any[];
@@ -527,6 +611,25 @@ Return ONLY valid JSON:
     console.log(`[Grounding] ${groundingChunks.length} chunks for "${artist} - ${title}":`,
       groundingChunks.map((c: any) => ({ title: c?.web?.title, uri: c?.web?.uri })));
 
+    // Step 3.5: Resolve contextual images from Wikipedia/Commons in parallel
+    const imageResults = await Promise.allSettled(
+      rawNuggets.map(async (n) => {
+        if (!n.imageSearchQuery) return null;
+        return resolveNuggetImage(n.imageSearchQuery);
+      })
+    );
+    // Attach resolved images back to rawNuggets
+    for (let i = 0; i < rawNuggets.length; i++) {
+      const result = imageResults[i];
+      if (result.status === "fulfilled" && result.value) {
+        rawNuggets[i]._resolvedImageUrl = result.value.url;
+        rawNuggets[i]._resolvedImageTitle = result.value.title;
+        console.log(`[ImageSearch] Resolved "${rawNuggets[i].imageSearchQuery}" → ${result.value.url}`);
+      } else if (rawNuggets[i].imageSearchQuery) {
+        console.log(`[ImageSearch] No result for "${rawNuggets[i].imageSearchQuery}"`);
+      }
+    }
+
     // Step 4: Assemble response with real video IDs and grounding-sourced URLs
     // Filter grounding chunks once for reuse across all nuggets
     const realChunks = groundingChunks.filter((chunk: any) => {
@@ -550,6 +653,12 @@ Return ONLY valid JSON:
           locator: source.locator,
         },
       };
+
+      // Contextual image resolved from Wikipedia/Commons
+      if (n._resolvedImageUrl) {
+        result.imageUrl = n._resolvedImageUrl;
+        result.imageCaption = n.imageCaption || n._resolvedImageTitle || n.imageSearchQuery;
+      }
 
       // YouTube sources — use verified video IDs
       if (source.type === "youtube" && source.videoIndex != null) {

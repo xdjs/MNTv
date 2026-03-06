@@ -9,6 +9,8 @@ interface AINuggetData {
   text: string;
   kind: "artist" | "track" | "discovery";
   listenFor?: boolean;
+  imageUrl?: string;
+  imageCaption?: string;
   source: {
     type: "youtube" | "article" | "interview";
     title: string;
@@ -282,17 +284,25 @@ export function useAINuggets(
         } as Nugget;
       });
 
-      // ── Assign images from Spotify (always accurate, zero API calls) ──
-      for (const nugget of newNuggets) {
-        if (nugget.kind === "artist" && artistImageUrl) {
+      // ── Assign images: prefer server-resolved contextual images, fall back to Spotify ──
+      for (let idx = 0; idx < newNuggets.length; idx++) {
+        const nugget = newNuggets[idx];
+        const aiNugget = aiNuggets[idx];
+
+        // Prefer server-resolved contextual image (Wikipedia/Commons)
+        if (aiNugget?.imageUrl) {
+          nugget.imageUrl = aiNugget.imageUrl;
+          nugget.imageCaption = aiNugget.imageCaption || nugget.headline;
+        }
+        // Fall back to Spotify images
+        else if (nugget.kind === "artist" && artistImageUrl) {
           nugget.imageUrl = artistImageUrl;
           nugget.imageCaption = artist;
-        } else if (nugget.kind === "track" && coverArtUrl) {
+        } else if ((nugget.kind === "track" || nugget.kind === "discovery") && coverArtUrl) {
           nugget.imageUrl = coverArtUrl;
-          nugget.imageCaption = `${title}${album ? " \u2014 " + album : ""}`;
-        } else if (nugget.kind === "discovery" && coverArtUrl) {
-          nugget.imageUrl = coverArtUrl;
-          nugget.imageCaption = nugget.headline || "Explore next";
+          nugget.imageCaption = nugget.kind === "track"
+            ? `${title}${album ? " \u2014 " + album : ""}`
+            : nugget.headline || "Explore next";
         }
       }
 
