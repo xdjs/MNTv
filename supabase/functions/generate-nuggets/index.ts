@@ -210,6 +210,48 @@ const TIER_CONFIG: Record<Tier, {
   },
 };
 
+// ── Thematic angle pools (tier + listen-count gated) ─────────────────
+interface AngleDef {
+  name: string;
+  minListen: number;          // earliest listen count where this angle appears
+  tiers: Set<Tier>;           // which tiers include this angle
+}
+
+const ANGLE_POOL: AngleDef[] = [
+  // Available from first listen
+  { name: "personal stories",           minListen: 1, tiers: new Set(["casual", "curious", "nerd"]) },
+  { name: "cultural impact",            minListen: 1, tiers: new Set(["casual", "curious", "nerd"]) },
+  { name: "live performances",          minListen: 1, tiers: new Set(["casual", "curious", "nerd"]) },
+  { name: "collaborations",             minListen: 1, tiers: new Set(["casual", "curious", "nerd"]) },
+  { name: "lyrical meaning",            minListen: 1, tiers: new Set(["casual", "curious", "nerd"]) },
+  { name: "chart performance",          minListen: 1, tiers: new Set(["casual", "curious", "nerd"]) },
+  { name: "music video creation",       minListen: 1, tiers: new Set(["casual", "curious", "nerd"]) },
+  { name: "historical context",         minListen: 1, tiers: new Set(["casual", "curious", "nerd"]) },
+  // Unlock at listen 2 for casual/curious, always available for nerd
+  { name: "recording sessions",         minListen: 2, tiers: new Set(["curious", "nerd"]) },
+  { name: "production techniques",      minListen: 2, tiers: new Set(["curious", "nerd"]) },
+  { name: "instrument choices",         minListen: 2, tiers: new Set(["curious", "nerd"]) },
+  { name: "critical reception",         minListen: 2, tiers: new Set(["curious", "nerd"]) },
+  { name: "samples and influences",     minListen: 2, tiers: new Set(["curious", "nerd"]) },
+  { name: "fan theories",               minListen: 2, tiers: new Set(["curious", "nerd"]) },
+  { name: "session musicians",          minListen: 2, tiers: new Set(["nerd"]) },
+  // Deep cuts — unlock at listen 3 for curious, always available for nerd
+  { name: "harmonic and rhythmic analysis", minListen: 3, tiers: new Set(["nerd"]) },
+  { name: "signal chain and gear",      minListen: 3, tiers: new Set(["nerd"]) },
+  { name: "micro-genre lineage",        minListen: 3, tiers: new Set(["nerd"]) },
+  { name: "mixing and mastering",       minListen: 3, tiers: new Set(["nerd"]) },
+];
+
+function pickAngles(tier: Tier, listenCount: number, count = 2): string[] {
+  // Nerd tier gets everything unlocked regardless of listen count
+  const eligible = ANGLE_POOL.filter((a) =>
+    a.tiers.has(tier) && (tier === "nerd" || listenCount >= a.minListen)
+  );
+  // Shuffle and pick
+  const shuffled = eligible.sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count).map((a) => a.name);
+}
+
 // ── Generate nuggets with Gemini + Google Search grounding ───────────
 interface GeminiNugget {
   headline: string;
@@ -265,6 +307,10 @@ async function generateWithGemini(
     depthInstruction = "The listener keeps coming back (listen #" + listenCount + "). Give them deep cuts — obscure influences, technical breakdowns, unexpected cultural connections, niche recommendations only a true nerd would know.";
   }
 
+  // Pick random thematic angles for this generation
+  const angles = pickAngles(tier, listenCount);
+  const angleInstruction = `\nTHEMATIC ANGLES: For the artist and track nuggets, explore these angles: ${angles.join(", ")}. Use these as creative direction — the nugget should still be surprising and specific, not a generic take on the angle.`;
+
   const nonRepeatInstruction = previousNuggets.length > 0
     ? `\n\nDO NOT repeat or closely rephrase any of these previously shown headlines:\n${previousNuggets.map((h) => `- "${h}"`).join("\n")}\nGenerate completely fresh angles.`
     : "";
@@ -284,7 +330,7 @@ Use this to:
 
 IMPORTANT DISAMBIGUATION: The ARTIST/BAND is "${artist}". The SONG/TRACK is "${title}". These are different — "${title}" is the song name, NOT a band. All nuggets must be about the artist "${artist}" and their song "${title}".
 
-DEPTH CONTEXT: ${depthInstruction}${nonRepeatInstruction}
+DEPTH CONTEXT: ${depthInstruction}${angleInstruction}${nonRepeatInstruction}
 ${tasteContext}
 TONE & STYLE: ${tierConfig.tone}
 ASSUMED KNOWLEDGE: ${tierConfig.assumedKnowledge}
