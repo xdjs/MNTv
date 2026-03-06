@@ -6,7 +6,6 @@ import { useUserProfile, tierGlowClass } from "@/hooks/useMusicNerdState";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ExternalLink, Music, BookOpen, Play } from "lucide-react";
-import CompanionNuggetCard from "@/components/companion/CompanionNuggetCard";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import type { CompanionNugget } from "@/mock/types";
 
@@ -254,24 +253,65 @@ export default function Companion() {
               </section>
             )}
 
-            {/* Three categorized sections — all nuggets shown, scroll to see more */}
+            {/* Three categorized sections — nuggets in a scrollable card per section */}
             {SECTIONS.map(({ key, label, color }) => {
               const visible = getSectionNuggets(key);
               if (visible.length === 0) return null;
 
               return (
-                <section key={key} className="space-y-3">
-                  <div className="flex items-center gap-2">
+                <section key={key}>
+                  <div className="flex items-center gap-2 mb-3">
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${color}`}>{label}</span>
                     {visible.length > 1 && (
-                      <span className="text-[10px] text-muted-foreground/60">{visible.length} insights</span>
+                      <span className="text-[10px] text-muted-foreground/60">{visible.length} insights · swipe →</span>
                     )}
                   </div>
-                  {visible.map((nugget) => (
-                    <ErrorBoundary key={nugget.id}>
-                      <CompanionNuggetCard nugget={nugget} />
-                    </ErrorBoundary>
-                  ))}
+                  <div className="apple-glass rounded-2xl overflow-hidden">
+                    <div className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide">
+                      {visible.map((nugget, idx) => (
+                        <div
+                          key={nugget.id}
+                          className={`flex-none w-full snap-center p-4 space-y-3 ${idx > 0 ? "border-l border-foreground/5" : ""}`}
+                        >
+                          <ErrorBoundary>
+                            {nugget.imageUrl && (
+                              <div className="-mx-4 -mt-4 mb-3">
+                                <img
+                                  src={nugget.imageUrl}
+                                  alt={nugget.imageCaption || nugget.headline || ""}
+                                  className="w-full object-contain max-h-44"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                />
+                                {nugget.imageCaption && (
+                                  <p className="px-4 py-1.5 text-xs text-muted-foreground italic">{nugget.imageCaption}</p>
+                                )}
+                              </div>
+                            )}
+                            {nugget.headline && (
+                              <p className="text-sm font-bold text-foreground leading-snug">{nugget.headline}</p>
+                            )}
+                            {nugget.text && (
+                              <p className="text-sm text-foreground/75 leading-relaxed">{nugget.text}</p>
+                            )}
+                            {nugget.sourceUrl && nugget.sourceName && (
+                              <a
+                                href={nugget.sourceUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-foreground/8 border border-foreground/10 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                              >
+                                <ExternalLink size={11} />
+                                {nugget.sourceName}
+                              </a>
+                            )}
+                            {visible.length > 1 && (
+                              <p className="text-[10px] text-muted-foreground/40 text-right">{idx + 1} / {visible.length}</p>
+                            )}
+                          </ErrorBoundary>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </section>
               );
             })}
