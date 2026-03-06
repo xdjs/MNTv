@@ -35,7 +35,7 @@ export default function Listen() {
   const { trackId: rawTrackId } = useParams<{ trackId: string }>();
   const navigate = useNavigate();
 
-  const { profile } = useUserProfile();
+  const { profile, saveProfile } = useUserProfile();
 
   // ── Track parsing — all tracks encoded as: real::<artist>::<title>::<album>::<uri> ──
   const realTrackMeta = useMemo(() => {
@@ -413,8 +413,7 @@ export default function Listen() {
         const allAccumulatedNuggets = player.getCompanionNuggets(trackKey);
 
         // Pre-generate companion content so the QR companion page loads instantly.
-        // Always use listenCount 1 and tier "casual" — the companion page on mobile
-        // (unauthenticated QR scan) uses these same defaults, guaranteeing a cache hit.
+        // Use actual tier so each tier's companion is cached separately.
         // Pass image URLs so the companion page works for unauthenticated QR users.
         const { error } = await supabase.functions.invoke("generate-companion", {
           body: {
@@ -422,7 +421,7 @@ export default function Listen() {
             title: track.title,
             album: track.album,
             listenCount: 1,
-            tier: "casual",
+            tier,
             prebuiltNuggets: allAccumulatedNuggets,
             coverArtUrl: effectiveCoverArt || undefined,
             artistImage: artistImageUrl || effectiveCoverArt || undefined,
@@ -1009,7 +1008,7 @@ export default function Listen() {
             className="fixed bottom-6 right-6 z-10 hover:opacity-100 transition-opacity rounded-xl overflow-hidden"
           >
             <QRCode
-              value={`${window.location.origin}/c/${shortId}`}
+              value={`${window.location.origin}/c/${shortId}?tier=${tier}`}
               size={140}
               qrStyle="dots"
               eyeRadius={8}
@@ -1021,17 +1020,14 @@ export default function Listen() {
           </motion.div>
         )}
 
-        {/* Dev panel — development only */}
-        {import.meta.env.DEV && (
+        {/* Dev panel */}
         <button
           onClick={() => setDevOpen((o) => !o)}
-          className="fixed bottom-4 right-4 z-50 rounded-lg bg-foreground/5 px-3 py-1.5 text-xs text-muted-foreground hover:bg-foreground/10 transition-colors"
+          className="fixed top-4 right-4 z-50 rounded-lg bg-foreground/5 px-3 py-1.5 text-xs text-muted-foreground hover:bg-foreground/10 transition-colors"
         >
           DEV
         </button>
-        )}
 
-        {import.meta.env.DEV && (
         <AnimatePresence>
           {devOpen && (
             <DevPanel
@@ -1041,6 +1037,12 @@ export default function Listen() {
               nuggetCount={trackNuggets.length}
               listenCount={listenCount}
               trackKey={track ? `${track.artist}::${track.title}` : undefined}
+              currentTier={tier}
+              onTierChange={(newTier) => {
+                if (profile) {
+                  saveProfile({ ...profile, calculatedTier: newTier });
+                }
+              }}
               onResetHistory={async () => {
                 if (!track) return;
                 const trackKey = `${track.artist}::${track.title}`;
@@ -1066,7 +1068,6 @@ export default function Listen() {
             />
           )}
         </AnimatePresence>
-        )}
 
         {/* Overlays */}
         <AnimatePresence>

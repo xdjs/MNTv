@@ -28,6 +28,23 @@ export default function Browse() {
   const { rows: allRows } = usePersonalizedCatalog(profile);
   const userName = profile?.spotifyDisplayName || "";
 
+  const demoItems = [
+    {
+      id: "demo-around-the-world",
+      imageUrl: "https://i.scdn.co/image/ab67616d0000b273286a4dca354e36e2e5c95e4a",
+      title: "Around the World",
+      subtitle: "Daft Punk",
+      href: "/listen/real::Daft%20Punk::Around%20the%20World::Homework::spotify:track:1pKYYY0dkg23sQQXi0Q5zN",
+    },
+    {
+      id: "demo-weird-fishes",
+      imageUrl: "https://i.scdn.co/image/ab67616d0000b2731a84d71391df7469c5ab8539",
+      title: "Weird Fishes/Arpeggi",
+      subtitle: "Radiohead",
+      href: "/listen/real::Radiohead::Weird%20Fishes%2FArpeggi::In%20Rainbows::spotify:track:4tha3dahOS9LhTxKn4JYLC",
+    },
+  ];
+
   const tierLogoGlow: Record<string, string> = {
     casual: "#22c55e",
     curious: "#3b82f6",
@@ -70,7 +87,7 @@ export default function Browse() {
 
   const getCurrentCenterX = useCallback(() => {
     if (rowIndex === -1) return window.innerWidth / 2;
-    const label = allRows[rowIndex]?.label;
+    const label = rowIndex < allRows.length ? allRows[rowIndex]?.label : "Demo Tracks";
     if (!label) return window.innerWidth / 2;
     const el = document.querySelector<HTMLElement>(`[data-tile-row="${label}"][data-tile-col="${colIndex}"]`);
     if (!el) return window.innerWidth / 2;
@@ -93,10 +110,12 @@ export default function Browse() {
             setRowIndex(0);
             setColIndex(nextCol);
           }
-        } else if (rowIndex < allRows.length - 1) {
+        } else if (rowIndex < allRows.length) {
+          // allRows.length accounts for the extra "Demo Tracks" row
           const centerX = getCurrentCenterX();
           const nextRow = rowIndex + 1;
-          const nextCol = findClosestColByViewport(allRows[nextRow].label, centerX);
+          const nextLabel = nextRow < allRows.length ? allRows[nextRow].label : "Demo Tracks";
+          const nextCol = findClosestColByViewport(nextLabel, centerX);
           setRowIndex(nextRow);
           setColIndex(nextCol);
         }
@@ -116,6 +135,9 @@ export default function Browse() {
         e.preventDefault();
         if (rowIndex === -1) {
           setColIndex((c) => Math.min(c + 1, HEADER_ITEMS - 1));
+        } else if (rowIndex >= allRows.length) {
+          // Demo Tracks row has 2 items
+          setColIndex((c) => Math.min(c + 1, 1));
         } else {
           const maxCol = (allRows[rowIndex]?.items.length || 1) - 1;
           setColIndex((c) => Math.min(c + 1, maxCol));
@@ -130,7 +152,8 @@ export default function Browse() {
           else if (colIndex === 1) setSearchOpen(true);
           else if (colIndex === 2) handleSignOut();
         } else {
-          const item = allRows[rowIndex]?.items[colIndex];
+          const items = rowIndex < allRows.length ? allRows[rowIndex]?.items : demoItems;
+          const item = items?.[colIndex];
           if (item) navigate(item.href);
         }
       }
@@ -212,6 +235,14 @@ export default function Browse() {
             focusedIndex={rowIndex === i ? colIndex : null}
           />
         ))}
+
+        {/* Demo Tracks — hardcoded for live demos */}
+        <TileRow
+          label="Demo Tracks"
+          items={demoItems}
+          tileSize="md"
+          focusedIndex={rowIndex === allRows.length ? colIndex : null}
+        />
 
         <div className="h-20" />
 

@@ -42,6 +42,14 @@ export default function Companion() {
 
   const { profile } = useUserProfile();
 
+  // Read tier from URL search params (set by QR code from Listen page)
+  const urlTier = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get("tier");
+    if (t === "casual" || t === "curious" || t === "nerd") return t;
+    return null;
+  }, []);
+
   const [data, setData] = useState<CompanionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +90,7 @@ export default function Companion() {
   const artistGenres: string[] = [];
   const artistBio = "";
 
-  const tier = profile?.calculatedTier ?? "casual";
+  const tier = urlTier || (profile?.calculatedTier as "casual" | "curious" | "nerd") || "casual";
   const glowClass = tierGlowClass(tier);
 
   useEffect(() => {
@@ -98,10 +106,7 @@ export default function Companion() {
         // for the first listen. This guarantees a cache hit.
         const serverListenCount = 1;
 
-        // Always use tier "casual" to match the cache key from Listen.tsx pre-gen.
-        // This guarantees a cache hit with the exact same nuggets + embedded images.
-        const cacheTier = "casual";
-        console.log("[Companion] Fetching:", { artist: trackInfo!.artist, title: trackInfo!.title, tier: cacheTier });
+        console.log("[Companion] Fetching:", { artist: trackInfo!.artist, title: trackInfo!.title, tier });
 
         const { data: companionData, error: fnError } = await supabase.functions.invoke(
           "generate-companion",
@@ -111,7 +116,7 @@ export default function Companion() {
               title: trackInfo!.title,
               album: trackInfo!.album,
               listenCount: serverListenCount,
-              tier: cacheTier,
+              tier,
             },
           }
         );
@@ -132,7 +137,7 @@ export default function Companion() {
 
     fetchCompanion();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rawTrackId]);
+  }, [rawTrackId, tier]);
 
   if (!trackInfo) {
     return (

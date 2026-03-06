@@ -34,7 +34,7 @@ interface UseAINuggetsResult {
 // Called when another client's 'generating' sentinel is detected. Polls the DB
 // every 3 seconds for up to 30 seconds waiting for status → 'ready'.
 async function pollForReadyNuggets(
-  trackId: string,
+  cacheTrackId: string,
   maxAttempts = 10,
   intervalMs = 3000
 ): Promise<{ nuggets: Nugget[]; sources: Map<string, Source> } | null> {
@@ -43,7 +43,7 @@ async function pollForReadyNuggets(
     const { data } = await supabase
       .from("nugget_cache")
       .select("nuggets, sources, status")
-      .eq("track_id", trackId)
+      .eq("track_id", cacheTrackId)
       .maybeSingle();
 
     if (data?.status === "ready" && (data.nuggets as Nugget[] | null)?.length) {
@@ -103,6 +103,8 @@ export function useAINuggets(
     setError(null);
     // true once we own the 'generating' sentinel; reset to false after cache write succeeds
     let sentinelClaimed = false;
+    // Tier-scoped key for nugget_cache DB table — different tiers get different cached nuggets
+    const dbCacheKey = `${trackId}::${tier}`;
 
     try {
       const trackKey = `${artist}::${title}`;
@@ -143,11 +145,11 @@ export function useAINuggets(
         const { data: cached } = await supabase
           .from("nugget_cache")
           .select("nuggets, sources, status")
-          .eq("track_id", trackId)
+          .eq("track_id", dbCacheKey)
           .maybeSingle();
 
         if (cached?.status === "ready" && (cached.nuggets as Nugget[] | null)?.length) {
-          console.log("[NuggetCache] Serving cached nuggets for", trackId);
+          console.log("[NuggetCache] Serving cached nuggets for", dbCacheKey);
           const cachedNuggets = cached.nuggets as Nugget[];
           const cachedSources = new Map<string, Source>();
           const rawSources = cached.sources as Record<string, Source>;
@@ -188,10 +190,10 @@ export function useAINuggets(
 
         if (cached?.status === "generating") {
           // Another client is already generating — poll every 3 s for up to 30 s.
-          console.log("[NuggetCache] Generation in progress, polling…", trackId);
-          const polled = await pollForReadyNuggets(trackId);
+          console.log("[NuggetCache] Generation in progress, polling…", dbCacheKey);
+          const polled = await pollForReadyNuggets(dbCacheKey);
           if (polled) {
-            console.log("[NuggetCache] Poll succeeded — serving result for", trackId);
+            console.log("[NuggetCache] Poll succeeded — serving result for", dbCacheKey);
             setNuggets(polled.nuggets);
             setSources(polled.sources);
             setNuggetCache(cacheKey, { nuggets: polled.nuggets, sources: polled.sources, listenCount: currentListenCount });
@@ -199,8 +201,8 @@ export function useAINuggets(
             return;
           }
           // Timed out — the generating client likely crashed; remove stale sentinel.
-          console.warn("[NuggetCache] Poll timed out — removing stale sentinel for", trackId);
-          await supabase.from("nugget_cache").delete().eq("track_id", trackId);
+          console.warn("[NuggetCache] Poll timed out — removing stale sentinel for", dbCacheKey);
+          await supabase.from("nugget_cache").delete().eq("track_id", dbCacheKey);
         }
 
         // No cache entry (or stale sentinel removed) — claim the work.
@@ -209,10 +211,10 @@ export function useAINuggets(
         // (acceptable rare edge case — at worst two clients generate simultaneously).
         const { error: claimError } = await supabase
           .from("nugget_cache")
-          .insert({ track_id: trackId, status: "generating", nuggets: [], sources: {} });
+          .insert({ track_id: dbCacheKey, status: "generating", nuggets: [], sources: {} });
         if (!claimError) {
           sentinelClaimed = true;
-          console.log("[NuggetCache] Claimed generation sentinel for", trackId);
+          console.log("[NuggetCache] Claimed generation sentinel for", dbCacheKey);
         } else if (claimError.code !== "23505") {
           // Unexpected error (not a unique violation) — log but proceed.
           console.warn("[NuggetCache] Sentinel insert error:", claimError.message);
@@ -335,7 +337,7 @@ export function useAINuggets(
         newSources.forEach((src, key) => { cacheSourcesObj[key] = src; });
         await supabase.from("nugget_cache").upsert(
           {
-            track_id: trackId,
+            track_id: dbCacheKey,
             nuggets: newNuggets as unknown as Json,
             sources: cacheSourcesObj as unknown as Json,
             status: "ready",
@@ -343,7 +345,7 @@ export function useAINuggets(
           { onConflict: "track_id" }
         );
         sentinelClaimed = false; // sentinel resolved — no cleanup needed if error occurs later
-        console.log("[NuggetCache] Cached fresh nuggets for", trackId);
+        console.log("[NuggetCache] Cached fresh nuggets for", dbCacheKey);
       }
 
       // ── Upsert listen history ─────────────────────────────────────
@@ -377,7 +379,7 @@ export function useAINuggets(
       if (sentinelClaimed) {
         // Wrap in Promise.resolve so .catch() is available (PostgrestFilterBuilder is PromiseLike, not Promise).
         await Promise.resolve(
-          supabase.from("nugget_cache").delete().eq("track_id", trackId)
+          supabase.from("nugget_cache").delete().eq("track_id", dbCacheKey)
         ).catch(() => {});
       }
     } finally {

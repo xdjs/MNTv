@@ -13,17 +13,43 @@ interface Props {
   onIncrementListen?: () => void;
   activePlayer?: "spotify" | "none" | null;
   spotifyUri?: string | null;
+  currentTier?: "casual" | "curious" | "nerd";
+  onTierChange?: (tier: "casual" | "curious" | "nerd") => void;
 }
 
-export default function DevPanel({ animStyle, setAnimStyle, onJumpToNugget, nuggetCount, listenCount, trackKey, onResetHistory, onResetAllHistory, onIncrementListen, activePlayer, spotifyUri }: Props) {
+export default function DevPanel({ animStyle, setAnimStyle, onJumpToNugget, nuggetCount, listenCount, trackKey, onResetHistory, onResetAllHistory, onIncrementListen, activePlayer, spotifyUri, currentTier, onTierChange }: Props) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 20 }}
-      className="glass-panel fixed bottom-14 right-4 z-50 rounded-xl p-4 w-56"
+      exit={{ opacity: 0, y: -20 }}
+      className="glass-panel fixed top-14 right-4 z-50 rounded-xl p-4 w-56"
     >
       <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Dev Panel</p>
+
+      {/* Tier Switcher */}
+      {currentTier && onTierChange && (
+        <div className="mb-3">
+          <p className="text-xs text-muted-foreground mb-1.5">Tier</p>
+          <div className="flex gap-1.5">
+            {(["casual", "curious", "nerd"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => onTierChange(t)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  currentTier === t
+                    ? t === "casual" ? "bg-green-500/30 text-green-400"
+                    : t === "curious" ? "bg-blue-500/30 text-blue-400"
+                    : "bg-pink-500/30 text-pink-400"
+                    : "bg-foreground/5 text-muted-foreground hover:bg-foreground/10"
+                }`}
+              >
+                {t.charAt(0).toUpperCase() + t.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Listen Depth */}
       {listenCount != null && (
