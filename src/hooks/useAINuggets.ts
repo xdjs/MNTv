@@ -4,30 +4,11 @@ import type { Json } from "@/integrations/supabase/types";
 import type { Nugget, Source } from "@/mock/types";
 import { usePlayer } from "@/contexts/PlayerContext";
 
-interface ImageHint {
-  type: "artist" | "album" | "wiki";
-  query: string;
-  caption: string;
-}
-
-interface ImageProvenance {
-  source: string;
-  articleTitle?: string;
-  imageFileName?: string;
-  matchQuality: "exact" | "related" | "generic";
-}
-
-interface ResolvedImage {
-  url: string;
-  provenance: ImageProvenance | null;
-}
-
 interface AINuggetData {
   headline: string;
   text: string;
   kind: "artist" | "track" | "discovery";
   listenFor?: boolean;
-  imageHint?: ImageHint;
   source: {
     type: "youtube" | "article" | "interview";
     title: string;
@@ -45,18 +26,6 @@ interface UseAINuggetsResult {
   loading: boolean;
   error: string | null;
   listenCount: number;
-}
-
-async function resolveImageHint(hint: ImageHint, artist?: string, title?: string): Promise<ResolvedImage | null> {
-  try {
-    const { data, error } = await supabase.functions.invoke("nugget-image", {
-      body: { type: hint.type, query: hint.query, width: 500, artist, title },
-    });
-    if (error || !data?.imageUrl) return null;
-    return { url: data.imageUrl, provenance: data.provenance || null };
-  } catch {
-    return null;
-  }
 }
 
 // ── Sentinel poll helper ──────────────────────────────────────────────────────
@@ -310,76 +279,27 @@ export function useAINuggets(
           kind: n.kind,
           listenFor: n.listenFor || false,
           sourceId,
-          imageCaption: n.imageHint?.caption,
         } as Nugget;
       });
 
-      // ── Resolve images and apply visual rotation ──────────────────
-      // Hash entire trackId (not just first char) for better distribution
+      // ── Assign images from Spotify (always accurate, zero API calls) ──
+      for (const nugget of newNuggets) {
+        if (nugget.kind === "artist" && artistImageUrl) {
+          nugget.imageUrl = artistImageUrl;
+          nugget.imageCaption = artist;
+        } else if (nugget.kind === "track" && coverArtUrl) {
+          nugget.imageUrl = coverArtUrl;
+          nugget.imageCaption = `${title}${album ? " \u2014 " + album : ""}`;
+        } else if (nugget.kind === "discovery" && coverArtUrl) {
+          nugget.imageUrl = coverArtUrl;
+          nugget.imageCaption = nugget.headline || "Explore next";
+        }
+      }
+
+      // ── Visual rotation (which nugget gets visualOnly) ──────────────
       let hashSum = 0;
       for (let c = 0; c < trackId.length; c++) hashSum += trackId.charCodeAt(c);
       const visualSlotIndex = hashSum % 3;
-
-      const imageResults = await Promise.allSettled(
-        aiNuggets.map((n) =>
-          n.imageHint ? resolveImageHint(n.imageHint, artist, title) : Promise.resolve(null)
-        )
-      );
-
-      // Collect images needing caption regeneration (non-exact match quality)
-      const captionRegenItems: { index: number; nuggetHeadline: string; imageSource: string; articleTitle?: string; imageFileName?: string }[] = [];
-
-      for (let i = 0; i < newNuggets.length; i++) {
-        const result = imageResults[i];
-        if (result?.status === "fulfilled" && result.value) {
-          newNuggets[i].imageUrl = result.value.url;
-          const prov = result.value.provenance;
-          if (prov && prov.matchQuality === "exact") {
-            // Keep the AI-generated caption — it's accurate for verified images
-            newNuggets[i].imageCaption = aiNuggets[i].imageHint?.caption;
-          } else {
-            // Queue for caption regeneration
-            captionRegenItems.push({
-              index: i,
-              nuggetHeadline: aiNuggets[i].headline,
-              imageSource: prov?.source || "unknown",
-              articleTitle: prov?.articleTitle,
-              imageFileName: prov?.imageFileName,
-            });
-            // Temporary caption until regen completes
-            newNuggets[i].imageCaption = aiNuggets[i].imageHint?.caption;
-          }
-        }
-      }
-
-      // Regenerate captions for non-exact matches in a single batch call
-      if (captionRegenItems.length > 0) {
-        try {
-          const { data: captionData } = await supabase.functions.invoke("generate-nuggets", {
-            body: {
-              mode: "captions",
-              artist,
-              title,
-              items: captionRegenItems.map((item) => ({
-                nuggetHeadline: item.nuggetHeadline,
-                imageSource: item.imageSource,
-                articleTitle: item.articleTitle,
-                imageFileName: item.imageFileName,
-              })),
-            },
-          });
-          if (captionData?.captions && Array.isArray(captionData.captions)) {
-            for (let j = 0; j < captionRegenItems.length; j++) {
-              const newCaption = captionData.captions[j];
-              if (newCaption && typeof newCaption === "string") {
-                newNuggets[captionRegenItems[j].index].imageCaption = newCaption;
-              }
-            }
-          }
-        } catch (e) {
-          console.warn("[CaptionRegen] Failed, keeping original captions:", e);
-        }
-      }
 
       let visualAssigned = false;
       for (let attempt = 0; attempt < 3 && !visualAssigned; attempt++) {
@@ -388,23 +308,6 @@ export function useAINuggets(
           newNuggets[idx].visualOnly = true;
           visualAssigned = true;
         }
-      }
-
-      if (!visualAssigned) {
-        // Only use cover art as fallback — skip profile artistImageUrl since it
-        // can map to the wrong artist. Don't use DiceBear placeholders either.
-        const fallbackUrl = coverArtUrl && !coverArtUrl.includes("dicebear.com") ? coverArtUrl : null;
-        if (fallbackUrl) {
-          const fallbackIdx = visualSlotIndex % newNuggets.length;
-          const nugget = newNuggets[fallbackIdx];
-          if (nugget) {
-            nugget.imageUrl = fallbackUrl;
-            nugget.imageCaption = nugget.headline;
-            nugget.visualOnly = true;
-            console.log("[NuggetVisual] Used cover art fallback for visual nugget");
-          }
-        }
-        // If no real image available, all nuggets stay text-only — that's fine.
       }
 
       setNuggets(newNuggets);

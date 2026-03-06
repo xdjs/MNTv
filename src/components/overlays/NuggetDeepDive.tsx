@@ -130,7 +130,7 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
           sourceTitle: source?.title,
           sourcePublisher: source?.publisher,
           imageCaption: nugget.imageCaption,
-          imageQuery: nugget.imageUrl ? (nugget as { imageHint?: { query?: string } }).imageHint?.query : undefined,
+          imageQuery: nugget.imageCaption,
         },
       });
 

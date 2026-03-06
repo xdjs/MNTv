@@ -196,23 +196,55 @@ export default function Listen() {
     isNavigatingRef.current = true;
     setSkipLoading(true);
     try {
-      // Use artist field filter so Spotify returns tracks BY this artist,
-      // not tracks with the artist's name in the title
+      const titleLower = track.title.toLowerCase();
+      const artistLower = track.artist.toLowerCase();
+
+      const pickAndNavigate = (tracks: SpotifyTrackResult[]) => {
+        const filtered = tracks.filter(
+          (t) =>
+            t.title.toLowerCase() !== titleLower &&
+            t.artist.toLowerCase().includes(artistLower)
+        );
+        if (filtered.length > 0) {
+          const pick = filtered[Math.floor(Math.random() * Math.min(filtered.length, 5))];
+          navigate(
+            `/listen/real::${encodeURIComponent(pick.artist)}::${encodeURIComponent(pick.title)}::${encodeURIComponent(pick.album || "")}::${encodeURIComponent(pick.uri || "")}`
+          );
+          return true;
+        }
+        return false;
+      };
+
+      // Attempt 1: artist field filter (most precise)
       const { data } = await supabase.functions.invoke("spotify-search", {
         body: { query: `artist:${track.artist}` },
       });
-      const artistLower = track.artist.toLowerCase();
-      const candidates = (data?.tracks as SpotifyTrackResult[] || []).filter(
-        (t) =>
-          t.title.toLowerCase() !== track.title.toLowerCase() &&
-          t.artist.toLowerCase().includes(artistLower)
+      if (pickAndNavigate(data?.tracks || [])) return;
+
+      // Attempt 2: broader search without field filter
+      const { data: data2 } = await supabase.functions.invoke("spotify-search", {
+        body: { query: track.artist },
+      });
+      if (pickAndNavigate(data2?.tracks || [])) return;
+
+      // Attempt 3: search by artist + title (find similar music)
+      const { data: data3 } = await supabase.functions.invoke("spotify-search", {
+        body: { query: `${track.artist} ${track.title}` },
+      });
+      const anyTrack = (data3?.tracks as SpotifyTrackResult[] || []).filter(
+        (t) => t.title.toLowerCase() !== titleLower
       );
-      if (candidates.length > 0) {
-        const pick = candidates[Math.floor(Math.random() * Math.min(candidates.length, 5))];
+      if (anyTrack.length > 0) {
+        const pick = anyTrack[Math.floor(Math.random() * Math.min(anyTrack.length, 5))];
         navigate(
           `/listen/real::${encodeURIComponent(pick.artist)}::${encodeURIComponent(pick.title)}::${encodeURIComponent(pick.album || "")}::${encodeURIComponent(pick.uri || "")}`
         );
+        return;
       }
+
+      // No results at all — reset navigation lock
+      console.warn("[Listen] No related tracks found for", track.artist);
+      isNavigatingRef.current = false;
     } catch (err) {
       console.warn("[Listen] Skip next failed:", err);
       isNavigatingRef.current = false;

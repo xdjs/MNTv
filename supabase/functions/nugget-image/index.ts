@@ -1,3 +1,8 @@
+// DEPRECATED: This function is no longer called by the client.
+// Image resolution has been replaced by client-side Spotify image assignment
+// in useAINuggets.ts — always accurate, zero API calls.
+// Kept deployed for safety but can be removed in a future cleanup.
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
