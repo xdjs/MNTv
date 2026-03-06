@@ -43,7 +43,9 @@
         "locator": "Daft Punk",
         "url": "https://en.wikipedia.org/wiki/Daft_Punk",
         "verified": false
-      }
+      },
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/68/Daft_Punk_in_2013_2-_centered.jpg/500px-Daft_Punk_in_2013_2-_centered.jpg",
+      "imageCaption": "Daft Punk's Thomas Bangalter (right) also produced under the Stardust alias"
     }
   ]
 }

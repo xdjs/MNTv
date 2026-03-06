@@ -1022,7 +1022,7 @@ export default function Listen() {
             className="fixed bottom-6 right-6 z-10 hover:opacity-90 transition-opacity rounded-xl overflow-hidden"
           >
             <QRCode
-              value={`${window.location.origin}/c/${shortId}?tier=${tier}`}
+              value={`${window.location.origin}/c/${shortId}?tier=${tier}&listen=${listenCount}`}
               size={100}
               qrStyle="dots"
               eyeRadius={6}
