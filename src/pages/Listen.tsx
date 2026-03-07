@@ -790,28 +790,25 @@ export default function Listen() {
     setNuggetQueue([]);
     seek(t);
 
-    if (targetNugget) {
-      // Show only this nugget; mark all nuggets before it as "shown" so they don't re-trigger
-      const newShown = new Set<string>();
-      for (const n of trackNuggets) {
-        if (n.timestampSec <= t) newShown.add(n.id);
-      }
-      setShownNuggetIds(newShown);
-      setActiveNugget(targetNugget);
-      // Preserve dismissed nuggets before seek point, clear ones after
-      setDismissedNuggets((prev) => {
-        const next = new Map<string, Nugget>();
-        for (const [id, nugget] of prev) {
-          if (nugget.timestampSec <= t) next.set(id, nugget);
-        }
-        return next;
-      });
-    } else {
-      // Seeked before any nugget — clear active and dismissed
-      setShownNuggetIds(new Set());
-      setActiveNugget(null);
-      setDismissedNuggets(new Map());
+    // Mark nuggets before the seek position as "shown" so they don't
+    // re-trigger. Exclude the target nugget (closest to seek time) so the
+    // trigger effect can fire it naturally when playback ticks.
+    const newShown = new Set<string>();
+    for (const n of trackNuggets) {
+      if (n.timestampSec <= t && n !== targetNugget) newShown.add(n.id);
     }
+    setShownNuggetIds(newShown);
+    setActiveNugget(null);
+
+    // Preserve dismissed nuggets before seek point (except the target, which
+    // should re-trigger), clear ones after
+    setDismissedNuggets((prev) => {
+      const next = new Map<string, Nugget>();
+      for (const [id, nugget] of prev) {
+        if (nugget.timestampSec <= t && id !== targetNugget?.id) next.set(id, nugget);
+      }
+      return next;
+    });
   }, [seek, trackNuggets]);
 
   // Nugget trigger logic — fires on playback tick
@@ -973,7 +970,7 @@ export default function Listen() {
             <button
               onClick={() => {
                 if (shortId) {
-                  window.open(`${window.location.origin}/c/${shortId}`, "_blank");
+                  window.open(`${window.location.origin}/c/${shortId}?tier=${tier}&listen=${listenCount}`, "_blank");
                 }
               }}
               disabled={!shortId}
