@@ -177,8 +177,16 @@ export default function Listen() {
 
   // If this track was previously listened to in this session, restore the listen depth.
   // This handles both track completion (onEnded) and returning to a track via prev/browse.
+  // Guard: run at most once per track mount to prevent mid-visit re-runs caused by
+  // async profile load changing the `track` object reference.
+  const completionCheckedRef = useRef(false);
   useEffect(() => {
-    if (!track) return;
+    completionCheckedRef.current = false;
+  }, [trackId]);
+
+  useEffect(() => {
+    if (!track || completionCheckedRef.current) return;
+    completionCheckedRef.current = true;
     const key = `${track.artist}::${track.title}`;
     if (player.isTrackCompleted(key)) {
       // Track ended naturally — clear flag and force fresh generation

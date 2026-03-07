@@ -426,7 +426,9 @@ export function useAINuggets(
         console.log("[NuggetCache] Cached fresh nuggets for", dbCacheKey);
       }
 
-      // ── Upsert listen history ─────────────────────────────────────
+      // ── Update previous_nuggets for deduplication ─────────────────
+      // Only update previous_nuggets here — listen_count is managed solely
+      // by Listen.tsx's 5-second threshold to avoid double-counting.
       const newHeadlines = newNuggets.map((n) => n.headline || n.text).filter(Boolean);
       const updatedPreviousNuggets = [...previousNuggets, ...newHeadlines];
 
@@ -434,22 +436,14 @@ export function useAINuggets(
         await supabase
           .from("nugget_history")
           .update({
-            listen_count: currentListenCount + 1,
             previous_nuggets: updatedPreviousNuggets as Json,
             updated_at: new Date().toISOString(),
           })
           .eq("track_key", trackKey)
           .eq("user_id", userId);
-      } else {
-        await supabase
-          .from("nugget_history")
-          .insert({
-            track_key: trackKey,
-            user_id: userId,
-            listen_count: currentListenCount + 1,
-            previous_nuggets: newHeadlines as Json,
-          });
       }
+      // If no historyRow, Listen.tsx threshold will create the row at 5 seconds.
+      // previous_nuggets will be written on the next listen when the row exists.
     } catch (e) {
       console.error("AI nugget generation failed:", e);
       if (!cancelledRef.current) {
