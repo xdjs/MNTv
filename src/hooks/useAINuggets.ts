@@ -191,17 +191,18 @@ export function useAINuggets(
           } as Nugget;
         });
 
-        // Assign images
+        // Assign images — never use DiceBear placeholder URLs
+        const isRealImg = (url?: string) => url && !url.includes("dicebear.com");
         for (let idx = 0; idx < newNuggets.length; idx++) {
           const nugget = newNuggets[idx];
           const seedNugget = seedData[idx];
           if (seedNugget?.imageUrl) {
             nugget.imageUrl = seedNugget.imageUrl;
             nugget.imageCaption = seedNugget.imageCaption || nugget.headline;
-          } else if (nugget.kind === "artist" && artistImageUrl) {
+          } else if (nugget.kind === "artist" && isRealImg(artistImageUrl)) {
             nugget.imageUrl = artistImageUrl;
             nugget.imageCaption = artist;
-          } else if ((nugget.kind === "track" || nugget.kind === "discovery") && coverArtUrl) {
+          } else if ((nugget.kind === "track" || nugget.kind === "discovery") && isRealImg(coverArtUrl)) {
             nugget.imageUrl = coverArtUrl;
             nugget.imageCaption = nugget.kind === "track"
               ? `${title}${album ? " \u2014 " + album : ""}`
@@ -364,6 +365,8 @@ export function useAINuggets(
       });
 
       // ── Assign images: prefer server-resolved contextual images, fall back to Spotify ──
+      // Never use DiceBear placeholder URLs as nugget images — they look broken on companion.
+      const isRealImage = (url?: string) => url && !url.includes("dicebear.com");
       for (let idx = 0; idx < newNuggets.length; idx++) {
         const nugget = newNuggets[idx];
         const aiNugget = aiNuggets[idx];
@@ -373,11 +376,11 @@ export function useAINuggets(
           nugget.imageUrl = aiNugget.imageUrl;
           nugget.imageCaption = aiNugget.imageCaption || nugget.headline;
         }
-        // Fall back to Spotify images
-        else if (nugget.kind === "artist" && artistImageUrl) {
+        // Fall back to Spotify images (only real URLs, not DiceBear placeholders)
+        else if (nugget.kind === "artist" && isRealImage(artistImageUrl)) {
           nugget.imageUrl = artistImageUrl;
           nugget.imageCaption = artist;
-        } else if ((nugget.kind === "track" || nugget.kind === "discovery") && coverArtUrl) {
+        } else if ((nugget.kind === "track" || nugget.kind === "discovery") && isRealImage(coverArtUrl)) {
           nugget.imageUrl = coverArtUrl;
           nugget.imageCaption = nugget.kind === "track"
             ? `${title}${album ? " \u2014 " + album : ""}`
