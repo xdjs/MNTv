@@ -193,58 +193,6 @@ export default function Listen() {
     }
   }, [trackId, track, player]);
 
-  // 5-second listen threshold — counts as a "listen" for progression purposes.
-  // Marks the track as completed in session so next visit triggers fresh nuggets.
-  // Also increments the DB listen_count so the backend knows the depth.
-  const listenThresholdMetRef = useRef(false);
-  useEffect(() => {
-    // Reset threshold on track change
-    listenThresholdMetRef.current = false;
-  }, [trackId]);
-
-  useEffect(() => {
-    if (!track || !isPlaying || currentTime < 5 || listenThresholdMetRef.current) return;
-    listenThresholdMetRef.current = true;
-    const key = `${track.artist}::${track.title}`;
-    player.markTrackCompleted(key);
-
-    // Increment DB listen count in background
-    (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const userId = session?.user?.id ?? localStorage.getItem("musicnerd_anon_id") ?? (() => {
-        const id = crypto.randomUUID();
-        localStorage.setItem("musicnerd_anon_id", id);
-        return id;
-      })();
-      const trackKey = `${track.artist}::${track.title}`;
-      const { data: historyRow } = await supabase
-        .from("nugget_history")
-        .select("listen_count, previous_nuggets")
-        .eq("track_key", trackKey)
-        .eq("user_id", userId)
-        .maybeSingle();
-      if (historyRow) {
-        await supabase
-          .from("nugget_history")
-          .update({
-            listen_count: (historyRow.listen_count || 1) + 1,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("track_key", trackKey)
-          .eq("user_id", userId);
-      } else {
-        await supabase
-          .from("nugget_history")
-          .insert({
-            track_key: trackKey,
-            user_id: userId,
-            listen_count: 2,
-            previous_nuggets: [],
-          });
-      }
-    })();
-  }, [track, isPlaying, currentTime, player, trackId]);
-
   // For real tracks: next is always available (we fetch on demand), prev uses global history
   const hasPrev = !!player.prevTrackRoute;
   const hasNext = true;
@@ -348,6 +296,56 @@ export default function Listen() {
     isExternalListenMode, setExternalListenMode, externalPlayback, spotifyStateTrack,
   } = player;
   const realDuration = playerDuration > 0 ? playerDuration : (track?.durationSec || 300);
+
+  // 5-second listen threshold — counts as a "listen" for progression purposes.
+  // Marks the track as completed in session so next visit triggers fresh nuggets.
+  // Also increments the DB listen_count so the backend knows the depth.
+  const listenThresholdMetRef = useRef(false);
+  useEffect(() => {
+    listenThresholdMetRef.current = false;
+  }, [trackId]);
+
+  useEffect(() => {
+    if (!track || !isPlaying || currentTime < 5 || listenThresholdMetRef.current) return;
+    listenThresholdMetRef.current = true;
+    const key = `${track.artist}::${track.title}`;
+    player.markTrackCompleted(key);
+
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id ?? localStorage.getItem("musicnerd_anon_id") ?? (() => {
+        const id = crypto.randomUUID();
+        localStorage.setItem("musicnerd_anon_id", id);
+        return id;
+      })();
+      const trackKey = `${track.artist}::${track.title}`;
+      const { data: historyRow } = await supabase
+        .from("nugget_history")
+        .select("listen_count, previous_nuggets")
+        .eq("track_key", trackKey)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (historyRow) {
+        await supabase
+          .from("nugget_history")
+          .update({
+            listen_count: (historyRow.listen_count || 1) + 1,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("track_key", trackKey)
+          .eq("user_id", userId);
+      } else {
+        await supabase
+          .from("nugget_history")
+          .insert({
+            track_key: trackKey,
+            user_id: userId,
+            listen_count: 2,
+            previous_nuggets: [],
+          });
+      }
+    })();
+  }, [track, isPlaying, currentTime, player, trackId]);
 
   // Use Spotify SDK album art when available (better than DiceBear for externally-changed tracks)
   const effectiveCoverArt = useMemo(() => {
