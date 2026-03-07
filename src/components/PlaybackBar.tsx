@@ -1,10 +1,6 @@
 import { Play, Pause, SkipBack, SkipForward, ThumbsUp, ThumbsDown, Shuffle } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useRef, type RefObject } from "react";
-import NuggetCard from "@/components/NuggetCard";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
-import ErrorBoundary from "@/components/ErrorBoundary";
-import type { Nugget, AnimationStyle, Source } from "@/mock/types";
 
 interface NuggetMarkerInfo {
   id: string;
@@ -36,27 +32,11 @@ interface Props {
   onLike?: () => void;
   onDislike?: () => void;
   onShuffle?: () => void;
-  // Floating nugget card props
-  activeNugget?: Nugget | null;
-  activeNuggetPct?: number | null;
-  animStyle?: AnimationStyle;
-  nuggetFocused?: boolean;
-  deepDiveNugget?: Nugget | null;
-  onNuggetClick?: (nugget: Nugget) => void;
-  onNuggetFocus?: () => void;
-  onNuggetBlur?: () => void;
-  nuggetCurrentTime?: string;
-  nuggetSource?: Source | null;
-  onSourceClick?: () => void;
-  nuggetRef?: RefObject<HTMLDivElement | null>;
-  dwelling?: boolean;
-  reopenedNuggetId?: string | null;
   // Mini-logo props
   dismissedMarkers?: DismissedMarker[];
   onMiniLogoClick?: (id: string) => void;
-  // Active nugget ID for marker highlighting
+  // Marker state
   activeNuggetId?: string | null;
-  // Set of dismissed nugget IDs for marker styling
   dismissedNuggetIds?: Set<string>;
 }
 
@@ -80,20 +60,6 @@ export default function PlaybackBar({
   onLike,
   onDislike,
   onShuffle,
-  activeNugget = null,
-  activeNuggetPct = null,
-  animStyle = "A",
-  nuggetFocused = false,
-  deepDiveNugget = null,
-  onNuggetClick,
-  onNuggetFocus,
-  onNuggetBlur,
-  nuggetCurrentTime,
-  nuggetSource,
-  onSourceClick,
-  nuggetRef: externalNuggetRef,
-  dwelling = false,
-  reopenedNuggetId = null,
   dismissedMarkers = [],
   onMiniLogoClick,
   activeNuggetId = null,
@@ -101,10 +67,7 @@ export default function PlaybackBar({
 }: Props) {
   const isFocused = (idx: number) => focusedIndex === idx;
   const focusGlow = "tv-focus-glow";
-  const internalNuggetRef = useRef<HTMLDivElement>(null);
-  const nuggetRef = externalNuggetRef || internalNuggetRef;
 
-  // Determine marker dot state
   const getMarkerStyle = (marker: NuggetMarkerInfo) => {
     if (marker.id === activeNuggetId) {
       return "h-3 w-3 bg-primary animate-pulse";
@@ -114,8 +77,6 @@ export default function PlaybackBar({
     }
     return "h-2 w-2 bg-foreground/20";
   };
-
-  const isReopened = reopenedNuggetId != null && activeNugget?.id === reopenedNuggetId;
 
   return (
     <motion.div
@@ -128,85 +89,6 @@ export default function PlaybackBar({
       <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-background/80 to-transparent pointer-events-none" />
 
       <div className={`relative flex flex-col gap-3 transition-opacity duration-1000 ${fadingIn ? "opacity-60" : "opacity-100"}`}>
-
-        {/* ── Floating nugget card layer ── */}
-        <AnimatePresence mode="wait">
-          {activeNugget && activeNuggetPct != null && (
-            <motion.div
-              key={activeNugget.id}
-              initial={isReopened
-                ? { scale: 0.3, y: 10, opacity: 0 }
-                : { y: 30, opacity: 0 }
-              }
-              animate={{ scale: 1, y: 0, opacity: 1 }}
-              exit={{ y: 15, opacity: 0, scale: 0.7 }}
-              transition={isReopened
-                ? { type: "spring", stiffness: 300, damping: 22 }
-                : { duration: 0.4, ease: [0.22, 1, 0.36, 1] }
-              }
-              className="relative mb-2"
-              style={{
-                // Position card so its left-edge logo aligns with the timeline dot.
-                // The NuggetCard logo sits at -left-3 (-12px) from card edge, so offset by ~12px.
-                marginLeft: `clamp(0px, calc(${activeNuggetPct}% - 12px), calc(100% - 420px))`,
-                width: "min(420px, 100%)",
-              }}
-            >
-              {/* Card content */}
-              <div
-                ref={nuggetRef}
-                tabIndex={0}
-                className="cursor-pointer outline-none"
-                onClick={() => !deepDiveNugget && onNuggetClick?.(activeNugget)}
-                onFocus={onNuggetFocus}
-                onBlur={onNuggetBlur}
-                style={{
-                  opacity: deepDiveNugget ? 0 : 1,
-                  scale: deepDiveNugget ? "0.95" : "1",
-                  pointerEvents: deepDiveNugget ? "none" : "auto",
-                  transition: "opacity 0.3s ease, scale 0.3s ease",
-                }}
-              >
-                <ErrorBoundary>
-                  <NuggetCard
-                    nugget={activeNugget}
-                    animationStyle={animStyle}
-                    onSourceClick={() => onSourceClick?.()}
-                    currentTime={nuggetCurrentTime}
-                    sourceOverride={nuggetSource}
-                    focused={nuggetFocused && !deepDiveNugget}
-                  />
-                </ErrorBoundary>
-                {nuggetFocused && !deepDiveNugget && (
-                  <motion.p
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="mt-2 text-center text-xs text-muted-foreground"
-                  >
-                    {dwelling ? (
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                        Exploring...
-                      </span>
-                    ) : (
-                      "Press Enter to explore"
-                    )}
-                  </motion.p>
-                )}
-              </div>
-
-              {/* Anchor line from card logo down to timeline dot */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="absolute -bottom-2 w-px h-4 bg-foreground/30"
-                style={{ left: 0 }}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         {/* ── Mini-logo layer for dismissed nuggets ── */}
         {dismissedMarkers.length > 0 && (
@@ -267,7 +149,6 @@ export default function PlaybackBar({
               className="absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-primary shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
               style={{ left: `${progress}%`, transform: `translateX(-50%) translateY(-50%)` }}
             />
-            {/* Enhanced marker dots with state-aware styling */}
             {nuggetMarkers.map((marker) => (
               <div
                 key={marker.id}
