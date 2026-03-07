@@ -7,7 +7,7 @@ import { QRCode } from "react-qrcode-logo";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
-
+import NuggetCard from "@/components/NuggetCard";
 import MediaOverlay from "@/components/overlays/MediaOverlay";
 import ReadingOverlay from "@/components/overlays/ReadingOverlay";
 import NuggetDeepDive from "@/components/overlays/NuggetDeepDive";
@@ -1026,17 +1026,99 @@ export default function Listen() {
           />
         </motion.div>
 
-        {/* Spacer — fills where old nugget panel was, pushes bar to bottom */}
+        {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Playback controls + floating nugget card */}
+        {/* Floating nugget card — independent of bar visibility, anchored to timeline position */}
+        <div
+          className="fixed left-0 right-0 z-30 pointer-events-none transition-[bottom] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
+          style={{ bottom: barVisible ? 160 : 48 }}
+        >
+          {/* Layout wrapper matching progress bar track horizontal bounds */}
+          <div className="px-4 md:px-10">
+            <div className="flex gap-4">
+              <div className="w-14 shrink-0" />
+              <div className="relative flex-1">
+                <AnimatePresence mode="wait">
+                  {activeNugget && activeNuggetPct != null && (
+                    <motion.div
+                      key={activeNugget.id}
+                      initial={reopenedNuggetId === activeNugget.id
+                        ? { scale: 0.3, y: 10, opacity: 0 }
+                        : { y: 30, opacity: 0 }
+                      }
+                      animate={{ scale: 1, y: 0, opacity: 1 }}
+                      exit={{ y: 15, opacity: 0, scale: 0.7 }}
+                      transition={reopenedNuggetId === activeNugget.id
+                        ? { type: "spring", stiffness: 300, damping: 22 }
+                        : { duration: 0.4, ease: [0.22, 1, 0.36, 1] }
+                      }
+                      className="pointer-events-auto"
+                      style={{
+                        // Left edge aligns with the timeline marker dot.
+                        // Clamp so card doesn't overflow the right edge.
+                        marginLeft: `clamp(0px, ${activeNuggetPct}%, calc(100% - 420px))`,
+                        width: "min(420px, 100%)",
+                      }}
+                    >
+                      <div
+                        ref={nuggetRef}
+                        tabIndex={0}
+                        className="cursor-pointer outline-none"
+                        onClick={() => !deepDiveNugget && handleNuggetClick(activeNugget)}
+                        onFocus={() => setNuggetFocused(true)}
+                        onBlur={() => setNuggetFocused(false)}
+                        style={{
+                          opacity: deepDiveNugget ? 0 : 1,
+                          transform: deepDiveNugget ? "scale(0.95)" : "scale(1)",
+                          pointerEvents: deepDiveNugget ? "none" : "auto",
+                          transition: "opacity 0.3s ease, transform 0.3s ease",
+                        }}
+                      >
+                        <ErrorBoundary>
+                          <NuggetCard
+                            nugget={activeNugget}
+                            animationStyle={animStyle}
+                            onSourceClick={() => handleSourceClick(activeNugget)}
+                            currentTime={formatTime(activeNugget.timestampSec)}
+                            sourceOverride={getSource(activeNugget.sourceId) || null}
+                            focused={nuggetFocused && !deepDiveNugget}
+                          />
+                        </ErrorBoundary>
+                        {nuggetFocused && !deepDiveNugget && (
+                          <motion.p
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="mt-2 text-center text-xs text-muted-foreground"
+                          >
+                            {dwelling ? (
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                                Exploring...
+                              </span>
+                            ) : (
+                              "Press Enter to explore"
+                            )}
+                          </motion.p>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+              <div className="w-14 shrink-0" />
+            </div>
+          </div>
+        </div>
+
+        {/* Playback controls */}
         <PlaybackBar
           isPlaying={isPlaying}
           fadingIn={fadingIn}
           progress={progress}
           currentTimeFormatted={formatTime(currentTime)}
           durationFormatted={formatTime(effectiveDuration)}
-          visible={barVisible || !!activeNugget}
+          visible={barVisible}
           hasPrev={hasPrev}
           hasNext={hasNext}
           liked={liked}
@@ -1058,22 +1140,6 @@ export default function Listen() {
           onLike={() => setLiked((v) => v === true ? null : true)}
           onDislike={() => setLiked((v) => v === false ? null : false)}
           onShuffle={() => setShuffleOn((v) => !v)}
-          // Floating nugget card props
-          activeNugget={activeNugget}
-          activeNuggetPct={activeNuggetPct}
-          animStyle={animStyle}
-          nuggetFocused={nuggetFocused}
-          deepDiveNugget={deepDiveNugget}
-          onNuggetClick={handleNuggetClick}
-          onNuggetFocus={() => setNuggetFocused(true)}
-          onNuggetBlur={() => setNuggetFocused(false)}
-          nuggetCurrentTime={activeNugget ? formatTime(activeNugget.timestampSec) : undefined}
-          nuggetSource={activeNugget ? (getSource(activeNugget.sourceId) || null) : null}
-          onSourceClick={activeNugget ? () => handleSourceClick(activeNugget) : undefined}
-          nuggetRef={nuggetRef}
-          dwelling={dwelling}
-          reopenedNuggetId={reopenedNuggetId}
-          // Mini-logo props
           dismissedMarkers={dismissedMarkers}
           onMiniLogoClick={handleMiniLogoClick}
           activeNuggetId={activeNugget?.id ?? null}
@@ -1084,18 +1150,17 @@ export default function Listen() {
         {companionReady && shortId && (
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 0.6, scale: 1 }}
-            className="fixed bottom-6 right-6 z-10 hover:opacity-90 transition-opacity rounded-xl overflow-hidden"
+            animate={{ opacity: 1, scale: 1 }}
+            className="fixed bottom-6 right-6 z-10 hover:opacity-90 transition-opacity rounded-xl overflow-hidden bg-white p-1"
           >
             <QRCode
               value={`${window.location.origin}/c/${shortId}?tier=${tier}&listen=${listenCount}`}
-              size={100}
-              qrStyle="dots"
-              eyeRadius={6}
-              fgColor="#ffffff"
-              bgColor="transparent"
+              size={120}
+              qrStyle="squares"
+              fgColor="#000000"
+              bgColor="#ffffff"
               ecLevel="H"
-              quietZone={6}
+              quietZone={8}
             />
           </motion.div>
         )}
