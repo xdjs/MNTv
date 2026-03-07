@@ -776,11 +776,10 @@ export default function Listen() {
           setActiveNugget(n);
           setReopenedNuggetId(null);
           setShownNuggetIds((s) => new Set(s).add(n.id));
-          showBar(true); // keep bar visible while nugget is showing
         }
       }
     }
-  }, [currentTime, isPlaying, nerdActive, trackNuggets, activeNugget, shownNuggetIds, showBar]);
+  }, [currentTime, isPlaying, nerdActive, trackNuggets, activeNugget, shownNuggetIds]);
 
   // Auto-dismiss nugget: quick swap if queued, otherwise fade after 8s
   useEffect(() => {
@@ -790,11 +789,9 @@ export default function Listen() {
       setDismissedNuggets((prev) => new Map(prev).set(activeNugget.id, activeNugget));
       setActiveNugget(null);
       setReopenedNuggetId(null);
-      // Restart hide timer now that nugget is dismissed
-      showBar();
     }, delay);
     return () => clearTimeout(timer);
-  }, [activeNugget, deepDiveNugget, nuggetFocused, nuggetQueue.length, showBar]);
+  }, [activeNugget, deepDiveNugget, nuggetFocused, nuggetQueue.length]);
 
   useEffect(() => {
     if (!activeNugget && nuggetQueue.length > 0) {
@@ -803,9 +800,8 @@ export default function Listen() {
       setActiveNugget(next);
       setReopenedNuggetId(null);
       setShownNuggetIds((s) => new Set(s).add(next.id));
-      showBar(true);
     }
-  }, [activeNugget, nuggetQueue, showBar]);
+  }, [activeNugget, nuggetQueue]);
 
   const getSource = useCallback((sourceId: string): Source | undefined => {
     return aiSources.get(sourceId);
@@ -1150,8 +1146,8 @@ export default function Listen() {
         {companionReady && shortId && (
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 0.6, scale: 1 }}
-            className="fixed bottom-6 right-6 z-10 hover:opacity-90 transition-opacity rounded-xl overflow-hidden"
+            animate={{ opacity: 0.7, scale: 1 }}
+            className="fixed bottom-6 right-6 z-10 hover:opacity-95 transition-opacity rounded-2xl overflow-hidden bg-black/50 backdrop-blur-md p-2"
           >
             <QRCode
               value={`${window.location.origin}/c/${shortId}?tier=${tier}&listen=${listenCount}`}

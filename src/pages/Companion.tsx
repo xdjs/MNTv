@@ -41,11 +41,16 @@ export default function Companion() {
 
   const { profile } = useUserProfile();
 
-  // Read tier from URL search params (set by QR code from Listen page)
+  // Read tier and listen count from URL search params (set by QR code from Listen page)
+  const urlParams = useMemo(() => new URLSearchParams(window.location.search), []);
   const urlTier = useMemo(() => {
-    const t = new URLSearchParams(window.location.search).get("tier");
+    const t = urlParams.get("tier");
     return (t === "casual" || t === "curious" || t === "nerd") ? t : null;
-  }, []);
+  }, [urlParams]);
+  const urlListenCount = useMemo(() => {
+    const l = parseInt(urlParams.get("listen") || "1", 10);
+    return Number.isFinite(l) && l >= 1 ? l : 1;
+  }, [urlParams]);
 
   const [data, setData] = useState<CompanionData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -145,12 +150,12 @@ export default function Companion() {
     );
   }
 
-  // Return nuggets for a section — show all nuggets the Listen page accumulated.
+  // Return nuggets for a section — only show nuggets unlocked up to the current listen count.
   // Newer listens (higher listenUnlockLevel) appear first so fresh content is prominent.
   function getSectionNuggets(category: CompanionNugget["category"]): CompanionNugget[] {
     if (!data?.nuggets) return [];
     return data.nuggets
-      .filter((n) => n.category === category)
+      .filter((n) => n.category === category && (n.listenUnlockLevel || 1) <= urlListenCount)
       .sort((a, b) => {
         const levelDiff = (b.listenUnlockLevel || 1) - (a.listenUnlockLevel || 1);
         if (levelDiff !== 0) return levelDiff;
