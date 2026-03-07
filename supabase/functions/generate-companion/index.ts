@@ -502,6 +502,17 @@ OUTPUT: Raw JSON only. No backticks.`;
 
         // Cache only non-personalised responses
         if (!isPersonalised) {
+          // When writing prebuilt nuggets from the player, delete ALL existing
+          // cache entries for this track/tier so stale Gemini-generated entries
+          // at other listen tiers can't be returned by the "highest tier" lookup.
+          if (validPrebuiltNuggets) {
+            const baseCacheKey = `${artist}::${title}::${safeTier}`;
+            await supabase.from("companion_cache").delete().in("track_key", [
+              `${baseCacheKey}::1`,
+              `${baseCacheKey}::2`,
+              `${baseCacheKey}::3`,
+            ]);
+          }
           await supabase.from("companion_cache").upsert(
             { track_key: cacheKey, listen_count_tier: listenTier, content: parsed },
             { onConflict: "track_key,listen_count_tier" }
