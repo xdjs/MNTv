@@ -146,9 +146,9 @@ export default function PlaybackBar({
               }
               className="relative mb-2"
               style={{
-                // Position card centered on nugget dot, clamped to stay on-screen
-                // On mobile: full width centered. On desktop: 420px card offset from dot.
-                marginLeft: `clamp(0px, calc(${activeNuggetPct}% - 210px), calc(100% - 420px))`,
+                // Position card so its left-edge logo aligns with the timeline dot.
+                // The NuggetCard logo sits at -left-3 (-12px) from card edge, so offset by ~12px.
+                marginLeft: `clamp(0px, calc(${activeNuggetPct}% - 12px), calc(100% - 420px))`,
                 width: "min(420px, 100%)",
               }}
             >
@@ -195,17 +195,14 @@ export default function PlaybackBar({
                 )}
               </div>
 
-              {/* Anchor line from card to timeline dot */}
+              {/* Anchor line from card logo down to timeline dot */}
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.2 }}
                 className="absolute -bottom-2 w-px h-4 bg-foreground/30"
-                style={{
-                  // Point line toward the nugget dot position relative to card
-                  left: `clamp(20px, calc(${activeNuggetPct}% - clamp(0px, calc(${activeNuggetPct}% - 210px), calc(100% - 420px))), calc(100% - 20px))`,
-                }}
+                style={{ left: 0 }}
               />
             </motion.div>
           )}

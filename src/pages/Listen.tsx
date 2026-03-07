@@ -172,13 +172,24 @@ export default function Listen() {
     player.pushTrackHistory(`/listen/${rawTrackId}`);
   }, [rawTrackId, player]);
 
-  // If this track was completed in this session, force fresh nugget generation
+  // If this track was previously listened to in this session, restore the listen depth.
+  // This handles both track completion (onEnded) and returning to a track via prev/browse.
   useEffect(() => {
     if (!track) return;
     const key = `${track.artist}::${track.title}`;
     if (player.isTrackCompleted(key)) {
+      // Track ended naturally — clear flag and force fresh generation
       player.clearTrackCompleted(key);
       setRegenerateKey((k) => k + 1);
+    } else {
+      // Check if we already listened to this track earlier in this session.
+      // The session listen count was stored by useAINuggets after resolving from DB.
+      const sessionCount = player.getTrackListenCount(key);
+      if (sessionCount > 1) {
+        // Set regenerateKey to match the prior listen depth so useAINuggets
+        // skips the first-listen cache and generates at the correct depth.
+        setRegenerateKey(sessionCount - 1);
+      }
     }
   }, [trackId, track, player]);
 
@@ -1025,7 +1036,7 @@ export default function Listen() {
           progress={progress}
           currentTimeFormatted={formatTime(currentTime)}
           durationFormatted={formatTime(effectiveDuration)}
-          visible={barVisible}
+          visible={barVisible || !!activeNugget}
           hasPrev={hasPrev}
           hasNext={hasNext}
           liked={liked}

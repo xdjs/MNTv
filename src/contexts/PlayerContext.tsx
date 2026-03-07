@@ -112,6 +112,9 @@ interface PlayerActions {
   markTrackCompleted: (key: string) => void;
   isTrackCompleted: (key: string) => boolean;
   clearTrackCompleted: (key: string) => void;
+  /** Session-scoped listen count per track (persists across navigation) */
+  getTrackListenCount: (key: string) => number;
+  setTrackListenCount: (key: string, count: number) => void;
   /** Accumulated companion nuggets per track (session-scoped) */
   getCompanionNuggets: (key: string) => CompanionNugget[];
   appendCompanionNuggets: (key: string, nuggets: CompanionNugget[]) => void;
@@ -172,6 +175,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const markTrackCompleted = useCallback((key: string) => { trackCompletedRef.current.add(key); }, []);
   const isTrackCompleted = useCallback((key: string) => trackCompletedRef.current.has(key), []);
   const clearTrackCompleted = useCallback((key: string) => { trackCompletedRef.current.delete(key); }, []);
+
+  // Session-scoped listen count per track (persists across navigation within the session)
+  const trackListenCountRef = useRef<Map<string, number>>(new Map());
+  const getTrackListenCount = useCallback((key: string) => trackListenCountRef.current.get(key) || 0, []);
+  const setTrackListenCount = useCallback((key: string, count: number) => { trackListenCountRef.current.set(key, count); }, []);
 
   // Accumulated companion nuggets per track (session-scoped)
   const companionAccRef = useRef<Map<string, CompanionNugget[]>>(new Map());
@@ -411,6 +419,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     markTrackCompleted,
     isTrackCompleted,
     clearTrackCompleted,
+    getTrackListenCount,
+    setTrackListenCount,
     getCompanionNuggets,
     appendCompanionNuggets,
   }), [
@@ -419,7 +429,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setCurrentTrack, setOnEnded, pushTrackHistory, popTrackHistory, loadTrack,
     syncExternalTrack, play, pause, toggle, seek, stop, setExternalListenMode,
     getNuggetCache, setNuggetCache, clearNuggetCache, markTrackCompleted,
-    isTrackCompleted, clearTrackCompleted, getCompanionNuggets, appendCompanionNuggets,
+    isTrackCompleted, clearTrackCompleted, getTrackListenCount, setTrackListenCount,
+    getCompanionNuggets, appendCompanionNuggets,
   ]);
 
   return (

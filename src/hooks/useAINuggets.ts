@@ -79,7 +79,7 @@ export function useAINuggets(
   const [error, setError] = useState<string | null>(null);
   const [listenCount, setListenCount] = useState(1);
 
-  const { getNuggetCache, setNuggetCache } = usePlayer();
+  const { getNuggetCache, setNuggetCache, getTrackListenCount, setTrackListenCount } = usePlayer();
   const cancelledRef = useRef(false);
 
   const generate = useCallback(async () => {
@@ -147,6 +147,7 @@ export function useAINuggets(
 
       if (cancelledRef.current) return;
       setListenCount(currentListenCount);
+      setTrackListenCount(trackKey, currentListenCount);
 
       // ── Check nugget_cache for first listen ──────────────────────
       // Skip DB cache when regenerateKey > 0 — that means the track was
@@ -404,7 +405,7 @@ export function useAINuggets(
         setLoading(false);
       }
     }
-  }, [trackId, artist, title, album, durationSec, coverArtUrl, artistImageUrl, tier, regenerateKey, topArtists, topTracks, getNuggetCache, setNuggetCache]);
+  }, [trackId, artist, title, album, durationSec, coverArtUrl, artistImageUrl, tier, regenerateKey, topArtists, topTracks, getNuggetCache, setNuggetCache, setTrackListenCount]);
 
   useEffect(() => {
     cancelledRef.current = false;
