@@ -492,30 +492,38 @@ export default function Listen() {
           player.appendCompanionNuggets(trackKey, filteredNuggets);
           const allAccumulatedNuggets = player.getCompanionNuggets(trackKey);
 
-          // Write directly to companion_cache (same key format as generate-companion)
-          const companionCacheKey = `${track.artist}::${track.title}::casual::${tier}`;
+          // Write directly to companion_cache using the SAME schema as
+          // generate-companion edge function (track_key + listen_count_tier columns)
+          const listenTier = Math.min(Math.max(listenCount, 1), 3);
+          const companionCacheKey = `${track.artist}::${track.title}::${tier}::${listenTier}`;
 
-          // Delete stale entries first
-          await supabase
-            .from("companion_cache")
-            .delete()
-            .eq("track_id", companionCacheKey);
+          const content = {
+            artistSummary: seedCompanion.artistSummary,
+            trackStory: seedCompanion.trackStory,
+            nuggets: allAccumulatedNuggets,
+            externalLinks: seedCompanion.externalLinks,
+            coverArtUrl: effectiveCoverArt || null,
+            artistImage: artistImageUrl || effectiveCoverArt || null,
+          };
+
+          // Delete stale entries for ALL listen tiers so the "highest tier"
+          // lookup in generate-companion always finds the freshest data
+          const baseCacheKey = `${track.artist}::${track.title}::${tier}`;
+          await supabase.from("companion_cache").delete().in("track_key", [
+            `${baseCacheKey}::1`,
+            `${baseCacheKey}::2`,
+            `${baseCacheKey}::3`,
+          ]);
 
           await supabase
             .from("companion_cache")
             .upsert(
               {
-                track_id: companionCacheKey,
-                content: {
-                  artistSummary: seedCompanion.artistSummary,
-                  trackStory: seedCompanion.trackStory,
-                  nuggets: allAccumulatedNuggets,
-                  externalLinks: seedCompanion.externalLinks,
-                  coverArtUrl: effectiveCoverArt || null,
-                  artistImage: artistImageUrl || effectiveCoverArt || null,
-                },
+                track_key: companionCacheKey,
+                listen_count_tier: listenTier,
+                content,
               },
-              { onConflict: "track_id" }
+              { onConflict: "track_key,listen_count_tier" }
             );
 
           if (cancelled) return;
