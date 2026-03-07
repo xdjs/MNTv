@@ -149,12 +149,20 @@ export default function Companion() {
     );
   }
 
-  // Return nuggets for a section — only show nuggets unlocked up to the current listen count.
+  // Derive effective listen count from the data — the cache may return a higher
+  // tier than the URL requested, so use the max across URL param and nugget data.
+  const effectiveListenCount = useMemo(() => {
+    if (!data?.nuggets?.length) return urlListenCount;
+    const maxFromData = Math.max(...data.nuggets.map((n) => n.listenUnlockLevel || 1));
+    return Math.max(urlListenCount, maxFromData);
+  }, [data?.nuggets, urlListenCount]);
+
+  // Return nuggets for a section — show all nuggets up to the effective listen count.
   // Newer listens (higher listenUnlockLevel) appear first so fresh content is prominent.
   function getSectionNuggets(category: CompanionNugget["category"]): CompanionNugget[] {
     if (!data?.nuggets) return [];
     return data.nuggets
-      .filter((n) => n.category === category && (n.listenUnlockLevel || 1) <= urlListenCount)
+      .filter((n) => n.category === category && (n.listenUnlockLevel || 1) <= effectiveListenCount)
       .sort((a, b) => {
         const levelDiff = (b.listenUnlockLevel || 1) - (a.listenUnlockLevel || 1);
         if (levelDiff !== 0) return levelDiff;

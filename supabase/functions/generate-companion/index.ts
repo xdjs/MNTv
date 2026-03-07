@@ -234,15 +234,24 @@ serve(async (req) => {
     const isPersonalised = !!(lastFmUsername || safeSpotifyTopArtists?.length || safeSpotifyTopTracks?.length);
 
     if (!isPersonalised) {
+      // Look for the HIGHEST available cache tier (not just the requested one).
+      // This ensures the companion page always shows the most complete accumulated
+      // nuggets even if the QR URL has a stale listen= param.
+      const baseCacheKey = `${artist}::${title}::${safeTier}`;
       const { data: cached } = await supabase
         .from("companion_cache")
-        .select("content")
-        .eq("track_key", cacheKey)
-        .eq("listen_count_tier", listenTier)
+        .select("content, listen_count_tier")
+        .in("track_key", [
+          `${baseCacheKey}::1`,
+          `${baseCacheKey}::2`,
+          `${baseCacheKey}::3`,
+        ])
+        .order("listen_count_tier", { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       if (cached?.content) {
-        console.log(`Cache hit: ${cacheKey}`);
+        console.log(`Cache hit: ${baseCacheKey}::${cached.listen_count_tier} (requested tier ${listenTier})`);
         return new Response(JSON.stringify(cached.content), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
