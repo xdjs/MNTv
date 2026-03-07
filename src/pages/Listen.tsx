@@ -7,7 +7,7 @@ import { QRCode } from "react-qrcode-logo";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
-import NuggetCard from "@/components/NuggetCard";
+
 import MediaOverlay from "@/components/overlays/MediaOverlay";
 import ReadingOverlay from "@/components/overlays/ReadingOverlay";
 import NuggetDeepDive from "@/components/overlays/NuggetDeepDive";
@@ -513,6 +513,8 @@ export default function Listen() {
   const [activeNugget, setActiveNugget] = useState<Nugget | null>(null);
   const [nuggetQueue, setNuggetQueue] = useState<Nugget[]>([]);
   const [shownNuggetIds, setShownNuggetIds] = useState<Set<string>>(new Set());
+  const [dismissedNuggets, setDismissedNuggets] = useState<Map<string, Nugget>>(new Map());
+  const [reopenedNuggetId, setReopenedNuggetId] = useState<string | null>(null);
   const [mediaOverlay, setMediaOverlay] = useState<Source | null>(null);
   const [readingOverlay, setReadingOverlay] = useState<Source | null>(null);
   const [deepDiveNugget, setDeepDiveNugget] = useState<Nugget | null>(null);
@@ -524,10 +526,12 @@ export default function Listen() {
   const [barVisible, setBarVisible] = useState(true);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const showBar = useCallback(() => {
+  const showBar = useCallback((keepVisible?: boolean) => {
     setBarVisible(true);
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    hideTimerRef.current = setTimeout(() => setBarVisible(false), HIDE_DELAY);
+    if (!keepVisible) {
+      hideTimerRef.current = setTimeout(() => setBarVisible(false), HIDE_DELAY);
+    }
   }, []);
 
   useEffect(() => {
@@ -548,6 +552,17 @@ export default function Listen() {
     setDeepDiveNugget(nugget);
     setNuggetFocused(false);
   }, []);
+
+  // Re-open a dismissed nugget from its mini-logo (does NOT seek)
+  const handleMiniLogoClick = useCallback((id: string) => {
+    const nugget = dismissedNuggets.get(id);
+    if (!nugget) return;
+    setDismissedNuggets((prev) => { const next = new Map(prev); next.delete(id); return next; });
+    setNuggetQueue([]);
+    setActiveNugget(nugget);
+    setReopenedNuggetId(id);
+    showBar(true);
+  }, [dismissedNuggets, showBar]);
 
   const [nuggetFocused, setNuggetFocused] = useState(false);
   const nuggetRef = useRef<HTMLDivElement>(null);
@@ -691,6 +706,8 @@ export default function Listen() {
     if (aiNuggets.length === 0) return;
     setActiveNugget(null);
     setNuggetQueue([]);
+    setDismissedNuggets(new Map());
+    setReopenedNuggetId(null);
     // Don't skip any nuggets on arrival — show all of them sequentially.
     // The trigger logic below will fire them one by one via the queue.
     setShownNuggetIds(new Set());
@@ -720,10 +737,19 @@ export default function Listen() {
       }
       setShownNuggetIds(newShown);
       setActiveNugget(targetNugget);
+      // Preserve dismissed nuggets before seek point, clear ones after
+      setDismissedNuggets((prev) => {
+        const next = new Map<string, Nugget>();
+        for (const [id, nugget] of prev) {
+          if (nugget.timestampSec <= t) next.set(id, nugget);
+        }
+        return next;
+      });
     } else {
-      // Seeked before any nugget — clear active
+      // Seeked before any nugget — clear active and dismissed
       setShownNuggetIds(new Set());
       setActiveNugget(null);
+      setDismissedNuggets(new Map());
     }
   }, [seek, trackNuggets]);
 
@@ -737,28 +763,38 @@ export default function Listen() {
           setNuggetQueue((q) => (q.find((x) => x.id === n.id) ? q : [...q, n]));
         } else {
           setActiveNugget(n);
+          setReopenedNuggetId(null);
           setShownNuggetIds((s) => new Set(s).add(n.id));
+          showBar(true); // keep bar visible while nugget is showing
         }
       }
     }
-  }, [currentTime, isPlaying, nerdActive, trackNuggets, activeNugget, shownNuggetIds]);
+  }, [currentTime, isPlaying, nerdActive, trackNuggets, activeNugget, shownNuggetIds, showBar]);
 
   // Auto-dismiss nugget: quick swap if queued, otherwise fade after 8s
   useEffect(() => {
     if (!activeNugget || deepDiveNugget || nuggetFocused) return;
     const delay = nuggetQueue.length > 0 ? 6000 : 8000;
-    const timer = setTimeout(() => setActiveNugget(null), delay);
+    const timer = setTimeout(() => {
+      setDismissedNuggets((prev) => new Map(prev).set(activeNugget.id, activeNugget));
+      setActiveNugget(null);
+      setReopenedNuggetId(null);
+      // Restart hide timer now that nugget is dismissed
+      showBar();
+    }, delay);
     return () => clearTimeout(timer);
-  }, [activeNugget, deepDiveNugget, nuggetFocused, nuggetQueue.length]);
+  }, [activeNugget, deepDiveNugget, nuggetFocused, nuggetQueue.length, showBar]);
 
   useEffect(() => {
     if (!activeNugget && nuggetQueue.length > 0) {
       const next = nuggetQueue[0];
       setNuggetQueue((q) => q.slice(1));
       setActiveNugget(next);
+      setReopenedNuggetId(null);
       setShownNuggetIds((s) => new Set(s).add(next.id));
+      showBar(true);
     }
-  }, [activeNugget, nuggetQueue]);
+  }, [activeNugget, nuggetQueue, showBar]);
 
   const getSource = useCallback((sourceId: string): Source | undefined => {
     return aiSources.get(sourceId);
@@ -793,6 +829,28 @@ export default function Listen() {
   );
 
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+  // Nugget timeline position map: nugget ID → % position along timeline
+  const nuggetPositionMap = useMemo(() => {
+    if (realDuration <= 0) return new Map<string, number>();
+    const map = new Map<string, number>();
+    for (const n of trackNuggets) {
+      map.set(n.id, (n.timestampSec / realDuration) * 100);
+    }
+    return map;
+  }, [trackNuggets, realDuration]);
+
+  const activeNuggetPct = activeNugget ? nuggetPositionMap.get(activeNugget.id) ?? null : null;
+
+  // Dismissed markers array for PlaybackBar
+  const dismissedMarkers = useMemo(() => {
+    const markers: Array<{ id: string; pct: number }> = [];
+    for (const [id] of dismissedNuggets) {
+      const pct = nuggetPositionMap.get(id);
+      if (pct != null) markers.push({ id, pct });
+    }
+    return markers;
+  }, [dismissedNuggets, nuggetPositionMap]);
 
   // Must be called unconditionally — before any early returns
   useThemeSync(effectiveCoverArt || "");
@@ -946,56 +1004,10 @@ export default function Listen() {
           />
         </motion.div>
 
-        {/* Nugget cards */}
-        <div className="relative z-10 flex flex-1 items-center justify-end px-4 pb-24 md:px-10">
-          <div className="w-full max-w-[520px] shrink-0">
-            <AnimatePresence mode="wait">
-              {activeNugget && (
-                <motion.div
-                  key={activeNugget.id}
-                  ref={nuggetRef}
-                  tabIndex={0}
-                  className="cursor-pointer outline-none"
-                  onClick={() => !deepDiveNugget && handleNuggetClick(activeNugget)}
-                  onFocus={() => setNuggetFocused(true)}
-                  onBlur={() => setNuggetFocused(false)}
-                  animate={{ opacity: deepDiveNugget ? 0 : 1, scale: deepDiveNugget ? 0.95 : 1 }}
-                  transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                  style={{ pointerEvents: deepDiveNugget ? "none" : "auto" }}
-                >
-                  <ErrorBoundary>
-                    <NuggetCard
-                      nugget={activeNugget}
-                      animationStyle={animStyle}
-                      onSourceClick={() => handleSourceClick(activeNugget)}
-                      currentTime={formatTime(activeNugget.timestampSec)}
-                      sourceOverride={getSource(activeNugget.sourceId) || null}
-                      focused={nuggetFocused && !deepDiveNugget}
-                    />
-                  </ErrorBoundary>
-                  {nuggetFocused && !deepDiveNugget && (
-                    <motion.p
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="mt-2 text-center text-xs text-muted-foreground"
-                    >
-                      {dwelling ? (
-                        <span className="inline-flex items-center gap-1.5">
-                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                          Exploring…
-                        </span>
-                      ) : (
-                        "Press Enter to explore"
-                      )}
-                    </motion.p>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
+        {/* Spacer — fills where old nugget panel was, pushes bar to bottom */}
+        <div className="flex-1" />
 
-        {/* Playback controls */}
+        {/* Playback controls + floating nugget card */}
         <PlaybackBar
           isPlaying={isPlaying}
           fadingIn={fadingIn}
@@ -1007,11 +1019,10 @@ export default function Listen() {
           hasNext={hasNext}
           liked={liked}
           shuffle={shuffleOn}
-          nuggetMarkers={trackNuggets.map((n) => (n.timestampSec / effectiveDuration) * 100)}
+          nuggetMarkers={trackNuggets.map((n) => ({ id: n.id, pct: (n.timestampSec / effectiveDuration) * 100 }))}
           focusedIndex={focusZone === 'bar' ? barFocusIndex : null}
           onToggle={() => {
             showBar();
-            // If in external listen mode, take over playback locally
             if (isExternalListenMode) {
               setExternalListenMode(false);
               lastLoadedTrackRef.current = null;
@@ -1025,6 +1036,26 @@ export default function Listen() {
           onLike={() => setLiked((v) => v === true ? null : true)}
           onDislike={() => setLiked((v) => v === false ? null : false)}
           onShuffle={() => setShuffleOn((v) => !v)}
+          // Floating nugget card props
+          activeNugget={activeNugget}
+          activeNuggetPct={activeNuggetPct}
+          animStyle={animStyle}
+          nuggetFocused={nuggetFocused}
+          deepDiveNugget={deepDiveNugget}
+          onNuggetClick={handleNuggetClick}
+          onNuggetFocus={() => setNuggetFocused(true)}
+          onNuggetBlur={() => setNuggetFocused(false)}
+          nuggetCurrentTime={activeNugget ? formatTime(activeNugget.timestampSec) : undefined}
+          nuggetSource={activeNugget ? (getSource(activeNugget.sourceId) || null) : null}
+          onSourceClick={activeNugget ? () => handleSourceClick(activeNugget) : undefined}
+          nuggetRef={nuggetRef}
+          dwelling={dwelling}
+          reopenedNuggetId={reopenedNuggetId}
+          // Mini-logo props
+          dismissedMarkers={dismissedMarkers}
+          onMiniLogoClick={handleMiniLogoClick}
+          activeNuggetId={activeNugget?.id ?? null}
+          dismissedNuggetIds={new Set(dismissedNuggets.keys())}
         />
 
         {/* QR Code — only shown once companion content is pre-generated */}
