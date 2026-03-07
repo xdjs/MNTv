@@ -118,6 +118,7 @@ interface PlayerActions {
   /** Accumulated companion nuggets per track (session-scoped) */
   getCompanionNuggets: (key: string) => CompanionNugget[];
   appendCompanionNuggets: (key: string, nuggets: CompanionNugget[]) => void;
+  clearCompanionNuggets: (key: string) => void;
 }
 
 type PlayerContextType = PlayerState & PlayerActions;
@@ -190,6 +191,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const newOnes = nuggets.filter((n: CompanionNugget) => !existingIds.has(n.id));
     companionAccRef.current.set(key, [...existing, ...newOnes]);
   }, []);
+  const clearCompanionNuggets = useCallback((key: string) => { companionAccRef.current.delete(key); }, []);
 
   // Track history for prev button (persists across Listen re-mounts)
   const trackHistoryRef = useRef<string[]>([]);
@@ -423,6 +425,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setTrackListenCount,
     getCompanionNuggets,
     appendCompanionNuggets,
+    clearCompanionNuggets,
   }), [
     spPlaying, spTime, spDuration, activePlayer, spReady, currentSpotifyUri,
     currentTrack, prevTrackRoute, externalTrack, isExternalListenMode, spotifyStateTrack,
@@ -430,7 +433,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     syncExternalTrack, play, pause, toggle, seek, stop, setExternalListenMode,
     getNuggetCache, setNuggetCache, clearNuggetCache, markTrackCompleted,
     isTrackCompleted, clearTrackCompleted, getTrackListenCount, setTrackListenCount,
-    getCompanionNuggets, appendCompanionNuggets,
+    getCompanionNuggets, appendCompanionNuggets, clearCompanionNuggets,
   ]);
 
   return (

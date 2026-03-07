@@ -203,6 +203,9 @@ export default function Listen() {
   const isNavigatingRef = useRef(false);
   const lastLoadedTrackRef = useRef<string | null>(null);
   const prevRawTrackIdRef = useRef<string | undefined>(rawTrackId);
+  // Timestamp of last track load — suppresses false external detection during the
+  // brief window where the SDK still reports the OLD track after loadTrack is called.
+  const trackLoadTimestampRef = useRef(0);
 
   // Reset navigation lock + load guard when the route changes (new track mounted).
   // Also pause the current track immediately so the old track doesn't keep playing
@@ -215,6 +218,7 @@ export default function Listen() {
 
     isNavigatingRef.current = false;
     lastLoadedTrackRef.current = null;
+    trackLoadTimestampRef.current = Date.now();
 
     if (isTrackSwitch) {
       player.pause();
@@ -380,6 +384,9 @@ export default function Listen() {
     if (isNavigatingRef.current) return;
     if (!isPlaying) return;
     if (!player.currentSpotifyUri) return;
+    // Suppress during the brief window after a track load where the SDK still
+    // reports the OLD track — prevents false redirect back to the previous track.
+    if (Date.now() - trackLoadTimestampRef.current < 2000) return;
     if (spotifyStateTrack.spotifyUri === player.currentSpotifyUri) return;
     // Also skip if the SDK is reporting what we're about to load (route resolved but loadTrack pending)
     if (spotifyUri && spotifyStateTrack.spotifyUri === spotifyUri) return;
@@ -1235,12 +1242,23 @@ export default function Listen() {
                 if (!track) return;
                 const trackKey = `${track.artist}::${track.title}`;
                 await supabase.from("nugget_history").delete().eq("track_key", trackKey);
-                setRegenerateKey((k) => k + 1);
+                player.setTrackListenCount(trackKey, 0);
+                player.clearTrackCompleted(trackKey);
+                player.clearCompanionNuggets(trackKey);
+                player.clearNuggetCache();
+                setRegenerateKey(0);
               }}
               onResetAllHistory={async () => {
                 if (!window.confirm("Delete ALL listening history? This cannot be undone.")) return;
                 await supabase.from("nugget_history").delete().neq("track_key", "");
-                setRegenerateKey((k) => k + 1);
+                if (track) {
+                  const trackKey = `${track.artist}::${track.title}`;
+                  player.setTrackListenCount(trackKey, 0);
+                  player.clearTrackCompleted(trackKey);
+                  player.clearCompanionNuggets(trackKey);
+                }
+                player.clearNuggetCache();
+                setRegenerateKey(0);
               }}
               activePlayer={activePlayer}
               spotifyUri={spotifyUri}
