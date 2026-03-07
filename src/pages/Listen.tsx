@@ -485,67 +485,30 @@ export default function Listen() {
     let cancelled = false;
     (async () => {
       try {
-        // ── Seed companion shortcut for demo tracks ──────────────────
+        // Build prebuilt nuggets for the companion page.
+        // Both demo (seed) and AI tracks go through the edge function — direct
+        // DB writes from the client are blocked by RLS (service_role only).
+        const trackKey = `${track.artist}::${track.title}`;
         const seedCompanion = getSeedCompanion(track.artist, track.title, tier);
-        if (seedCompanion) {
-          console.log("[SeedCompanion] Writing seed companion for", track.artist, "—", track.title);
 
-          // Filter companion nuggets by listen depth
+        let prebuiltNuggets: any[];
+        if (seedCompanion) {
+          // Demo tracks: use seed companion data, filter by listen depth
           const filteredNuggets = seedCompanion.nuggets.filter(
             (n) => n.listenUnlockLevel <= listenCount
           );
-
-          // Accumulate in session state
-          const trackKey = `${track.artist}::${track.title}`;
           player.appendCompanionNuggets(trackKey, filteredNuggets);
-          const allAccumulatedNuggets = player.getCompanionNuggets(trackKey);
-
-          // Write directly to companion_cache using the SAME schema as
-          // generate-companion edge function (track_key + listen_count_tier columns)
-          const listenTier = Math.min(Math.max(listenCount, 1), 3);
-          const companionCacheKey = `${track.artist}::${track.title}::${tier}::${listenTier}`;
-
-          const content = {
-            artistSummary: seedCompanion.artistSummary,
-            trackStory: seedCompanion.trackStory,
-            nuggets: allAccumulatedNuggets,
-            externalLinks: seedCompanion.externalLinks,
-            coverArtUrl: effectiveCoverArt || null,
-            artistImage: artistImageUrl || effectiveCoverArt || null,
-          };
-
-          // Delete stale entries for ALL listen tiers so the "highest tier"
-          // lookup in generate-companion always finds the freshest data
-          const baseCacheKey = `${track.artist}::${track.title}::${tier}`;
-          await supabase.from("companion_cache").delete().in("track_key", [
-            `${baseCacheKey}::1`,
-            `${baseCacheKey}::2`,
-            `${baseCacheKey}::3`,
-          ]);
-
-          await supabase
-            .from("companion_cache")
-            .upsert(
-              {
-                track_key: companionCacheKey,
-                listen_count_tier: listenTier,
-                content,
-              },
-              { onConflict: "track_key,listen_count_tier" }
-            );
-
-          if (cancelled) return;
+          prebuiltNuggets = player.getCompanionNuggets(trackKey);
+          console.log("[SeedCompanion] Sending", prebuiltNuggets.length, "accumulated nuggets for", trackKey);
         } else {
-          // ── Normal AI companion flow ─────────────────────────────────
-          // Transform Listen page nuggets into CompanionNugget format so the
-          // companion page shows the exact same content — no separate Gemini call.
+          // AI tracks: transform listen page nuggets to companion format
           const kindToCategory: Record<string, string> = {
             artist: "history",
             track: "track",
             discovery: "explore",
           };
           const now = Date.now();
-          const prebuiltNuggets = aiNuggets.map((n, i) => {
+          const transformed = aiNuggets.map((n, i) => {
             const source = aiSources.get(n.sourceId);
             return {
               id: n.id,
@@ -560,30 +523,25 @@ export default function Listen() {
               imageCaption: n.imageCaption,
             };
           });
-
-          // Accumulate nuggets across listens within this session
-          const trackKey = `${track.artist}::${track.title}`;
-          player.appendCompanionNuggets(trackKey, prebuiltNuggets);
-          const allAccumulatedNuggets = player.getCompanionNuggets(trackKey);
-
-          // Pre-generate companion content so the QR companion page loads instantly.
-          // Use actual tier so each tier's companion is cached separately.
-          // Pass image URLs so the companion page works for unauthenticated QR users.
-          const { error } = await supabase.functions.invoke("generate-companion", {
-            body: {
-              artist: track.artist,
-              title: track.title,
-              album: track.album,
-              listenCount,
-              tier,
-              prebuiltNuggets: allAccumulatedNuggets,
-              coverArtUrl: effectiveCoverArt || undefined,
-              artistImage: artistImageUrl || effectiveCoverArt || undefined,
-            },
-          });
-          if (cancelled) return;
-          if (error) console.warn("[Listen] Companion pre-gen error:", error);
+          player.appendCompanionNuggets(trackKey, transformed);
+          prebuiltNuggets = player.getCompanionNuggets(trackKey);
         }
+
+        // Route through edge function (has service_role for DB writes)
+        const { error } = await supabase.functions.invoke("generate-companion", {
+          body: {
+            artist: track.artist,
+            title: track.title,
+            album: track.album,
+            listenCount,
+            tier,
+            prebuiltNuggets,
+            coverArtUrl: effectiveCoverArt || undefined,
+            artistImage: artistImageUrl || effectiveCoverArt || undefined,
+          },
+        });
+        if (cancelled) return;
+        if (error) console.warn("[Listen] Companion pre-gen error:", error);
 
         // Create or reuse a short URL for the QR code (even if pre-gen failed,
         // the companion page will generate on demand)

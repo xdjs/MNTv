@@ -436,29 +436,31 @@ OUTPUT: Raw JSON only. No backticks.`;
               n.timestamp = now - Math.random() * tierConfig.nuggetCount * 60000;
             }
           }
+        }
 
-          // Accumulate nuggets from previous listen tiers so the companion page
-          // shows all nuggets across listens, not just the current tier's batch.
-          if (listenTier > 1) {
-            const previousNuggets: any[] = [];
-            for (let t = 1; t < listenTier; t++) {
-              const prevKey = `${artist}::${title}::${safeTier}::${t}`;
-              const { data: prevCached } = await supabase
-                .from("companion_cache")
-                .select("content")
-                .eq("track_key", prevKey)
-                .eq("listen_count_tier", t)
-                .maybeSingle();
-              if (prevCached?.content?.nuggets) {
-                previousNuggets.push(...prevCached.content.nuggets);
-              }
+        // Accumulate nuggets from previous listen tiers so the companion page
+        // shows all nuggets across listens, not just the current tier's batch.
+        // Runs for both prebuilt and Gemini-generated nuggets — handles
+        // cross-session cases where PlayerContext is empty on fresh load.
+        if (parsed.nuggets && listenTier > 1) {
+          const previousNuggets: any[] = [];
+          for (let t = 1; t < listenTier; t++) {
+            const prevKey = `${artist}::${title}::${safeTier}::${t}`;
+            const { data: prevCached } = await supabase
+              .from("companion_cache")
+              .select("content")
+              .eq("track_key", prevKey)
+              .eq("listen_count_tier", t)
+              .maybeSingle();
+            if (prevCached?.content?.nuggets) {
+              previousNuggets.push(...prevCached.content.nuggets);
             }
-            if (previousNuggets.length > 0) {
-              // Deduplicate by id (prebuilt nuggets may overlap)
-              const existingIds = new Set(parsed.nuggets.map((n: any) => n.id));
-              const unique = previousNuggets.filter((n: any) => !existingIds.has(n.id));
-              parsed.nuggets = [...unique, ...parsed.nuggets];
-            }
+          }
+          if (previousNuggets.length > 0) {
+            // Deduplicate by id (prebuilt nuggets may overlap with cached ones)
+            const existingIds = new Set(parsed.nuggets.map((n: any) => n.id));
+            const unique = previousNuggets.filter((n: any) => !existingIds.has(n.id));
+            parsed.nuggets = [...unique, ...parsed.nuggets];
           }
         }
 

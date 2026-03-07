@@ -157,8 +157,8 @@ export function useAINuggets(
 
         const newSources = new Map<string, Source>();
         const newNuggets: Nugget[] = seedData.map((n, i) => {
-          const sourceId = `seed-src-${trackId}-${i}`;
-          const nuggetId = `seed-nug-${trackId}-${i}`;
+          const sourceId = `seed-src-${trackId}-L${currentListenCount}-${i}`;
+          const nuggetId = `seed-nug-${trackId}-L${currentListenCount}-${i}`;
 
           const source: Source = {
             id: sourceId,
@@ -325,8 +325,8 @@ export function useAINuggets(
 
       const newSources = new Map<string, Source>();
       const newNuggets: Nugget[] = aiNuggets.map((n, i) => {
-        const sourceId = `ai-src-${trackId}-${i}`;
-        const nuggetId = `ai-nug-${trackId}-${i}`;
+        const sourceId = `ai-src-${trackId}-L${currentListenCount}-${i}`;
+        const nuggetId = `ai-nug-${trackId}-L${currentListenCount}-${i}`;
 
         const source: Source = {
           id: sourceId,

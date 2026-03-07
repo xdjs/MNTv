@@ -71,6 +71,42 @@
       "sourceName": "Mixmag",
       "imageCaption": null,
       "listenUnlockLevel": 2
+    },
+    {
+      "id": "seed-3-0",
+      "text": "After a reported studio accident on September 9, 1999, where a sampler allegedly 'exploded,' Daft Punk introduced the robot personas for their second album *Discovery* (2001). Thomas Bangalter later framed it as an artistic rebirth: 'We did not choose to become robots. There was an accident in our studio.' Whether literal or mythologized, the personas freed them from the celebrity machine and became an artistic statement about the relationship between humans and technology.",
+      "category": "history",
+      "headline": "Daft Punk's iconic robot helmets weren't just a fashion choice — they emerged from a mysterious 'studio accident' that became part of the duo's origin mythology.",
+      "imageUrl": null,
+      "sourceUrl": "https://www.theguardian.com/music/2013/may/19/daft-punk-random-access-memories",
+      "timestamp": 1772767538000,
+      "sourceName": "The Guardian",
+      "imageCaption": null,
+      "listenUnlockLevel": 3
+    },
+    {
+      "id": "seed-3-1",
+      "text": "Unlike a vocoder, which analyzes speech electronically, a talkbox works by routing raw synthesizer sound through a plastic tube into the performer's mouth, using the mouth cavity as a resonant filter. The performer shapes vowels and consonants physically while the synthesizer provides the pitch and timbre. This gives the vocal line in 'Around the World' its distinctive organic quality despite being electronically generated — it's literally a human body modulating a machine's voice, embodying the tension at the heart of Daft Punk's entire artistic vision.",
+      "category": "track",
+      "headline": "The vocal effect in 'Around the World' isn't a digital trick — it requires the performer to physically shape synthesizer sound with their own mouth through a tube.",
+      "imageUrl": null,
+      "sourceUrl": "https://reverb.com/news/the-gear-that-defined-daft-punk",
+      "timestamp": 1772767478000,
+      "sourceName": "Reverb.com",
+      "imageCaption": null,
+      "listenUnlockLevel": 3
+    },
+    {
+      "id": "seed-3-2",
+      "text": "DJ Falcon (real name Stéphane Quême) is one of the unsung architects of the French Touch sound and a close collaborator of Thomas Bangalter. His releases on Bangalter's Roulé label showcase the same meticulous approach to filtered disco loops and driving basslines that powers 'Around the World.' His track 'Hello My Name Is DJ Falcon' is a masterclass in building hypnotic grooves from minimal elements — exactly the philosophy that made Daft Punk's early work so revolutionary.",
+      "category": "explore",
+      "headline": "If the craftsmanship behind 'Around the World' fascinates you, explore DJ Falcon — a close Bangalter collaborator whose Roulé label releases helped define French Touch.",
+      "imageUrl": null,
+      "sourceUrl": "https://en.wikipedia.org/wiki/DJ_Falcon",
+      "timestamp": 1772767418000,
+      "sourceName": "Wikipedia",
+      "imageCaption": null,
+      "listenUnlockLevel": 3
     }
   ],
   "trackStory": "\"Around the World,\" released in 1997 from their debut album \"Homework,\" is celebrated for its distinctive repetitive structure and catchy bassline. The track famously repeats the phrase \"around the world\" 144 times, serving as a hypnotic mantra that symbolizes global connectivity and the cyclical nature of human experience. Its groundbreaking music video, directed by Michel Gondry, features various choreographed groups representing different musical elements, further enhancing its cultural impact and timeless appeal. This minimalist yet powerful approach helped define the French house genre and cemented Daft Punk's status as electronic music pioneers.",
