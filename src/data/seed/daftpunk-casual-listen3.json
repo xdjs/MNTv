@@ -1,0 +1,51 @@
+{
+  "nuggets": [
+    {
+      "headline": "Long before their iconic robot masks, Daft Punk's human members were already quite private, preferring the music to speak for itself.",
+      "text": "Even in their early days, Thomas Bangalter and Guy-Manuel de Homem-Christo were known for being introverted and deliberately shied away from the spotlight. Guy-Manuel de Homem-Christo explained, \"the idea of anonymity is really something we cherish... it's also a way that we're living our lives and... we really like this separation between the public image and and our private lives\". This deep-seated desire to put the focus squarely on their unique sound, rather than their personal lives, eventually paved the way for their iconic robot personas and allowed them to truly be free creatively.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "youtube",
+        "title": "Daft Punk Interview (Guy-Man Talks! Instant Crush, Star Wars Talk, Brian Wilson's Car, RAM)",
+        "publisher": "Tuna on Toast with Stryker",
+        "quoteSnippet": "the idea of anonymity is really something we cherish. because uh it's it's a statement it's also a way that we're living our lives and and we really like this separation. between the public image and and our private lives.",
+        "locator": "2:30",
+        "url": "https://www.youtube.com/watch?v=F_S9p-m14wQ",
+        "verified": false
+      }
+    },
+    {
+      "headline": "The hypnotic repetition of 'Around the World' isn't just about the words; it's a brilliant example of how Daft Punk used a simple trick to make a static sound constantly evolve!",
+      "text": "While the phrase 'around the world' repeats relentlessly, the true magic of the track lies in Daft Punk's expert manipulation of frequency filters. They were known to use \"deep lowpass filters (giving that underground muffled sound as heard on the intro of Around the World)\". These filters continuously sweep and modulate the sound, subtly opening and closing it, which creates a sense of movement and development, making the simple loop feel endlessly engaging and vibrant without adding new musical elements. It's a masterclass in making a single sound tell a whole story.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "How Daft Punk made \"Homework\": A layman-friendly walkthrough of the tools and techniques that made Daft Punk's first album : r/DaftPunk",
+        "publisher": "Reddit",
+        "quoteSnippet": "Daft Punk was known to use heavy distortion, deep lowpass filters (giving that underground muffled sound as heard on the intro of Around the World)",
+        "locator": "paragraph 6",
+        "url": "https://www.reddit.com/r/DaftPunk/comments/pq7f9s/how_daft_punk_made_homework_a_laymanfriendly/",
+        "verified": false
+      }
+    },
+    {
+      "headline": "If the groovy, filtered sounds of 'Around the World' get you moving, you absolutely have to check out Etienne de Crécy's 'Super Discount' project!",
+      "text": "Etienne de Crécy, another pioneer of the French House scene, delivered his debut album 'Super Discount' in 1996, which quickly became a foundational classic of electronic music. It's packed with the same kind of infectious, sample-driven funk and clever filter work that makes Daft Punk's 'Homework' so iconic. Many of its repetitive compositions and deep, dubby disco sounds will bring to mind the early Daft Punk style, offering a slightly grittier, yet equally irresistible, sonic journey.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Super Discount 25ème Anniversaire - Étienne De Crécy - Vinyle album - Achat & prix | fnac",
+        "publisher": "fnac.com",
+        "quoteSnippet": "Sorti en 1996, Super Discount est le premier album d'Étienne de Crécy, l'une des figures les plus influentes de la scène électronique et l'un des producteurs les plus inspirés. Ce disque est devenu avec le temps l'un des disques pionniers de la French Touch et un classique fondateur de la musique électronique, en France comme à l'étranger.",
+        "locator": "Résumé",
+        "url": "https://www.fnac.com/a16520330/Etienne-De-Crecy-Super-Discount-25eme-Anniversaire-Vinyle-album",
+        "verified": false
+      },
+      "imageUrl": "https://coverartarchive.org/release/cc779631-97ea-49f5-bb12-f69ecfae7f0e/front-500",
+      "imageCaption": "Étienne de Crécy 'Super Discount' — a cornerstone of the French house movement"
+    }
+  ]
+}

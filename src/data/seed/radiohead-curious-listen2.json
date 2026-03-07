@@ -1,0 +1,48 @@
+{
+  "nuggets": [
+    {
+      "headline": "Before the 'In Rainbows' triumph, Radiohead faced a creative paralysis so severe their management suggested they break up.",
+      "text": "Following their 'Hail to the Thief' tour, Radiohead took a year-long hiatus, leading to a period of intense frustration in the studio where progress was painfully slow. The band's management even intervened, suggesting they consider disbanding due to the lack of momentum, with Brian Message stating, 'You have to be honest if it's not working.' It was a pivotal moment where the band had to consciously decide to continue, driven by a belief in the core quality of their new songs and a desire to secure their legacy.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "In Rainbows - Wikipedia",
+        "publisher": "Wikipedia",
+        "quoteSnippet": "Concerned by the lack of progress, Radiohead's management suggested they break up. Brian Message, a partner at their management company, said later: 'You have to be honest if it's not working. You have to have passion about what you do.' O'Brien said Radiohead decided to continue because 'when you got beyond all the shit and the bollocks, the core of these songs were really good'. He felt In Rainbows could be the final Radiohead record, and was motivated by a desire to secure their legacy as a great band.",
+        "url": "https://en.wikipedia.org/wiki/In_Rainbows",
+        "verified": false
+      }
+    },
+    {
+      "headline": "The 'underwater' sonic texture of 'Weird Fishes/Arpeggi' isn't just atmospheric; it's a deliberate rhythmic homage to a minimalist classical pioneer.",
+      "text": "The song's signature overlapping guitar arpeggios, which create its flowing, almost disorienting feel, are heavily influenced by the phasing techniques of American minimalist composer Steve Reich. Jonny Greenwood, a classical music enthusiast, employed these intricate, complementary rhythms to evoke the ebb and flow of the ocean, giving the track a unique tension and release that transcends typical song structure. This approach to layering rhythmic patterns is a hallmark of Reich's work, which Greenwood openly admires.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "In Rainbows - Wikipedia",
+        "publisher": "Wikipedia",
+        "quoteSnippet": "'Weird Fishes / Arpeggi' features a phasing technique influenced by the American composer Steve Reich.",
+        "url": "https://en.wikipedia.org/wiki/In_Rainbows",
+        "verified": false
+      }
+    },
+    {
+      "headline": "If the intricate guitar interplay and layered harmonies of 'Weird Fishes/Arpeggi' hooked you, then you absolutely need to dive into Grizzly Bear's 'Veckatimest.'",
+      "text": "Grizzly Bear, particularly their album 'Veckatimest,' shares Radiohead's penchant for complex, yet organic, sonic tapestries. Jonny Greenwood himself lauded Grizzly Bear as his 'favorite band' while they supported Radiohead on the 'In Rainbows' North American tour in 2008. Their use of rich vocal harmonies, nuanced instrumentation, and a blend of traditional and electronic elements creates a similar sense of expansive beauty and emotional depth that's deeply satisfying for fans of 'Weird Fishes/Arpeggi.'",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Jonny Greenwood: Grizzly Bear Are My Favourite Band | The Quietus",
+        "publisher": "The Quietus",
+        "quoteSnippet": "At last Friday's tour-closing concert in Toronto, Colin and Jonny Greenwood sported Grizzly Bear t-shirts and, just before Radiohead played 'House Of Cards', Jonny stepped forward and said something along the lines of \"Thom wants me to thank my favorite band in the world, Grizzly Bear, so thanks a lot, thank you very much for touring with us.\"",
+        "url": "https://thequietus.com/articles/00021-jonny-greenwood-grizzly-bear-radiohead-favourite-band",
+        "verified": false
+      },
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/RadioheadO2211125_composite.jpg/500px-RadioheadO2211125_composite.jpg",
+      "imageCaption": "Radiohead live — the band that nearly broke up before creating 'In Rainbows'"
+    }
+  ]
+}

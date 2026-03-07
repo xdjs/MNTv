@@ -1,0 +1,48 @@
+{
+  "nuggets": [
+    {
+      "headline": "That iconic 'French Touch' compression wasn't just a choice, it was the sound of a cheap, notoriously aggressive piece of gear being pushed to its absolute limit.",
+      "text": "Daft Punk's signature pumping sound on *Homework* is largely attributable to the Alesis 3630, a budget-friendly and often maligned compressor. Rather than using it for subtle dynamic control, they exploited its tendency to create audible 'pumping' artifacts when pushed hard, turning a technical flaw into a defining stylistic element of the French House genre. This aggressive compression was applied to the entire mix, gluing the elements together in a way that became their sonic fingerprint.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Alesis 3630: The Daft Punk Compressor",
+        "publisher": "gearnews.com",
+        "quoteSnippet": "The sampler-based workflow of the production style and the lo-fi aesthetic allowed the 3630 to be used as a bus compressor or limiter when bouncing mixes to tape or the DAT machines that Daft Punk used.",
+        "url": "https://gearnews.com/alesis-3630-the-daft-punk-compressor/",
+        "verified": false
+      }
+    },
+    {
+      "headline": "The track's hypnotic effect isn't just the endlessly repeating vocal; it's a meticulously crafted five-part instrumental loop where each element is a distinct character.",
+      "text": "The genius of \"Around the World\" lies in its minimalist construction, using only five core instrumental elements. In Michel Gondry's iconic music video, each of these parts is represented by a different group of dancers: the robots for the talk box vocals, athletes for the bassline, synchronized swimmers for the keyboard, skeletons for the guitar, and mummies for the Roland TR-909 drum machine. This visual representation makes it clear how each part interacts to create the track's deceptively simple, yet utterly captivating, groove.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "Around the World (Daft Punk song) - Wikipedia",
+        "publisher": "Wikipedia",
+        "quoteSnippet": "According to Gondry's notes, the robots represent the vocals, the physicality and small-minded rapidity of the athletes symbolizes the ascending/descending bass guitar, the femininity of the disco girls represents the high-pitched keyboard, the skeletons dance to the guitar, and the mummies represent the drum machine.",
+        "url": "https://en.wikipedia.org/wiki/Around_the_World_(Daft_Punk_song)",
+        "verified": false
+      }
+    },
+    {
+      "headline": "If you want to understand the DNA of Daft Punk's disco-funk infusion, you need to hear Cerrone's 1976 epic, 'Love in C Minor.'",
+      "text": "Long before Daft Punk, French producer and drummer Marc Cerrone was a pioneer of the Euro Disco sound. His track \"Love in C Minor\" is a masterclass in the kind of lush, orchestral, and rhythmically driving disco that would heavily influence the next generation of French electronic artists. You can hear the blueprint for Daft Punk's fusion of relentless four-on-the-floor beats with soulful melodic elements right here.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "CERRONE-LOVE IN C MINOR.",
+        "publisher": "dereksmusicblog",
+        "quoteSnippet": "Listening to Love In C Minor you only begin to realize just how innovative and influential this album was. Marc Cerrone was brave, releasing an album that was unlike anything before. In doing so, he helped invent a new genre of music Euro Disco.",
+        "url": "https://dereksmusicblog.com/2015/02/01/cerrone-love-in-c-minor/",
+        "verified": false
+      },
+      "imageUrl": "https://coverartarchive.org/release/c74bba16-541e-427f-be81-0bc7cb4718a6/front-500",
+      "imageCaption": "Cerrone 'Love in C Minor' (1976) — a blueprint for electronic dance music"
+    }
+  ]
+}

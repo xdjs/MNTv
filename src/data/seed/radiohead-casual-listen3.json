@@ -1,0 +1,51 @@
+{
+  "nuggets": [
+    {
+      "headline": "Did you know that after the massive success of 'OK Computer,' Radiohead's Thom Yorke found himself completely creatively blocked, almost unable to make music?",
+      "text": "Following the intense reception of 'OK Computer,' Thom Yorke faced a debilitating period of writer's block, feeling 'trapped in his own particular labyrinth' and overwhelmed by external criticism. He eventually found his way back to creativity not through music, but by immersing himself in visual art and drawings, often inspired by walks around Cornwall with artist Stanley Donwood.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "exclaim.ca",
+        "publisher": "Revolver",
+        "quoteSnippet": "He continued: \"It kind of shut me down, and so whenever I tried to write something, whenever I sat down in front of any instrument, I sort of froze. I had this thing in the way, this little voice.\"",
+        "locator": "October 14, 2021",
+        "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEa3ZRI32p5f16gDcXaBjc9SlsXVrmOmFoliqs18W5rFPuhOrQWpg0fOdcMhDMMY7KQf-E6TeVNkMHJYJkbVcFKQ29jsJKsdnxiyLPpHZvCSUhkFNkYiuCvoPLYWOuB0JtJIsMP90UJYIL0uWkBd_Ctv8iy-GLkJi35HrRQ0cZGql7thIBSRON7F7EPCKcTC9jEppctw41fiSHTLdVY2Hok9neezNSNsuo-wbgm",
+        "verified": true
+      }
+    },
+    {
+      "headline": "Before it became the flowing album track we know, 'Weird Fishes/Arpeggi' was tested live in a surprising orchestral setting years before 'In Rainbows' even came out!",
+      "text": "The ethereal beauty of 'Weird Fishes/Arpeggi' was actually previewed in a very different form years before the release of 'In Rainbows'. In July 2005, Thom Yorke and Jonny Greenwood performed an early version of the song at the Ether festival, backed by none other than the London Sinfonietta orchestra and the Arab Orchestra of Nazareth. This early outing shows how the core idea for the track was already taking shape, even with such a grand, experimental accompaniment.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "exclaim.ca",
+        "publisher": "Wikipedia",
+        "quoteSnippet": "At the Ether festival in July 2005, Jonny Greenwood and Yorke performed a version of the future In Rainbows track \"Weird Fishes/Arpeggi\" with the London Sinfonietta orchestra and the Arab Orchestra of Nazareth.",
+        "locator": "Music section",
+        "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEa3ZRI32p5f16gDcXaBjc9SlsXVrmOmFoliqs18W5rFPuhOrQWpg0fOdcMhDMMY7KQf-E6TeVNkMHJYJkbVcFKQ29jsJKsdnxiyLPpHZvCSUhkFNkYiuCvoPLYWOuB0JtJIsMP90UJYIL0uWkBd_Ctv8iy-GLkJi35HrRQ0cZGql7thIBSRON7F7EPCKcTC9jEppctw41fiSHTLdVY2Hok9neezNSNsuo-wbgm",
+        "verified": true
+      }
+    },
+    {
+      "headline": "If the immersive, atmospheric soundscapes of 'Weird Fishes/Arpeggi' truly captivated you, then you absolutely need to drift into the world of Sigur Rós.",
+      "text": "For a similar blend of melancholic beauty, expansive arrangements, and a truly unique vocal presence, I wholeheartedly recommend the Icelandic band Sigur Rós. They're masters of creating atmospheric rock with orchestral flourishes and crescendos that evoke a similar reflective and ethereal feeling, even though their music often defies traditional genre boundaries.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "exclaim.ca",
+        "publisher": "Quora",
+        "quoteSnippet": "Sigur Ros does the slow and atmospheric thing.",
+        "locator": "August 26, 2015",
+        "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEa3ZRI32p5f16gDcXaBjc9SlsXVrmOmFoliqs18W5rFPuhOrQWpg0fOdcMhDMMY7KQf-E6TeVNkMHJYJkbVcFKQ29jsJKsdnxiyLPpHZvCSUhkFNkYiuCvoPLYWOuB0JtJIsMP90UJYIL0uWkBd_Ctv8iy-GLkJi35HrRQ0cZGql7thIBSRON7F7EPCKcTC9jEppctw41fiSHTLdVY2Hok9neezNSNsuo-wbgm",
+        "verified": true
+      },
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ce/Sigur_R%C3%B3s_2013.jpg/500px-Sigur_R%C3%B3s_2013.jpg",
+      "imageCaption": "Sigur Rós — Icelandic post-rock pioneers"
+    }
+  ]
+}

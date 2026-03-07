@@ -1,0 +1,51 @@
+{
+  "nuggets": [
+    {
+      "headline": "Daft Punk was initially so determined to maintain creative control that they almost didn't sign with a major record label for *Homework*.",
+      "text": "Despite the buzz around their early singles, Thomas Bangalter and Guy-Manuel de Homem-Christo were wary of major labels, prioritizing full creative freedom and ownership of their masters. They reportedly turned down offers before securing a deal with Virgin Records in 1996 that met their strict terms, demonstrating their unwavering commitment to artistic independence from the very beginning.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "20 Years Ago: Daft Punk Turns In Their 'Homework' - Diffuser",
+        "publisher": "Diffuser",
+        "quoteSnippet": "But Daft Punk played it cool. The pair weren't even sure if they wanted to make a full album, much less become beholden to a major corporation. But, after securing creative control and rights to their original masters, the 21-year-old Bangalter and 22-year-old de Homem-Christo signed with Virgin Records in the fall of 1996.",
+        "locator": "paragraph 5",
+        "url": "https://diffuser.fm/daft-punk-homework-anniversary/",
+        "verified": false
+      }
+    },
+    {
+      "headline": "The instantly recognizable bassline of \"Around the World\" has a surprising connection to classic disco and a unique vocal effect.",
+      "text": "Daft Punk revealed their inspiration for the track's signature groove came from legendary disco band Chic, describing it as \"making a Chic record with a talk box and just playing the bass on the synthesizer.\" This clever blend of disco influence and an unexpected piece of vocal effects gear helped them craft the song's iconic, irresistible sound.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "Around the World (Daft Punk song) - Wikipedia",
+        "publisher": "Wikipedia",
+        "quoteSnippet": "Daft Punk recalled that the song 'was like making a Chic record with a talk box and just playing the bass on the synthesizer'.",
+        "locator": "Composition section",
+        "url": "https://en.wikipedia.org/wiki/Around_the_World_(Daft_Punk_song)",
+        "verified": false
+      }
+    },
+    {
+      "headline": "If this track's infectious, filtered sound gets your head nodding, you'll absolutely love the early work of fellow French house pioneers, Cassius.",
+      "text": "The duo, made up of Philippe Zdar and Hubert Boombass, carved out their own space in the French Touch movement with a sound deeply rooted in disco, funk, and soulful house, much like Daft Punk. Their debut album, \"1999,\" is packed with similar feel-good grooves and clever sampling that will instantly resonate with fans of \"Around the World.\"",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Cassius (band) - Wikipedia",
+        "publisher": "Wikipedia",
+        "quoteSnippet": "In January 1999, they released their first single to become a mainstream hit, 'Cassius 1999'. It was published by Virgin Records, and entered the UK Singles Chart at No. 7. This was soon followed by their debut album, 1999...",
+        "locator": "History section",
+        "url": "https://en.wikipedia.org/wiki/Cassius_(band)",
+        "verified": false
+      },
+      "imageUrl": "https://coverartarchive.org/release/17fba1f3-3db9-455b-9fd9-c4ab821bad4d/front-500",
+      "imageCaption": "Cassius '1999' — French house pioneers and contemporaries of Daft Punk"
+    }
+  ]
+}

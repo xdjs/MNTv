@@ -1,0 +1,51 @@
+{
+  "nuggets": [
+    {
+      "headline": "Before *In Rainbows*, Radiohead's creative freedom was less a given and more a hard-won battle, forged by an audacious decision that shook the music industry.",
+      "text": "Having fulfilled their contract with EMI, Radiohead chose to self-release *In Rainbows* as a 'pay-what-you-want' download, a move that gave them unprecedented creative autonomy and allowed them to record without external pressures. This artistic liberation, however, followed a period of struggle where initial recording sessions without long-time producer Nigel Godrich proved unfruitful, leading them to tour with unfinished songs to refine them before Godrich's eventual return.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Classic Album Revisted: Radiohead - In Rainbows",
+        "publisher": "XS Noize",
+        "quoteSnippet": "Radiohead had decided that along with not re-signing with a major music label that they would intentionally shake things up by not utilizing their long time collaborator and producer Nigel Godrich. At first the band thought of self producing the recording, but eventually decided to bring in producer Spike Stent of Bjork and U2 fame in an attempt to venture off in a new direction. The time in the studio with Stent proved to be frustrating and… Radiohead attempted to get the creative ball rolling by toured Europe and the US with embryonic forms of many of the songs that would appear on “In Rainbows”.",
+        "locator": "November 27 2016",
+        "url": "https://www.xsnoize.com/classic-album-revisted-radiohead-in-rainbows/",
+        "verified": false
+      }
+    },
+    {
+      "headline": "The mesmerising 'underwater' drift of 'Weird Fishes/Arpeggi' isn't just atmospheric; it's a rhythmic tightrope walk, with the guitars intentionally playing against the drums.",
+      "text": "The song's distinctive, flowing texture comes from a sophisticated polyrhythmic arrangement, where the drums maintain a steady 4/4 beat while the various guitar parts, notably by Ed O'Brien and Jonny Greenwood, weave intricate arpeggios in patterns like 3/8 and 5/8. This deliberate rhythmic friction causes the arpeggios to fall on different parts of the beat each time, creating an evolving, almost hypnotic sense of ebb and flow that pulls the listener deeper into the sound.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "youtube",
+        "title": "Weird Fishes - Radiohead | Breakdown + Guitar Tab - YouTube",
+        "publisher": "MT Guitar",
+        "quoteSnippet": "the drum beat is in four four. right four four means four beats to a bar the quarter note gets the beat. okay. and right 2 3 4 1 2 3 4 so that's a a beat a bar of four. but now the arpeggios are in 38 meaning. 1 2 3 1 2 3 1 2 3 okay over and over again over a four beat pattern.",
+        "locator": "3:28",
+        "url": "https://www.youtube.com/watch?v=kYJv4jTzY8c",
+        "verified": false
+      }
+    },
+    {
+      "headline": "If the meticulous layering and patient sonic exploration of 'Weird Fishes/Arpeggi' resonated with you, you absolutely must delve into Talk Talk's masterpiece, 'Spirit of Eden.'",
+      "text": "Radiohead, particularly Thom Yorke, has cited Talk Talk's later work, especially *Spirit of Eden*, as a significant influence, and the connection is palpable in the shared philosophy of building immersive soundscapes through improvisation and focusing on the 'space between the notes.' Much like 'Weird Fishes/Arpeggi,' *Spirit of Eden* creates its profound emotional impact not through traditional song structures, but through the patient accumulation of delicate textures, unexpected instrumental contributions, and a deep appreciation for atmospheric depth.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "The Story of Talk Talk 'Spirit of Eden' - Classic Album Sundays",
+        "publisher": "Classic Album Sundays",
+        "quoteSnippet": "It is often regarded as one of the first post-rock albums, a genre later championed with great success by Radiohead, Bon Iver and Sigur Ros. Talk Talk were ahead of their time, as Spirit of Eden still sounds contemporary and relevant today.",
+        "locator": "General Knowledge",
+        "url": "https://classicalbumsundays.com/the-story-of-talk-talk-spirit-of-eden/",
+        "verified": false
+      },
+      "imageUrl": "https://coverartarchive.org/release/f95a4d58-aeaa-4e5c-b198-5e2145020d61/front-500",
+      "imageCaption": "Talk Talk 'Spirit of Eden' — the post-rock masterpiece that influenced Radiohead"
+    }
+  ]
+}

@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import type { Nugget, Source } from "@/mock/types";
 import { usePlayer } from "@/contexts/PlayerContext";
+import { getSeedListenNuggets } from "@/data/seedNuggets";
 
 interface AINuggetData {
   headline: string;
@@ -148,6 +149,86 @@ export function useAINuggets(
       if (cancelledRef.current) return;
       setListenCount(currentListenCount);
       setTrackListenCount(trackKey, currentListenCount);
+
+      // ── Seed data shortcut for demo tracks ──────────────────────
+      const seedData = getSeedListenNuggets(artist, title, tier, currentListenCount);
+      if (seedData) {
+        console.log("[SeedNuggets] Serving seed data for", trackKey, "listen", currentListenCount, "tier", tier);
+
+        const newSources = new Map<string, Source>();
+        const newNuggets: Nugget[] = seedData.map((n, i) => {
+          const sourceId = `seed-src-${trackId}-${i}`;
+          const nuggetId = `seed-nug-${trackId}-${i}`;
+
+          const source: Source = {
+            id: sourceId,
+            type: n.source.type,
+            title: n.source.title,
+            publisher: n.source.publisher,
+            url: n.source.url,
+            embedId: n.source.embedId,
+            quoteSnippet: n.source.quoteSnippet,
+            locator: n.source.locator,
+          };
+          newSources.set(sourceId, source);
+
+          const earlyStart = 20;
+          const endBuffer = 15;
+          const usableDuration = Math.max(durationSec - earlyStart - endBuffer, 30);
+          const spacing = usableDuration / (seedData.length + 1);
+          const timestampSec = Math.floor(earlyStart + spacing * (i + 1));
+
+          return {
+            id: nuggetId,
+            trackId,
+            timestampSec: Math.min(timestampSec, durationSec - 10),
+            durationMs: 7000,
+            headline: n.headline,
+            text: n.text,
+            kind: n.kind,
+            listenFor: n.listenFor || false,
+            sourceId,
+          } as Nugget;
+        });
+
+        // Assign images
+        for (let idx = 0; idx < newNuggets.length; idx++) {
+          const nugget = newNuggets[idx];
+          const seedNugget = seedData[idx];
+          if (seedNugget?.imageUrl) {
+            nugget.imageUrl = seedNugget.imageUrl;
+            nugget.imageCaption = seedNugget.imageCaption || nugget.headline;
+          } else if (nugget.kind === "artist" && artistImageUrl) {
+            nugget.imageUrl = artistImageUrl;
+            nugget.imageCaption = artist;
+          } else if ((nugget.kind === "track" || nugget.kind === "discovery") && coverArtUrl) {
+            nugget.imageUrl = coverArtUrl;
+            nugget.imageCaption = nugget.kind === "track"
+              ? `${title}${album ? " \u2014 " + album : ""}`
+              : nugget.headline || "Explore next";
+          }
+        }
+
+        // Visual rotation
+        let hashSum = 0;
+        for (let c = 0; c < trackId.length; c++) hashSum += trackId.charCodeAt(c);
+        const visualSlotIndex = hashSum % 3;
+        let visualAssigned = false;
+        for (let attempt = 0; attempt < 3 && !visualAssigned; attempt++) {
+          const idx = (visualSlotIndex + attempt) % 3;
+          if (idx < newNuggets.length && newNuggets[idx].imageUrl) {
+            newNuggets[idx].visualOnly = true;
+            visualAssigned = true;
+          }
+        }
+
+        if (cancelledRef.current) return;
+        setNuggets(newNuggets);
+        setSources(newSources);
+        setNuggetCache(cacheKey, { nuggets: newNuggets, sources: newSources, listenCount: currentListenCount });
+        setLoading(false);
+        return;
+      }
 
       // ── Check nugget_cache for first listen ──────────────────────
       // Skip DB cache when regenerateKey > 0 — that means the track was

@@ -1,0 +1,48 @@
+{
+  "nuggets": [
+    {
+      "headline": "Daft Punk's signature \"French touch\" sound wasn't born from high-end gear, but from a cheap compressor and a surprisingly lo-fi recording chain.",
+      "text": "The duo achieved their classic compressed and pumping sound on *Homework* using a notoriously affordable Alesis 3630 compressor, a unit that cost only $300. Their entire process was a hybrid of analog and digital: sounds were first sent through a Mackie MS-1202 mixer and the Alesis compressor, recorded to a Panasonic SV-3700 DAT machine, and then sampled into a Roland S-760. They would then slice and sequence these samples on a Mac running an early, entry-level version of Logic called MicroLogic, before recording the final track back to the DAT.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Daft Punk's Homework turns 25: discover the gear and production techniques behind the sound",
+        "publisher": "MusicRadar",
+        "quoteSnippet": "Effects-wise, it comes as no surprise to see the Alesis 3630 on the kit list - this was a staple of French touch production at the time... When it came to recording, Thomas Bangaleter explained that sounds were sent through their mixer (a Mackie MS1202) and compressor to the DAT machine (a Panasonic SV-3700), with MIDI sequencing being taken care of by a Mac running Emagic's MicroLogic... sounds from the DAT were then sent to a Roland S-760 sampler to be spliced up, before these bits and pieces were sequenced from the Mac and finished tracks recorded back to the DAT.",
+        "url": "https://www.musicradar.com/news/daft-punk-homework-gear-production-techniques",
+        "verified": false
+      }
+    },
+    {
+      "headline": "The track's hypnotic power isn't just the endlessly repeating vocal; it's a visual representation of each musical part, brought to life in its iconic music video.",
+      "text": "The sole lyric, \"around the world,\" is repeated 144 times in the album version, processed through a vocoder to create its robotic texture. Director Michel Gondry's groundbreaking video visualizes the song's sparse instrumentation by assigning each element to a distinct group of dancers on a circular stage resembling a vinyl record. The robots represent the vocoder-processed vocals, the athletes embody the driving bassline, the synchronized swimmers move to the high-pitched synthesizer melody, and mummies march to the beat of the Roland TR-909 drum machine.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "Around the World (Daft Punk song) - Wikipedia",
+        "publisher": "Wikipedia",
+        "quoteSnippet": "The phrase occurs 144 times in the album version... Upon analysis of the song, Michel Gondry noted its distinctive structure: 'I realized how genius and simple the music was. Only five different instruments, with very few patterns, each to create numerous possibilities of figures.'",
+        "url": "https://en.wikipedia.org/wiki/Around_the_World_(Daft_Punk_song)",
+        "verified": false
+      }
+    },
+    {
+      "headline": "If the cosmic disco pulse of this track resonates with you, then you owe it to yourself to check out the foundational work of French disco pioneer Cerrone.",
+      "text": "Long before the French touch movement, drummer and producer Marc Cerrone was laying the groundwork with epic, synthesizer-heavy disco tracks in the 1970s. His 1977 opus, \"Supernature,\" is a direct ancestor to Daft Punk's sound, with its driving four-on-the-floor beat, futuristic synth arpeggios, and thematic storytelling. The influence is so profound that modern French producers, including Daft Punk, universally cite Cerrone's work as a primary source of inspiration for their own musical explorations.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Cerrone's contribution to dance music is as important as Giorgio Moroder and Kraftwerk's",
+        "publisher": "Mixmag",
+        "quoteSnippet": "Speak to any member of the modern generation of French producers, from David Guetta to Dimitri From Paris and Daft Punk to Bob Sinclar, and Cerrone's music was and is a primary source of inspiration.",
+        "url": "https://mixmag.net/feature/cerrone-dna-interview-french-disco-pioneer",
+        "verified": false
+      },
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/CERRONE_Marc_02-24x30-2009.jpg/500px-CERRONE_Marc_02-24x30-2009.jpg",
+      "imageCaption": "Cerrone — French disco pioneer whose cosmic grooves shaped Daft Punk's sound"
+    }
+  ]
+}

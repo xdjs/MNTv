@@ -1,0 +1,51 @@
+{
+  "nuggets": [
+    {
+      "headline": "Daft Punk's legendary anonymity wasn't an accident; it was a deliberate artistic decision born from a philosophy opposing traditional celebrity.",
+      "text": "Even before the iconic robot helmets became their full-time personas, Thomas Bangalter and Guy-Manuel de Homem-Christo intentionally shied away from the star system, believing the music should be the sole focus. This foundational commitment to artistic control and prioritizing the sound over individual personalities allowed them to cultivate a mystique that defined their career and set the stage for their later visual anonymity.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Daft Punk Interview",
+        "publisher": "Vice",
+        "quoteSnippet": "We don't believe in the star system. We want to focus on the music. If we have to create an image, it must be an artificial one. That's a good compromise.",
+        "locator": "Interview, 2001",
+        "url": "https://www.vice.com/en/article/3kgzbw/daft-punk-interview-104-v12n1",
+        "verified": false
+      }
+    },
+    {
+      "headline": "The endlessly repeating 'Around the World' vocal isn't just a hook; it's a carefully crafted, almost architectural element that defines the track's entire structure.",
+      "text": "The famously simple phrase, repeated a staggering 144 times throughout the song, functions less as a traditional lyric and more as a rhythmic and melodic building block, akin to another instrument. This minimalist yet hypnotic vocal allows the intricate interplay of filtered basslines, synthesizers, and drums to shine, acting as a textural guide that propels the listener through the track's evolving sonic landscape without needing a narrative.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "A beginner's guide to Daft Punk",
+        "publisher": "The Brag Media (Tone Deaf)",
+        "quoteSnippet": "Featuring one of the most hypnotic and memorable lyrics in dance music history, 'Around The World' famously repeats its title 144 times in the space of four minutes.",
+        "locator": "Section: Around The World (1997)",
+        "url": "https://thebrag.com/music/daft-punk-beginner-guide-albums-songs/",
+        "verified": false
+      }
+    },
+    {
+      "headline": "If the driving, filtered funk of 'Around the World' hit you just right, then you absolutely need to explore the foundational genius of Motorbass.",
+      "text": "Before Daft Punk’s *Homework* exploded globally, Philippe Zdar (later of Cassius) and Étienne de Crécy, as Motorbass, released their equally essential album *Pansoul* in 1996. *Pansoul* is a masterclass in the same deeply groovy, sample-heavy, and impeccably filtered house music that defined the French Touch scene, offering a slightly more organic, jazz-inflected take on the genre's nascent sound that clearly resonated with their contemporaries.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "The 20 Best House Albums Ever Made",
+        "publisher": "Mixmag",
+        "quoteSnippet": "Motorbass’s Philippe Zdar and Étienne de Crécy crafted an album that feels like a jazzy, filtered-funk journey through Parisian nightclubs in the mid-90s.",
+        "locator": "Section: 15. Motorbass – 'Pansoul' (1996)",
+        "url": "https://mixmag.net/feature/the-20-best-house-albums-ever-made/6",
+        "verified": false
+      },
+      "imageUrl": "https://coverartarchive.org/release/af5e8c09-2d26-41ba-8df8-45507052b4f4/front-500",
+      "imageCaption": "Motorbass 'Pansoul' — Philippe Zdar's proto-French house classic"
+    }
+  ]
+}

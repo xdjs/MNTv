@@ -1,0 +1,51 @@
+{
+  "nuggets": [
+    {
+      "headline": "Daft Punk started not as robots, but as humble French indie rockers, with their name coming from an accidental insult!",
+      "text": "Before they became the iconic helmeted robots, Thomas Bangalter and Guy-Manuel de Homem-Christo were just two friends who met in secondary school in Paris in 1987. They first formed an indie rock band called Darlin' in 1992, but a negative review from Melody Maker magazine dubbed their music \"a daft punky thrash,\" a criticism they found so amusing they adopted it as their new band name. They later embraced their robot personas to stay anonymous and keep the focus on the music.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Daft Punk - Wikipedia",
+        "publisher": "Wikipedia",
+        "quoteSnippet": "Daft Punk formed after their previous group, the indie rock band Darlin', disbanded. ... Their name was taken from a negative review of Darlin' in Melody Maker by Dave Jennings, who dubbed their music 'a daft punky thrash'. The band found the review amusing.",
+        "locator": "Early career and Darlin'",
+        "url": "https://en.wikipedia.org/wiki/Daft_Punk",
+        "verified": false
+      }
+    },
+    {
+      "headline": "The iconic \"Around the World\" lyrics repeat a mind-boggling 144 times, and its legendary music video is a visual masterclass of translating sound into sight!",
+      "text": "The hypnotic \"around the world\" lyric is repeated exactly 144 times in the album version of the song, making it one of the most memorable and simple hooks in dance music history. Director Michel Gondry crafted an ingenious music video where each group of characters—robots, athletes, synchronized swimmers, skeletons, and mummies—literally embodies a different instrument or vocal part of the track, moving in perfect sync with its specific rhythm and melody.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "Around the World (Daft Punk song) - Wikipedia",
+        "publisher": "Wikipedia",
+        "quoteSnippet": "The song's lyrics solely consist of the words 'around the world', repeated on loop for a total of 144 times in the album version. The music video was directed by Michel Gondry and choreographed by Blanca Li. ... Upon analysis of the song, Michel Gondry noted its distinctive structure: 'I realized how genius and simple the music was. Only five different instruments, with very few patterns, each to create numerous possibilities of figures.'",
+        "locator": "Composition",
+        "url": "https://en.wikipedia.org/wiki/Around_the_World_(Daft_Punk_song)",
+        "verified": false
+      }
+    },
+    {
+      "headline": "If this track's funky, filtered groove hit you just right, you absolutely need to check out Daft Punk's own Thomas Bangalter in his supergroup project, Stardust!",
+      "text": "Stardust, a short-lived French house supergroup, featured none other than Daft Punk's Thomas Bangalter, along with DJ Alan Braxe and vocalist Benjamin Diamond. Their 1998 hit \"Music Sounds Better With You\" is a perfect example of the \"French Touch\" sound, with its infectious disco samples and feel-good vibes that perfectly complement \"Around the World.\" It's a foundational track for many French house fans and an instant classic.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Daft Punk - Wikipedia",
+        "publisher": "Wikipedia",
+        "quoteSnippet": "Bangalter created his own record label, Roulé, after the release of Homework, and released solo projects by themselves and their friends. ... and founded the group Stardust with Alan Braxe and Benjamin Diamond. In 1998, Stardust released their only song, the chart hit 'Music Sounds Better With You'.",
+        "locator": "Daft Punk",
+        "url": "https://en.wikipedia.org/wiki/Daft_Punk",
+        "verified": false
+      },
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/68/Daft_Punk_in_2013_2-_centered.jpg/500px-Daft_Punk_in_2013_2-_centered.jpg",
+      "imageCaption": "Daft Punk's Thomas Bangalter (right) also produced under the Stardust alias"
+    }
+  ]
+}

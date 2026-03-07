@@ -15,6 +15,7 @@ import DevPanel from "@/components/DevPanel";
 import PlaybackBar from "@/components/PlaybackBar";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { useAINuggets } from "@/hooks/useAINuggets";
+import { getSeedCompanion } from "@/data/seedNuggets";
 import { useSpotifyToken } from "@/hooks/useSpotifyToken";
 import { usePlayer } from "@/contexts/PlayerContext";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
@@ -476,52 +477,97 @@ export default function Listen() {
     let cancelled = false;
     (async () => {
       try {
-        // Transform Listen page nuggets into CompanionNugget format so the
-        // companion page shows the exact same content — no separate Gemini call.
-        const kindToCategory: Record<string, string> = {
-          artist: "history",
-          track: "track",
-          discovery: "explore",
-        };
-        const now = Date.now();
-        const prebuiltNuggets = aiNuggets.map((n, i) => {
-          const source = aiSources.get(n.sourceId);
-          return {
-            id: n.id,
-            timestamp: now - i * 60000,
-            headline: n.headline || "",
-            text: n.text,
-            category: kindToCategory[n.kind] || "track",
-            listenUnlockLevel: listenCount,
-            sourceName: source?.publisher || "",
-            sourceUrl: source?.url || "",
-            imageUrl: n.imageUrl,
-            imageCaption: n.imageCaption,
+        // ── Seed companion shortcut for demo tracks ──────────────────
+        const seedCompanion = getSeedCompanion(track.artist, track.title, tier);
+        if (seedCompanion) {
+          console.log("[SeedCompanion] Writing seed companion for", track.artist, "—", track.title);
+
+          // Filter companion nuggets by listen depth
+          const filteredNuggets = seedCompanion.nuggets.filter(
+            (n) => n.listenUnlockLevel <= listenCount
+          );
+
+          // Accumulate in session state
+          const trackKey = `${track.artist}::${track.title}`;
+          player.appendCompanionNuggets(trackKey, filteredNuggets);
+          const allAccumulatedNuggets = player.getCompanionNuggets(trackKey);
+
+          // Write directly to companion_cache (same key format as generate-companion)
+          const companionCacheKey = `${track.artist}::${track.title}::casual::${tier}`;
+
+          // Delete stale entries first
+          await supabase
+            .from("companion_cache")
+            .delete()
+            .eq("track_id", companionCacheKey);
+
+          await supabase
+            .from("companion_cache")
+            .upsert(
+              {
+                track_id: companionCacheKey,
+                content: {
+                  artistSummary: seedCompanion.artistSummary,
+                  trackStory: seedCompanion.trackStory,
+                  nuggets: allAccumulatedNuggets,
+                  externalLinks: seedCompanion.externalLinks,
+                  coverArtUrl: effectiveCoverArt || null,
+                  artistImage: artistImageUrl || effectiveCoverArt || null,
+                },
+              },
+              { onConflict: "track_id" }
+            );
+
+          if (cancelled) return;
+        } else {
+          // ── Normal AI companion flow ─────────────────────────────────
+          // Transform Listen page nuggets into CompanionNugget format so the
+          // companion page shows the exact same content — no separate Gemini call.
+          const kindToCategory: Record<string, string> = {
+            artist: "history",
+            track: "track",
+            discovery: "explore",
           };
-        });
+          const now = Date.now();
+          const prebuiltNuggets = aiNuggets.map((n, i) => {
+            const source = aiSources.get(n.sourceId);
+            return {
+              id: n.id,
+              timestamp: now - i * 60000,
+              headline: n.headline || "",
+              text: n.text,
+              category: kindToCategory[n.kind] || "track",
+              listenUnlockLevel: listenCount,
+              sourceName: source?.publisher || "",
+              sourceUrl: source?.url || "",
+              imageUrl: n.imageUrl,
+              imageCaption: n.imageCaption,
+            };
+          });
 
-        // Accumulate nuggets across listens within this session
-        const trackKey = `${track.artist}::${track.title}`;
-        player.appendCompanionNuggets(trackKey, prebuiltNuggets);
-        const allAccumulatedNuggets = player.getCompanionNuggets(trackKey);
+          // Accumulate nuggets across listens within this session
+          const trackKey = `${track.artist}::${track.title}`;
+          player.appendCompanionNuggets(trackKey, prebuiltNuggets);
+          const allAccumulatedNuggets = player.getCompanionNuggets(trackKey);
 
-        // Pre-generate companion content so the QR companion page loads instantly.
-        // Use actual tier so each tier's companion is cached separately.
-        // Pass image URLs so the companion page works for unauthenticated QR users.
-        const { error } = await supabase.functions.invoke("generate-companion", {
-          body: {
-            artist: track.artist,
-            title: track.title,
-            album: track.album,
-            listenCount,
-            tier,
-            prebuiltNuggets: allAccumulatedNuggets,
-            coverArtUrl: effectiveCoverArt || undefined,
-            artistImage: artistImageUrl || effectiveCoverArt || undefined,
-          },
-        });
-        if (cancelled) return;
-        if (error) console.warn("[Listen] Companion pre-gen error:", error);
+          // Pre-generate companion content so the QR companion page loads instantly.
+          // Use actual tier so each tier's companion is cached separately.
+          // Pass image URLs so the companion page works for unauthenticated QR users.
+          const { error } = await supabase.functions.invoke("generate-companion", {
+            body: {
+              artist: track.artist,
+              title: track.title,
+              album: track.album,
+              listenCount,
+              tier,
+              prebuiltNuggets: allAccumulatedNuggets,
+              coverArtUrl: effectiveCoverArt || undefined,
+              artistImage: artistImageUrl || effectiveCoverArt || undefined,
+            },
+          });
+          if (cancelled) return;
+          if (error) console.warn("[Listen] Companion pre-gen error:", error);
+        }
 
         // Create or reuse a short URL for the QR code (even if pre-gen failed,
         // the companion page will generate on demand)

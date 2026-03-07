@@ -1,0 +1,92 @@
+{
+  "nuggets": [
+    {
+      "id": "seed-1-0",
+      "text": "Initially emerging from an indie rock band called Darlin' in the early 90s, Thomas Bangalter and Guy-Manuel de Homem-Christo received a negative review in Melody Maker that dismissed their music as 'a daft punky thrash.' Instead of being deterred, they adopted the insult as their new band name, signaling a deliberate shift into electronic music. While the full robot personas became prominent later with their album *Discovery*, this early moment defined their DIY ethos and willingness to forge their own path, famously recording their debut album *Homework* in a bedroom studio.",
+      "category": "history",
+      "headline": "Before they were the iconic helmeted robots, Daft Punk's very name was an embrace of a scathing music review that launched them into a new electronic sound.",
+      "imageUrl": null,
+      "sourceUrl": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQH01OW0JVyrhw5wdSeVILPejW4CBDNWEFX9FSVOQ0lrQ-P4wRQCBlAL8AeiA9P4J5wq3_1vEFR5RWCkmNRCFAd-DTru54rOyQCpUpsopG8R_cM8Zh7f7-YgmeaPXkD7OBdUC2LP6T7NxqOKO8kghWWYKOgOyodKpmutIbzGqdkBY50YbaNHyQ==",
+      "timestamp": 1772767457000,
+      "sourceName": "Broadwayinfosys",
+      "imageCaption": null,
+      "listenUnlockLevel": 1
+    },
+    {
+      "id": "seed-1-1",
+      "text": "The track's brilliance lies in its hypnotic repetition and layered instrumentation, famously featuring the phrase 'around the world' 144 times in its album version. Daft Punk themselves described the process as akin to 'making a Chic record with a talk box and just playing the bass on the synthesizer.' The iconic music video, directed by Michel Gondry, enhances this by visually assigning a distinct group of dancers to each musical element: robots for vocals, athletes for the bassline, disco girls for the keyboards, skeletons for the guitar, and mummies for the drums.",
+      "category": "track",
+      "headline": "The seemingly simple lyrics of 'Around the World'—just one phrase, repeated 144 times—hide a deeply clever arrangement and a groundbreaking music video where every dancer literally represents an instrument.",
+      "imageUrl": null,
+      "sourceUrl": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQH01OW0JVyrhw5wdSeVILPejW4CBDNWEFX9FSVOQ0lrQ-P4wRQCBlAL8AeiA9P4J5wq3_1vEFR5RWCkmNRCFAd-DTru54rOyQCpUpsopG8R_cM8Zh7f7-YgmeaPXkD7OBdUC2LP6T7NxqOKO8kghWWYKOgOyodKpmutIbzGqdkBY50YbaNHyQ==",
+      "timestamp": 1772767397000,
+      "sourceName": "Wikipedia",
+      "imageCaption": null,
+      "listenUnlockLevel": 1
+    },
+    {
+      "id": "seed-1-2",
+      "text": "Daft Punk has consistently cited Chic and their co-founder, Nile Rodgers, as a monumental influence on their sound, even stating that \"Around the World\" captured the essence of a Chic record. This shared musical DNA, rooted in irresistible and often repetitive funk and disco grooves, later blossomed into a direct collaboration, with Rodgers famously playing guitar on several tracks, including the global smash 'Get Lucky,' from Daft Punk's *Random Access Memories* album.",
+      "category": "explore",
+      "headline": "If that infectious, driving bassline and funky groove of 'Around the World' resonated with you, you absolutely have to dive into the legendary work of Nile Rodgers, the undisputed master of disco-funk.",
+      "imageUrl": null,
+      "sourceUrl": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQH01OW0JVyrhw5wdSeVILPejW4CBDNWEFX9FSVOQ0lrQ-P4wRQCBlAL8AeiA9P4J5wq3_1vEFR5RWCkmNRCFAd-DTru54rOyQCpUpsopG8R_cM8Zh7f7-YgmeaPXkD7OBdUC2LP6T7NxqOKO8kghWWYKOgOyodKpmutIbzGqdkBY50YbaNHyQ==",
+      "timestamp": 1772767337000,
+      "sourceName": "Dazed",
+      "imageCaption": null,
+      "listenUnlockLevel": 1
+    },
+    {
+      "id": "seed-2-0",
+      "text": "Daft Punk's seminal debut, 'Homework,' wasn't crafted in a lavish studio; instead, Guy-Manuel de Homem-Christo and Thomas Bangalter meticulously built its tracks, including 'Around the World,' primarily in their own bedrooms. This DIY approach, utilizing a minimal setup of drum machines like the Roland TR-909 and synthesizers such as the Roland TB-303, became a defining characteristic of their early sound, demonstrating that revolutionary electronic music could emerge from simple, accessible tools and sheer creative ingenuity.",
+      "category": "history",
+      "headline": "Before the dazzling arena shows and iconic helmets, Daft Punk forged their groundbreaking sound from the humble confines of a bedroom studio, proving that innovation needed only raw talent and basic gear.",
+      "imageUrl": null,
+      "sourceUrl": "https://pitchfork.com/features/the-25th-anniversary-of-daft-punks-homework/",
+      "timestamp": 1772767498000,
+      "sourceName": "Pitchfork",
+      "imageCaption": null,
+      "listenUnlockLevel": 2
+    },
+    {
+      "id": "seed-2-1",
+      "text": "The iconic, digitized vocal mantra 'Around the World' was masterfully crafted using a Roland VP-330 Vocoder Plus, a specific vintage hardware synthesizer. Instead of relying solely on software effects, Guy-Manuel and Thomas opted for this classic vocoder to achieve the track's distinctive robotic yet melodic voice, solidifying a production technique that would define not only 'Around the World' but also become a hallmark of Daft Punk's influential sound.",
+      "category": "track",
+      "headline": "The instantly recognizable robotic voice repeating 'Around the World' wasn't a digital trick, but the result of a vintage piece of hardware that became a signature of Daft Punk's sound.",
+      "imageUrl": null,
+      "sourceUrl": "https://reverb.com/news/the-gear-that-defined-daft-punk",
+      "timestamp": 1772767438000,
+      "sourceName": "Reverb.com",
+      "imageCaption": null,
+      "listenUnlockLevel": 2
+    },
+    {
+      "id": "seed-2-2",
+      "text": "For listeners captivated by the irresistible danceability of 'Around the World,' diving into Stardust's iconic 'Music Sounds Better With You' is a must. This legendary track, a collaboration between Daft Punk's own Thomas Bangalter, Alan Braxe, and vocalist Benjamin Diamond, embodies a similar French House ethos with its filtered samples, driving bassline, and euphoric atmosphere, offering a perfect continuation of that feel-good, sample-laden electronic sound.",
+      "category": "explore",
+      "headline": "If the propulsive, feel-good energy of 'Around the World' makes you want to hit the dance floor, then you absolutely need to explore the infectious groove of Stardust's 'Music Sounds Better With You.'",
+      "imageUrl": null,
+      "sourceUrl": "https://mixmag.net/feature/the-story-of-stardusts-music-sounds-better-with-you-thomas-bangalter-alan-braxe-benjamin-diamond",
+      "timestamp": 1772767378000,
+      "sourceName": "Mixmag",
+      "imageCaption": null,
+      "listenUnlockLevel": 2
+    }
+  ],
+  "trackStory": "\"Around the World,\" released in 1997 from their debut album \"Homework,\" is celebrated for its distinctive repetitive structure and catchy bassline. The track famously repeats the phrase \"around the world\" 144 times, serving as a hypnotic mantra that symbolizes global connectivity and the cyclical nature of human experience. Its groundbreaking music video, directed by Michel Gondry, features various choreographed groups representing different musical elements, further enhancing its cultural impact and timeless appeal. This minimalist yet powerful approach helped define the French house genre and cemented Daft Punk's status as electronic music pioneers.",
+  "artistSummary": "Daft Punk was a French electronic music duo formed in 1993, renowned for their innovative blend of house, funk, disco, and techno. They became globally iconic through their distinctive robot personas, which emphasized anonymity and a focus on their groundbreaking musical artistry.",
+  "externalLinks": [
+    {
+      "url": "https://en.wikipedia.org/wiki/Daft_Punk",
+      "label": "Wikipedia - Daft Punk"
+    },
+    {
+      "url": "https://open.spotify.com/search/Daft%20Punk%20Around%20the%20World",
+      "label": "Spotify - Daft Punk - Around the World"
+    },
+    {
+      "url": "https://music.youtube.com/watch?v=s9MszVEJc9U",
+      "label": "YouTube Music - Daft Punk - Around The World Official Music Video"
+    }
+  ]
+}
