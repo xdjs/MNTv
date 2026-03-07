@@ -475,10 +475,14 @@ export default function Listen() {
   // Pre-generate companion content so QR code only shows when ready
   const [companionReady, setCompanionReady] = useState(false);
   const [shortId, setShortId] = useState<string | null>(null);
+  // Reset companion readiness when track changes OR when listen depth changes
+  // (regenerateKey bumps on each new listen). Without this, the QR code stays
+  // visible with a stale listen= URL while the new companion pre-gen is in flight,
+  // causing the companion page to fetch the previous listen's cached data.
   useEffect(() => {
     setCompanionReady(false);
     setShortId(null);
-  }, [rawTrackId]);
+  }, [rawTrackId, regenerateKey]);
 
   useEffect(() => {
     if (aiLoading || aiNuggets.length === 0 || !track) return;
