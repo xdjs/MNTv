@@ -961,6 +961,17 @@ export default function Listen() {
           )}
         </motion.div>
 
+        {/* Spotify URI resolving indicator */}
+        {hasSpotifyToken && !spotifyUri && !isExternalListenMode && (
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="relative z-10 mx-10 mt-2 text-xs text-foreground/40 animate-pulse"
+          >
+            Connecting to Spotify...
+          </motion.p>
+        )}
+
         {/* External listen mode banner */}
         {isExternalListenMode && externalPlayback && (
           <motion.div

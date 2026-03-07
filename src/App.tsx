@@ -3,22 +3,25 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
-import { useEffect, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { AnimatePresence } from "framer-motion";
 import Onboarding from "./pages/Onboarding";
-import Connect from "./pages/Connect";
-import Browse from "./pages/Browse";
-import ArtistProfile from "./pages/ArtistProfile";
-import AlbumDetail from "./pages/AlbumDetail";
-import Listen from "./pages/Listen";
 import Companion from "./pages/Companion";
 import CompanionShortRedirect from "./pages/CompanionShortRedirect";
-import SpotifyCallback from "./pages/SpotifyCallback";
 import NotFound from "./pages/NotFound";
+
+// Lazy-loaded pages (behind auth or heavy; not on critical QR-scan path)
+const Connect = lazy(() => import("./pages/Connect"));
+const Browse = lazy(() => import("./pages/Browse"));
+const ArtistProfile = lazy(() => import("./pages/ArtistProfile"));
+const AlbumDetail = lazy(() => import("./pages/AlbumDetail"));
+const Listen = lazy(() => import("./pages/Listen"));
+const SpotifyCallback = lazy(() => import("./pages/SpotifyCallback"));
 import { getStoredProfile } from "./hooks/useMusicNerdState";
 import { AuthProvider } from "./contexts/AuthContext";
 import { PlayerProvider } from "./contexts/PlayerContext";
 import NowPlayingBar from "./components/NowPlayingBar";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 const queryClient = new QueryClient();
 
@@ -45,31 +48,37 @@ function RootRoute() {
   return <Onboarding />;
 }
 
+function LazyFallback() {
+  return <div className="min-h-screen bg-background" />;
+}
+
 function AnimatedRoutes() {
   const location = useLocation();
   return (
     <>
       <ScrollToTop />
-      <AnimatePresence mode="wait">
-        <Routes location={location} key={location.pathname}>
-          {/* Public */}
-          <Route path="/" element={<RootRoute />} />
-          <Route path="/connect" element={<Connect />} />
-          <Route path="/spotify-callback" element={<SpotifyCallback />} />
+      <Suspense fallback={<LazyFallback />}>
+        <AnimatePresence mode="wait">
+          <Routes location={location} key={location.pathname}>
+            {/* Public */}
+            <Route path="/" element={<RootRoute />} />
+            <Route path="/connect" element={<Connect />} />
+            <Route path="/spotify-callback" element={<SpotifyCallback />} />
 
-          {/* Protected — requires completed profile */}
-          <Route path="/browse" element={<ProtectedRoute><Browse /></ProtectedRoute>} />
-          <Route path="/artist/:artistId" element={<ProtectedRoute><ArtistProfile /></ProtectedRoute>} />
-          <Route path="/album/:albumId" element={<ProtectedRoute><AlbumDetail /></ProtectedRoute>} />
-          <Route path="/listen/:trackId" element={<ProtectedRoute><Listen /></ProtectedRoute>} />
+            {/* Protected — requires completed profile */}
+            <Route path="/browse" element={<ProtectedRoute><Browse /></ProtectedRoute>} />
+            <Route path="/artist/:artistId" element={<ProtectedRoute><ArtistProfile /></ProtectedRoute>} />
+            <Route path="/album/:albumId" element={<ProtectedRoute><AlbumDetail /></ProtectedRoute>} />
+            <Route path="/listen/:trackId" element={<ProtectedRoute><Listen /></ProtectedRoute>} />
 
-          {/* Companion — public, no login required (scanned on phone via QR) */}
-          <Route path="/companion/:trackId" element={<Companion />} />
-          <Route path="/c/:shortId" element={<CompanionShortRedirect />} />
+            {/* Companion — eagerly loaded (QR-scanned on mobile, must be instant) */}
+            <Route path="/companion/:trackId" element={<Companion />} />
+            <Route path="/c/:shortId" element={<CompanionShortRedirect />} />
 
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </AnimatePresence>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AnimatePresence>
+      </Suspense>
     </>
   );
 }
@@ -82,8 +91,23 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <PlayerProvider>
-            <AnimatedRoutes />
-            <NowPlayingBar />
+            <ErrorBoundary fallback={
+              <div className="min-h-screen bg-background flex items-center justify-center p-6">
+                <div className="text-center space-y-3">
+                  <p className="text-lg font-bold text-foreground">Something went wrong</p>
+                  <p className="text-sm text-muted-foreground">Try refreshing the page.</p>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="mt-2 px-5 py-2 rounded-full bg-primary/20 text-primary text-sm font-semibold hover:bg-primary/30 transition-colors"
+                  >
+                    Refresh
+                  </button>
+                </div>
+              </div>
+            }>
+              <AnimatedRoutes />
+              <NowPlayingBar />
+            </ErrorBoundary>
           </PlayerProvider>
         </AuthProvider>
       </BrowserRouter>

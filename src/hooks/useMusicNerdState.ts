@@ -82,8 +82,9 @@ export function useUserProfile() {
   // that was just saved but whose async DB write hasn't landed yet.
   useEffect(() => {
     if (!user?.id) return;
+    let cancelled = false;
     loadProfileFromDB(user.id).then((dbProfile) => {
-      if (!dbProfile) return;
+      if (cancelled || !dbProfile) return;
       const local = (() => {
         try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || "null"); } catch { return null; }
       })() as UserProfile | null;
@@ -114,6 +115,7 @@ export function useUserProfile() {
       localStorage.setItem(PROFILE_KEY, JSON.stringify(merged));
       setProfileState(merged);
     });
+    return () => { cancelled = true; };
   }, [user?.id]);
 
   const saveProfile = useCallback(async (p: UserProfile) => {

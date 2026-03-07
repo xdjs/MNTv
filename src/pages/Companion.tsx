@@ -2,7 +2,7 @@ import { useParams } from "react-router-dom";
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useArtistImage } from "@/hooks/useArtistImage";
-import { useUserProfile, tierGlowClass } from "@/hooks/useMusicNerdState";
+import { useUserProfile, tierGlowClass, tierBadgeColor, tierBadgeLabel } from "@/hooks/useMusicNerdState";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ExternalLink, Music, BookOpen, Play } from "lucide-react";
@@ -55,6 +55,7 @@ export default function Companion() {
   const [data, setData] = useState<CompanionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   // Resolve track + artist data
   const trackInfo = useMemo(() => {
@@ -139,7 +140,7 @@ export default function Companion() {
 
     fetchCompanion();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rawTrackId, tier]);
+  }, [rawTrackId, tier, retryKey]);
 
   if (!trackInfo) {
     return (
@@ -167,12 +168,8 @@ export default function Companion() {
       <header className="sticky top-0 z-20 flex items-center gap-3 px-5 py-4 bg-background/80 backdrop-blur-xl border-b border-border/50">
         <MusicNerdLogo size={32} />
         <span className="text-sm font-bold text-foreground/70 tracking-wide">MUSICNERD</span>
-        <span className={`ml-auto text-[10px] font-bold px-2.5 py-1 rounded-full ${
-          tier === "nerd" ? "bg-pink-500/20 text-pink-400" :
-          tier === "curious" ? "bg-blue-500/20 text-blue-400" :
-          "bg-green-500/20 text-green-400"
-        }`}>
-          {tier === "nerd" ? "● Nerd Mode" : tier === "curious" ? "● Curious" : "● Casual"}
+        <span className={`ml-auto text-[10px] font-bold px-2.5 py-1 rounded-full ${tierBadgeColor(tier)}`}>
+          ● {tierBadgeLabel(tier)}
         </span>
       </header>
 
@@ -231,6 +228,12 @@ export default function Companion() {
           <div className="apple-glass rounded-2xl p-6 text-center">
             <p className="text-destructive font-semibold">Something went wrong</p>
             <p className="text-sm text-muted-foreground mt-1">{error}</p>
+            <button
+              onClick={() => setRetryKey((k) => k + 1)}
+              className="mt-4 px-4 py-2 rounded-full bg-primary/20 text-primary text-sm font-semibold hover:bg-primary/30 transition-colors"
+            >
+              Try again
+            </button>
           </div>
         ) : data ? (
           <ErrorBoundary fallback={

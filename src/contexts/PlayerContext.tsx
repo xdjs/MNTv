@@ -1,4 +1,4 @@
-import { createContext, useContext, useRef, useState, useCallback, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useRef, useState, useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { useSpotifyToken } from "@/hooks/useSpotifyToken";
 import { useCurrentlyPlaying, type ExternalTrack } from "@/hooks/useCurrentlyPlaying";
 import type { Nugget, Source } from "@/mock/types";
@@ -328,14 +328,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (activePlayer === "spotify" && spReady && currentSpotifyUri && !hasAutoPlayedRef.current) {
       hasAutoPlayedRef.current = true;
+      const uriToPlay = currentSpotifyUri; // capture before async gap
       (async () => {
         const token = await getValidToken();
         if (!token || !spDeviceId) return;
-        lastSpUriRef.current = currentSpotifyUri;
+        lastSpUriRef.current = uriToPlay;
         await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${spDeviceId}`, {
           method: "PUT",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ uris: [currentSpotifyUri] }),
+          body: JSON.stringify({ uris: [uriToPlay] }),
         });
       })();
     }
@@ -380,7 +381,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   // ── Unified state ─────────────────────────────────────────────────
 
-  const value: PlayerContextType = {
+  const value: PlayerContextType = useMemo(() => ({
     isPlaying: spPlaying,
     currentTime: spTime,
     duration: spDuration || 0,
@@ -412,7 +413,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     clearTrackCompleted,
     getCompanionNuggets,
     appendCompanionNuggets,
-  };
+  }), [
+    spPlaying, spTime, spDuration, activePlayer, spReady, currentSpotifyUri,
+    currentTrack, prevTrackRoute, externalTrack, isExternalListenMode, spotifyStateTrack,
+    setCurrentTrack, setOnEnded, pushTrackHistory, popTrackHistory, loadTrack,
+    syncExternalTrack, play, pause, toggle, seek, stop, setExternalListenMode,
+    getNuggetCache, setNuggetCache, clearNuggetCache, markTrackCompleted,
+    isTrackCompleted, clearTrackCompleted, getCompanionNuggets, appendCompanionNuggets,
+  ]);
 
   return (
     <PlayerContext.Provider value={value}>

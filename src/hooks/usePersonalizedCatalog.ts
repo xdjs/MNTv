@@ -130,9 +130,11 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
   // Fetch Last.fm data
   useEffect(() => {
     if (!profile?.lastFmUsername) return;
+    let cancelled = false;
     supabase.functions
       .invoke("lastfm-sync", { body: { username: profile.lastFmUsername } })
       .then(({ data }) => {
+        if (cancelled) return;
         if (data?.topArtists) {
           setLastFmData({
             topArtists: data.topArtists,
@@ -141,26 +143,31 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
         }
       })
       .catch(console.warn);
+    return () => { cancelled = true; };
   }, [profile?.lastFmUsername]);
 
   // Fetch recommendations
   useEffect(() => {
     if (!topArtistNames.length) return;
+    let cancelled = false;
     setLoading(true);
     supabase.functions
       .invoke("lastfm-recommendations", { body: { topArtists: topArtistNames } })
       .then(({ data }) => {
+        if (cancelled) return;
         if (data?.recommendations?.length) {
           setRecommendations(data.recommendations);
         }
       })
       .catch(console.warn)
-      .finally(() => setLoading(false));
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [topArtistNames]);
 
   // Resolve artist images + IDs via Spotify for artists without Spotify images
   useEffect(() => {
     if (!profile) return;
+    let cancelled = false;
     const spotifyImages = profile.spotifyArtistImages || {};
     const spotifyIds = profile.spotifyArtistIds || {};
     const artistNames = [
@@ -184,7 +191,7 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
     supabase.functions
       .invoke("spotify-resolve", { body: { artists: batch } })
       .then(({ data }) => {
-        if (!data?.resolved) return;
+        if (cancelled || !data?.resolved) return;
         const newImages = new Map(resolvedImages);
         const newIds = new Map(resolvedIds);
         for (const [name, info] of Object.entries(data.resolved as Record<string, { id: string; imageUrl: string }>)) {
@@ -200,6 +207,10 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
         setResolvedIds(newIds);
       })
       .catch(console.warn);
+    return () => {
+      cancelled = true;
+      batch.forEach((name) => pendingFetches.current.delete(name));
+    };
   }, [profile, lastFmData, recommendations]);
 
   const rows = useMemo<BrowseRow[]>(() => {

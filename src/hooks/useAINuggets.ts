@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import type { Nugget, Source } from "@/mock/types";
@@ -80,6 +80,7 @@ export function useAINuggets(
   const [listenCount, setListenCount] = useState(1);
 
   const { getNuggetCache, setNuggetCache } = usePlayer();
+  const cancelledRef = useRef(false);
 
   const generate = useCallback(async () => {
     if (!artist || !title) return;
@@ -144,6 +145,7 @@ export function useAINuggets(
         currentListenCount = regenerateKey + 1;
       }
 
+      if (cancelledRef.current) return;
       setListenCount(currentListenCount);
 
       // ── Check nugget_cache for first listen ──────────────────────
@@ -164,6 +166,7 @@ export function useAINuggets(
           for (const [key, val] of Object.entries(rawSources)) {
             cachedSources.set(key, val);
           }
+          if (cancelledRef.current) return;
           setNuggets(cachedNuggets);
           setSources(cachedSources);
 
@@ -200,6 +203,7 @@ export function useAINuggets(
           // Another client is already generating — poll every 3 s for up to 30 s.
           console.log("[NuggetCache] Generation in progress, polling…", dbCacheKey);
           const polled = await pollForReadyNuggets(dbCacheKey);
+          if (cancelledRef.current) return;
           if (polled) {
             console.log("[NuggetCache] Poll succeeded — serving result for", dbCacheKey);
             setNuggets(polled.nuggets);
@@ -243,6 +247,8 @@ export function useAINuggets(
           userTopTracks: topTracks?.slice(0, 10),
         },
       });
+
+      if (cancelledRef.current) return;
 
       if (fnError) {
         throw new Error(fnError.message || "Failed to generate nuggets");
@@ -330,6 +336,7 @@ export function useAINuggets(
         }
       }
 
+      if (cancelledRef.current) return;
       setNuggets(newNuggets);
       setSources(newSources);
 
@@ -382,7 +389,9 @@ export function useAINuggets(
       }
     } catch (e) {
       console.error("AI nugget generation failed:", e);
-      setError(e instanceof Error ? e.message : "Unknown error");
+      if (!cancelledRef.current) {
+        setError(e instanceof Error ? e.message : "Unknown error");
+      }
       // Remove the 'generating' sentinel so waiting clients don't poll indefinitely.
       if (sentinelClaimed) {
         // Wrap in Promise.resolve so .catch() is available (PostgrestFilterBuilder is PromiseLike, not Promise).
@@ -391,12 +400,16 @@ export function useAINuggets(
         ).catch(() => {});
       }
     } finally {
-      setLoading(false);
+      if (!cancelledRef.current) {
+        setLoading(false);
+      }
     }
   }, [trackId, artist, title, album, durationSec, coverArtUrl, artistImageUrl, tier, regenerateKey, topArtists, topTracks, getNuggetCache, setNuggetCache]);
 
   useEffect(() => {
+    cancelledRef.current = false;
     generate();
+    return () => { cancelledRef.current = true; };
   }, [generate, regenerateKey]);
 
   return { nuggets, sources, loading, error, listenCount };
