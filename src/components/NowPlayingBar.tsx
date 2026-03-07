@@ -36,6 +36,11 @@ export default function NowPlayingBar() {
     navigate(`/listen/${id}`);
   };
 
+  // Build Listen URL with cover art query param so Listen.tsx shows the correct artwork
+  const listenUrl = currentTrack
+    ? `/listen/${currentTrack.trackId}?art=${encodeURIComponent(currentTrack.coverArtUrl)}`
+    : null;
+
   const handlePrev = () => {
     const prev = popTrackHistory();
     if (prev) navigate(prev);
@@ -43,7 +48,7 @@ export default function NowPlayingBar() {
   };
 
   const handleNext = () => {
-    if (currentTrack) navigate(`/listen/${currentTrack.trackId}`);
+    if (listenUrl) navigate(listenUrl);
   };
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -113,7 +118,7 @@ export default function NowPlayingBar() {
               <div className="flex items-center gap-3 px-4 pt-2 md:px-10">
                 {/* Album art + track info — click to go to Listen */}
                 <button
-                  onClick={() => navigate(`/listen/${currentTrack.trackId}`)}
+                  onClick={() => navigate(listenUrl!)}
                   className="flex flex-1 items-center gap-3 min-w-0 text-left"
                 >
                   <img

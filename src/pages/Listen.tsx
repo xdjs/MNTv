@@ -167,10 +167,12 @@ export default function Listen() {
 
 
   // Push current track to global history (persists across Listen re-mounts)
+  // Include ?art= query param so prev navigation preserves artwork
   const player = usePlayer();
   useEffect(() => {
-    player.pushTrackHistory(`/listen/${rawTrackId}`);
-  }, [rawTrackId, player]);
+    const artParam = urlArt ? `?art=${encodeURIComponent(urlArt)}` : "";
+    player.pushTrackHistory(`/listen/${rawTrackId}${artParam}`);
+  }, [rawTrackId, urlArt, player]);
 
   // If this track was previously listened to in this session, restore the listen depth.
   // This handles both track completion (onEnded) and returning to a track via prev/browse.
