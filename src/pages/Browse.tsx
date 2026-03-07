@@ -244,7 +244,7 @@ export default function Browse() {
           focusedIndex={rowIndex === allRows.length ? colIndex : null}
         />
 
-        <div className="h-20" />
+        <div className="h-28" />
 
         <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
       </div>
