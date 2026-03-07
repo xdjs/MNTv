@@ -189,11 +189,24 @@ export default function Listen() {
   // Suppress external track detection during our own navigation (track end, next/prev)
   const isNavigatingRef = useRef(false);
   const lastLoadedTrackRef = useRef<string | null>(null);
+  const prevRawTrackIdRef = useRef<string | undefined>(rawTrackId);
 
-  // Reset navigation lock + load guard when the route changes (new track mounted)
+  // Reset navigation lock + load guard when the route changes (new track mounted).
+  // Also pause the current track immediately so the old track doesn't keep playing
+  // while the new URI resolves, and clear external listen mode so the load effect
+  // isn't blocked on subsequent track switches.
   useEffect(() => {
+    const isTrackSwitch = prevRawTrackIdRef.current !== undefined &&
+      prevRawTrackIdRef.current !== rawTrackId;
+    prevRawTrackIdRef.current = rawTrackId;
+
     isNavigatingRef.current = false;
     lastLoadedTrackRef.current = null;
+
+    if (isTrackSwitch) {
+      player.pause();
+      if (isExternalListenMode) setExternalListenMode(false);
+    }
   }, [rawTrackId]);
 
   // Fetch a related track from Spotify and navigate to it
