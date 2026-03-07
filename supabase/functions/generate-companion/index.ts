@@ -232,8 +232,12 @@ serve(async (req) => {
 
     // Personalised = has ANY taste signals (Last.fm OR Spotify). Skip cache for these.
     const isPersonalised = !!(lastFmUsername || safeSpotifyTopArtists?.length || safeSpotifyTopTracks?.length);
+    // When prebuiltNuggets are provided (from Listen.tsx pre-gen), ALWAYS skip
+    // cache and write fresh — the prebuilt nuggets are the authoritative player
+    // nuggets and must replace any stale cached content.
+    const hasPrebuilt = Array.isArray(prebuiltNuggets) && prebuiltNuggets.length > 0;
 
-    if (!isPersonalised) {
+    if (!isPersonalised && !hasPrebuilt) {
       // Look for the HIGHEST available cache tier (not just the requested one).
       // This ensures the companion page always shows the most complete accumulated
       // nuggets even if the QR URL has a stale listen= param.
