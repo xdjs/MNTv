@@ -1150,17 +1150,18 @@ export default function Listen() {
         {companionReady && shortId && (
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="fixed bottom-6 right-6 z-10 hover:opacity-90 transition-opacity rounded-xl overflow-hidden bg-white p-1"
+            animate={{ opacity: 0.6, scale: 1 }}
+            className="fixed bottom-6 right-6 z-10 hover:opacity-90 transition-opacity rounded-xl overflow-hidden"
           >
             <QRCode
               value={`${window.location.origin}/c/${shortId}?tier=${tier}&listen=${listenCount}`}
-              size={120}
-              qrStyle="squares"
-              fgColor="#000000"
-              bgColor="#ffffff"
+              size={100}
+              qrStyle="dots"
+              eyeRadius={6}
+              fgColor="#ffffff"
+              bgColor="transparent"
               ecLevel="H"
-              quietZone={8}
+              quietZone={6}
             />
           </motion.div>
         )}
