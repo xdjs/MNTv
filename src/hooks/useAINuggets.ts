@@ -174,27 +174,8 @@ export function useAINuggets(
           // Write to in-memory cache
           setNuggetCache(cacheKey, { nuggets: cachedNuggets, sources: cachedSources, listenCount: currentListenCount });
 
-          // Upsert listen history so next time we generate fresh
-          if (historyRow) {
-            await supabase
-              .from("nugget_history")
-              .update({
-                listen_count: currentListenCount + 1,
-                previous_nuggets: cachedNuggets.map((n) => n.headline || n.text).filter(Boolean) as Json,
-                updated_at: new Date().toISOString(),
-              })
-              .eq("track_key", trackKey)
-              .eq("user_id", userId);
-          } else {
-            await supabase
-              .from("nugget_history")
-              .insert({
-                track_key: trackKey,
-                user_id: userId,
-                listen_count: 2,
-                previous_nuggets: cachedNuggets.map((n) => n.headline || n.text).filter(Boolean) as Json,
-              });
-          }
+          // Don't increment listen_count here — Listen.tsx handles that
+          // after the 5-second playback threshold is met.
 
           setLoading(false);
           return;

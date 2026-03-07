@@ -104,10 +104,9 @@ export default function Companion() {
       setError(null);
 
       try {
-        // Always use listenCount 1 — RLS blocks unauthenticated reads of
-        // nugget_history, and the pre-gen from Listen.tsx uses the same count
-        // for the first listen. This guarantees a cache hit.
-        const serverListenCount = 1;
+        // Use the listen count from the QR URL so the companion page fetches
+        // the correct depth tier from the cache (pre-gen'd by Listen.tsx).
+        const serverListenCount = urlListenCount;
 
         console.log("[Companion] Fetching:", { artist: trackInfo!.artist, title: trackInfo!.title, tier });
 

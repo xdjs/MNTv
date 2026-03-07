@@ -193,6 +193,58 @@ export default function Listen() {
     }
   }, [trackId, track, player]);
 
+  // 5-second listen threshold — counts as a "listen" for progression purposes.
+  // Marks the track as completed in session so next visit triggers fresh nuggets.
+  // Also increments the DB listen_count so the backend knows the depth.
+  const listenThresholdMetRef = useRef(false);
+  useEffect(() => {
+    // Reset threshold on track change
+    listenThresholdMetRef.current = false;
+  }, [trackId]);
+
+  useEffect(() => {
+    if (!track || !isPlaying || currentTime < 5 || listenThresholdMetRef.current) return;
+    listenThresholdMetRef.current = true;
+    const key = `${track.artist}::${track.title}`;
+    player.markTrackCompleted(key);
+
+    // Increment DB listen count in background
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id ?? localStorage.getItem("musicnerd_anon_id") ?? (() => {
+        const id = crypto.randomUUID();
+        localStorage.setItem("musicnerd_anon_id", id);
+        return id;
+      })();
+      const trackKey = `${track.artist}::${track.title}`;
+      const { data: historyRow } = await supabase
+        .from("nugget_history")
+        .select("listen_count, previous_nuggets")
+        .eq("track_key", trackKey)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (historyRow) {
+        await supabase
+          .from("nugget_history")
+          .update({
+            listen_count: (historyRow.listen_count || 1) + 1,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("track_key", trackKey)
+          .eq("user_id", userId);
+      } else {
+        await supabase
+          .from("nugget_history")
+          .insert({
+            track_key: trackKey,
+            user_id: userId,
+            listen_count: 2,
+            previous_nuggets: [],
+          });
+      }
+    })();
+  }, [track, isPlaying, currentTime, player, trackId]);
+
   // For real tracks: next is always available (we fetch on demand), prev uses global history
   const hasPrev = !!player.prevTrackRoute;
   const hasNext = true;
@@ -450,7 +502,7 @@ export default function Listen() {
             artist: track.artist,
             title: track.title,
             album: track.album,
-            listenCount: 1,
+            listenCount,
             tier,
             prebuiltNuggets: allAccumulatedNuggets,
             coverArtUrl: effectiveCoverArt || undefined,
@@ -1146,18 +1198,17 @@ export default function Listen() {
         {companionReady && shortId && (
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 0.7, scale: 1 }}
-            className="fixed bottom-6 right-6 z-10 hover:opacity-95 transition-opacity rounded-2xl overflow-hidden bg-black/50 backdrop-blur-md p-2"
+            animate={{ opacity: 0.6, scale: 1 }}
+            className="fixed bottom-6 right-6 z-10 hover:opacity-90 transition-opacity rounded-xl overflow-hidden"
           >
             <QRCode
               value={`${window.location.origin}/c/${shortId}?tier=${tier}&listen=${listenCount}`}
               size={100}
               qrStyle="dots"
-              eyeRadius={6}
               fgColor="#ffffff"
               bgColor="transparent"
-              ecLevel="H"
-              quietZone={6}
+              ecLevel="M"
+              quietZone={8}
             />
           </motion.div>
         )}
