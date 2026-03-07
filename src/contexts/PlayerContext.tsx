@@ -343,11 +343,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         const token = await getValidToken();
         if (!token || !spDeviceId) return;
         lastSpUriRef.current = uriToPlay;
-        await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${spDeviceId}`, {
+        const res = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${spDeviceId}`, {
           method: "PUT",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
           body: JSON.stringify({ uris: [uriToPlay] }),
         });
+        if (!res.ok) {
+          console.error(`[Player] Spotify play failed (${res.status}):`, await res.text().catch(() => ""), "URI:", uriToPlay);
+        }
       })();
     }
   }, [activePlayer, spReady, currentSpotifyUri, spDeviceId, getValidToken]);
