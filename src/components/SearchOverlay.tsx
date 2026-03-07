@@ -155,7 +155,7 @@ export default function SearchOverlay({ open, onClose }: Props) {
                           {spotifyResults!.tracks.map((t, i) => (
                             <button
                               key={`${t.artist}-${t.title}-${i}`}
-                              onClick={() => { onClose(); navigate(`/listen/real::${encodeURIComponent(t.artist)}::${encodeURIComponent(t.title)}::${encodeURIComponent(t.album)}::${encodeURIComponent(t.uri || "")}`); }}
+                              onClick={() => { onClose(); navigate(`/listen/real::${encodeURIComponent(t.artist)}::${encodeURIComponent(t.title)}::${encodeURIComponent(t.album)}::${encodeURIComponent(t.uri || "")}${t.imageUrl ? `?art=${encodeURIComponent(t.imageUrl)}` : ""}`); }}
                               className="flex w-full items-center gap-4 rounded-xl p-3 transition-colors hover:bg-foreground/5 text-left"
                             >
                               {t.imageUrl ? (
