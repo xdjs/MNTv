@@ -370,9 +370,13 @@ export default function Listen() {
   // IMPORTANT: Only depend on spotifyStateTrack changes, NOT player.currentSpotifyUri.
   // Otherwise loadTrack (which sets currentSpotifyUri) causes the effect to fire while
   // the SDK still reports the OLD track, creating a false "external skip" → bounce loop.
+  // Also require isPlaying — when loadTrack pauses the old track, the SDK fires a state
+  // change for the OLD track (paused). Without the isPlaying guard, this is misinterpreted
+  // as an external skip, causing a false redirect back to the old track's page.
   useEffect(() => {
     if (!spotifyStateTrack) return;
     if (isNavigatingRef.current) return;
+    if (!isPlaying) return;
     if (!player.currentSpotifyUri) return;
     if (spotifyStateTrack.spotifyUri === player.currentSpotifyUri) return;
     // Also skip if the SDK is reporting what we're about to load (route resolved but loadTrack pending)
@@ -381,7 +385,7 @@ export default function Listen() {
     isNavigatingRef.current = true;
     const newRoute = `/listen/real::${encodeURIComponent(spotifyStateTrack.artist)}::${encodeURIComponent(spotifyStateTrack.title)}::${encodeURIComponent(spotifyStateTrack.album)}::${encodeURIComponent(spotifyStateTrack.spotifyUri)}`;
     navigate(newRoute);
-  }, [spotifyStateTrack?.spotifyUri]);
+  }, [spotifyStateTrack?.spotifyUri, isPlaying]);
 
   // Fading state for overlay transitions
   const [fadingIn, setFadingIn] = useState(false);

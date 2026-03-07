@@ -30,9 +30,10 @@ export default function CompanionShortRedirect() {
           return;
         }
 
-        // Build the real:: trackId and go to companion
+        // Build the real:: trackId and go to companion, preserving query params
+        // (tier, listen count) so the companion page shows the correct nuggets
         const trackId = `real::${encodeURIComponent(data.artist)}::${encodeURIComponent(data.title)}::${encodeURIComponent(data.album || "")}`;
-        navigate(`/companion/${trackId}`, { replace: true });
+        navigate(`/companion/${trackId}${window.location.search}`, { replace: true });
       } catch (err) {
         console.error("[CompanionShort] Unexpected error:", err);
         setError("Something went wrong.");
