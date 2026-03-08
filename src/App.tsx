@@ -69,7 +69,7 @@ function AnimatedRoutes() {
             <Route path="/browse" element={<ProtectedRoute><Browse /></ProtectedRoute>} />
             <Route path="/artist/:artistId" element={<ProtectedRoute><ArtistProfile /></ProtectedRoute>} />
             <Route path="/album/:albumId" element={<ProtectedRoute><AlbumDetail /></ProtectedRoute>} />
-            <Route path="/listen/:trackId" element={<ProtectedRoute><Listen /></ProtectedRoute>} />
+            <Route path="/listen/*" element={<ProtectedRoute><Listen /></ProtectedRoute>} />
 
             {/* Companion — eagerly loaded (QR-scanned on mobile, must be instant) */}
             <Route path="/companion/:trackId" element={<Companion />} />

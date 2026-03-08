@@ -34,7 +34,9 @@ interface SpotifyTrackResult {
 const HIDE_DELAY = 3000;
 
 export default function Listen() {
-  const { trackId: rawTrackId } = useParams<{ trackId: string }>();
+  // Use wildcard param — `:trackId` breaks when titles contain "/" (e.g. "Weird Fishes/Arpeggi")
+  const params = useParams();
+  const rawTrackId = params["*"] || "";
   const navigate = useNavigate();
 
   const { profile, saveProfile } = useUserProfile();
