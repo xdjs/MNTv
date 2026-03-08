@@ -423,9 +423,14 @@ function buildExaPromptContext(answers: ExaAnswer[]): {
     );
   }
 
-  const citList = allCitations.map((c) =>
-    `[CIT ${c.citIndex}] "${c.title}"${c.author ? ` by ${c.author}` : ""} — ${c.url}`
-  ).join("\n");
+  // Include image URLs in citation list so Gemini can select them
+  const citList = allCitations.map((c) => {
+    let line = `[CIT ${c.citIndex}] "${c.title}"${c.author ? ` by ${c.author}` : ""} — ${c.url}`;
+    if (c.imageUrl) {
+      line += `\n  [IMG CIT ${c.citIndex}] ${c.imageUrl}`;
+    }
+    return line;
+  }).join("\n");
 
   const context = parts.join("\n\n---\n\n") +
     "\n\n---\nSOURCE CITATIONS:\n" + citList;
@@ -439,7 +444,8 @@ interface GeminiNugget {
   text: string;
   kind: "artist" | "track" | "discovery";
   listenFor: boolean;
-  imageSearchQuery?: string;
+  selectedImageUrl?: string;   // Exa image URL chosen by Gemini
+  imageSearchQuery?: string;   // fallback: search Wikipedia/Commons for this
   imageCaption?: string;
   source: {
     type: "youtube" | "article" | "interview";
@@ -548,12 +554,11 @@ CRITICAL RULES:
 - Be factually accurate — do not fabricate quotes or facts
 - If you cannot find a specific real source for a fact, set publisher to "General Knowledge" — this is better than fabricating an article that doesn't exist
 - NEVER invent specific studio names, gear model numbers, or personnel names — if unsure, describe generally
-- ALWAYS include "imageSearchQuery" and "imageCaption" for EVERY nugget:
-  - For artist nuggets: search for the artist, a key collaborator, the recording studio, or a relevant era photo. Example: "Stevie Nicks Fleetwood Mac 1977", "Abbey Road Studios London"
-  - For track nuggets: search for the specific instrument, production technique, music video, or cultural reference mentioned. Example: "Fender Rhodes electric piano", "Hyperballad Björk music video"
-  - For discovery nuggets: search for the recommended artist. Example: "Leila electronic music producer"
-  - "imageCaption": short (6-12 words) explaining the image's relevance to the nugget
-  - Be SPECIFIC — "Stevie Nicks 1977 Rumours era" is better than "Fleetwood Mac". Name the exact person, place, instrument, or thing.
+- IMAGE SELECTION — for EVERY nugget, choose the best image approach:
+  1. **Check the [IMG CIT N] URLs** in the source citations above. If an image from the research is directly relevant to THIS nugget's content (e.g., the article it cites has an image of the person, instrument, or event discussed), use it by setting "selectedImageUrl" to that exact URL.
+  2. **If no Exa image fits**, set "imageSearchQuery" to a SPECIFIC search term for the thing mentioned in the nugget. Be precise — "Fender Rhodes electric piano" or "Stevie Nicks 1977 Rumours era" is better than "Fleetwood Mac". Search for the exact person, place, instrument, studio, or cultural reference the nugget discusses.
+  3. You MUST include one of "selectedImageUrl" OR "imageSearchQuery" for every nugget. Prefer "selectedImageUrl" when a relevant Exa image exists.
+  4. Always include "imageCaption": short (6-12 words) explaining the image's relevance to the nugget content.
 
 ALSO generate an "artistSummary" field: 2-3 punchy sentences capturing who ${artist} is — their significance, sound, and why they matter. Use the researched material. This will be shown on the companion page.
 
@@ -566,7 +571,8 @@ Return ONLY valid JSON:
       "text": "2-3 sentences of surprising music trivia with full detail",
       "kind": "artist|track|discovery",
       "listenFor": false,
-      "imageSearchQuery": "HBO Insecure TV show",
+      "selectedImageUrl": "https://example.com/relevant-image.jpg OR omit if using imageSearchQuery",
+      "imageSearchQuery": "HBO Insecure TV show OR omit if using selectedImageUrl",
       "imageCaption": "The HBO series that featured this track",
       "source": {
         "type": "youtube|article|interview",
@@ -908,47 +914,28 @@ Return ONLY valid JSON:
     }
 
     // Step 3.5: Resolve images for each nugget
-    // Priority: 1) Exa citation images (from source article pages)
-    //           2) Wikipedia/Commons via Gemini's imageSearchQuery
-    //           3) Frontend falls back to Spotify album art
+    // Priority: 1) Gemini-selected Exa image (selectedImageUrl) — Gemini matched it semantically
+    //           2) Wikipedia/Commons via Gemini's imageSearchQuery — specific thing search
+    //           3) Exa citation fallback — any unused Exa image from same group
+    //           4) Frontend falls back to Spotify album art
     const usedImageUrls = new Set<string>();
 
-    // First pass: try Exa citation images (most relevant — from the actual source pages)
+    // First pass: use Gemini's selectedImageUrl (it saw the Exa images and chose)
     for (let i = 0; i < rawNuggets.length; i++) {
-      const source = rawNuggets[i].source || {};
-      if (!exaCitations?.length) continue;
-
-      // Try the nugget's own citation first
-      if (source.citIndex != null) {
-        const cit = exaCitations.find((c) => c.citIndex === source.citIndex && c.imageUrl && !usedImageUrls.has(c.imageUrl));
-        if (cit?.imageUrl) {
-          rawNuggets[i]._resolvedImageUrl = cit.imageUrl;
-          rawNuggets[i]._resolvedImageTitle = cit.title;
-          usedImageUrls.add(cit.imageUrl);
-          console.log(`[Image] Exa citation image for nugget ${i}: ${cit.imageUrl}`);
-          continue;
-        }
-      }
-
-      // Try any Exa citation from the same answer group (artist=0-9, track=10-19, discovery=20-29)
-      const groupStart = i * 10; // citIndex offsets: 0, 10, 20
-      const groupEnd = groupStart + 10;
-      const groupCit = exaCitations.find((c) =>
-        c.citIndex >= groupStart && c.citIndex < groupEnd && c.imageUrl && !usedImageUrls.has(c.imageUrl)
-      );
-      if (groupCit?.imageUrl) {
-        rawNuggets[i]._resolvedImageUrl = groupCit.imageUrl;
-        rawNuggets[i]._resolvedImageTitle = groupCit.title;
-        usedImageUrls.add(groupCit.imageUrl);
-        console.log(`[Image] Exa group image for nugget ${i}: ${groupCit.imageUrl}`);
+      const selectedUrl = rawNuggets[i].selectedImageUrl;
+      if (selectedUrl && !usedImageUrls.has(selectedUrl) && !isGarbageImage(selectedUrl)) {
+        rawNuggets[i]._resolvedImageUrl = selectedUrl;
+        rawNuggets[i]._resolvedImageTitle = rawNuggets[i].imageCaption || "";
+        usedImageUrls.add(selectedUrl);
+        console.log(`[Image] Gemini selected Exa image for nugget ${i}: ${selectedUrl}`);
       }
     }
 
-    // Second pass: for nuggets still missing images, try Wikipedia/Commons
-    // Build search queries for nuggets that need them
+    // Second pass: for nuggets without a Gemini-selected image, search Wikipedia/Commons
     for (const n of rawNuggets) {
-      if (n._resolvedImageUrl) continue; // already has an Exa image
+      if (n._resolvedImageUrl) continue;
       if (!n.imageSearchQuery) {
+        // Generate fallback search queries if Gemini didn't provide one
         if (n.kind === "artist") {
           n.imageSearchQuery = `${artist} musician`;
           n.imageCaption = n.imageCaption || artist;
@@ -967,15 +954,34 @@ Return ONLY valid JSON:
     );
     const wikiResults = await Promise.allSettled(wikiSearchNeeded);
     for (let i = 0; i < rawNuggets.length; i++) {
-      if (rawNuggets[i]._resolvedImageUrl) continue; // already resolved via Exa
+      if (rawNuggets[i]._resolvedImageUrl) continue;
       const result = wikiResults[i];
       if (result.status === "fulfilled" && result.value && !usedImageUrls.has(result.value.url)) {
         rawNuggets[i]._resolvedImageUrl = result.value.url;
         rawNuggets[i]._resolvedImageTitle = result.value.title;
         usedImageUrls.add(result.value.url);
         console.log(`[Image] Wikipedia for nugget ${i} "${rawNuggets[i].imageSearchQuery}" → ${result.value.url}`);
-      } else if (!rawNuggets[i]._resolvedImageUrl) {
-        console.log(`[Image] No image for nugget ${i} — frontend will use album art`);
+      }
+    }
+
+    // Third pass: fallback to any unused Exa citation image from the same group
+    if (exaCitations?.length) {
+      for (let i = 0; i < rawNuggets.length; i++) {
+        if (rawNuggets[i]._resolvedImageUrl) continue;
+        const groupStart = i * 10;
+        const groupEnd = groupStart + 10;
+        const groupCit = exaCitations.find((c) =>
+          c.citIndex >= groupStart && c.citIndex < groupEnd &&
+          c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl)
+        );
+        if (groupCit?.imageUrl) {
+          rawNuggets[i]._resolvedImageUrl = groupCit.imageUrl;
+          rawNuggets[i]._resolvedImageTitle = groupCit.title;
+          usedImageUrls.add(groupCit.imageUrl);
+          console.log(`[Image] Exa fallback for nugget ${i}: ${groupCit.imageUrl}`);
+        } else {
+          console.log(`[Image] No image for nugget ${i} — frontend will use album art`);
+        }
       }
     }
 
