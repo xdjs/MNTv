@@ -190,14 +190,47 @@ class RecitationError extends Error {
 }
 
 // ── Wikipedia / Wikimedia Commons image search ──────────────────────
-// Primary: Wikipedia search → lead image of top result
+// Check if a Wikipedia page title is relevant to the search query
+function isRelevantWikiResult(pageTitle: string, query: string): boolean {
+  const titleLower = pageTitle.toLowerCase();
+  const queryLower = query.toLowerCase();
+  // Extract meaningful words from query (skip common filler)
+  const stopWords = new Set(["the", "a", "an", "of", "by", "in", "at", "for", "and", "or", "to", "musician", "artist", "band", "song", "album", "music", "producer", "track"]);
+  const queryWords = queryLower.split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w));
+  // At least one significant query word must appear in the page title
+  return queryWords.some(word => titleLower.includes(word));
+}
+
+// Reject known bad image patterns from Wikipedia/Commons
+function isGarbageImage(url: string): boolean {
+  const lower = url.toLowerCase();
+  return (
+    lower.includes(".pdf") ||
+    lower.includes(".djvu") ||
+    lower.includes(".svg") ||
+    lower.includes("flag_of_") ||
+    lower.includes("coat_of_arms") ||
+    lower.includes("map_of_") ||
+    lower.includes("us_navy") ||
+    lower.includes("no-image") ||
+    lower.includes("no_image") ||
+    lower.includes("placeholder") ||
+    lower.includes("icon") ||
+    lower.includes("logo") ||
+    lower.includes("symbol") ||
+    lower.includes("question_mark") ||
+    lower.includes("blank")
+  );
+}
+
+// Primary: Wikipedia search → lead image of top result (with relevance check)
 async function searchWikipediaImage(query: string): Promise<{ url: string; title: string } | null> {
   try {
     const url = new URL("https://en.wikipedia.org/w/api.php");
     url.searchParams.set("action", "query");
     url.searchParams.set("generator", "search");
     url.searchParams.set("gsrsearch", query);
-    url.searchParams.set("gsrlimit", "1");
+    url.searchParams.set("gsrlimit", "3"); // Get top 3 for better matching
     url.searchParams.set("prop", "pageimages");
     url.searchParams.set("piprop", "thumbnail");
     url.searchParams.set("pithumbsize", "500");
@@ -209,24 +242,30 @@ async function searchWikipediaImage(query: string): Promise<{ url: string; title
     const data = await res.json();
     const pages = data.query?.pages;
     if (!pages) return null;
-    const page = Object.values(pages)[0] as any;
-    const thumb = page?.thumbnail?.source;
-    if (!thumb) return null;
-    return { url: thumb, title: page.title || query };
+
+    // Check each result for relevance
+    for (const page of Object.values(pages) as any[]) {
+      const thumb = page?.thumbnail?.source;
+      if (!thumb) continue;
+      if (isGarbageImage(thumb)) continue;
+      if (!isRelevantWikiResult(page.title || "", query)) continue;
+      return { url: thumb, title: page.title || query };
+    }
+    return null;
   } catch {
     return null;
   }
 }
 
-// Fallback: Wikimedia Commons direct file search
-async function searchCommonsImage(query: string): Promise<string | null> {
+// Fallback: Wikimedia Commons direct file search (with relevance check)
+async function searchCommonsImage(query: string): Promise<{ url: string; title: string } | null> {
   try {
     const url = new URL("https://commons.wikimedia.org/w/api.php");
     url.searchParams.set("action", "query");
     url.searchParams.set("generator", "search");
     url.searchParams.set("gsrnamespace", "6");
     url.searchParams.set("gsrsearch", query);
-    url.searchParams.set("gsrlimit", "1");
+    url.searchParams.set("gsrlimit", "3");
     url.searchParams.set("prop", "imageinfo");
     url.searchParams.set("iiprop", "url");
     url.searchParams.set("iiurlwidth", "500");
@@ -238,8 +277,16 @@ async function searchCommonsImage(query: string): Promise<string | null> {
     const data = await res.json();
     const pages = data.query?.pages;
     if (!pages) return null;
-    const page = Object.values(pages)[0] as any;
-    return page?.imageinfo?.[0]?.thumburl || page?.imageinfo?.[0]?.url || null;
+
+    for (const page of Object.values(pages) as any[]) {
+      const thumbUrl = page?.imageinfo?.[0]?.thumburl || page?.imageinfo?.[0]?.url;
+      if (!thumbUrl) continue;
+      if (isGarbageImage(thumbUrl)) continue;
+      // Commons file titles often contain the subject
+      if (!isRelevantWikiResult(page.title || "", query)) continue;
+      return { url: thumbUrl, title: page.title || query };
+    }
+    return null;
   } catch {
     return null;
   }
@@ -250,7 +297,7 @@ async function resolveNuggetImage(query: string): Promise<{ url: string; title: 
   const wiki = await searchWikipediaImage(query);
   if (wiki) return wiki;
   const commons = await searchCommonsImage(query);
-  if (commons) return { url: commons, title: query };
+  if (commons) return commons;
   return null;
 }
 
@@ -884,26 +931,29 @@ Return ONLY valid JSON:
         return resolveNuggetImage(n.imageSearchQuery);
       })
     );
-    // Attach resolved images back to rawNuggets
+    // Attach resolved images back to rawNuggets (deduplicate — no two nuggets share the same image)
+    const usedImageUrls = new Set<string>();
     for (let i = 0; i < rawNuggets.length; i++) {
       const result = imageResults[i];
-      if (result.status === "fulfilled" && result.value) {
+      if (result.status === "fulfilled" && result.value && !usedImageUrls.has(result.value.url)) {
         rawNuggets[i]._resolvedImageUrl = result.value.url;
         rawNuggets[i]._resolvedImageTitle = result.value.title;
+        usedImageUrls.add(result.value.url);
         console.log(`[ImageSearch] Resolved "${rawNuggets[i].imageSearchQuery}" → ${result.value.url}`);
       } else if (rawNuggets[i].imageSearchQuery) {
         // Fallback: try Exa citation images for this nugget's source
         const source = rawNuggets[i].source || {};
         if (exaCitations?.length && source.citIndex != null) {
-          const cit = exaCitations.find((c) => c.citIndex === source.citIndex);
+          const cit = exaCitations.find((c) => c.citIndex === source.citIndex && c.imageUrl && !usedImageUrls.has(c.imageUrl));
           if (cit?.imageUrl) {
             rawNuggets[i]._resolvedImageUrl = cit.imageUrl;
             rawNuggets[i]._resolvedImageTitle = cit.title;
+            usedImageUrls.add(cit.imageUrl);
             console.log(`[ImageSearch] Exa citation image for "${rawNuggets[i].imageSearchQuery}" → ${cit.imageUrl}`);
           }
         }
         if (!rawNuggets[i]._resolvedImageUrl) {
-          console.log(`[ImageSearch] No result for "${rawNuggets[i].imageSearchQuery}"`);
+          console.log(`[ImageSearch] No relevant image for "${rawNuggets[i].imageSearchQuery}" — will use album art fallback`);
         }
       }
     }
