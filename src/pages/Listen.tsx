@@ -342,6 +342,7 @@ export default function Listen() {
         .eq("user_id", userId)
         .maybeSingle();
       if (historyRow) {
+        // Row exists — bump listen_count, preserve previous_nuggets
         await supabase
           .from("nugget_history")
           .update({
@@ -351,7 +352,10 @@ export default function Listen() {
           .eq("track_key", trackKey)
           .eq("user_id", userId);
       } else {
-        await supabase
+        // No row yet — useAINuggets may have already created one with
+        // previous_nuggets populated. Try insert; if it already exists
+        // (race with useAINuggets), update listen_count instead.
+        const { error: insertErr } = await supabase
           .from("nugget_history")
           .insert({
             track_key: trackKey,
@@ -359,6 +363,17 @@ export default function Listen() {
             listen_count: 2,
             previous_nuggets: [],
           });
+        if (insertErr?.code === "23505") {
+          // Row was created by useAINuggets — just bump listen_count
+          await supabase
+            .from("nugget_history")
+            .update({
+              listen_count: 2,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("track_key", trackKey)
+            .eq("user_id", userId);
+        }
       }
     })();
   }, [track, isPlaying, currentTime, player, trackId]);

@@ -450,9 +450,19 @@ export function useAINuggets(
           })
           .eq("track_key", trackKey)
           .eq("user_id", userId);
+      } else {
+        // No history row yet — create one now with the headlines so listen 2
+        // can deduplicate. listen_count starts at 1; Listen.tsx will bump it
+        // to 2 at the 5-second threshold.
+        await supabase
+          .from("nugget_history")
+          .insert({
+            track_key: trackKey,
+            user_id: userId,
+            listen_count: 1,
+            previous_nuggets: updatedPreviousNuggets as Json,
+          });
       }
-      // If no historyRow, Listen.tsx threshold will create the row at 5 seconds.
-      // previous_nuggets will be written on the next listen when the row exists.
     } catch (e) {
       console.error("AI nugget generation failed:", e);
       if (!cancelledRef.current) {

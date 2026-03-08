@@ -621,7 +621,7 @@ async function generateWithGemini(
   const angleInstruction = `\nTHEMATIC ANGLES: For the artist and track nuggets, explore these angles: ${angles.join(", ")}. Use these as creative direction — the nugget should still be surprising and specific, not a generic take on the angle.`;
 
   const nonRepeatInstruction = previousNuggets.length > 0
-    ? `\n\nDO NOT repeat or closely rephrase any of these previously shown headlines:\n${previousNuggets.map((h) => `- "${h}"`).join("\n")}\nGenerate completely fresh angles.`
+    ? `\n\nPREVIOUSLY SHOWN — the listener has already seen ALL of these nuggets. You MUST NOT repeat, rephrase, or cover the same topic/fact/artist as any of them:\n${previousNuggets.map((h) => `- "${h}"`).join("\n")}\nEvery nugget you generate must be about a DIFFERENT fact, angle, and (for discovery) a DIFFERENT recommended artist than anything listed above. If a previous headline mentions an artist name, do NOT recommend that artist again.`
     : "";
 
   // Build listener taste context for personalized connections
