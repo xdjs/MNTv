@@ -50,18 +50,39 @@ interface SeedCompanionFile {
   externalLinks: { url: string; label: string }[];
 }
 
-// ── Track slug mapping ──────────────────────────────────────────────────────
+// ── Demo track registry ─────────────────────────────────────────────────────
 
 type Tier = "casual" | "curious" | "nerd";
 
+export interface DemoTrackMeta {
+  id: string;
+  artist: string;
+  title: string;
+  album: string;
+  spotifyUri: string;
+  coverArtUrl: string;
+  /** File-name slug used in src/data/seed/ */
+  slug: string;
+}
+
+/** All demo tracks — single source of truth for Browse tiles + Listen playback. */
+export const DEMO_TRACKS: DemoTrackMeta[] = [
+  { id: "demo-around-the-world", artist: "Daft Punk", title: "Around the World", album: "Homework", spotifyUri: "spotify:track:1pKYYY0dkg23sQQXi0Q5zN", coverArtUrl: "https://i.scdn.co/image/ab67616d0000b2738ac778cc7d88779f74d33311", slug: "daftpunk" },
+  { id: "demo-weird-fishes", artist: "Radiohead", title: "Weird Fishes/Arpeggi", album: "In Rainbows", spotifyUri: "spotify:track:4tha3dahOS9LhTxKn4JYLC", coverArtUrl: "https://i.scdn.co/image/ab67616d0000b273de3c04b5fc750b68899b20a9", slug: "radiohead" },
+  { id: "demo-oms-at-play", artist: "Pete Rango", title: "Oms at Play", album: "Savage Planet", spotifyUri: "spotify:track:7mYphBaMfblb6iu1saj3MC", coverArtUrl: "https://i.scdn.co/image/ab67616d0000b27305b43e15352510b1b9c9a5a5", slug: "peterango" },
+  { id: "demo-love-hangover", artist: "Aaron Doh", title: "Love Hangover", album: "Love Lies", spotifyUri: "spotify:track:2N8zd5nKHrjhDgo78ZhtWl", coverArtUrl: "https://i.scdn.co/image/ab67616d0000b273bcdeee598b7cfab69f0dce68", slug: "aarondoh" },
+  { id: "demo-slack", artist: "Jamee Cornelia", title: "SLACK", album: "HARVEST", spotifyUri: "spotify:track:5bU8cB57AfhTtO0qj9zy3X", coverArtUrl: "https://i.scdn.co/image/ab67616d0000b273e9c4a69ecd5c43229cfd03f3", slug: "jameecornelia" },
+];
+
+/** Look up a demo track by its simple ID (e.g. "demo-weird-fishes"). */
+export function getDemoTrackById(id: string): DemoTrackMeta | null {
+  return DEMO_TRACKS.find((t) => t.id === id) || null;
+}
+
 /** Maps "Artist::Title" → the file-name slug used in src/data/seed/ */
-const SEED_TRACKS: Record<string, string> = {
-  "Daft Punk::Around the World": "daftpunk",
-  "Radiohead::Weird Fishes/Arpeggi": "radiohead",
-  "Pete Rango::Oms at Play": "peterango",
-  "Aaron Doh::Love Hangover": "aarondoh",
-  "Jamee Cornelia::SLACK": "jameecornelia",
-};
+const SEED_TRACKS: Record<string, string> = Object.fromEntries(
+  DEMO_TRACKS.map((t) => [`${t.artist}::${t.title}`, t.slug])
+);
 
 // ── Dynamic import helpers ──────────────────────────────────────────────────
 

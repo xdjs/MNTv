@@ -15,7 +15,7 @@ import DevPanel from "@/components/DevPanel";
 import PlaybackBar from "@/components/PlaybackBar";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { useAINuggets } from "@/hooks/useAINuggets";
-import { getSeedCompanion } from "@/data/seedNuggets";
+import { getSeedCompanion, getDemoTrackById } from "@/data/seedNuggets";
 import { useSpotifyToken } from "@/hooks/useSpotifyToken";
 import { initiateSpotifyAuth } from "@/hooks/useSpotifyAuth";
 import { usePlayer } from "@/contexts/PlayerContext";
@@ -41,8 +41,12 @@ export default function Listen() {
 
   const { profile, saveProfile } = useUserProfile();
 
-  // ── Track parsing — all tracks encoded as: real::<artist>::<title>::<album>::<uri> ──
+  // ── Track parsing — demo IDs or real::<artist>::<title>::<album>::<uri> ──
   const realTrackMeta = useMemo(() => {
+    // Demo track lookup (e.g. "demo-weird-fishes")
+    const demo = rawTrackId ? getDemoTrackById(rawTrackId) : null;
+    if (demo) return { artist: demo.artist, title: demo.title, album: demo.album, spotifyUri: demo.spotifyUri };
+
     if (!rawTrackId?.startsWith("real%3A%3A") && !rawTrackId?.startsWith("real::")) return null;
     const decoded = decodeURIComponent(rawTrackId);
     const parts = decoded.split("::");
