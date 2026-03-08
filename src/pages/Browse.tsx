@@ -41,7 +41,28 @@ export default function Browse() {
       imageUrl: "https://i.scdn.co/image/ab67616d0000b273de3c04b5fc750b68899b20a9",
       title: "Weird Fishes/Arpeggi",
       subtitle: "Radiohead",
-      href: "/listen/real::Radiohead::Weird%20Fishes%2FArpeggi::In%20Rainbows::spotify:track:4Iyo50UoYhuuYORMLrGDci?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b273de3c04b5fc750b68899b20a9",
+      href: "/listen/real::Radiohead::Weird%20Fishes%2FArpeggi::In%20Rainbows::spotify:track:4tha3dahOS9LhTxKn4JYLC?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b273de3c04b5fc750b68899b20a9",
+    },
+    {
+      id: "demo-oms-at-play",
+      imageUrl: "https://i.scdn.co/image/ab67616d0000b27305b43e15352510b1b9c9a5a5",
+      title: "Oms at Play",
+      subtitle: "Pete Rango",
+      href: "/listen/real::Pete%20Rango::Oms%20at%20Play::Savage%20Planet::spotify:track:7mYphBaMfblb6iu1saj3MC?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b27305b43e15352510b1b9c9a5a5",
+    },
+    {
+      id: "demo-love-hangover",
+      imageUrl: "https://i.scdn.co/image/ab67616d0000b273bcdeee598b7cfab69f0dce68",
+      title: "Love Hangover",
+      subtitle: "Aaron Doh",
+      href: "/listen/real::Aaron%20Doh::Love%20Hangover::Love%20Lies::spotify:track:2N8zd5nKHrjhDgo78ZhtWl?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b273bcdeee598b7cfab69f0dce68",
+    },
+    {
+      id: "demo-slack",
+      imageUrl: "https://i.scdn.co/image/ab67616d0000b273e9c4a69ecd5c43229cfd03f3",
+      title: "SLACK",
+      subtitle: "Jamee Cornelia",
+      href: "/listen/real::Jamee%20Cornelia::SLACK::HARVEST::spotify:track:5bU8cB57AfhTtO0qj9zy3X?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b273e9c4a69ecd5c43229cfd03f3",
     },
   ];
 
@@ -136,8 +157,7 @@ export default function Browse() {
         if (rowIndex === -1) {
           setColIndex((c) => Math.min(c + 1, HEADER_ITEMS - 1));
         } else if (rowIndex >= allRows.length) {
-          // Demo Tracks row has 2 items
-          setColIndex((c) => Math.min(c + 1, 1));
+          setColIndex((c) => Math.min(c + 1, demoItems.length - 1));
         } else {
           const maxCol = (allRows[rowIndex]?.items.length || 1) - 1;
           setColIndex((c) => Math.min(c + 1, maxCol));
