@@ -96,6 +96,152 @@ async function fetchTranscript(videoId: string): Promise<string | null> {
   }
 }
 
+// ── Spotify artist data (genres + related artists) ──────────────────
+let spotifyTokenCache: string | null = null;
+let spotifyTokenExpiry = 0;
+
+async function getSpotifyAppToken(): Promise<string | null> {
+  if (spotifyTokenCache && Date.now() < spotifyTokenExpiry) return spotifyTokenCache;
+  const clientId = Deno.env.get("VITE_SPOTIFY_CLIENT_ID");
+  const clientSecret = Deno.env.get("SPOTIFY_CLIENT_SECRET");
+  if (!clientId || !clientSecret) return null;
+  try {
+    const res = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      },
+      body: "grant_type=client_credentials",
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    spotifyTokenCache = data.access_token;
+    spotifyTokenExpiry = Date.now() + (data.expires_in - 300) * 1000;
+    return spotifyTokenCache;
+  } catch { return null; }
+}
+
+interface SpotifyArtistInfo {
+  genres: string[];
+  relatedArtists: string[];
+  topTrackNames: string[];
+  albumNames: string[];
+  followers: number;
+}
+
+async function fetchSpotifyArtistInfo(artistName: string): Promise<SpotifyArtistInfo | null> {
+  try {
+    const token = await getSpotifyAppToken();
+    if (!token) return null;
+    const q = encodeURIComponent(artistName.trim());
+    const searchRes = await fetch(`https://api.spotify.com/v1/search?type=artist&limit=1&q=${q}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!searchRes.ok) return null;
+    const searchData = await searchRes.json();
+    const artist = searchData?.artists?.items?.[0];
+    if (!artist) return null;
+
+    // Fetch top tracks + albums in parallel — these give Gemini genre clues
+    const [topTracksRes, albumsRes] = await Promise.all([
+      fetch(`https://api.spotify.com/v1/artists/${artist.id}/top-tracks?market=US`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+      fetch(`https://api.spotify.com/v1/artists/${artist.id}/albums?include_groups=album,single&limit=20&market=US`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    ]);
+
+    const topTracksData = topTracksRes.ok ? await topTracksRes.json() : null;
+    const albumsData = albumsRes.ok ? await albumsRes.json() : null;
+
+    const topTrackNames = (topTracksData?.tracks || []).slice(0, 10).map((t: any) => t.name);
+    const albumNames = (albumsData?.items || []).slice(0, 10).map((a: any) => a.name);
+
+    console.log(`[Spotify] ${artistName}: ${artist.genres.length} genres, ${topTrackNames.length} tracks, ${albumNames.length} albums, ${artist.followers?.total || 0} followers`);
+
+    return {
+      genres: artist.genres || [],
+      relatedArtists: [],
+      topTrackNames,
+      albumNames,
+      followers: artist.followers?.total || 0,
+    };
+  } catch (e) {
+    console.error("[Spotify] Artist info fetch failed:", e);
+    return null;
+  }
+}
+
+// ── Last.fm similar artists ──────────────────────────────────────────
+interface LastFmSimilarArtist {
+  name: string;
+  match: number; // 0-1 similarity score
+}
+
+async function fetchLastFmSimilarArtists(artistName: string): Promise<LastFmSimilarArtist[]> {
+  const apiKey = Deno.env.get("LASTFM_API_KEY");
+  if (!apiKey) {
+    console.log("[Last.fm] No LASTFM_API_KEY configured, skipping");
+    return [];
+  }
+  try {
+    const url = new URL("https://ws.audioscrobbler.com/2.0/");
+    url.searchParams.set("method", "artist.getSimilar");
+    url.searchParams.set("artist", artistName);
+    url.searchParams.set("api_key", apiKey);
+    url.searchParams.set("format", "json");
+    url.searchParams.set("limit", "10");
+    url.searchParams.set("autocorrect", "1");
+
+    const res = await fetch(url.toString());
+    if (!res.ok) {
+      console.log(`[Last.fm] artist.getSimilar failed: ${res.status}`);
+      return [];
+    }
+    const data = await res.json();
+    const artists = data?.similarartists?.artist || [];
+    if (artists.length === 0) {
+      console.log(`[Last.fm] No similar artists found for "${artistName}"`);
+      return [];
+    }
+    const result = artists.map((a: any) => ({
+      name: a.name as string,
+      match: parseFloat(a.match) || 0,
+    }));
+    console.log(`[Last.fm] Found ${result.length} similar artists for "${artistName}": ${result.slice(0, 5).map((a: LastFmSimilarArtist) => a.name).join(", ")}`);
+    return result;
+  } catch (e) {
+    console.error("[Last.fm] Error fetching similar artists:", e);
+    return [];
+  }
+}
+
+// Also fetch Last.fm genre tags for an artist
+async function fetchLastFmArtistTags(artistName: string): Promise<string[]> {
+  const apiKey = Deno.env.get("LASTFM_API_KEY");
+  if (!apiKey) return [];
+  try {
+    const url = new URL("https://ws.audioscrobbler.com/2.0/");
+    url.searchParams.set("method", "artist.getTopTags");
+    url.searchParams.set("artist", artistName);
+    url.searchParams.set("api_key", apiKey);
+    url.searchParams.set("format", "json");
+    url.searchParams.set("autocorrect", "1");
+
+    const res = await fetch(url.toString());
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data?.toptags?.tag || [])
+      .slice(0, 5)
+      .map((t: any) => t.name as string)
+      .filter((t: string) => t.toLowerCase() !== "seen live");
+  } catch {
+    return [];
+  }
+}
+
 // ── Exa /answer API ─────────────────────────────────────────────────
 interface ExaCitation {
   citIndex: number;
@@ -135,14 +281,15 @@ function extractImageUrl(text: string | undefined): string | null {
   for (const pattern of imgPatterns) {
     const matches = text.match(pattern);
     if (matches) {
-      // Clean URLs: strip trailing markdown/punctuation artifacts
-      const cleaned = matches.map(m => m.replace(/[)\]}>'"]+$/, ""));
+      // Clean URLs: strip trailing markdown/punctuation artifacts and embedded markdown links
+      const cleaned = matches.map(m => m.replace(/\]\(https?:\/\/.*$/, "").replace(/[)\]}>'"\\]+$/, ""));
       // Prefer larger images, skip thumbnails, icons, and placeholder images
       const good = cleaned.find(m =>
         !m.includes("icon") && !m.includes("logo") && !m.includes("favicon") &&
         !m.includes("1x1") && !m.includes("pixel") && !m.includes("no-image") &&
         !m.includes("no_image") && !m.includes("placeholder") && !m.includes("default") &&
-        !m.includes("blank") && !m.includes("spacer") && m.length < 500
+        !m.includes("blank") && !m.includes("spacer") && !m.includes("dummy") &&
+        !m.includes("revslider") && !m.includes("/plugins/") && m.length < 500
       );
       if (good) return good;
     }
@@ -150,46 +297,75 @@ function extractImageUrl(text: string | undefined): string | null {
   return null;
 }
 
-async function askExa(
+// Search Exa with /search + contents instead of /answer for better entity control.
+// Uses includeText to ensure pages actually mention the artist name.
+async function searchExaPages(
   query: string,
   label: string,
   apiKey: string,
   citIndexStart: number,
+  includeText?: string[],
+  excludeText?: string[],
 ): Promise<ExaAnswer> {
-  const res = await fetch("https://api.exa.ai/answer", {
+  const body: any = {
+    query,
+    type: "auto",
+    numResults: 5,
+    contents: {
+      text: { maxCharacters: 3000 },
+    },
+  };
+  if (includeText?.length) body.includeText = includeText;
+  if (excludeText?.length) body.excludeText = excludeText;
+
+  const res = await fetch("https://api.exa.ai/search", {
     method: "POST",
     headers: {
       "x-api-key": apiKey,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ query, text: true }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
-    console.error(`[Exa] /answer failed for ${label}:`, res.status, await res.text());
+    console.error(`[Exa] /search failed for ${label}:`, res.status, await res.text());
     return { label, answer: "", citations: [], costDollars: 0 };
   }
 
   const data = await res.json();
-  const citations: ExaCitation[] = (data.citations || []).map(
-    (c: any, i: number) => ({
+  const results = data.results || [];
+
+  // Build citations from search results
+  const citations: ExaCitation[] = results.map(
+    (r: any, i: number) => ({
       citIndex: citIndexStart + i,
-      url: c.url || "",
-      title: c.title || "",
-      author: c.author || null,
-      publishedDate: c.publishedDate || null,
-      imageUrl: extractImageUrl(c.text) || null,
+      url: r.url || "",
+      title: r.title || "",
+      author: r.author || null,
+      publishedDate: r.publishedDate || null,
+      imageUrl: extractImageUrl(r.text) || null,
     })
   );
 
+  // Build answer from page text snippets (replacing Exa's synthesized answer)
+  const snippets = results
+    .filter((r: any) => r.text)
+    .map((r: any, i: number) => {
+      // Truncate each page to keep prompt reasonable
+      const text = (r.text || "").slice(0, 2000);
+      return `[Source: "${r.title}" — ${r.url}]\n${text}`;
+    })
+    .join("\n\n---\n\n");
+
   const citImgCount = citations.filter(c => c.imageUrl).length;
   if (citImgCount > 0) {
-    console.log(`[Exa] ${label}: extracted ${citImgCount} images from citation text`);
+    console.log(`[Exa] ${label}: extracted ${citImgCount} images from ${results.length} results`);
   }
+  console.log(`[Exa] ${label}: ${results.length} results${includeText ? ` (includeText: ${includeText.join(", ")})` : ""}`);
 
   return {
     label,
-    answer: data.answer || "",
+    answer: snippets,
     citations,
     costDollars: data.costDollars?.total || 0,
   };
@@ -204,11 +380,19 @@ class RecitationError extends Error {
 function isRelevantWikiResult(pageTitle: string, query: string): boolean {
   const titleLower = pageTitle.toLowerCase();
   const queryLower = query.toLowerCase();
-  // Extract meaningful words from query (skip common filler)
-  const stopWords = new Set(["the", "a", "an", "of", "by", "in", "at", "for", "and", "or", "to", "musician", "artist", "band", "song", "album", "music", "producer", "track"]);
+
+  // First try: entire cleaned query as substring (e.g., "pete rango" in title)
+  const cleanQuery = queryLower
+    .replace(/\b(musician|artist|band|song|album|music|producer|track)\b/g, "")
+    .trim();
+  if (cleanQuery && titleLower.includes(cleanQuery)) return true;
+
+  // Fallback: ALL significant words must appear (fixes "Pete Townshend" matching "Pete Rango musician")
+  const stopWords = new Set(["the", "a", "an", "of", "by", "in", "at", "for",
+    "and", "or", "to", "musician", "artist", "band", "song", "album", "music",
+    "producer", "track"]);
   const queryWords = queryLower.split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w));
-  // At least one significant query word must appear in the page title
-  return queryWords.some(word => titleLower.includes(word));
+  return queryWords.length > 0 && queryWords.every(word => titleLower.includes(word));
 }
 
 // Reject known bad image patterns from Wikipedia/Commons
@@ -220,6 +404,7 @@ function isGarbageImage(url: string): boolean {
     lower.includes(".svg") ||
     lower.includes("flag_of_") ||
     lower.includes("coat_of_arms") ||
+    lower.includes("coat_of_") ||
     lower.includes("map_of_") ||
     lower.includes("us_navy") ||
     lower.includes("no-image") ||
@@ -229,8 +414,80 @@ function isGarbageImage(url: string): boolean {
     lower.includes("logo") ||
     lower.includes("symbol") ||
     lower.includes("question_mark") ||
-    lower.includes("blank")
+    lower.includes("blank") ||
+    lower.includes("dummy") ||
+    lower.includes("spacer") ||
+    lower.includes("1x1") ||
+    lower.includes("revslider") ||
+    lower.includes("/plugins/") ||
+    lower.includes("2a96cbd8b46e442fc41c2b86b821562f") || // Last.fm default placeholder
+    lower.includes("mdpi.com/files") ||
+    lower.includes("ams.org/images") ||
+    lower.includes("govinfo.gov") ||
+    lower.includes("big_cover-") ||
+    lower.includes("monument")
   );
+}
+
+// ── Word-boundary matching helper ─────────────────────────────────────
+// Uses regex \b to prevent "pete" matching inside "peter" or "cornelia" matching "Cornelia Murr"
+function wordBoundaryMatch(haystack: string, needle: string): boolean {
+  try {
+    const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`\\b${escaped}\\b`).test(haystack);
+  } catch {
+    return haystack.includes(needle);
+  }
+}
+
+// ── Filter Exa citations by relevance ─────────────────────────────────
+// Two-level filtering:
+//   "strict" = artist name must appear (for images + external links — avoids wrong-person contamination)
+//   "loose"  = artist OR title may appear (for prompt context — wider but still filtered)
+function citationMentionsArtistStrict(c: ExaCitation, artistLower: string): boolean {
+  const hay = `${c.title} ${c.url} ${c.author || ""}`.toLowerCase();
+  // Strict: require the FULL artist name as a unit — "pete rango" must appear, not just "pete" + "rango" separately
+  // This prevents "Pete Rock", "Pete Atkin", "Cornelia Murr" from matching
+  if (wordBoundaryMatch(hay, artistLower)) return true;
+  // Also check URL slug variants: "peterango" (concatenated), "pete-rango" (hyphenated)
+  const slug = artistLower.replace(/\s+/g, "");
+  const hyphenated = artistLower.replace(/\s+/g, "-");
+  return hay.includes(slug) || hay.includes(hyphenated);
+}
+
+function citationMentionsArtistLoose(c: ExaCitation, artistLower: string, titleLower: string, artistWords: string[]): boolean {
+  const hay = `${c.title} ${c.url} ${c.author || ""}`.toLowerCase();
+  // Full name match
+  if (wordBoundaryMatch(hay, artistLower)) return true;
+  // Title match
+  if (wordBoundaryMatch(hay, titleLower)) return true;
+  // Individual word fallback (only for loose mode)
+  return artistWords.length >= 2 && artistWords.every(w => wordBoundaryMatch(hay, w));
+}
+
+function filterRelevantCitations(
+  citations: ExaCitation[], artist: string, title: string,
+  mode: "strict" | "loose" = "loose"
+): ExaCitation[] {
+  const artistLower = artist.toLowerCase();
+  const titleLower = title.toLowerCase();
+  const artistWords = artistLower.split(/\s+/).filter(w => w.length > 2);
+
+  if (mode === "strict") {
+    // STRICT: require FULL artist name — no individual word fallback
+    // This prevents "Pete Rock" (matches "pete" but not "pete rango"),
+    // "Cornelia Murr" (matches "cornelia" but not "jamee cornelia"), etc.
+    const artistOnly = citations.filter(c => citationMentionsArtistStrict(c, artistLower));
+    return artistOnly.length > 0 ? artistOnly : [];
+  }
+
+  // Loose mode: artist OR title match (used for prompt context to Gemini)
+  const relevant = citations.filter(c =>
+    citationMentionsArtistLoose(c, artistLower, titleLower, artistWords)
+  );
+
+  // If filtering removes everything, return originals (some context is better than none)
+  return relevant.length > 0 ? relevant : citations;
 }
 
 // ── Fetch image as base64 for multimodal Gemini input ────────────────
@@ -264,7 +521,11 @@ async function fetchImageAsBase64(url: string): Promise<{ mimeType: string; base
 }
 
 // ── Prepare image candidates from Exa citations ─────────────────────
-async function prepareImageCandidates(citations: ExaCitation[]): Promise<ImageCandidate[]> {
+async function prepareImageCandidates(
+  citations: ExaCitation[],
+  artist?: string,
+  spotifyArtistImageUrl?: string,
+): Promise<ImageCandidate[]> {
   const groups: { name: "artist" | "track" | "discovery"; prefix: string; start: number; end: number }[] = [
     { name: "artist", prefix: "A", start: 0, end: 10 },
     { name: "track", prefix: "T", start: 10, end: 20 },
@@ -310,6 +571,23 @@ async function prepareImageCandidates(citations: ExaCitation[]): Promise<ImageCa
     .filter((r): r is PromiseFulfilledResult<ImageCandidate | null> => r.status === "fulfilled")
     .map(r => r.value)
     .filter((c): c is ImageCandidate => c !== null);
+
+  // Inject Spotify artist image as IMG-A0 (guaranteed-relevant artist image)
+  if (spotifyArtistImageUrl) {
+    const imgData = await fetchImageAsBase64(spotifyArtistImageUrl);
+    if (imgData) {
+      candidates.unshift({
+        label: "IMG-A0",
+        group: "artist",
+        mimeType: imgData.mimeType,
+        base64: imgData.base64,
+        sourceUrl: spotifyArtistImageUrl,
+        citIndex: -1,
+        citTitle: `${artist || "Artist"} (Spotify artist photo)`,
+      });
+      console.log(`[ImagePrep] Injected Spotify artist image as IMG-A0`);
+    }
+  }
 
   console.log(`[ImagePrep] Downloaded ${candidates.length}/${tasks.length} candidate images`);
   return candidates;
@@ -519,22 +797,37 @@ function buildExaQuestions(
   const angleStr = angles.join(", ");
 
   return {
-    artistQ: `${artist}${albumCtx}: ${cfg.artistFocus} Focus on: ${angleStr}.`,
-    trackQ: `"${title}" by ${artist}${albumCtx}: ${cfg.trackFocus} Focus on: ${angleStr}.`,
-    discoveryQ: `Artists related to ${artist} "${title}": ${cfg.discoveryFocus}`,
+    artistQ: `"${artist}" music artist${albumCtx}: ${cfg.artistFocus} Focus on: ${angleStr}.`,
+    trackQ: `"${title}" by "${artist}" music artist (NOT cover, NOT remix, NOT video game, specifically the song by "${artist}")${albumCtx}: ${cfg.trackFocus} Focus on: ${angleStr}.`,
+    discoveryQ: `Musicians with similar sound to "${artist}"${albumCtx}: ${cfg.discoveryFocus}`,
   };
 }
 
 // ── Build citation-indexed context for Gemini prompt ─────────────────
-function buildExaPromptContext(answers: ExaAnswer[]): {
+function buildExaPromptContext(answers: ExaAnswer[], artist?: string, title?: string): {
   context: string;
   allCitations: ExaCitation[];
 } {
   const allCitations: ExaCitation[] = [];
   const parts: string[] = [];
 
+  const artistLower = (artist || "").toLowerCase();
+  const artistWords = artistLower.split(/\s+/).filter(w => w.length > 2);
+
   for (const a of answers) {
     if (!a.answer) continue;
+    // Check if the Exa answer actually mentions the artist — if not, the answer
+    // is likely about an unrelated person with a similar name or song title.
+    // Skip irrelevant answers to prevent Gemini from using wrong-person data.
+    if (artist && artistWords.length > 0) {
+      const answerLower = a.answer.toLowerCase();
+      const mentionsArtist = wordBoundaryMatch(answerLower, artistLower) ||
+        (artistWords.length >= 2 && artistWords.every(w => wordBoundaryMatch(answerLower, w)));
+      if (!mentionsArtist) {
+        console.log(`[Exa] Skipping ${a.label} answer — does not mention "${artist}"`);
+        continue;
+      }
+    }
     allCitations.push(...a.citations);
     parts.push(
       `[${a.label.toUpperCase()} RESEARCH]\n${a.answer}`
@@ -592,6 +885,10 @@ async function generateWithGemini(
   exaContext?: string,
   exaCitations?: ExaCitation[],
   imageCandidates?: ImageCandidate[],
+  sparseData?: boolean,
+  spotifyInfo?: SpotifyArtistInfo | null,
+  lastFmSimilar?: LastFmSimilarArtist[],
+  lastFmTags?: string[],
 ): Promise<{ nuggets: GeminiNugget[]; artistSummary: string; groundingChunks: any[]; exaCitations?: ExaCitation[] }> {
   const tierConfig = TIER_CONFIG[tier];
   const transcriptContext = videos
@@ -635,12 +932,70 @@ Use this to:
 - Do NOT recommend artists already in their top artists list\n`
     : "";
 
+  // Build music context for accurate genre + discovery recommendations
+  const hasSpotifyGenres = spotifyInfo && spotifyInfo.genres.length > 0;
+  const hasSpotifyTracks = spotifyInfo && spotifyInfo.topTrackNames.length > 0;
+  const hasLastFmSimilar = lastFmSimilar && lastFmSimilar.length > 0;
+  const hasLastFmTags = lastFmTags && lastFmTags.length > 0;
+
+  let musicDataContext = `\nMUSIC DATA for "${artist}":`;
+  // Spotify catalog data
+  if (hasSpotifyGenres) {
+    musicDataContext += `\nSpotify genres: ${spotifyInfo!.genres.join(", ")}`;
+  }
+  if (hasLastFmTags) {
+    musicDataContext += `\nLast.fm genre tags: ${lastFmTags!.join(", ")}`;
+  }
+  if (hasSpotifyTracks) {
+    musicDataContext += `\nTop tracks: ${spotifyInfo!.topTrackNames.join(", ")}`;
+  }
+  if (spotifyInfo && spotifyInfo.albumNames.length > 0) {
+    musicDataContext += `\nAlbums/Singles: ${spotifyInfo!.albumNames.join(", ")}`;
+  }
+  if (spotifyInfo) {
+    musicDataContext += `\nFollowers: ${spotifyInfo.followers.toLocaleString()}`;
+  }
+  // Last.fm similar artists — this is the key data for discovery recommendations
+  if (hasLastFmSimilar) {
+    musicDataContext += `\n\nLAST.FM SIMILAR ARTISTS (ranked by similarity):`;
+    for (const sim of lastFmSimilar!.slice(0, 8)) {
+      musicDataContext += `\n- ${sim.name} (${Math.round(sim.match * 100)}% match)`;
+    }
+  }
+
+  // Discovery instruction — prioritize Last.fm similar artists when available
+  if (hasLastFmSimilar) {
+    musicDataContext += `\n\nDISCOVERY NUGGET INSTRUCTIONS: The LAST.FM SIMILAR ARTISTS above are VERIFIED similar artists based on real listener data. For the discovery nugget, you MUST recommend one of these artists (or a very closely related artist in the same scene). Pick the one whose sound best matches the specific track "${title}". Explain WHY their sound is similar — mention specific sonic qualities, production style, or genre elements they share. The recommended artist MUST exist on Spotify.\n`;
+  } else {
+    musicDataContext += `\n\nDISCOVERY NUGGET INSTRUCTIONS: Use the track names, album names, and genre tags above to understand "${artist}"'s actual musical style. Then recommend an artist whose SOUND genuinely resembles "${title}". The recommended artist MUST exist on Spotify. Do NOT rely on the Exa discovery research — it is unreliable for lesser-known artists. Use YOUR OWN musical knowledge informed by the catalog data above.\n`;
+  }
+
   const prompt = `You are a music historian and trivia expert. Generate exactly 3 fascinating nuggets about the song "${title}" by the artist/band ${artist}${album ? ` from the album "${album}"` : ""}.
 
-IMPORTANT DISAMBIGUATION: The ARTIST/BAND is "${artist}". The SONG/TRACK is "${title}". These are different — "${title}" is the song name, NOT a band. All nuggets must be about the artist "${artist}" and their song "${title}".
+IMPORTANT DISAMBIGUATION: The ARTIST/BAND is exactly "${artist}". The SONG/TRACK is exactly "${title}". These are different — "${title}" is the song name, NOT a band. All nuggets must be about the artist "${artist}" and their song "${title}".
+Do NOT use information about other people with similar names. Artists with similar-sounding names are DIFFERENT people — e.g., "Pete RG" is NOT "Pete Rango", "Sneaky Pete" is NOT "Pete Rango", "Cornelia Murr" is NOT "Jamee Cornelia". If the research mentions a different artist, even one with a very similar name, do NOT use their biography, collaborators, discography, or any other details. If the Exa research returns information about unrelated people, state that verifiable facts are limited rather than adopting those facts.
+Do NOT confuse the album title or song title with video games, films, or other media that share the same name. Only use information about the MUSIC.
+If a research source is about a DIFFERENT album, EP, or project (even by the same artist), do NOT transfer its specific details (collaborators, studio location, recording process, musicians involved) to "${title}"${album ? ` or "${album}"` : ""}. Only use facts that EXPLICITLY mention "${title}"${album ? ` or "${album}"` : ""}, or that clearly describe the artist's general career/philosophy.
 
+ACCURACY RULES:
+- NEVER claim the artist collaborated with, was produced by, or is connected to famous people unless the research material EXPLICITLY states this with a verifiable citation.
+- NEVER connect the track title or album title to unrelated people/things that happen to share the same word (e.g., don't link a track called "SLACK" to Freddie Slack or a band called The Slackers unless the research proves a deliberate, documented connection).
+- If the research material is thin for this artist, write nuggets about what IS verifiably known rather than speculating. It's better to say "This independent artist..." than to fabricate connections to famous names.
+- For discovery nuggets: recommend artists whose music SOUNDS similar to the track "${title}" — match the genre, mood, tempo, and production style of THIS specific track. Do NOT recommend based on the artist's name, the track title, or their other projects in different genres.
+- Do NOT recommend artists who share ANY part of the artist's name — not the first name, not the last name, not any word. For example: if researching "Pete Rango", do NOT recommend "Pete Rock", "Pete Townshend", "Pete Anderson", "Sneaky Pete Kleinow", or anyone else named Pete. If researching "Jamee Cornelia", do NOT recommend "Cornelia Murr" or anyone else with "Cornelia" or "Jamee" in their name.
+- Do NOT use fabricated publisher names like "Internal Research Document", "General Knowledge", "General Musical Analysis", "Music Analysis", "Music Historian", or "Listening Analysis". Every source must be a REAL, verifiable publication, website, or media outlet that you can point to with a real URL. If no specific source exists for a fact, use the artist's own website, Bandcamp, SoundCloud, Spotify page, or a real music publication that covers the genre.
+- Do NOT fabricate academic connections (e.g., "studied at X university" or "subject of academic research") unless the research material explicitly states this.
+- Do NOT embellish or generalize beyond what the source material says. If the same collaborator appears on every track, say "all tracks feature the same collaborator" — do NOT frame it as "features a special guest artist" which implies different guests. Stick to exactly what the data shows.
+${sparseData ? `
+SPARSE DATA WARNING: The research material for "${artist}" is very limited. This means:
+- Do NOT fill the gap by discussing other people with similar names, films/games with similar titles, or famous songs with the same name.
+- Focus on describing the LISTENING EXPERIENCE: the sonic qualities, mood, instrumentation, and emotional texture you can observe from the track itself.
+- For the discovery nugget: recommend a genuinely sonically similar artist based on the genre/mood of the track, NOT based on name similarity or title matching.
+- It is perfectly fine to acknowledge that the artist is independent/underground. Write from the perspective of discovering a hidden gem.
+- NEVER fabricate production details (specific gear, studio techniques, personnel) that are not in the research material.
+` : ""}
 DEPTH CONTEXT: ${depthInstruction}${angleInstruction}${nonRepeatInstruction}
-${tasteContext}
+${tasteContext}${musicDataContext}
 TONE & STYLE: ${tierConfig.tone}
 ASSUMED KNOWLEDGE: ${tierConfig.assumedKnowledge}
 SOURCE EXPECTATIONS: Prefer sources from ${tierConfig.sourceExpectation}.
@@ -803,7 +1158,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, imageCaption, imageQuery, listenCount, previousNuggets, tier: rawTier, userTopArtists: rawTopArtists, userTopTracks: rawTopTracks } = body;
+    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, imageCaption, imageQuery, listenCount, previousNuggets, tier: rawTier, userTopArtists: rawTopArtists, userTopTracks: rawTopTracks, spotifyArtistImageUrl: rawSpotifyArtistImageUrl, spotifyTrackId: rawSpotifyTrackId } = body;
     const tier: Tier = (rawTier === "casual" || rawTier === "curious" || rawTier === "nerd") ? rawTier : "casual";
 
     // ── Input validation ────────────────────────────────────────────
@@ -837,6 +1192,15 @@ serve(async (req) => {
     const safeTopTracks: string[] = Array.isArray(rawTopTracks)
       ? rawTopTracks.slice(0, 10).map((s: unknown) => (typeof s === "string" ? s.slice(0, 100) : "")).filter(Boolean)
       : [];
+    const safeSpotifyArtistImageUrl: string | undefined =
+      typeof rawSpotifyArtistImageUrl === "string" && rawSpotifyArtistImageUrl.startsWith("http")
+        ? rawSpotifyArtistImageUrl.slice(0, 500)
+        : undefined;
+    // Spotify track ID for recommendations (e.g., "7mYphBaMfblb6iu1saj3MC")
+    const safeSpotifyTrackId: string | undefined =
+      typeof rawSpotifyTrackId === "string" && /^[a-zA-Z0-9]{22}$/.test(rawSpotifyTrackId)
+        ? rawSpotifyTrackId
+        : undefined;
 
     const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY");
     if (!GOOGLE_AI_API_KEY) {
@@ -930,17 +1294,28 @@ Return ONLY valid JSON:
     const EXA_API_KEY = Deno.env.get("EXA_API_KEY");
     let exaPromptContext: string | undefined;
     let exaCitations: ExaCitation[] | undefined;
+    // Strict-filtered citations: only those mentioning the artist name.
+    // Used for images and external links to prevent wrong-person contamination.
+    let exaCitationsStrict: ExaCitation[] = [];
+
+    // Fetch Spotify + Last.fm artist info in parallel with Exa
+    const spotifyInfoPromise = fetchSpotifyArtistInfo(artist);
+    const lastFmSimilarPromise = fetchLastFmSimilarArtists(artist);
+    const lastFmTagsPromise = fetchLastFmArtistTags(artist);
 
     // Exa enrichment: every request when Exa key is configured
+    // Uses /search + contents with includeText for entity disambiguation
     if (EXA_API_KEY) {
-      console.log(`[Exa] Asking Exa about "${artist} - ${title}" (${tier} tier, listen #${safeListenCount})`);
+      console.log(`[Exa] Searching Exa about "${artist} - ${title}" (${tier} tier, listen #${safeListenCount})`);
       const angles = pickAngles(tier, safeListenCount);
       const questions = buildExaQuestions(artist, title, album, tier, angles);
 
+      // Artist + track queries require the artist name in page text.
+      // Discovery query is about finding similar artists, so no includeText filter.
       const [artistResult, trackResult, discoveryResult] = await Promise.allSettled([
-        askExa(questions.artistQ, "artist", EXA_API_KEY, 0),
-        askExa(questions.trackQ, "track", EXA_API_KEY, 10),
-        askExa(questions.discoveryQ, "discovery", EXA_API_KEY, 20),
+        searchExaPages(questions.artistQ, "artist", EXA_API_KEY, 0, [artist]),
+        searchExaPages(questions.trackQ, "track", EXA_API_KEY, 10, [artist]),
+        searchExaPages(questions.discoveryQ, "discovery", EXA_API_KEY, 20),
       ]);
 
       const answers: ExaAnswer[] = [];
@@ -953,19 +1328,26 @@ Return ONLY valid JSON:
       }
 
       if (answers.length > 0) {
-        const { context, allCitations } = buildExaPromptContext(answers);
+        const { context, allCitations } = buildExaPromptContext(answers, artist, title);
+        // Loose filter for prompt context (artist OR title match)
+        const filteredCitations = filterRelevantCitations(allCitations, artist, title, "loose");
+        // Strict filter for images and external links (artist name must appear)
+        exaCitationsStrict = filterRelevantCitations(allCitations, artist, title, "strict");
         exaPromptContext = context;
-        exaCitations = allCitations;
-        console.log(`[Exa] ${answers.length} answers, ${allCitations.length} citations, $${totalCost.toFixed(3)}`);
+        exaCitations = filteredCitations;
+        console.log(`[Exa] ${answers.length} answers, ${allCitations.length} citations (${filteredCitations.length} loose, ${exaCitationsStrict.length} strict), $${totalCost.toFixed(3)}`);
       } else {
         console.log(`[Exa] No answers returned, falling back to Google grounding`);
       }
     }
 
     // Start image candidate downloads in parallel with YouTube (they're independent)
-    const imageCandidatesPromise = exaCitations?.length
-      ? prepareImageCandidates(exaCitations)
-      : Promise.resolve([] as ImageCandidate[]);
+    // Use strict-filtered citations for images to avoid wrong-person photos
+    const imageCandidatesPromise = exaCitationsStrict.length
+      ? prepareImageCandidates(exaCitationsStrict, artist, safeSpotifyArtistImageUrl)
+      : (safeSpotifyArtistImageUrl
+          ? prepareImageCandidates([], artist, safeSpotifyArtistImageUrl)
+          : Promise.resolve([] as ImageCandidate[]));
 
     // YouTube search + transcripts only on repeat listens (listenCount >= 2).
     // First listen uses Exa (if configured) or Gemini + Google Search grounding alone.
@@ -1003,14 +1385,33 @@ Return ONLY valid JSON:
     }
 
     // Step 3: Generate nuggets with Gemini + Google Search grounding
-    const imageCandidates = await imageCandidatesPromise;
+    const [imageCandidates, resolvedSpotifyInfo, resolvedLastFmSimilar, resolvedLastFmTags] = await Promise.all([
+      imageCandidatesPromise,
+      spotifyInfoPromise,
+      lastFmSimilarPromise,
+      lastFmTagsPromise,
+    ]);
+    if (resolvedSpotifyInfo) {
+      console.log(`[Spotify] Genres: ${resolvedSpotifyInfo.genres.join(", ") || "none"}`);
+    }
+    if (resolvedLastFmSimilar.length > 0) {
+      console.log(`[Last.fm] Similar: ${resolvedLastFmSimilar.slice(0, 5).map(a => a.name).join(", ")}`);
+    }
+    if (resolvedLastFmTags.length > 0) {
+      console.log(`[Last.fm] Tags: ${resolvedLastFmTags.join(", ")}`);
+    }
+    // Detect sparse data: if very few strict citations mention the artist, tell Gemini to be conservative
+    const isSparseData = exaCitationsStrict.length <= 2;
+    if (isSparseData) {
+      console.log(`[SparseData] Only ${exaCitationsStrict.length} strict citations — enabling conservative mode`);
+    }
     let rawNuggets: any[];
     let groundingChunks: any[];
     let artistSummary = "";
     try {
       const result = await generateWithGemini(
         artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier, safeTopArtists, safeTopTracks,
-        exaPromptContext, exaCitations, imageCandidates
+        exaPromptContext, exaCitations, imageCandidates, isSparseData, resolvedSpotifyInfo, resolvedLastFmSimilar, resolvedLastFmTags
       );
       rawNuggets = result.nuggets;
       groundingChunks = result.groundingChunks;
@@ -1020,7 +1421,7 @@ Return ONLY valid JSON:
         console.log("Retrying without transcripts to avoid RECITATION block...");
         const result = await generateWithGemini(
           artist, title, album, videos, new Map(), GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier, safeTopArtists, safeTopTracks,
-          exaPromptContext, exaCitations, imageCandidates
+          exaPromptContext, exaCitations, imageCandidates, isSparseData, resolvedSpotifyInfo, resolvedLastFmSimilar, resolvedLastFmTags
         );
         rawNuggets = result.nuggets;
         groundingChunks = result.groundingChunks;
@@ -1115,13 +1516,13 @@ Return ONLY valid JSON:
       }
     }
 
-    // Third pass: fallback to any unused Exa citation image from the same group
-    if (exaCitations?.length) {
+    // Third pass: fallback to any unused strict-filtered Exa citation image from the same group
+    if (exaCitationsStrict.length) {
       for (let i = 0; i < rawNuggets.length; i++) {
         if (rawNuggets[i]._resolvedImageUrl) continue;
         const groupStart = i * 10;
         const groupEnd = groupStart + 10;
-        const groupCit = exaCitations.find((c) =>
+        const groupCit = exaCitationsStrict.find((c) =>
           c.citIndex >= groupStart && c.citIndex < groupEnd &&
           c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl)
         );
@@ -1144,11 +1545,16 @@ Return ONLY valid JSON:
       return uri && !chunkTitle.includes("vertex ai") && !chunkTitle.includes("grounding api");
     });
 
+    // Helper: strip leaked citation markers like [CIT 0], [CIT 1, CIT 2] from text
+    const stripCitMarkers = (s: string) => s.replace(/\s*\[CIT\s*\d+(?:\s*,\s*CIT\s*\d+)*\]/gi, "").trim();
+    // Helper: clean malformed image URLs (strip embedded markdown link syntax like `](url)`)
+    const cleanImageUrl = (url: string) => url.replace(/\]\(https?:\/\/.*$/, "").replace(/[)\]}>'"\\]+$/, "");
+
     const nuggets = rawNuggets.map((n) => {
       const source = n.source || {};
       const result: any = {
-        headline: n.headline,
-        text: n.text,
+        headline: stripCitMarkers(n.headline || ""),
+        text: stripCitMarkers(n.text || ""),
         kind: n.kind,
         listenFor: n.listenFor,
         source: {
@@ -1162,7 +1568,7 @@ Return ONLY valid JSON:
 
       // Contextual image resolved from Wikipedia/Commons
       if (n._resolvedImageUrl) {
-        result.imageUrl = n._resolvedImageUrl;
+        result.imageUrl = cleanImageUrl(n._resolvedImageUrl);
         result.imageCaption = n.imageCaption || n._resolvedImageTitle || n.imageSearchQuery;
       }
 
@@ -1221,23 +1627,28 @@ Return ONLY valid JSON:
           }
         }
 
-        // No domain match — use best grounding chunk (real URL from Google Search)
+        // No domain match — use best grounding chunk that mentions the artist (from Google Search)
         if (!result.source.url && realChunks.length > 0) {
-          // Try to find a grounding chunk whose title/URL relates to this nugget's publisher
+          const artistLower = artist.toLowerCase();
           const pubLower = (source.publisher || "").toLowerCase();
+          // Only use chunks that mention the artist — prevents marking Brian Eno/Omar-S articles as verified Pete Rango sources
           const relevantChunk = realChunks.find((chunk: any) => {
             const chunkTitle = (chunk?.web?.title || "").toLowerCase();
             const chunkUri = (chunk?.web?.uri || "").toLowerCase();
-            return pubLower && (chunkTitle.includes(pubLower) || chunkUri.includes(pubLower));
+            return pubLower && (chunkTitle.includes(pubLower) || chunkUri.includes(pubLower)) &&
+                   (wordBoundaryMatch(chunkTitle, artistLower) || wordBoundaryMatch(chunkUri, artistLower));
           }) || realChunks.find((chunk: any) => {
-            // Fall back to any chunk mentioning the artist or title
             const chunkTitle = (chunk?.web?.title || "").toLowerCase();
-            return chunkTitle.includes(artist.toLowerCase()) || chunkTitle.includes(title.toLowerCase());
-          }) || realChunks[0];
+            const chunkUri = (chunk?.web?.uri || "").toLowerCase();
+            return wordBoundaryMatch(chunkTitle, artistLower) || wordBoundaryMatch(chunkUri, artistLower);
+          });
+          // No blind fallback to realChunks[0] — that causes wrong-article contamination.
 
-          result.source.url = relevantChunk.web.uri;
-          if (relevantChunk.web.title) result.source.title = relevantChunk.web.title;
-          result.source.verified = true;
+          if (relevantChunk) {
+            result.source.url = relevantChunk.web.uri;
+            if (relevantChunk.web.title) result.source.title = relevantChunk.web.title;
+            result.source.verified = true;
+          }
         }
 
         // Final fallback — targeted Google Search so the user can find the real page
@@ -1251,12 +1662,12 @@ Return ONLY valid JSON:
       return result;
     });
 
-    // Build external links from Exa citations (verified real URLs)
+    // Build external links from strict-filtered Exa citations only
+    // (must mention artist name — prevents Diana Ross, Slackers, etc. from becoming links)
     const externalLinks: { label: string; url: string }[] = [];
-    if (exaCitations?.length) {
-      // Deduplicate by domain, pick the most relevant citations
+    if (exaCitationsStrict.length) {
       const seenDomains = new Set<string>();
-      for (const cit of exaCitations) {
+      for (const cit of exaCitationsStrict) {
         try {
           const domain = new URL(cit.url).hostname.replace(/^www\./, "");
           if (!seenDomains.has(domain) && externalLinks.length < 5) {
@@ -1266,9 +1677,17 @@ Return ONLY valid JSON:
         } catch { /* skip invalid URLs */ }
       }
     }
-    // Add Wikipedia fallback if not already present
+    // Add Wikipedia fallback only if Exa found a Wikipedia citation for this artist
+    // (avoids fabricating Wikipedia links for indie/unknown artists who don't have pages)
     if (!externalLinks.some(l => l.url.includes("wikipedia.org"))) {
-      externalLinks.push({ label: `${artist} — Wikipedia`, url: `https://en.wikipedia.org/wiki/${encodeURIComponent(artist).replace(/%20/g, "_")}` });
+      // Check if any Exa citation came from Wikipedia AND mentions the artist
+      const wikiCit = exaCitations?.find(c =>
+        c.url.includes("wikipedia.org") &&
+        c.title.toLowerCase().includes(artist.toLowerCase())
+      );
+      if (wikiCit) {
+        externalLinks.push({ label: `${artist} — Wikipedia`, url: wikiCit.url });
+      }
     }
 
     return new Response(JSON.stringify({ nuggets, artistSummary, externalLinks }), {

@@ -145,7 +145,9 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
                 className="w-full rounded-xl object-contain"
                 style={{ maxHeight: "380px", minHeight: "160px" }}
                 onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = "none";
+                  // Hide the entire image container (img + gradient + caption)
+                  const container = (e.target as HTMLImageElement).closest(".relative.overflow-hidden");
+                  if (container) (container as HTMLElement).style.display = "none";
                 }}
               />
               {/* Gradient overlay for caption legibility */}
