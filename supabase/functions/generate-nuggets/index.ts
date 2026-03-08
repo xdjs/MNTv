@@ -907,9 +907,47 @@ Return ONLY valid JSON:
       }
     }
 
-    // Step 3.5: Resolve contextual images from Wikipedia/Commons in parallel
-    // Auto-generate image queries for nuggets where Gemini didn't provide one
+    // Step 3.5: Resolve images for each nugget
+    // Priority: 1) Exa citation images (from source article pages)
+    //           2) Wikipedia/Commons via Gemini's imageSearchQuery
+    //           3) Frontend falls back to Spotify album art
+    const usedImageUrls = new Set<string>();
+
+    // First pass: try Exa citation images (most relevant — from the actual source pages)
+    for (let i = 0; i < rawNuggets.length; i++) {
+      const source = rawNuggets[i].source || {};
+      if (!exaCitations?.length) continue;
+
+      // Try the nugget's own citation first
+      if (source.citIndex != null) {
+        const cit = exaCitations.find((c) => c.citIndex === source.citIndex && c.imageUrl && !usedImageUrls.has(c.imageUrl));
+        if (cit?.imageUrl) {
+          rawNuggets[i]._resolvedImageUrl = cit.imageUrl;
+          rawNuggets[i]._resolvedImageTitle = cit.title;
+          usedImageUrls.add(cit.imageUrl);
+          console.log(`[Image] Exa citation image for nugget ${i}: ${cit.imageUrl}`);
+          continue;
+        }
+      }
+
+      // Try any Exa citation from the same answer group (artist=0-9, track=10-19, discovery=20-29)
+      const groupStart = i * 10; // citIndex offsets: 0, 10, 20
+      const groupEnd = groupStart + 10;
+      const groupCit = exaCitations.find((c) =>
+        c.citIndex >= groupStart && c.citIndex < groupEnd && c.imageUrl && !usedImageUrls.has(c.imageUrl)
+      );
+      if (groupCit?.imageUrl) {
+        rawNuggets[i]._resolvedImageUrl = groupCit.imageUrl;
+        rawNuggets[i]._resolvedImageTitle = groupCit.title;
+        usedImageUrls.add(groupCit.imageUrl);
+        console.log(`[Image] Exa group image for nugget ${i}: ${groupCit.imageUrl}`);
+      }
+    }
+
+    // Second pass: for nuggets still missing images, try Wikipedia/Commons
+    // Build search queries for nuggets that need them
     for (const n of rawNuggets) {
+      if (n._resolvedImageUrl) continue; // already has an Exa image
       if (!n.imageSearchQuery) {
         if (n.kind === "artist") {
           n.imageSearchQuery = `${artist} musician`;
@@ -918,43 +956,26 @@ Return ONLY valid JSON:
           n.imageSearchQuery = `${artist} ${title} song`;
           n.imageCaption = n.imageCaption || `${title} by ${artist}`;
         } else if (n.kind === "discovery") {
-          // Try to extract the recommended artist name from the text
           const recMatch = n.text?.match(/(?:artist|musician|producer|band)\s+(\w[\w\s]+?)(?:\s+shares|\s+is|\s+has|,|\.|'s)/i);
           n.imageSearchQuery = recMatch ? `${recMatch[1]} musician` : `${artist} related artists`;
           n.imageCaption = n.imageCaption || "Recommended artist";
         }
       }
     }
-    const imageResults = await Promise.allSettled(
-      rawNuggets.map(async (n) => {
-        if (!n.imageSearchQuery) return null;
-        return resolveNuggetImage(n.imageSearchQuery);
-      })
+    const wikiSearchNeeded = rawNuggets.map((n) =>
+      !n._resolvedImageUrl && n.imageSearchQuery ? resolveNuggetImage(n.imageSearchQuery) : Promise.resolve(null)
     );
-    // Attach resolved images back to rawNuggets (deduplicate — no two nuggets share the same image)
-    const usedImageUrls = new Set<string>();
+    const wikiResults = await Promise.allSettled(wikiSearchNeeded);
     for (let i = 0; i < rawNuggets.length; i++) {
-      const result = imageResults[i];
+      if (rawNuggets[i]._resolvedImageUrl) continue; // already resolved via Exa
+      const result = wikiResults[i];
       if (result.status === "fulfilled" && result.value && !usedImageUrls.has(result.value.url)) {
         rawNuggets[i]._resolvedImageUrl = result.value.url;
         rawNuggets[i]._resolvedImageTitle = result.value.title;
         usedImageUrls.add(result.value.url);
-        console.log(`[ImageSearch] Resolved "${rawNuggets[i].imageSearchQuery}" → ${result.value.url}`);
-      } else if (rawNuggets[i].imageSearchQuery) {
-        // Fallback: try Exa citation images for this nugget's source
-        const source = rawNuggets[i].source || {};
-        if (exaCitations?.length && source.citIndex != null) {
-          const cit = exaCitations.find((c) => c.citIndex === source.citIndex && c.imageUrl && !usedImageUrls.has(c.imageUrl));
-          if (cit?.imageUrl) {
-            rawNuggets[i]._resolvedImageUrl = cit.imageUrl;
-            rawNuggets[i]._resolvedImageTitle = cit.title;
-            usedImageUrls.add(cit.imageUrl);
-            console.log(`[ImageSearch] Exa citation image for "${rawNuggets[i].imageSearchQuery}" → ${cit.imageUrl}`);
-          }
-        }
-        if (!rawNuggets[i]._resolvedImageUrl) {
-          console.log(`[ImageSearch] No relevant image for "${rawNuggets[i].imageSearchQuery}" — will use album art fallback`);
-        }
+        console.log(`[Image] Wikipedia for nugget ${i} "${rawNuggets[i].imageSearchQuery}" → ${result.value.url}`);
+      } else if (!rawNuggets[i]._resolvedImageUrl) {
+        console.log(`[Image] No image for nugget ${i} — frontend will use album art`);
       }
     }
 
