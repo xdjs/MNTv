@@ -13,8 +13,9 @@ interface Props {
   onClose: () => void;
 }
 
+// Kind labels — matches companion page sections
 const kindLabels: Record<string, string> = {
-  artist: "The Artist",
+  artist: "History",
   track: "The Track",
   discovery: "Explore Next",
 };

@@ -12,9 +12,9 @@ interface Props {
   focused?: boolean;
 }
 
-// Kind labels for the nugget header
+// Kind labels for the nugget header — matches companion page sections
 const kindLabels: Record<string, string> = {
-  artist: "The Artist",
+  artist: "History",
   track: "The Track",
   discovery: "Explore Next",
 };

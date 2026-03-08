@@ -467,14 +467,12 @@ CRITICAL RULES:
 - Be factually accurate — do not fabricate quotes or facts
 - If you cannot find a specific real source for a fact, set publisher to "General Knowledge" — this is better than fabricating an article that doesn't exist
 - NEVER invent specific studio names, gear model numbers, or personnel names — if unsure, describe generally
-- Optionally include "imageSearchQuery" and "imageCaption" when the nugget references something visually interesting BEYOND the main artist or album cover:
-  - A TV show, film, or cultural event the song appeared in
-  - A specific instrument, piece of gear, or studio
-  - A notable collaborator, producer, or featured artist
-  - A specific album cover from a different release
-  - Examples: "HBO Insecure TV show", "Moog Minimoog synthesizer", "Abbey Road Studios London"
+- ALWAYS include "imageSearchQuery" and "imageCaption" for EVERY nugget:
+  - For artist nuggets: search for the artist, a key collaborator, the recording studio, or a relevant era photo. Example: "Stevie Nicks Fleetwood Mac 1977", "Abbey Road Studios London"
+  - For track nuggets: search for the specific instrument, production technique, music video, or cultural reference mentioned. Example: "Fender Rhodes electric piano", "Hyperballad Björk music video"
+  - For discovery nuggets: search for the recommended artist. Example: "Leila electronic music producer"
   - "imageCaption": short (6-12 words) explaining the image's relevance to the nugget
-  - Do NOT include this for generic artist/track facts — we already have the album art for those
+  - Be SPECIFIC — "Stevie Nicks 1977 Rumours era" is better than "Fleetwood Mac". Name the exact person, place, instrument, or thing.
 
 Return ONLY valid JSON:
 {
@@ -812,7 +810,34 @@ Return ONLY valid JSON:
     console.log(`[Grounding] ${groundingChunks.length} chunks for "${artist} - ${title}":`,
       groundingChunks.map((c: any) => ({ title: c?.web?.title, uri: c?.web?.uri })));
 
+    // Enforce kind order: exactly [artist, track, discovery]
+    // Gemini sometimes returns wrong kinds — force them based on position
+    const expectedKinds = ["artist", "track", "discovery"] as const;
+    for (let i = 0; i < rawNuggets.length && i < 3; i++) {
+      if (rawNuggets[i].kind !== expectedKinds[i]) {
+        console.log(`[KindFix] Nugget ${i}: "${rawNuggets[i].kind}" → "${expectedKinds[i]}"`);
+        rawNuggets[i].kind = expectedKinds[i];
+      }
+    }
+
     // Step 3.5: Resolve contextual images from Wikipedia/Commons in parallel
+    // Auto-generate image queries for nuggets where Gemini didn't provide one
+    for (const n of rawNuggets) {
+      if (!n.imageSearchQuery) {
+        if (n.kind === "artist") {
+          n.imageSearchQuery = `${artist} musician`;
+          n.imageCaption = n.imageCaption || artist;
+        } else if (n.kind === "track") {
+          n.imageSearchQuery = `${artist} ${title} song`;
+          n.imageCaption = n.imageCaption || `${title} by ${artist}`;
+        } else if (n.kind === "discovery") {
+          // Try to extract the recommended artist name from the text
+          const recMatch = n.text?.match(/(?:artist|musician|producer|band)\s+(\w[\w\s]+?)(?:\s+shares|\s+is|\s+has|,|\.|'s)/i);
+          n.imageSearchQuery = recMatch ? `${recMatch[1]} musician` : `${artist} related artists`;
+          n.imageCaption = n.imageCaption || "Recommended artist";
+        }
+      }
+    }
     const imageResults = await Promise.allSettled(
       rawNuggets.map(async (n) => {
         if (!n.imageSearchQuery) return null;
