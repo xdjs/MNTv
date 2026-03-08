@@ -211,6 +211,8 @@ export default function Listen() {
 
   // Suppress external track detection during our own navigation (track end, next/prev)
   const isNavigatingRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => { return () => { mountedRef.current = false; }; }, []);
   const lastLoadedTrackRef = useRef<string | null>(null);
   const prevRawTrackIdRef = useRef<string | undefined>(rawTrackId);
   // Timestamp of last track load — suppresses false external detection during the
@@ -245,6 +247,7 @@ export default function Listen() {
       const titleLower = track.title.toLowerCase();
 
       const navigateTo = (pick: SpotifyTrackResult) => {
+        if (!mountedRef.current) return; // stale call after unmount
         navigate(
           `/listen/real::${encodeURIComponent(pick.artist)}::${encodeURIComponent(pick.title)}::${encodeURIComponent(pick.album || "")}::${encodeURIComponent(pick.uri || "")}`
         );
@@ -814,7 +817,12 @@ export default function Listen() {
     return () => clearDwell();
   }, [activeNugget, clearDwell]);
 
-  useEffect(() => { if (!isExternalListenMode) play(); }, [play, isExternalListenMode]);
+  // Auto-resume only after the correct track has been loaded into the SDK.
+  // Without the spotifyUri guard, this fires on mount and resumes the PREVIOUS
+  // track (still in the SDK) before loadTrack has a chance to swap it out.
+  useEffect(() => {
+    if (!isExternalListenMode && spotifyUri && player.currentSpotifyUri === spotifyUri) play();
+  }, [play, isExternalListenMode, spotifyUri, player.currentSpotifyUri]);
 
   useEffect(() => {
     if (aiNuggets.length === 0) return;
