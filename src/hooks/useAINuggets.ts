@@ -151,7 +151,7 @@ export function useAINuggets(
       setTrackListenCount(trackKey, currentListenCount);
 
       // ── Seed data shortcut for demo tracks ──────────────────────
-      const seedData = getSeedListenNuggets(artist, title, tier, currentListenCount);
+      const seedData = await getSeedListenNuggets(artist, title, tier, currentListenCount);
       if (seedData) {
         console.log("[SeedNuggets] Serving seed data for", trackKey, "listen", currentListenCount, "tier", tier);
 

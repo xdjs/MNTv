@@ -4,13 +4,13 @@ import { ArrowLeft, Smartphone } from "lucide-react";
 // mock/tracks kept as reference — no longer imported for runtime use
 import { useThemeSync } from "@/hooks/useThemeSync";
 import { QRCode } from "react-qrcode-logo";
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import NuggetCard from "@/components/NuggetCard";
-import MediaOverlay from "@/components/overlays/MediaOverlay";
-import ReadingOverlay from "@/components/overlays/ReadingOverlay";
-import NuggetDeepDive from "@/components/overlays/NuggetDeepDive";
+const MediaOverlay = lazy(() => import("@/components/overlays/MediaOverlay"));
+const ReadingOverlay = lazy(() => import("@/components/overlays/ReadingOverlay"));
+const NuggetDeepDive = lazy(() => import("@/components/overlays/NuggetDeepDive"));
 import DevPanel from "@/components/DevPanel";
 import PlaybackBar from "@/components/PlaybackBar";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -509,7 +509,7 @@ export default function Listen() {
         // Both demo (seed) and AI tracks go through the edge function — direct
         // DB writes from the client are blocked by RLS (service_role only).
         const trackKey = `${track.artist}::${track.title}`;
-        const seedCompanion = getSeedCompanion(track.artist, track.title, tier);
+        const seedCompanion = await getSeedCompanion(track.artist, track.title, tier);
 
         let prebuiltNuggets: any[];
         if (seedCompanion) {
@@ -1336,48 +1336,54 @@ export default function Listen() {
           )}
         </AnimatePresence>
 
-        {/* Overlays */}
-        <AnimatePresence>
-          {mediaOverlay && (
-            <MediaOverlay
-              source={mediaOverlay}
-              onClose={() => { setMediaOverlay(null); resumeWithFade(); }}
-            />
-          )}
-        </AnimatePresence>
-        <AnimatePresence>
-          {readingOverlay && (
-            <ReadingOverlay
-              source={readingOverlay}
-              onClose={() => setReadingOverlay(null)}
-            />
-          )}
-        </AnimatePresence>
-        <AnimatePresence>
-          {deepDiveNugget && (
-            <ErrorBoundary fallback={
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                <div className="apple-glass rounded-2xl p-6 text-center max-w-sm mx-4">
-                  <p className="text-sm text-muted-foreground mb-3">Couldn't load deep dive.</p>
-                  <button
-                    onClick={() => { setDeepDiveNugget(null); setFocusZone('bar'); }}
-                    className="text-xs text-primary hover:underline"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            }>
-              <NuggetDeepDive
-                nugget={deepDiveNugget}
-                source={getSource(deepDiveNugget.sourceId) || null}
-                artist={track.artist}
-                trackTitle={track.title}
-                onClose={() => { setDeepDiveNugget(null); setFocusZone('bar'); setNuggetFocused(false); }}
+        {/* Overlays (lazy-loaded — only fetched when opened) */}
+        <Suspense fallback={null}>
+          <AnimatePresence>
+            {mediaOverlay && (
+              <MediaOverlay
+                source={mediaOverlay}
+                onClose={() => { setMediaOverlay(null); resumeWithFade(); }}
               />
-            </ErrorBoundary>
-          )}
-        </AnimatePresence>
+            )}
+          </AnimatePresence>
+        </Suspense>
+        <Suspense fallback={null}>
+          <AnimatePresence>
+            {readingOverlay && (
+              <ReadingOverlay
+                source={readingOverlay}
+                onClose={() => setReadingOverlay(null)}
+              />
+            )}
+          </AnimatePresence>
+        </Suspense>
+        <Suspense fallback={null}>
+          <AnimatePresence>
+            {deepDiveNugget && (
+              <ErrorBoundary fallback={
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                  <div className="apple-glass rounded-2xl p-6 text-center max-w-sm mx-4">
+                    <p className="text-sm text-muted-foreground mb-3">Couldn't load deep dive.</p>
+                    <button
+                      onClick={() => { setDeepDiveNugget(null); setFocusZone('bar'); }}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              }>
+                <NuggetDeepDive
+                  nugget={deepDiveNugget}
+                  source={getSource(deepDiveNugget.sourceId) || null}
+                  artist={track.artist}
+                  trackTitle={track.title}
+                  onClose={() => { setDeepDiveNugget(null); setFocusZone('bar'); setNuggetFocused(false); }}
+                />
+              </ErrorBoundary>
+            )}
+          </AnimatePresence>
+        </Suspense>
       </div>
     </PageTransition>
   );
