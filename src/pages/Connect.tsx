@@ -41,6 +41,7 @@ export default function Connect() {
   const [pendingTrackImages, setPendingTrackImages] = useState<{ title: string; artist: string; imageUrl: string }[]>([]);
   const [pendingDisplayName, setPendingDisplayName] = useState<string | null>(null);
   const [lastFmUsername, setLastFmUsername] = useState("");
+  const [lastFmSaved, setLastFmSaved] = useState(false);
   const [showLastFm, setShowLastFm] = useState(false);
 
   // If already onboarded, redirect to browse
@@ -162,10 +163,24 @@ export default function Connect() {
                           <input
                             type="text"
                             value={lastFmUsername}
-                            onChange={(e) => setLastFmUsername(e.target.value)}
+                            onChange={(e) => { setLastFmUsername(e.target.value); setLastFmSaved(false); }}
+                            onKeyDown={(e) => { if (e.key === "Enter" && lastFmUsername.trim()) setLastFmSaved(true); }}
                             placeholder="Last.fm username (optional)"
                             className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/50 outline-none"
                           />
+                          {lastFmUsername.trim() && (
+                            lastFmSaved ? (
+                              <span className="text-xs font-semibold text-red-400">✓</span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setLastFmSaved(true)}
+                                className="text-xs font-semibold text-red-400 hover:text-red-300 transition-colors whitespace-nowrap"
+                              >
+                                Save
+                              </button>
+                            )
+                          )}
                         </div>
                       )}
                     </div>
