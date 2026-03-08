@@ -113,6 +113,16 @@ interface ExaAnswer {
   costDollars: number;
 }
 
+interface ImageCandidate {
+  label: string;        // "IMG-A1", "IMG-T2", "IMG-D1"
+  group: "artist" | "track" | "discovery";
+  mimeType: string;
+  base64: string;
+  sourceUrl: string;    // original URL for post-processing
+  citIndex: number;
+  citTitle: string;
+}
+
 // Extract image URLs from Exa citation text content
 function extractImageUrl(text: string | undefined): string | null {
   if (!text) return null;
@@ -221,6 +231,114 @@ function isGarbageImage(url: string): boolean {
     lower.includes("question_mark") ||
     lower.includes("blank")
   );
+}
+
+// ── Fetch image as base64 for multimodal Gemini input ────────────────
+async function fetchImageAsBase64(url: string): Promise<{ mimeType: string; base64: string } | null> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+
+    const contentType = res.headers.get("content-type") || "";
+    const validTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    const mimeType = validTypes.find(t => contentType.includes(t));
+    if (!mimeType) return null;
+
+    const buf = await res.arrayBuffer();
+    // Skip tiny images (<5KB, likely icons) and huge ones (>500KB)
+    if (buf.byteLength < 5000 || buf.byteLength > 500_000) return null;
+
+    const bytes = new Uint8Array(buf);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const base64 = btoa(binary);
+    return { mimeType, base64 };
+  } catch {
+    return null;
+  }
+}
+
+// ── Prepare image candidates from Exa citations ─────────────────────
+async function prepareImageCandidates(citations: ExaCitation[]): Promise<ImageCandidate[]> {
+  const groups: { name: "artist" | "track" | "discovery"; prefix: string; start: number; end: number }[] = [
+    { name: "artist", prefix: "A", start: 0, end: 10 },
+    { name: "track", prefix: "T", start: 10, end: 20 },
+    { name: "discovery", prefix: "D", start: 20, end: 30 },
+  ];
+
+  const tasks: { label: string; group: "artist" | "track" | "discovery"; cit: ExaCitation }[] = [];
+
+  for (const g of groups) {
+    const groupCits = citations.filter(c =>
+      c.citIndex >= g.start && c.citIndex < g.end &&
+      c.imageUrl && !isGarbageImage(c.imageUrl)
+    );
+    // Take max 3 per group
+    for (let i = 0; i < Math.min(3, groupCits.length); i++) {
+      tasks.push({
+        label: `IMG-${g.prefix}${i + 1}`,
+        group: g.name,
+        cit: groupCits[i],
+      });
+    }
+  }
+
+  if (tasks.length === 0) return [];
+
+  const results = await Promise.allSettled(
+    tasks.map(async (t) => {
+      const imgData = await fetchImageAsBase64(t.cit.imageUrl!);
+      if (!imgData) return null;
+      return {
+        label: t.label,
+        group: t.group,
+        mimeType: imgData.mimeType,
+        base64: imgData.base64,
+        sourceUrl: t.cit.imageUrl!,
+        citIndex: t.cit.citIndex,
+        citTitle: t.cit.title,
+      } as ImageCandidate;
+    })
+  );
+
+  const candidates = results
+    .filter((r): r is PromiseFulfilledResult<ImageCandidate | null> => r.status === "fulfilled")
+    .map(r => r.value)
+    .filter((c): c is ImageCandidate => c !== null);
+
+  console.log(`[ImagePrep] Downloaded ${candidates.length}/${tasks.length} candidate images`);
+  return candidates;
+}
+
+// ── Build multimodal parts for Gemini (text + inline images) ─────────
+function buildMultimodalParts(
+  prompt: string,
+  imageCandidates?: ImageCandidate[],
+): any[] {
+  if (!imageCandidates || imageCandidates.length === 0) {
+    return [{ text: prompt }];
+  }
+
+  const parts: any[] = [{ text: prompt }];
+  parts.push({ text: "\n\n--- IMAGE CANDIDATES (visually inspect each) ---" });
+
+  for (const img of imageCandidates) {
+    parts.push({
+      inlineData: {
+        mimeType: img.mimeType,
+        data: img.base64,
+      },
+    });
+    parts.push({ text: `[${img.label}] from "${img.citTitle}" (CIT ${img.citIndex})` });
+  }
+
+  parts.push({ text: "--- END IMAGE CANDIDATES ---" });
+  return parts;
 }
 
 // Primary: Wikipedia search → lead image of top result (with relevance check)
@@ -444,7 +562,8 @@ interface GeminiNugget {
   text: string;
   kind: "artist" | "track" | "discovery";
   listenFor: boolean;
-  selectedImageUrl?: string;   // Exa image URL chosen by Gemini
+  selectedImageLabel?: string;  // Multimodal: label like "IMG-A1" chosen after visual inspection
+  selectedImageUrl?: string;   // Legacy text-only fallback: Exa image URL chosen by Gemini
   imageSearchQuery?: string;   // fallback: search Wikipedia/Commons for this
   imageCaption?: string;
   source: {
@@ -472,6 +591,7 @@ async function generateWithGemini(
   userTopTracks: string[] = [],
   exaContext?: string,
   exaCitations?: ExaCitation[],
+  imageCandidates?: ImageCandidate[],
 ): Promise<{ nuggets: GeminiNugget[]; artistSummary: string; groundingChunks: any[]; exaCitations?: ExaCitation[] }> {
   const tierConfig = TIER_CONFIG[tier];
   const transcriptContext = videos
@@ -554,10 +674,13 @@ CRITICAL RULES:
 - Be factually accurate — do not fabricate quotes or facts
 - If you cannot find a specific real source for a fact, set publisher to "General Knowledge" — this is better than fabricating an article that doesn't exist
 - NEVER invent specific studio names, gear model numbers, or personnel names — if unsure, describe generally
-- IMAGE SELECTION — for EVERY nugget, choose the best image approach:
-  1. **Check the [IMG CIT N] URLs** in the source citations above. If an image from the research is directly relevant to THIS nugget's content (e.g., the article it cites has an image of the person, instrument, or event discussed), use it by setting "selectedImageUrl" to that exact URL.
-  2. **If no Exa image fits**, set "imageSearchQuery" to a SPECIFIC search term for the thing mentioned in the nugget. Be precise — "Fender Rhodes electric piano" or "Stevie Nicks 1977 Rumours era" is better than "Fleetwood Mac". Search for the exact person, place, instrument, studio, or cultural reference the nugget discusses.
-  3. You MUST include one of "selectedImageUrl" OR "imageSearchQuery" for every nugget. Prefer "selectedImageUrl" when a relevant Exa image exists.
+- IMAGE SELECTION — for EVERY nugget, choose the best image approach:${imageCandidates && imageCandidates.length > 0 ? `
+  1. **VISUALLY INSPECT the [IMG-X#] image candidates** shown below the prompt. You can SEE these images. Select the one most relevant to THIS nugget's content by setting "selectedImageLabel" to its label (e.g., "IMG-A1"). REJECT images that are: site logos, generic headers, stock photos, blank/placeholder images, or unrelated to the nugget topic. Only select an image that genuinely shows the person, place, instrument, event, or concept discussed in the nugget.
+  2. **If no candidate image fits**, set "imageSearchQuery" to a SPECIFIC search term for the thing mentioned in the nugget. Be precise — "Fender Rhodes electric piano" or "Stevie Nicks 1977 Rumours era" is better than "Fleetwood Mac".
+  3. You MUST include one of "selectedImageLabel" OR "imageSearchQuery" for every nugget. Prefer "selectedImageLabel" when a visually relevant candidate exists.` : `
+  1. **Check the [IMG CIT N] URLs** in the source citations above. If an image from the research is directly relevant to THIS nugget's content, use it by setting "selectedImageUrl" to that exact URL.
+  2. **If no Exa image fits**, set "imageSearchQuery" to a SPECIFIC search term for the thing mentioned in the nugget. Be precise — "Fender Rhodes electric piano" or "Stevie Nicks 1977 Rumours era" is better than "Fleetwood Mac".
+  3. You MUST include one of "selectedImageUrl" OR "imageSearchQuery" for every nugget. Prefer "selectedImageUrl" when a relevant Exa image exists.`}
   4. Always include "imageCaption": short (6-12 words) explaining the image's relevance to the nugget content.
 
 ALSO generate an "artistSummary" field: 2-3 punchy sentences capturing who ${artist} is — their significance, sound, and why they matter. Use the researched material. This will be shown on the companion page.
@@ -571,8 +694,8 @@ Return ONLY valid JSON:
       "text": "2-3 sentences of surprising music trivia with full detail",
       "kind": "artist|track|discovery",
       "listenFor": false,
-      "selectedImageUrl": "https://example.com/relevant-image.jpg OR omit if using imageSearchQuery",
-      "imageSearchQuery": "HBO Insecure TV show OR omit if using selectedImageUrl",
+      ${imageCandidates && imageCandidates.length > 0 ? `"selectedImageLabel": "IMG-A1 OR omit if using imageSearchQuery",` : `"selectedImageUrl": "https://example.com/relevant-image.jpg OR omit if using imageSearchQuery",`}
+      "imageSearchQuery": "HBO Insecure TV show OR omit if using ${imageCandidates && imageCandidates.length > 0 ? "selectedImageLabel" : "selectedImageUrl"}",
       "imageCaption": "The HBO series that featured this track",
       "source": {
         "type": "youtube|article|interview",
@@ -588,8 +711,9 @@ Return ONLY valid JSON:
   ]
 }`;
 
+  const parts = buildMultimodalParts(prompt, imageCandidates);
   const body: any = {
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    contents: [{ role: "user", parts }],
     generationConfig: { temperature: tierConfig.temperature },
   };
 
@@ -838,6 +962,11 @@ Return ONLY valid JSON:
       }
     }
 
+    // Start image candidate downloads in parallel with YouTube (they're independent)
+    const imageCandidatesPromise = exaCitations?.length
+      ? prepareImageCandidates(exaCitations)
+      : Promise.resolve([] as ImageCandidate[]);
+
     // YouTube search + transcripts only on repeat listens (listenCount >= 2).
     // First listen uses Exa (if configured) or Gemini + Google Search grounding alone.
     let videos: YTVideo[] = [];
@@ -874,13 +1003,14 @@ Return ONLY valid JSON:
     }
 
     // Step 3: Generate nuggets with Gemini + Google Search grounding
+    const imageCandidates = await imageCandidatesPromise;
     let rawNuggets: any[];
     let groundingChunks: any[];
     let artistSummary = "";
     try {
       const result = await generateWithGemini(
         artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier, safeTopArtists, safeTopTracks,
-        exaPromptContext, exaCitations
+        exaPromptContext, exaCitations, imageCandidates
       );
       rawNuggets = result.nuggets;
       groundingChunks = result.groundingChunks;
@@ -890,7 +1020,7 @@ Return ONLY valid JSON:
         console.log("Retrying without transcripts to avoid RECITATION block...");
         const result = await generateWithGemini(
           artist, title, album, videos, new Map(), GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier, safeTopArtists, safeTopTracks,
-          exaPromptContext, exaCitations
+          exaPromptContext, exaCitations, imageCandidates
         );
         rawNuggets = result.nuggets;
         groundingChunks = result.groundingChunks;
@@ -914,14 +1044,35 @@ Return ONLY valid JSON:
     }
 
     // Step 3.5: Resolve images for each nugget
-    // Priority: 1) Gemini-selected Exa image (selectedImageUrl) — Gemini matched it semantically
-    //           2) Wikipedia/Commons via Gemini's imageSearchQuery — specific thing search
-    //           3) Exa citation fallback — any unused Exa image from same group
-    //           4) Frontend falls back to Spotify album art
+    // Priority: 1) Gemini visually selected image (selectedImageLabel) — multimodal inspection
+    //           2) Gemini text-selected Exa image (selectedImageUrl) — URL-based fallback
+    //           3) Wikipedia/Commons via Gemini's imageSearchQuery — specific thing search
+    //           4) Exa citation fallback — any unused Exa image from same group
+    //           5) Frontend falls back to Spotify album art
     const usedImageUrls = new Set<string>();
 
-    // First pass: use Gemini's selectedImageUrl (it saw the Exa images and chose)
+    // Build label→URL map from image candidates for multimodal resolution
+    const imageLabelMap = new Map<string, { sourceUrl: string; citTitle: string }>();
+    for (const c of imageCandidates) {
+      imageLabelMap.set(c.label, { sourceUrl: c.sourceUrl, citTitle: c.citTitle });
+    }
+
+    // First pass: resolve image labels (multimodal) or selectedImageUrl (text-only fallback)
     for (let i = 0; i < rawNuggets.length; i++) {
+      // Multimodal path: Gemini visually selected an image by label
+      const selectedLabel = rawNuggets[i].selectedImageLabel;
+      if (selectedLabel && imageLabelMap.has(selectedLabel)) {
+        const { sourceUrl, citTitle } = imageLabelMap.get(selectedLabel)!;
+        if (!usedImageUrls.has(sourceUrl) && !isGarbageImage(sourceUrl)) {
+          rawNuggets[i]._resolvedImageUrl = sourceUrl;
+          rawNuggets[i]._resolvedImageTitle = rawNuggets[i].imageCaption || citTitle;
+          usedImageUrls.add(sourceUrl);
+          console.log(`[Image] Gemini visually selected ${selectedLabel} for nugget ${i}: ${sourceUrl}`);
+          continue;
+        }
+      }
+
+      // Legacy text-only fallback: Gemini guessed from URL text
       const selectedUrl = rawNuggets[i].selectedImageUrl;
       if (selectedUrl && !usedImageUrls.has(selectedUrl) && !isGarbageImage(selectedUrl)) {
         rawNuggets[i]._resolvedImageUrl = selectedUrl;
