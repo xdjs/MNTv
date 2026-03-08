@@ -31,6 +31,48 @@ import rhNerdListen2 from "./seed/radiohead-nerd-listen2.json";
 import rhNerdListen3 from "./seed/radiohead-nerd-listen3.json";
 import rhNerdCompanion from "./seed/radiohead-nerd-companion.json";
 
+// ── Pete Rango — Oms at Play ────────────────────────────────────────────────
+import prCasualListen1 from "./seed/peterango-casual-listen1.json";
+import prCasualListen2 from "./seed/peterango-casual-listen2.json";
+import prCasualListen3 from "./seed/peterango-casual-listen3.json";
+import prCasualCompanion from "./seed/peterango-casual-companion.json";
+import prCuriousListen1 from "./seed/peterango-curious-listen1.json";
+import prCuriousListen2 from "./seed/peterango-curious-listen2.json";
+import prCuriousListen3 from "./seed/peterango-curious-listen3.json";
+import prCuriousCompanion from "./seed/peterango-curious-companion.json";
+import prNerdListen1 from "./seed/peterango-nerd-listen1.json";
+import prNerdListen2 from "./seed/peterango-nerd-listen2.json";
+import prNerdListen3 from "./seed/peterango-nerd-listen3.json";
+import prNerdCompanion from "./seed/peterango-nerd-companion.json";
+
+// ── Aaron Doh — Love Hangover ───────────────────────────────────────────────
+import adCasualListen1 from "./seed/aarondoh-casual-listen1.json";
+import adCasualListen2 from "./seed/aarondoh-casual-listen2.json";
+import adCasualListen3 from "./seed/aarondoh-casual-listen3.json";
+import adCasualCompanion from "./seed/aarondoh-casual-companion.json";
+import adCuriousListen1 from "./seed/aarondoh-curious-listen1.json";
+import adCuriousListen2 from "./seed/aarondoh-curious-listen2.json";
+import adCuriousListen3 from "./seed/aarondoh-curious-listen3.json";
+import adCuriousCompanion from "./seed/aarondoh-curious-companion.json";
+import adNerdListen1 from "./seed/aarondoh-nerd-listen1.json";
+import adNerdListen2 from "./seed/aarondoh-nerd-listen2.json";
+import adNerdListen3 from "./seed/aarondoh-nerd-listen3.json";
+import adNerdCompanion from "./seed/aarondoh-nerd-companion.json";
+
+// ── Jamee Cornelia — SLACK ──────────────────────────────────────────────────
+import jcCasualListen1 from "./seed/jameecornelia-casual-listen1.json";
+import jcCasualListen2 from "./seed/jameecornelia-casual-listen2.json";
+import jcCasualListen3 from "./seed/jameecornelia-casual-listen3.json";
+import jcCasualCompanion from "./seed/jameecornelia-casual-companion.json";
+import jcCuriousListen1 from "./seed/jameecornelia-curious-listen1.json";
+import jcCuriousListen2 from "./seed/jameecornelia-curious-listen2.json";
+import jcCuriousListen3 from "./seed/jameecornelia-curious-listen3.json";
+import jcCuriousCompanion from "./seed/jameecornelia-curious-companion.json";
+import jcNerdListen1 from "./seed/jameecornelia-nerd-listen1.json";
+import jcNerdListen2 from "./seed/jameecornelia-nerd-listen2.json";
+import jcNerdListen3 from "./seed/jameecornelia-nerd-listen3.json";
+import jcNerdCompanion from "./seed/jameecornelia-nerd-companion.json";
+
 // ── Types ───────────────────────────────────────────────────────────────────
 
 interface SeedNuggetData {
@@ -90,6 +132,21 @@ const listenMap: Record<string, Record<Tier, [SeedListenFile, SeedListenFile, Se
     curious: [rhCuriousListen1, rhCuriousListen2, rhCuriousListen3],
     nerd: [rhNerdListen1, rhNerdListen2, rhNerdListen3],
   },
+  "Pete Rango::Oms at Play": {
+    casual: [prCasualListen1, prCasualListen2, prCasualListen3],
+    curious: [prCuriousListen1, prCuriousListen2, prCuriousListen3],
+    nerd: [prNerdListen1, prNerdListen2, prNerdListen3],
+  },
+  "Aaron Doh::Love Hangover": {
+    casual: [adCasualListen1, adCasualListen2, adCasualListen3],
+    curious: [adCuriousListen1, adCuriousListen2, adCuriousListen3],
+    nerd: [adNerdListen1, adNerdListen2, adNerdListen3],
+  },
+  "Jamee Cornelia::SLACK": {
+    casual: [jcCasualListen1, jcCasualListen2, jcCasualListen3],
+    curious: [jcCuriousListen1, jcCuriousListen2, jcCuriousListen3],
+    nerd: [jcNerdListen1, jcNerdListen2, jcNerdListen3],
+  },
 };
 
 const companionMap: Record<string, Record<Tier, SeedCompanionFile>> = {
@@ -102,6 +159,21 @@ const companionMap: Record<string, Record<Tier, SeedCompanionFile>> = {
     casual: rhCasualCompanion,
     curious: rhCuriousCompanion,
     nerd: rhNerdCompanion,
+  },
+  "Pete Rango::Oms at Play": {
+    casual: prCasualCompanion,
+    curious: prCuriousCompanion,
+    nerd: prNerdCompanion,
+  },
+  "Aaron Doh::Love Hangover": {
+    casual: adCasualCompanion,
+    curious: adCuriousCompanion,
+    nerd: adNerdCompanion,
+  },
+  "Jamee Cornelia::SLACK": {
+    casual: jcCasualCompanion,
+    curious: jcCuriousCompanion,
+    nerd: jcNerdCompanion,
   },
 };
 

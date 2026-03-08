@@ -22,6 +22,30 @@ export const artists: Artist[] = [
     genres: ["Alternative Rock", "Art Rock", "Electronic"],
     relatedArtistIds: ["daft-punk"],
   },
+  {
+    id: "pete-rango",
+    name: "Pete Rango",
+    imageUrl: "",
+    bio: "Colombian-American producer and artist based in Miami. Blending Latin rhythms, hip-hop, and electronic production, Pete Rango crafts genre-fluid tracks that bridge cultures and push sonic boundaries.",
+    genres: ["Hip-Hop", "Latin", "Electronic"],
+    relatedArtistIds: ["aaron-doh", "jamee-cornelia"],
+  },
+  {
+    id: "aaron-doh",
+    name: "Aaron Doh",
+    imageUrl: "",
+    bio: "Los Angeles-based artist and content creator known for emotionally raw R&B and hip-hop. His debut EP Love Lies showcased a vulnerable, melodic style that resonated with a generation raised on SoundCloud and YouTube.",
+    genres: ["R&B", "Hip-Hop", "Pop"],
+    relatedArtistIds: ["pete-rango"],
+  },
+  {
+    id: "jamee-cornelia",
+    name: "Jamee Cornelia",
+    imageUrl: "",
+    bio: "Rising artist whose debut album HARVEST blends hip-hop, R&B, and experimental production into a cohesive sonic world. Known for sharp lyricism and genre-bending collaborations.",
+    genres: ["Hip-Hop", "R&B", "Alternative"],
+    relatedArtistIds: ["pete-rango", "aaron-doh"],
+  },
 ];
 
 // ==================== ALBUMS ====================
@@ -37,6 +61,12 @@ export const albums: Album[] = [
   { id: "alb-rh-kida", artistId: "radiohead", title: "Kid A", year: 2000, coverArtUrl: CAA("e75c0549-ad55-39e3-8025-c72c5d4a3c5d"), genre: "Art Rock" },
   { id: "alb-rh-okc", artistId: "radiohead", title: "OK Computer", year: 1997, coverArtUrl: CAA("b1392450-e666-3926-a536-22c65f834433"), genre: "Alternative Rock" },
   { id: "alb-rh-inrainbows", artistId: "radiohead", title: "In Rainbows", year: 2007, coverArtUrl: CAA("6e335887-60ba-38f0-95af-fae7774336bf"), genre: "Art Rock" },
+  // Pete Rango
+  { id: "alb-pr-savageplanet", artistId: "pete-rango", title: "Savage Planet", year: 2022, coverArtUrl: "", genre: "Hip-Hop" },
+  // Aaron Doh
+  { id: "alb-ad-lovelies", artistId: "aaron-doh", title: "Love Lies", year: 2018, coverArtUrl: "", genre: "R&B" },
+  // Jamee Cornelia
+  { id: "alb-jc-harvest", artistId: "jamee-cornelia", title: "HARVEST", year: 2026, coverArtUrl: "", genre: "Hip-Hop" },
 ];
 
 // ==================== TRACKS ====================
@@ -47,6 +77,12 @@ export const tracks: Track[] = [
   { id: "radiohead-everything", title: "Everything in Its Right Place", artist: "Radiohead", artistId: "radiohead", albumId: "alb-rh-kida", album: "Kid A", durationSec: 252, coverArtUrl: CAA("e75c0549-ad55-39e3-8025-c72c5d4a3c5d"), trackNumber: 1 },
   { id: "radiohead-paranoid-android", title: "Paranoid Android", artist: "Radiohead", artistId: "radiohead", albumId: "alb-rh-okc", album: "OK Computer", durationSec: 386, coverArtUrl: CAA("b1392450-e666-3926-a536-22c65f834433"), trackNumber: 1 },
   { id: "radiohead-reckoner", title: "Reckoner", artist: "Radiohead", artistId: "radiohead", albumId: "alb-rh-inrainbows", album: "In Rainbows", durationSec: 290, coverArtUrl: CAA("6e335887-60ba-38f0-95af-fae7774336bf"), trackNumber: 1 },
+  // Pete Rango
+  { id: "pete-rango-oms-at-play", title: "Oms at Play", artist: "Pete Rango", artistId: "pete-rango", albumId: "alb-pr-savageplanet", album: "Savage Planet", durationSec: 187, coverArtUrl: "", trackNumber: 1 },
+  // Aaron Doh
+  { id: "aaron-doh-love-hangover", title: "Love Hangover", artist: "Aaron Doh", artistId: "aaron-doh", albumId: "alb-ad-lovelies", album: "Love Lies", durationSec: 199, coverArtUrl: "", trackNumber: 4 },
+  // Jamee Cornelia
+  { id: "jamee-cornelia-slack", title: "SLACK", artist: "Jamee Cornelia", artistId: "jamee-cornelia", albumId: "alb-jc-harvest", album: "HARVEST", durationSec: 232, coverArtUrl: "", trackNumber: 1 },
 ];
 
 // ==================== SOURCES ====================
