@@ -323,6 +323,9 @@ export function useAINuggets(
       }
 
       const aiNuggets: AINuggetData[] = data?.nuggets || [];
+      // Companion metadata from generate-nuggets (Exa-sourced)
+      const aiArtistSummary: string = data?.artistSummary || "";
+      const aiExternalLinks: { label: string; url: string }[] = data?.externalLinks || [];
 
       const newSources = new Map<string, Source>();
       const newNuggets: Nugget[] = aiNuggets.map((n, i) => {
@@ -414,8 +417,11 @@ export function useAINuggets(
       // every subsequent first-listen to the same track hits the cache instead of
       // firing a new Gemini API call.
       if (currentListenCount <= 1) {
-        const cacheSourcesObj: Record<string, Source> = {};
+        const cacheSourcesObj: Record<string, any> = {};
         newSources.forEach((src, key) => { cacheSourcesObj[key] = src; });
+        // Store companion metadata alongside sources for the companion page to read
+        cacheSourcesObj.artistSummary = aiArtistSummary;
+        cacheSourcesObj.externalLinks = aiExternalLinks;
         await supabase.from("nugget_cache").upsert(
           {
             track_id: dbCacheKey,

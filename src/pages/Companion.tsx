@@ -11,7 +11,6 @@ import type { CompanionNugget } from "@/mock/types";
 
 interface CompanionData {
   artistSummary: string;
-  trackStory: string;
   nuggets: CompanionNugget[];
   externalLinks: { label?: string; name?: string; url: string }[];
   coverArtUrl?: string;
@@ -256,14 +255,6 @@ export default function Companion() {
               <section>
                 <h3 className="text-lg font-bold text-foreground mb-2">About the Artist</h3>
                 <p className="text-sm text-foreground/80 leading-relaxed">{data.artistSummary}</p>
-              </section>
-            )}
-
-            {/* Track Story */}
-            {data.trackStory && (
-              <section>
-                <h3 className="text-lg font-bold text-foreground mb-2">About This Track</h3>
-                <p className="text-sm text-foreground/80 leading-relaxed">{data.trackStory}</p>
               </section>
             )}
 

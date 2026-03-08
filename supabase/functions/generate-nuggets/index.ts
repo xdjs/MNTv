@@ -103,6 +103,7 @@ interface ExaCitation {
   title: string;
   author: string | null;
   publishedDate: string | null;
+  imageUrl: string | null;
 }
 
 interface ExaAnswer {
@@ -110,6 +111,33 @@ interface ExaAnswer {
   answer: string;
   citations: ExaCitation[];
   costDollars: number;
+}
+
+// Extract image URLs from Exa citation text content
+function extractImageUrl(text: string | undefined): string | null {
+  if (!text) return null;
+  // Match common image URL patterns in page content
+  const imgPatterns = [
+    /https?:\/\/[^\s"'<>]+\.(?:jpg|jpeg|png|webp)(?:\?[^\s"'<>]*)?/gi,
+    /https?:\/\/upload\.wikimedia\.org\/[^\s"'<>]+/gi,
+    /https?:\/\/i\.scdn\.co\/[^\s"'<>]+/gi,
+  ];
+  for (const pattern of imgPatterns) {
+    const matches = text.match(pattern);
+    if (matches) {
+      // Clean URLs: strip trailing markdown/punctuation artifacts
+      const cleaned = matches.map(m => m.replace(/[)\]}>'"]+$/, ""));
+      // Prefer larger images, skip thumbnails, icons, and placeholder images
+      const good = cleaned.find(m =>
+        !m.includes("icon") && !m.includes("logo") && !m.includes("favicon") &&
+        !m.includes("1x1") && !m.includes("pixel") && !m.includes("no-image") &&
+        !m.includes("no_image") && !m.includes("placeholder") && !m.includes("default") &&
+        !m.includes("blank") && !m.includes("spacer") && m.length < 500
+      );
+      if (good) return good;
+    }
+  }
+  return null;
 }
 
 async function askExa(
@@ -140,8 +168,14 @@ async function askExa(
       title: c.title || "",
       author: c.author || null,
       publishedDate: c.publishedDate || null,
+      imageUrl: extractImageUrl(c.text) || null,
     })
   );
+
+  const citImgCount = citations.filter(c => c.imageUrl).length;
+  if (citImgCount > 0) {
+    console.log(`[Exa] ${label}: extracted ${citImgCount} images from citation text`);
+  }
 
   return {
     label,
@@ -385,7 +419,7 @@ async function generateWithGemini(
   userTopTracks: string[] = [],
   exaContext?: string,
   exaCitations?: ExaCitation[],
-): Promise<{ nuggets: GeminiNugget[]; groundingChunks: any[]; exaCitations?: ExaCitation[] }> {
+): Promise<{ nuggets: GeminiNugget[]; artistSummary: string; groundingChunks: any[]; exaCitations?: ExaCitation[] }> {
   const tierConfig = TIER_CONFIG[tier];
   const transcriptContext = videos
     .filter((v) => transcripts.has(v.videoId))
@@ -474,8 +508,11 @@ CRITICAL RULES:
   - "imageCaption": short (6-12 words) explaining the image's relevance to the nugget
   - Be SPECIFIC — "Stevie Nicks 1977 Rumours era" is better than "Fleetwood Mac". Name the exact person, place, instrument, or thing.
 
+ALSO generate an "artistSummary" field: 2-3 punchy sentences capturing who ${artist} is — their significance, sound, and why they matter. Use the researched material. This will be shown on the companion page.
+
 Return ONLY valid JSON:
 {
+  "artistSummary": "2-3 sentences about the artist",
   "nuggets": [
     {
       "headline": "One punchy complete sentence hook",
@@ -546,7 +583,7 @@ Return ONLY valid JSON:
         throw new Error("Gemini returned empty response after retries");
       }
 
-      let parsed: { nuggets: GeminiNugget[] };
+      let parsed: { nuggets: GeminiNugget[]; artistSummary?: string };
       try {
         const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
         parsed = JSON.parse(cleaned);
@@ -559,7 +596,7 @@ Return ONLY valid JSON:
         }
         throw new Error("Failed to parse Gemini response");
       }
-      return { nuggets: parsed.nuggets || [], groundingChunks, exaCitations };
+      return { nuggets: parsed.nuggets || [], artistSummary: parsed.artistSummary || "", groundingChunks, exaCitations };
     }
 
     if (res.status === 429 && attempt < 2) {
@@ -786,6 +823,7 @@ Return ONLY valid JSON:
     // Step 3: Generate nuggets with Gemini + Google Search grounding
     let rawNuggets: any[];
     let groundingChunks: any[];
+    let artistSummary = "";
     try {
       const result = await generateWithGemini(
         artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier, safeTopArtists, safeTopTracks,
@@ -793,6 +831,7 @@ Return ONLY valid JSON:
       );
       rawNuggets = result.nuggets;
       groundingChunks = result.groundingChunks;
+      artistSummary = result.artistSummary;
     } catch (e) {
       if (e instanceof RecitationError) {
         console.log("Retrying without transcripts to avoid RECITATION block...");
@@ -802,6 +841,7 @@ Return ONLY valid JSON:
         );
         rawNuggets = result.nuggets;
         groundingChunks = result.groundingChunks;
+        artistSummary = result.artistSummary;
       } else {
         throw e;
       }
@@ -852,7 +892,19 @@ Return ONLY valid JSON:
         rawNuggets[i]._resolvedImageTitle = result.value.title;
         console.log(`[ImageSearch] Resolved "${rawNuggets[i].imageSearchQuery}" → ${result.value.url}`);
       } else if (rawNuggets[i].imageSearchQuery) {
-        console.log(`[ImageSearch] No result for "${rawNuggets[i].imageSearchQuery}"`);
+        // Fallback: try Exa citation images for this nugget's source
+        const source = rawNuggets[i].source || {};
+        if (exaCitations?.length && source.citIndex != null) {
+          const cit = exaCitations.find((c) => c.citIndex === source.citIndex);
+          if (cit?.imageUrl) {
+            rawNuggets[i]._resolvedImageUrl = cit.imageUrl;
+            rawNuggets[i]._resolvedImageTitle = cit.title;
+            console.log(`[ImageSearch] Exa citation image for "${rawNuggets[i].imageSearchQuery}" → ${cit.imageUrl}`);
+          }
+        }
+        if (!rawNuggets[i]._resolvedImageUrl) {
+          console.log(`[ImageSearch] No result for "${rawNuggets[i].imageSearchQuery}"`);
+        }
       }
     }
 
@@ -971,7 +1023,27 @@ Return ONLY valid JSON:
       return result;
     });
 
-    return new Response(JSON.stringify({ nuggets }), {
+    // Build external links from Exa citations (verified real URLs)
+    const externalLinks: { label: string; url: string }[] = [];
+    if (exaCitations?.length) {
+      // Deduplicate by domain, pick the most relevant citations
+      const seenDomains = new Set<string>();
+      for (const cit of exaCitations) {
+        try {
+          const domain = new URL(cit.url).hostname.replace(/^www\./, "");
+          if (!seenDomains.has(domain) && externalLinks.length < 5) {
+            seenDomains.add(domain);
+            externalLinks.push({ label: cit.title || domain, url: cit.url });
+          }
+        } catch { /* skip invalid URLs */ }
+      }
+    }
+    // Add Wikipedia fallback if not already present
+    if (!externalLinks.some(l => l.url.includes("wikipedia.org"))) {
+      externalLinks.push({ label: `${artist} — Wikipedia`, url: `https://en.wikipedia.org/wiki/${encodeURIComponent(artist).replace(/%20/g, "_")}` });
+    }
+
+    return new Response(JSON.stringify({ nuggets, artistSummary, externalLinks }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
