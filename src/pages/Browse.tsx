@@ -41,7 +41,7 @@ export default function Browse() {
       imageUrl: "https://i.scdn.co/image/ab67616d0000b273de3c04b5fc750b68899b20a9",
       title: "Weird Fishes/Arpeggi",
       subtitle: "Radiohead",
-      href: "/listen/real::Radiohead::Weird%20Fishes%2FArpeggi::In%20Rainbows::spotify:track:4tha3dahOS9LhTxKn4JYLC?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b273de3c04b5fc750b68899b20a9",
+      href: "/listen/real::Radiohead::Weird%20Fishes%252FArpeggi::In%20Rainbows::spotify:track:4tha3dahOS9LhTxKn4JYLC?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b273de3c04b5fc750b68899b20a9",
     },
     {
       id: "demo-oms-at-play",
