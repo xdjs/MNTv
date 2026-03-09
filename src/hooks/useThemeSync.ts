@@ -8,7 +8,7 @@ import { useTierAccent } from "./useTierAccent";
  * Use on pages that display both a player and cover art (e.g. Listen).
  * For pages with no cover art (e.g. Browse), call useTierAccent() directly.
  */
-export function useThemeSync(coverArtUrl?: string) {
-  useTierAccent();
+export function useThemeSync(coverArtUrl?: string, tier?: string) {
+  useTierAccent(tier);
   useAccentColor(coverArtUrl);
 }

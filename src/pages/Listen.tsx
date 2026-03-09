@@ -974,7 +974,7 @@ export default function Listen() {
   }, [dismissedNuggets, nuggetPositionMap]);
 
   // Must be called unconditionally — before any early returns
-  useThemeSync(effectiveCoverArt || "");
+  useThemeSync(effectiveCoverArt || "", tier);
 
   if (!track) {
     return (

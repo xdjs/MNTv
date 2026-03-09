@@ -23,7 +23,7 @@ export default function Browse() {
     saveProfile({ ...profile, calculatedTier: nextTier });
   }, [profile, tier, saveProfile]);
 
-  useTierAccent();
+  useTierAccent(tier);
 
   const { rows: allRows } = usePersonalizedCatalog(profile);
   const userName = profile?.spotifyDisplayName || "";

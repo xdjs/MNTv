@@ -29,11 +29,15 @@ export function applyTierAccent(hsl: string) {
 /**
  * Reactively locks --primary / --neon-glow / --ring to the user's tier color.
  * Re-runs automatically when the user's tier changes (e.g. after Spotify auth).
+ *
+ * Pass the caller's `profile?.calculatedTier` to avoid stale state — each
+ * useUserProfile() call creates an independent state instance, so relying on
+ * an internal call misses updates made by a sibling hook.
  */
-export function useTierAccent() {
+export function useTierAccent(callerTier?: string) {
   const { profile } = useUserProfile();
+  const tier = callerTier ?? profile?.calculatedTier ?? "nerd";
   useEffect(() => {
-    const tier = profile?.calculatedTier ?? "nerd";
     applyTierAccent(TIER_HSL[tier] ?? DEFAULT_TIER_HSL);
-  }, [profile?.calculatedTier]);
+  }, [tier]);
 }
