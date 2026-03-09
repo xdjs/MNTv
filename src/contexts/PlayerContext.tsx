@@ -147,6 +147,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const lastSpUriRef = useRef<string | null>(null);
   const spHasPlayedRef = useRef(false); // true once track has been unpaused at least once
   const maxPositionRef = useRef(0); // highest position (ms) reached — prevents false onEnded
+  const deviceLostRef = useRef(false); // true when another Spotify device takes over playback
+  const spTimeRef = useRef(0); // last known position in ms — used to resume after device loss
+  const spDeviceIdRef = useRef<string | null>(null); // stable ref for device ID (avoids deps churn)
+  const reTransferringRef = useRef(false); // prevents duplicate re-transfer API calls
 
   // Active player tracking
   const [activePlayer, setActivePlayer] = useState<ActivePlayer>("none");
@@ -232,14 +236,29 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
       player.addListener("ready", ({ device_id }) => {
         if (cancelled) return;
+        spDeviceIdRef.current = device_id;
         setSpDeviceId(device_id);
         setSpReady(true);
       });
       player.addListener("not_ready", () => { if (!cancelled) setSpReady(false); });
       player.addListener("player_state_changed", (state) => {
-        if (cancelled || !state) return;
+        if (cancelled) return;
+        if (!state) {
+          // Another Spotify device took over playback — our device is no longer active.
+          // Update UI to reflect stopped state and flag for re-transfer on next play().
+          deviceLostRef.current = true;
+          setSpPlaying(false);
+          if (spPollRef.current) {
+            clearInterval(spPollRef.current);
+            spPollRef.current = null;
+          }
+          console.log("[Player] Device lost — playback transferred to another device");
+          return;
+        }
+        deviceLostRef.current = false;
         setSpPlaying(!state.paused);
         setSpTime(state.position / 1000);
+        spTimeRef.current = state.position;
         setSpDuration(state.duration / 1000);
         if (!state.paused) {
           spHasPlayedRef.current = true;
@@ -249,6 +268,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
               const s = await spPlayerRef.current?.getCurrentState();
               if (!s) return;
               setSpTime(s.position / 1000);
+              spTimeRef.current = s.position;
               setSpDuration(s.duration / 1000);
               setSpPlaying(!s.paused);
             }, 250);
@@ -357,9 +377,36 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   // ── Controls ──────────────────────────────────────────────────────
 
-  const play = useCallback(() => {
+  const play = useCallback(async () => {
+    // If another Spotify device stole playback, re-transfer it back to our SDK device
+    if (deviceLostRef.current && spDeviceIdRef.current && lastSpUriRef.current) {
+      if (reTransferringRef.current) return; // already in progress
+      reTransferringRef.current = true;
+      try {
+        const token = await getValidToken();
+        if (token) {
+          console.log("[Player] Re-transferring playback back to MusicNerd TV device");
+          const res = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${spDeviceIdRef.current}`, {
+            method: "PUT",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              uris: [lastSpUriRef.current],
+              position_ms: Math.max(0, spTimeRef.current),
+            }),
+          });
+          if (res.ok) {
+            deviceLostRef.current = false;
+          } else {
+            console.error(`[Player] Re-transfer playback failed (${res.status}):`, await res.text().catch(() => ""));
+          }
+        }
+      } finally {
+        reTransferringRef.current = false;
+      }
+      return;
+    }
     spPlayerRef.current?.resume();
-  }, []);
+  }, [getValidToken]);
 
   const pause = useCallback(() => {
     spPlayerRef.current?.pause();
