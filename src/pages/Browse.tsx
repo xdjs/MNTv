@@ -50,14 +50,7 @@ export default function Browse() {
       subtitle: "Pete Rango",
       href: "/listen/real::Pete%20Rango::Oms%20at%20Play::Savage%20Planet::spotify:track:7mYphBaMfblb6iu1saj3MC?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b27305b43e15352510b1b9c9a5a5",
     },
-    {
-      id: "demo-love-hangover",
-      imageUrl: "https://i.scdn.co/image/ab67616d0000b273bcdeee598b7cfab69f0dce68",
-      title: "Love Hangover",
-      subtitle: "Aaron Doh",
-      href: "/listen/real::Aaron%20Doh::Love%20Hangover::Love%20Lies::spotify:track:2N8zd5nKHrjhDgo78ZhtWl?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b273bcdeee598b7cfab69f0dce68",
-    },
-    {
+{
       id: "demo-slack",
       imageUrl: "https://i.scdn.co/image/ab67616d0000b273e9c4a69ecd5c43229cfd03f3",
       title: "SLACK",
