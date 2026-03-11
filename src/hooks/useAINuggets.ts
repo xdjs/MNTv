@@ -193,12 +193,14 @@ export function useAINuggets(
 
         // Assign images — never use DiceBear placeholder URLs
         const isRealImg = (url?: string) => url && !url.includes("dicebear.com");
+        const contextualImageIndices = new Set<number>();
         for (let idx = 0; idx < newNuggets.length; idx++) {
           const nugget = newNuggets[idx];
           const seedNugget = seedData[idx];
           if (seedNugget?.imageUrl) {
             nugget.imageUrl = seedNugget.imageUrl;
             nugget.imageCaption = seedNugget.imageCaption || nugget.headline;
+            contextualImageIndices.add(idx);
           } else if (nugget.kind === "artist" && isRealImg(artistImageUrl)) {
             nugget.imageUrl = artistImageUrl;
             nugget.imageCaption = artist;
@@ -210,14 +212,16 @@ export function useAINuggets(
           }
         }
 
-        // Visual rotation
+        // Visual rotation — only promote to visualOnly if the image is contextual
+        // (server-provided), not a fallback artist photo or album cover (redundant
+        // with the Listen page background).
         let hashSum = 0;
         for (let c = 0; c < trackId.length; c++) hashSum += trackId.charCodeAt(c);
         const visualSlotIndex = hashSum % 3;
         let visualAssigned = false;
         for (let attempt = 0; attempt < 3 && !visualAssigned; attempt++) {
           const idx = (visualSlotIndex + attempt) % 3;
-          if (idx < newNuggets.length && newNuggets[idx].imageUrl) {
+          if (idx < newNuggets.length && contextualImageIndices.has(idx)) {
             newNuggets[idx].visualOnly = true;
             visualAssigned = true;
           }
@@ -298,6 +302,10 @@ export function useAINuggets(
       }
 
       // ── Generate fresh nuggets via AI ─────────────────────────────
+      // Extract Spotify track ID from trackId (format: real::Artist::Title::Album::spotify:track:XXXXX)
+      const spotifyUriMatch = trackId.match(/spotify:track:([a-zA-Z0-9]{22})/);
+      const spotifyTrackIdValue = spotifyUriMatch?.[1];
+
       const { data, error: fnError } = await supabase.functions.invoke("generate-nuggets", {
         body: {
           artist,
@@ -309,6 +317,10 @@ export function useAINuggets(
           // Pass user's Spotify taste so AI can personalize connections + calibrate assumed knowledge
           userTopArtists: topArtists?.slice(0, 10),
           userTopTracks: topTracks?.slice(0, 10),
+          // Pass Spotify artist image as known-good fallback for lesser-known artists
+          spotifyArtistImageUrl: artistImageUrl,
+          // Pass Spotify track ID for recommendations API (similar artists)
+          spotifyTrackId: spotifyTrackIdValue,
         },
       });
 
@@ -370,6 +382,7 @@ export function useAINuggets(
       // ── Assign images: prefer server-resolved contextual images, fall back to Spotify ──
       // Never use DiceBear placeholder URLs as nugget images — they look broken on companion.
       const isRealImage = (url?: string) => url && !url.includes("dicebear.com");
+      const contextualImageIndices = new Set<number>();
       for (let idx = 0; idx < newNuggets.length; idx++) {
         const nugget = newNuggets[idx];
         const aiNugget = aiNuggets[idx];
@@ -378,6 +391,7 @@ export function useAINuggets(
         if (aiNugget?.imageUrl) {
           nugget.imageUrl = aiNugget.imageUrl;
           nugget.imageCaption = aiNugget.imageCaption || nugget.headline;
+          contextualImageIndices.add(idx);
         }
         // Fall back to Spotify images (only real URLs, not DiceBear placeholders)
         else if (nugget.kind === "artist" && isRealImage(artistImageUrl)) {
@@ -391,7 +405,9 @@ export function useAINuggets(
         }
       }
 
-      // ── Visual rotation (which nugget gets visualOnly) ──────────────
+      // ── Visual rotation — only promote contextual (server-provided) images ──
+      // Fallback images (artist photo, album cover) are redundant with the
+      // Listen page background, so they should never become visualOnly cards.
       let hashSum = 0;
       for (let c = 0; c < trackId.length; c++) hashSum += trackId.charCodeAt(c);
       const visualSlotIndex = hashSum % 3;
@@ -399,7 +415,7 @@ export function useAINuggets(
       let visualAssigned = false;
       for (let attempt = 0; attempt < 3 && !visualAssigned; attempt++) {
         const idx = (visualSlotIndex + attempt) % 3;
-        if (idx < newNuggets.length && newNuggets[idx].imageUrl) {
+        if (idx < newNuggets.length && contextualImageIndices.has(idx)) {
           newNuggets[idx].visualOnly = true;
           visualAssigned = true;
         }

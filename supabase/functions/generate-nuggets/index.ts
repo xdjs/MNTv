@@ -307,13 +307,16 @@ async function searchExaPages(
   citIndexStart: number,
   includeText?: string[],
   excludeText?: string[],
+  options?: { numResults?: number; searchType?: string },
 ): Promise<ExaAnswer> {
   const body: any = {
     query,
-    type: "auto",
-    numResults: 5,
+    type: options?.searchType || "auto",
+    numResults: options?.numResults || 5,
+    livecrawl: "fallback",
     contents: {
       text: { maxCharacters: 6000 },
+      highlights: { numSentences: 3, highlightsPerUrl: 3 },
       extras: { imageLinks: 3 },
     },
     excludeDomains: ["facebook.com", "instagram.com"],
@@ -362,13 +365,18 @@ async function searchExaPages(
     }
   );
 
-  // Build answer from page text snippets (replacing Exa's synthesized answer)
+  // Build answer from page text snippets + highlights
   const snippets = results
-    .filter((r: any) => r.text)
+    .filter((r: any) => r.text || r.highlights?.length)
     .map((r: any, i: number) => {
       // Truncate each page to keep prompt reasonable
       const text = (r.text || "").slice(0, 5000);
-      return `[Source: "${r.title}" — ${r.url}]\n${text}`;
+      // Highlights are key excerpts Exa identified as most relevant to the query
+      const highlights = (r.highlights || []) as string[];
+      const highlightBlock = highlights.length > 0
+        ? `\n[Key excerpts]:\n${highlights.map((h: string) => `• ${h}`).join("\n")}`
+        : "";
+      return `[Source: "${r.title}" — ${r.url}]${highlightBlock}\n${text}`;
     })
     .join("\n\n---\n\n");
 
@@ -1123,10 +1131,20 @@ const BANNED_PHRASES = [
   "while specific details are scarce", "although information is limited",
   "this track offers", "this song offers", "the track provides", "the song provides",
   "immerse yourself", "the track's title provides", "provides a crucial clue",
+  "isn't just", "wasn't just", "more than just", "not just another",
+  "last.fm", "lastfm", "listener overlap", "listener data shows", "listener match",
 ];
 
-function validateNuggetQuality(nuggets: GeminiNugget[]): { valid: boolean; issues: string[] } {
+// Hallucinated source indicators — publishers/types Gemini invents when it has no real sources
+const HALLUCINATED_PUBLISHERS = [
+  "music data insights", "internal data", "musicdatainsights",
+  "ai music database", "music insights", "artist database",
+  "music analytics", "song insights", "track insights",
+];
+
+function validateNuggetQuality(nuggets: GeminiNugget[]): { valid: boolean; issues: string[]; hallucinated: boolean } {
   const issues: string[] = [];
+  let hallucinatedSourceCount = 0;
   for (let i = 0; i < nuggets.length; i++) {
     const n = nuggets[i];
     const allText = `${n.headline} ${n.text}`.toLowerCase();
@@ -1135,8 +1153,27 @@ function validateNuggetQuality(nuggets: GeminiNugget[]): { valid: boolean; issue
         issues.push(`Nugget ${i} (${n.kind}): banned phrase "${banned}"`);
       }
     }
+    // Check for hallucinated source types and publishers
+    const sourceType = (n.source?.type || "").toLowerCase();
+    const sourcePublisher = (n.source?.publisher || "").toLowerCase();
+    if (sourceType === "internal-data" || sourceType === "internal_data" || sourceType === "database" || sourceType === "editorial") {
+      issues.push(`Nugget ${i} (${n.kind}): hallucinated source type "${n.source.type}"`);
+      hallucinatedSourceCount++;
+    }
+    if (HALLUCINATED_PUBLISHERS.some(hp => sourcePublisher.includes(hp))) {
+      issues.push(`Nugget ${i} (${n.kind}): hallucinated publisher "${n.source.publisher}"`);
+      hallucinatedSourceCount++;
+    }
+    // Check for empty quoteSnippet with unverified google search URL — likely fabricated
+    const sourceUrl = n.source?.sourceUrl || "";
+    const quoteSnippet = n.source?.quoteSnippet || "";
+    if (!quoteSnippet && sourceUrl.includes("google.com/search") && sourceType !== "youtube") {
+      issues.push(`Nugget ${i} (${n.kind}): no quote + google search URL (likely fabricated)`);
+      hallucinatedSourceCount++;
+    }
   }
-  return { valid: issues.length === 0, issues };
+  const hallucinated = hallucinatedSourceCount >= 2; // majority of nuggets have fake sources
+  return { valid: issues.length === 0, issues, hallucinated };
 }
 
 // ── Generate nuggets with Gemini + Google Search grounding ───────────
@@ -1251,7 +1288,7 @@ Use this to:
     musicDataContext += `\nSpotify genres: ${spotifyInfo!.genres.join(", ")}`;
   }
   if (hasLastFmTags) {
-    musicDataContext += `\nLast.fm genre tags: ${lastFmTags!.join(", ")}`;
+    musicDataContext += `\nGenre tags: ${lastFmTags!.join(", ")}`;
   }
   if (hasSpotifyTracks) {
     musicDataContext += `\nTop tracks: ${spotifyInfo!.topTrackNames.join(", ")}`;
@@ -1262,23 +1299,50 @@ Use this to:
   if (spotifyInfo) {
     musicDataContext += `\nFollowers: ${spotifyInfo.followers.toLocaleString()}`;
   }
-  // Last.fm similar artists — this is the key data for discovery recommendations
+  // Similar artists from listener data — key data for discovery recommendations
+  // NOTE: Do NOT mention "Last.fm" in the prompt label — Gemini copies it into nugget text
   if (hasLastFmSimilar) {
-    musicDataContext += `\n\nLAST.FM SIMILAR ARTISTS (ranked by similarity):`;
+    musicDataContext += `\n\nVERIFIED SIMILAR ARTISTS (ranked by listener overlap):`;
     for (const sim of lastFmSimilar!.slice(0, 8)) {
-      musicDataContext += `\n- ${sim.name} (${Math.round(sim.match * 100)}% match)`;
+      musicDataContext += `\n- ${sim.name} (${Math.round(sim.match * 100)}% listener overlap)`;
     }
   }
 
   // Discovery instruction — prioritize Last.fm similar artists when available
+  // Build dedup clause for previously recommended discovery artists
+  const discoveryDedupClause = extractedDiscoveryArtists.length > 0
+    ? `\nDo NOT recommend any of these previously recommended artists: ${extractedDiscoveryArtists.join(", ")}. Pick a DIFFERENT artist.`
+    : "";
+
   if (hasLastFmSimilar) {
-    musicDataContext += `\n\nDISCOVERY NUGGET INSTRUCTIONS: The LAST.FM SIMILAR ARTISTS above are VERIFIED similar artists based on real listener data. For the discovery nugget, you MUST recommend one of these artists (or a very closely related artist in the same scene). Pick the one whose sound best matches the specific track "${title}". Explain WHY their sound is similar — mention specific sonic qualities, production style, or genre elements they share. The recommended artist MUST exist on Spotify.\n`;
+    const similarCount = lastFmSimilar!.length;
+    if (similarCount <= 3) {
+      // Short list — don't force Gemini to always pick the same top match
+      musicDataContext += `\n\nDISCOVERY NUGGET INSTRUCTIONS: The VERIFIED SIMILAR ARTISTS above are confirmed similar artists based on real listener data. You may recommend one of them, OR use your own musical knowledge to recommend a different artist whose sound genuinely resembles "${title}". Explain WHY their sound is similar. The recommended artist MUST exist on Spotify. IMPORTANT: Do NOT mention the data source (e.g. "listener data", "listener overlap", "similar artists list") in the nugget text — write as if YOU know this connection from musical knowledge.${discoveryDedupClause}\n`;
+    } else {
+      musicDataContext += `\n\nDISCOVERY NUGGET INSTRUCTIONS: The VERIFIED SIMILAR ARTISTS above are confirmed similar artists based on real listener data. For the discovery nugget, recommend one of these artists (or a very closely related artist in the same scene). Pick the one whose sound best matches the specific track "${title}". Explain WHY their sound is similar — mention specific sonic qualities, production style, or genre elements they share. The recommended artist MUST exist on Spotify. IMPORTANT: Do NOT mention the data source (e.g. "listener data", "listener overlap", "similar artists list") in the nugget text — write as if YOU know this connection from musical knowledge.${discoveryDedupClause}\n`;
+    }
   } else {
-    musicDataContext += `\n\nDISCOVERY NUGGET INSTRUCTIONS: Use the track names, album names, and genre tags above to understand "${artist}"'s actual musical style. Then recommend an artist whose SOUND genuinely resembles "${title}". The recommended artist MUST exist on Spotify. Do NOT rely on the Exa discovery research — it is unreliable for lesser-known artists. Use YOUR OWN musical knowledge informed by the catalog data above.\n`;
+    musicDataContext += `\n\nDISCOVERY NUGGET INSTRUCTIONS: Use the track names, album names, and genre tags above to understand "${artist}"'s actual musical style. Then recommend an artist whose SOUND genuinely resembles "${title}". The recommended artist MUST exist on Spotify. Do NOT rely on the Exa discovery research — it is unreliable for lesser-known artists. Use YOUR OWN musical knowledge informed by the catalog data above.${discoveryDedupClause}\n`;
   }
 
   // Adaptive search guidance: tell Gemini when track/discovery research was skipped
   let adaptiveGuidance = "";
+
+  // Sparse data mode: when very few verified sources exist, change writer behavior
+  if (sparseData) {
+    adaptiveGuidance += `\nSPARSE DATA MODE: Very little verified information exists about "${artist}". This is a lesser-known or emerging artist.
+
+CRITICAL RULES FOR SPARSE DATA:
+- Do NOT fabricate a narrative. If you don't have verified facts, write about what you DO know (even if it's just genre, location, or catalog data).
+- Source type MUST be "youtube", "article", or "interview" — NEVER use "internal-data", "database", or invented types.
+- Publisher MUST be a real publication or platform (e.g., "Bandcamp", "Spotify", "SoundCloud", "YouTube"). NEVER invent publishers like "Music Data Insights".
+- It is BETTER to write a shorter, honest nugget than to fill space with speculation.
+- Do NOT frame lack of information as a deliberate artistic choice (e.g., "operates as a digital ghost", "deliberate anti-persona"). A small artist is not automatically mysterious.
+- Focus on VERIFIABLE details: where they're from, their genre, their discography, real collaborators.
+- For the track nugget: write about the artist's creative context, NOT the track's sound or mood.\n`;
+  }
+
   if (trackSearchSkipped) {
     adaptiveGuidance += `\nTRACK NUGGET GUIDANCE: No track-specific reviews or articles exist for "${title}". The listener is ALREADY PLAYING this track — they can hear what it sounds like. Do NOT describe the track's sound, mood, or atmosphere.
 
@@ -1358,7 +1422,7 @@ IMAGE SELECTION — at least 1 nugget MUST include an image:
 RESEARCH BRIEF (verified — use ONLY these facts, do not add unverified information):
 ${curatedContext}
 
-${musicDataContext}
+${musicDataContext}${adaptiveGuidance}
 
 DEPTH: ${depthInstruction}
 ANGLES: ${angles.join(", ")}
@@ -1481,14 +1545,23 @@ Return ONLY valid JSON:
   }
 
   const parts = buildMultimodalParts(prompt, imageCandidates);
+  // Cap temperature at 0.8 for sparse data to reduce hallucination risk.
+  // Casual tier normally runs at 1.0 which is too creative when facts are thin.
+  const effectiveTemp = sparseData ? Math.min(tierConfig.temperature, 0.8) : tierConfig.temperature;
   const body: any = {
     contents: [{ role: "user", parts }],
-    generationConfig: { temperature: tierConfig.temperature },
+    generationConfig: { temperature: effectiveTemp },
   };
 
-  // Only use Google Search grounding when Exa is NOT providing source context
-  if (!exaContext) {
+  // Enable Google Search grounding when Exa context is missing OR sparse.
+  // Previously this only fired when exaContext was completely empty, which meant
+  // even thin/useless Exa results suppressed grounding — causing hallucination
+  // for lesser-known artists where Exa returns 1-2 low-quality pages.
+  if (!exaContext || sparseData) {
     body.tools = [{ google_search: {} }];
+    if (sparseData && exaContext) {
+      console.log(`[Grounding] Enabling Google Search grounding despite Exa context — sparse data mode`);
+    }
   }
 
   const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${tierConfig.model}:generateContent?key=${apiKey}`;
@@ -1546,6 +1619,27 @@ Return ONLY valid JSON:
       const validation = validateNuggetQuality(parsed.nuggets || []);
       if (!validation.valid) {
         console.log(`[Validator] ${validation.issues.length} quality issues: ${validation.issues.join("; ")}`);
+        // If hallucinated sources detected and we haven't retried for quality yet, retry
+        if (validation.hallucinated && attempt < 2) {
+          console.log(`[Validator] Hallucinated sources detected — retrying with hardened prompt`);
+          // Add anti-hallucination reinforcement to the prompt
+          const hardenedPart = {
+            role: "user",
+            parts: [{ text: `CRITICAL CORRECTION: Your previous response contained fabricated sources (fake publishers, made-up source types like "internal-data"). This is unacceptable.
+
+RULES FOR THIS RETRY:
+- Source type MUST be one of: "youtube", "article", "interview"
+- Publisher MUST be a real, verifiable publication name (e.g. "Pitchfork", "Rolling Stone", "The Guardian", "NME", "Bandcamp Daily")
+- If you cannot find a real source for a fact, use the source that informed you (even if it's a Google Search result) and set quoteSnippet to the relevant excerpt
+- Do NOT invent publishers like "Music Data Insights" or source types like "internal-data"
+- If you truly have NO verifiable information about this artist, write FEWER nuggets with what you can verify rather than fabricating 3 nuggets
+
+Regenerate the nuggets now with REAL sources only.` }],
+          };
+          body.contents = [...body.contents, hardenedPart];
+          await new Promise((r) => setTimeout(r, 2000));
+          continue;
+        }
       }
 
       return { nuggets: parsed.nuggets || [], artistSummary: parsed.artistSummary || "", groundingChunks, exaCitations };
@@ -1784,7 +1878,8 @@ Return ONLY valid JSON:
         console.log(`[Exa] Strategy: ARTIST-HEAVY (${artistStrictCount} strict cites, track "${title}" NOT mentioned)`);
         const broadQuery = buildBroadArtistQuery(artist);
         // Use citIndex 10-19 (track range) so image grouping treats this as "track" group
-        const broadResult = await searchExaPages(broadQuery, "artist-broad", EXA_API_KEY, 10, [artist]);
+        // More results (8) to maximize coverage for mid-tier artists
+        const broadResult = await searchExaPages(broadQuery, "artist-broad", EXA_API_KEY, 10, [artist], undefined, { numResults: 8 });
         if (broadResult.answer) {
           answers.push(broadResult);
           totalCost += broadResult.costDollars;
@@ -1793,20 +1888,36 @@ Return ONLY valid JSON:
         discoverySearchSkipped = true;
         console.log(`[Exa] Skipped track + discovery searches — using 2nd artist search + Last.fm`);
       } else {
-        // SPARSE: very little coverage — maybe 1 broader search, lean on Gemini + Last.fm
+        // SPARSE: very little coverage — multi-strategy search to maximize what we find
         console.log(`[Exa] Strategy: SPARSE (${artistStrictCount} strict cites, ${followers.toLocaleString()} followers)`);
-        if (artistStrictCount >= 1) {
-          // At least some coverage exists — try a broad search
-          const broadQuery = buildBroadArtistQuery(artist);
-          const broadResult = await searchExaPages(broadQuery, "artist-broad", EXA_API_KEY, 10, [artist]);
-          if (broadResult.answer) {
-            answers.push(broadResult);
-            totalCost += broadResult.costDollars;
+
+        // Strategy A: Broader auto search with more results (catches interview/profile pages)
+        const broadQuery = buildBroadArtistQuery(artist);
+        const broadResult = await searchExaPages(broadQuery, "artist-broad", EXA_API_KEY, 10, [artist], undefined, { numResults: 8 });
+        if (broadResult.answer) {
+          answers.push(broadResult);
+          totalCost += broadResult.costDollars;
+        }
+
+        // Strategy B: Keyword search fallback — catches exact name matches that neural/auto misses
+        const keywordQuery = `"${artist}" musician OR artist OR producer OR rapper OR singer`;
+        const keywordResult = await searchExaPages(keywordQuery, "artist-keyword", EXA_API_KEY, 20, undefined, undefined, { numResults: 5, searchType: "keyword" });
+        if (keywordResult.answer) {
+          // Only add if it found different pages than what we already have
+          const existingUrls = new Set(answers.flatMap(a => a.citations.map(c => c.url)));
+          const newCitations = keywordResult.citations.filter(c => !existingUrls.has(c.url));
+          if (newCitations.length > 0) {
+            answers.push(keywordResult);
+            totalCost += keywordResult.costDollars;
+            console.log(`[Exa] Keyword fallback found ${newCitations.length} new pages`);
+          } else {
+            console.log(`[Exa] Keyword fallback found no new pages`);
           }
         }
+
         trackSearchSkipped = true;
         discoverySearchSkipped = true;
-        console.log(`[Exa] Skipped track + discovery searches — sparse data, using Gemini knowledge + Last.fm`);
+        console.log(`[Exa] Sparse: ${answers.length} total answer sets, using Gemini knowledge + Last.fm for gaps`);
       }
 
       if (answers.length > 0) {
@@ -2217,7 +2328,30 @@ Return ONLY valid JSON:
       }
     }
 
-    return new Response(JSON.stringify({ nuggets, artistSummary, externalLinks }), {
+    // ── Fix 4: Post-generation source validation ──────────────────────
+    // Filter out nuggets with hallucinated/invalid source types or publishers.
+    // This is the last line of defense — catches anything the validator retry missed.
+    const validatedNuggets = nuggets.filter((n: any) => {
+      const sourceType = (n.source?.type || "").toLowerCase();
+      const publisher = (n.source?.publisher || "").toLowerCase();
+      // Reject hallucinated source types
+      if (sourceType === "internal-data" || sourceType === "internal_data" || sourceType === "database" || sourceType === "editorial") {
+        console.log(`[SourceFilter] Removed nugget "${n.headline?.slice(0, 50)}" — hallucinated source type "${sourceType}"`);
+        return false;
+      }
+      // Reject hallucinated publishers
+      if (HALLUCINATED_PUBLISHERS.some(hp => publisher.includes(hp))) {
+        console.log(`[SourceFilter] Removed nugget "${n.headline?.slice(0, 50)}" — hallucinated publisher "${n.source?.publisher}"`);
+        return false;
+      }
+      return true;
+    });
+
+    if (validatedNuggets.length < nuggets.length) {
+      console.log(`[SourceFilter] Filtered ${nuggets.length - validatedNuggets.length} nuggets with hallucinated sources (${validatedNuggets.length} remaining)`);
+    }
+
+    return new Response(JSON.stringify({ nuggets: validatedNuggets, artistSummary, externalLinks }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
