@@ -27,6 +27,10 @@ dist-ssr
 .env
 .env.*
 
+# Scripts with DB credentials
+scripts/fix-caches.sh
+scripts/seed-demo-resumable.sh
+
 # Supabase local CLI state
 supabase/.temp/
 .vercel
