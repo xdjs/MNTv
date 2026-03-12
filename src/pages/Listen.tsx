@@ -7,6 +7,7 @@ import { QRCode } from "react-qrcode-logo";
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
+import MusicNerdLoadingOrchestrator from "@/components/MusicNerdLoadingOrchestrator";
 import NuggetCard from "@/components/NuggetCard";
 const MediaOverlay = lazy(() => import("@/components/overlays/MediaOverlay"));
 const ReadingOverlay = lazy(() => import("@/components/overlays/ReadingOverlay"));
@@ -1034,26 +1035,20 @@ export default function Listen() {
             </motion.p>
           )}
           <div className="flex flex-col items-center gap-1.5">
-            <button
-              onClick={() => {
+            <MusicNerdLoadingOrchestrator
+              aiLoading={aiLoading}
+              shortId={shortId}
+              trackId={trackId}
+              tier={tier}
+              listenCount={listenCount}
+              focusZone={focusZone}
+              topFocusIndex={topFocusIndex}
+              onCompanionClick={() => {
                 if (shortId) {
                   window.open(`${window.location.origin}/c/${shortId}?tier=${tier}&listen=${listenCount}`, "_blank");
                 }
               }}
-              disabled={!shortId}
-              className={`transition-all duration-300 outline-none rounded-full ${
-                focusZone === 'top' && topFocusIndex === 1 ? "tv-focus-glow scale-110" : ""
-              }`}
-              aria-label="Open companion page"
-              style={{
-                filter: shortId
-                  ? "drop-shadow(0 0 8px hsl(var(--neon-glow) / 0.7)) drop-shadow(0 0 24px hsl(var(--neon-glow) / 0.35))"
-                  : "grayscale(1) opacity(0.4)",
-                transition: "filter 0.4s ease",
-              }}
-            >
-              <MusicNerdLogo size={40} glow={false} />
-            </button>
+            />
             <button
               onClick={() => setDevOpen((o) => !o)}
               className="rounded-md bg-foreground/5 px-2.5 py-0.5 text-[10px] text-muted-foreground/50 hover:bg-foreground/10 hover:text-muted-foreground transition-colors"
