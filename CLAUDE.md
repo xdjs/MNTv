@@ -118,7 +118,7 @@ Server-side (Supabase edge function secrets):
 - **Branch naming**: `username/feature-name`
 - **Commit messages**: Conventional commits — `feat:`, `fix:`, `chore:`, `refactor:`, `docs:`, `revert:`
 - **PRs always target `staging`**, never `main` directly
-- **Before pushing**: `npm run lint && npm test && npm run build`
+- **Before pushing**: `npm test && npm run build`
 
 ## Available Scripts
 ```bash
