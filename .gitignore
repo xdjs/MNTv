@@ -27,6 +27,13 @@ dist-ssr
 .env
 .env.*
 
+# Scripts with DB credentials
+scripts/fix-caches.sh
+scripts/seed-demo-resumable.sh
+
+# Claude Code session/memory
+.claude/
+
 # Supabase local CLI state
 supabase/.temp/
 .vercel
