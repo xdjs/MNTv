@@ -71,6 +71,8 @@ export const DEMO_TRACKS: DemoTrackMeta[] = [
   { id: "demo-weird-fishes", artist: "Radiohead", title: "Weird Fishes/Arpeggi", album: "In Rainbows", spotifyUri: "spotify:track:4wajJ1o7jWIg62YqpkHC7S", coverArtUrl: "https://i.scdn.co/image/ab67616d0000b273de3c04b5fc750b68899b20a9", slug: "radiohead" },
   { id: "demo-oms-at-play", artist: "Pete Rango", title: "Oms at Play", album: "Savage Planet", spotifyUri: "spotify:track:7mYphBaMfblb6iu1saj3MC", coverArtUrl: "https://i.scdn.co/image/ab67616d0000b27305b43e15352510b1b9c9a5a5", slug: "peterango" },
   { id: "demo-slack", artist: "Jamee Cornelia", title: "SLACK", album: "HARVEST", spotifyUri: "spotify:track:5bU8cB57AfhTtO0qj9zy3X", coverArtUrl: "https://i.scdn.co/image/ab67616d0000b273e9c4a69ecd5c43229cfd03f3", slug: "jameecornelia" },
+  { id: "demo-humble", artist: "Kendrick Lamar", title: "HUMBLE.", album: "DAMN.", spotifyUri: "spotify:track:7KXjTSCq5nL1LoYtL7XAwS", coverArtUrl: "https://i.scdn.co/image/ab67616d0000b2738b52c6b9bc4e43d873c06f07", slug: "kendrick" },
+  { id: "demo-bad-guy", artist: "Billie Eilish", title: "bad guy", album: "WHEN WE ALL FALL ASLEEP, WHERE DO WE GO?", spotifyUri: "spotify:track:2Fxmhks0bxGSBdJ92vM42m", coverArtUrl: "https://i.scdn.co/image/ab67616d0000b27350a3147b4edd7701a876c6ce", slug: "billie" },
 ];
 
 /** Look up a demo track by its simple ID (e.g. "demo-weird-fishes"). */
