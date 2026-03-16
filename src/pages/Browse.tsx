@@ -59,7 +59,7 @@ export default function Browse() {
     },
     {
       id: "demo-humble",
-      imageUrl: "https://i.scdn.co/image/ab67616d0000b2738b52c6b9bc4e43d873c06f07",
+      imageUrl: "https://i.scdn.co/image/ab67616d0000b2738b52c6b9bc4e43d873869699",
       title: "HUMBLE.",
       subtitle: "Kendrick Lamar",
       href: "/listen/demo-humble?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b2738b52c6b9bc4e43d873c06f07",
