@@ -1397,6 +1397,25 @@ IMAGE SELECTION — at least 1 nugget MUST include an image:
   // Use curated path only if curator found real substance (>=2 facts).
   // Otherwise fall back to direct path with Google Search grounding.
   const useCuratedPath = curatedFacts && (curatedFacts.artistFacts.length >= 2 || curatedFacts.trackFacts.length >= 1);
+
+  // ── Collaboration bias: lead with collaboration story for Curious/Nerd ──
+  const CREATIVE_ROLES = /\b(feat|feature|co-writ|co-produc|producer|produced|band member|vocalist|rapper|singer|songwriter)\b/i;
+  const creativeCollabs = curatedFacts?.keyCollaborators.filter(c => CREATIVE_ROLES.test(c)) ?? [];
+
+  // Only keep collaborators mentioned in trackFacts to avoid cross-track contamination.
+  // keyCollaborators is artist-level; collab bias must only feature people on THIS track.
+  const trackFactsText = (curatedFacts?.trackFacts ?? []).join(" ").toLowerCase();
+  const trackSpecificCollabs = creativeCollabs.filter(c => {
+    const name = c.split(/\s*[—–-]\s*/)[0].trim().toLowerCase();
+    const nameWords = name.split(/\s+/);
+    return nameWords.length <= 2
+      ? trackFactsText.includes(name)
+      : trackFactsText.includes(nameWords[0]) && trackFactsText.includes(nameWords[nameWords.length - 1]);
+  });
+  const collabsForPrompt = trackSpecificCollabs.length > 0 ? trackSpecificCollabs : [];
+  const collabNames = collabsForPrompt.map(c => c.split(/\s*[—–-]\s*/)[0].trim());
+  const applyCollabBias = collabsForPrompt.length > 0 && (tier === "curious" || tier === "nerd");
+
   if (useCuratedPath && curatedFacts) {
     // ── Curated path: research pre-processed by Agent 1 ─────────────
     const curatedContext = [
@@ -1444,10 +1463,15 @@ WRITING RULES — NON-NEGOTIABLE:
 7. Do NOT use fabricated publisher names like "General Knowledge" or "Music Analysis". Use the artist's real website, Bandcamp, Spotify, or a real music publication.
 
 STRUCTURE — exactly 3 nuggets:
-1. **artist** (kind: "artist"): ${tierConfig.artistFocus}. listenFor: false.
+1. **artist** (kind: "artist"): ${applyCollabBias
+      ? `Focus on the collaboration behind this track. Key creative partners: ${collabsForPrompt.join("; ")}. ONLY discuss work on "${title}" — do NOT reference other tracks or albums by ${artist}. Tell the story of their creative relationship — how they connected, what each brought to the table, and how this collaboration shaped the music. ${tier === "nerd" ? "Include specific production roles, studio dynamics, and technical contributions." : "Name specific people and moments."}`
+      : tierConfig.artistFocus}. listenFor: false.
 2. **track** (kind: "track"): ${tierConfig.trackFocus}${curatedFacts.trackFacts.length === 0 ? `. No track-specific articles exist — write about the artist's creative context or story that enhances listening. Do NOT describe the track's sound, mood, or atmosphere.` : ""}. listenFor: true.
 3. **discovery** (kind: "discovery"): ${tierConfig.discoveryFocus}. Be opinionated like a knowledgeable friend. listenFor: false.
-
+${applyCollabBias ? `\nANTI-SATURATION RULE (MANDATORY):
+- Nugget 1 already covers: ${collabNames.join(", ")}.
+- Nugget 2 (track) MUST NOT center on ${collabNames.join(" or ")}. They may appear in passing, but the focus must be a different angle entirely.
+- Nugget 3 (discovery) MUST recommend an artist who is NOT ${collabNames.join(" and NOT ")}. Do NOT recommend a collaborator from nugget 1 as a solo act.` : ""}
 SOURCE RULES: Facts reference [CIT N] citations. Include "citIndex" in each source to match. Do not invent URLs.
 ${imageInstructions}
 
@@ -1513,10 +1537,15 @@ WRITING RULES — NON-NEGOTIABLE:
 8. Do NOT recommend artists sharing ANY part of ${artist}'s name.
 
 STRUCTURE — exactly 3 nuggets:
-1. **artist** (kind: "artist"): ${tierConfig.artistFocus}. listenFor: false.
+1. **artist** (kind: "artist"): ${applyCollabBias
+      ? `Focus on the collaboration behind this track. Key creative partners: ${collabsForPrompt.join("; ")}. ONLY discuss work on "${title}" — do NOT reference other tracks or albums by ${artist}. Tell the story of their creative relationship — how they connected, what each brought to the table, and how this collaboration shaped the music. ${tier === "nerd" ? "Include specific production roles, studio dynamics, and technical contributions." : "Name specific people and moments."}`
+      : tierConfig.artistFocus}. listenFor: false.
 2. **track** (kind: "track"): ${tierConfig.trackFocus}. listenFor: true.
 3. **discovery** (kind: "discovery"): ${tierConfig.discoveryFocus}. listenFor: false.
-${imageInstructions}
+${applyCollabBias ? `\nANTI-SATURATION RULE (MANDATORY):
+- Nugget 1 already covers: ${collabNames.join(", ")}.
+- Nugget 2 (track) MUST NOT center on ${collabNames.join(" or ")}. They may appear in passing, but the focus must be a different angle entirely.
+- Nugget 3 (discovery) MUST recommend an artist who is NOT ${collabNames.join(" and NOT ")}. Do NOT recommend a collaborator from nugget 1 as a solo act.` : ""}${imageInstructions}
 
 ALSO generate "artistSummary": 2-3 punchy sentences about ${artist}.
 
@@ -1637,6 +1666,22 @@ RULES FOR THIS RETRY:
 Regenerate the nuggets now with REAL sources only.` }],
           };
           body.contents = [...body.contents, hardenedPart];
+          await new Promise((r) => setTimeout(r, 2000));
+          continue;
+        }
+        // Retry on banned phrases
+        const bannedIssues = validation.issues.filter(i => i.includes("banned phrase"));
+        if (bannedIssues.length > 0 && attempt < 2) {
+          console.log(`[Validator] Banned phrases detected — retrying`);
+          const bannedFound = bannedIssues.map(i => {
+            const match = i.match(/"([^"]+)"/);
+            return match ? match[1] : "";
+          }).filter(Boolean);
+          const correctionPart = {
+            role: "user",
+            parts: [{ text: `CORRECTION: Your response used banned phrases: ${bannedFound.map(b => `"${b}"`).join(", ")}. These phrases are NEVER allowed. Rewrite the affected nuggets with confident, specific language. Return the complete JSON with all 3 nuggets.` }],
+          };
+          body.contents = [...body.contents, correctionPart];
           await new Promise((r) => setTimeout(r, 2000));
           continue;
         }

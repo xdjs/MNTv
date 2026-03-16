@@ -57,6 +57,20 @@ export default function Browse() {
       subtitle: "Jamee Cornelia",
       href: "/listen/real::Jamee%20Cornelia::SLACK::HARVEST::spotify:track:5bU8cB57AfhTtO0qj9zy3X?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b273e9c4a69ecd5c43229cfd03f3",
     },
+    {
+      id: "demo-humble",
+      imageUrl: "https://i.scdn.co/image/ab67616d0000b2738b52c6b9bc4e43d873869699",
+      title: "HUMBLE.",
+      subtitle: "Kendrick Lamar",
+      href: "/listen/demo-humble?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b2738b52c6b9bc4e43d873869699",
+    },
+    {
+      id: "demo-bad-guy",
+      imageUrl: "https://i.scdn.co/image/ab67616d0000b27350a3147b4edd7701a876c6ce",
+      title: "bad guy",
+      subtitle: "Billie Eilish",
+      href: "/listen/demo-bad-guy?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b27350a3147b4edd7701a876c6ce",
+    },
   ];
 
   const tierLogoGlow: Record<string, string> = {
