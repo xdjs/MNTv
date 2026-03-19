@@ -130,17 +130,44 @@ interface SpotifyArtistInfo {
   followers: number;
 }
 
-async function fetchSpotifyArtistInfo(artistName: string): Promise<SpotifyArtistInfo | null> {
+async function fetchSpotifyArtistInfo(artistName: string, spotifyTrackId?: string): Promise<SpotifyArtistInfo | null> {
   try {
     const token = await getSpotifyAppToken();
     if (!token) return null;
-    const q = encodeURIComponent(artistName.trim());
-    const searchRes = await fetch(`https://api.spotify.com/v1/search?type=artist&limit=1&q=${q}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!searchRes.ok) return null;
-    const searchData = await searchRes.json();
-    const artist = searchData?.artists?.items?.[0];
+
+    let artist: any = null;
+
+    // When a track ID is available, resolve the artist from the track directly.
+    // This prevents name collisions where two artists share the same name.
+    if (spotifyTrackId) {
+      const trackRes = await fetch(`https://api.spotify.com/v1/tracks/${spotifyTrackId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (trackRes.ok) {
+        const trackData = await trackRes.json();
+        const primaryArtistId = trackData?.artists?.[0]?.id;
+        if (primaryArtistId) {
+          const artistRes = await fetch(`https://api.spotify.com/v1/artists/${primaryArtistId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (artistRes.ok) {
+            artist = await artistRes.json();
+            console.log(`[Spotify] Resolved artist from track ID: ${artist.name} (${primaryArtistId})`);
+          }
+        }
+      }
+    }
+
+    // Fallback: search by name if track-based resolution failed
+    if (!artist) {
+      const q = encodeURIComponent(artistName.trim());
+      const searchRes = await fetch(`https://api.spotify.com/v1/search?type=artist&limit=1&q=${q}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!searchRes.ok) return null;
+      const searchData = await searchRes.json();
+      artist = searchData?.artists?.items?.[0];
+    }
     if (!artist) return null;
 
     // Fetch top tracks + albums in parallel — these give Gemini genre clues
@@ -933,7 +960,13 @@ function buildBroadArtistQuery(artist: string): string {
 }
 
 // ── Build citation-indexed context for Gemini prompt ─────────────────
-function buildExaPromptContext(answers: ExaAnswer[], artist?: string, title?: string): {
+function buildExaPromptContext(
+  answers: ExaAnswer[],
+  artist?: string,
+  title?: string,
+  album?: string,
+  spotifyInfo?: SpotifyArtistInfo | null,
+): {
   context: string;
   allCitations: ExaCitation[];
 } {
@@ -943,17 +976,41 @@ function buildExaPromptContext(answers: ExaAnswer[], artist?: string, title?: st
   const artistLower = (artist || "").toLowerCase();
   const artistWords = artistLower.split(/\s+/).filter(w => w.length > 2);
 
+  // Build known discography for cross-validation (prevents wrong-artist contamination)
+  const knownAlbums = (spotifyInfo?.albumNames || []).map(a => a.toLowerCase()).filter(a => a.length > 3);
+  const knownTracks = (spotifyInfo?.topTrackNames || []).map(t => t.toLowerCase()).filter(t => t.length > 3);
+  const albumLower = album?.toLowerCase();
+  const titleLower = (title || "").toLowerCase();
+  // Cross-check triggers with ANY known discography data, not just large catalogs
+  const canValidateDiscography = knownAlbums.length > 0 || knownTracks.length > 0;
+
   for (const a of answers) {
     if (!a.answer) continue;
+    const answerLower = a.answer.toLowerCase();
+
     // Check if the Exa answer actually mentions the artist — if not, the answer
     // is likely about an unrelated person with a similar name or song title.
     // Skip irrelevant answers to prevent Gemini from using wrong-person data.
     if (artist && artistWords.length > 0) {
-      const answerLower = a.answer.toLowerCase();
       const mentionsArtist = wordBoundaryMatch(answerLower, artistLower) ||
         (artistWords.length >= 2 && artistWords.every(w => wordBoundaryMatch(answerLower, w)));
       if (!mentionsArtist) {
         console.log(`[Exa] Skipping ${a.label} answer — does not mention "${artist}"`);
+        continue;
+      }
+    }
+
+    // Discography cross-check: if we have the correct artist's discography from Spotify,
+    // verify the answer discusses the same artist (not a different artist with the same name).
+    // Checks album name, track title, AND known discography from Spotify.
+    if (canValidateDiscography && a.label.startsWith("artist")) {
+      const mentionsRequestedAlbum = albumLower && albumLower.length > 3 && answerLower.includes(albumLower);
+      const mentionsRequestedTitle = titleLower && titleLower.length > 3 && answerLower.includes(titleLower);
+      const mentionsKnownWork =
+        knownAlbums.some(alb => answerLower.includes(alb)) ||
+        knownTracks.some(trk => answerLower.includes(trk));
+      if (!mentionsRequestedAlbum && !mentionsRequestedTitle && !mentionsKnownWork) {
+        console.log(`[Exa] Skipping ${a.label} answer — mentions "${artist}" but none of their known albums/tracks (possible name collision)`);
         continue;
       }
     }
@@ -1023,6 +1080,7 @@ async function curateResearch(
   exaContext: string,
   transcriptContext: string,
   apiKey: string,
+  spotifyInfo?: SpotifyArtistInfo | null,
 ): Promise<CuratedResearch> {
   const fallback: CuratedResearch = {
     artistOrigin: "unknown",
@@ -1034,12 +1092,21 @@ async function curateResearch(
     warningsForWriter: ["Curation unavailable — writer should rely on its own knowledge"],
   };
 
+  // Build discography context for artist disambiguation
+  const discographySection = spotifyInfo && (spotifyInfo.albumNames.length > 0 || spotifyInfo.topTrackNames.length > 0)
+    ? `\nVERIFIED DISCOGRAPHY (from Spotify — use this to identify the CORRECT "${artist}"):
+${spotifyInfo.genres.length > 0 ? `Genres: ${spotifyInfo.genres.join(", ")}` : ""}
+${spotifyInfo.albumNames.length > 0 ? `Albums/Singles: ${spotifyInfo.albumNames.join(", ")}` : ""}
+${spotifyInfo.topTrackNames.length > 0 ? `Top tracks: ${spotifyInfo.topTrackNames.join(", ")}` : ""}
+If sources discuss an artist named "${artist}" but with a DIFFERENT discography (different albums, different genre, different era), those facts are about a DIFFERENT artist with the same name. Exclude them and add a warning to warningsForWriter.\n`
+    : "";
+
   const prompt = `You are a research analyst. Extract ALL verifiable facts from the sources below about the music artist "${artist}" and their song "${title}"${album ? ` from the album "${album}"` : ""}.
 
 YOUR GOAL: Extract as MANY facts as possible. Err on the side of INCLUSION — a fact that's partially relevant is better than no facts at all. The writer needs material to work with.
-
+${discographySection}
 RULES:
-1. "${artist}" is the primary artist. If a source clearly discusses a DIFFERENT person (e.g., "Cornelia Murr" ≠ "Jamee Cornelia"), exclude those facts. But if a name is a plausible variation (e.g., "Pete RG" could be "Pete Rango"), INCLUDE the facts and note the name variation in warningsForWriter.
+1. "${artist}" is the primary artist. If a source clearly discusses a DIFFERENT person or a DIFFERENT artist with the same name (different discography, different genre), exclude those facts. But if a name is a plausible variation (e.g., "Pete RG" could be "Pete Rango"), INCLUDE the facts and note the name variation in warningsForWriter.
 2. If a source reviews a DIFFERENT track by ${artist}, extract general artist biography, career details, creative philosophy, and collaborator info — just NOT that other track's specific sonic descriptions or genre labels.
 3. If a source discusses a different album/project by the same artist, extract career facts, creative approach, and collaborator info — just NOT that project's specific recording details.
 4. ORIGIN: When both a birthplace AND current city are mentioned, list the BIRTHPLACE as origin. "Grew up in Bogota" + "based in Richmond" → origin is Bogota, Colombia. Look carefully — origin info often appears in interview intros or "about" sections.
@@ -1367,7 +1434,7 @@ BANNED for track nuggets without track-specific articles:
   // ── Agent 1: Curate research ─────────────────────────────────────────
   let curatedFacts: CuratedResearch | null = null;
   if (exaContext) {
-    curatedFacts = await curateResearch(artist, title, album, exaContext, transcriptContext, apiKey);
+    curatedFacts = await curateResearch(artist, title, album, exaContext, transcriptContext, apiKey, spotifyInfo);
   }
 
   // ── Agent 2: Build writer prompt ───────────────────────────────────
@@ -1861,7 +1928,8 @@ Return ONLY valid JSON:
     let discoverySearchSkipped = false;
 
     // Fetch Spotify + Last.fm artist info in parallel with Exa Phase 1
-    const spotifyInfoPromise = fetchSpotifyArtistInfo(artist);
+    // Pass track ID for precise artist resolution (prevents name collisions)
+    const spotifyInfoPromise = fetchSpotifyArtistInfo(artist, safeSpotifyTrackId);
     const lastFmSimilarPromise = fetchLastFmSimilarArtists(artist);
     const lastFmTagsPromise = fetchLastFmArtistTags(artist);
 
@@ -1881,8 +1949,32 @@ Return ONLY valid JSON:
         spotifyInfoPromise,
       ]);
 
-      const artistAnswer = artistSearchResult;
+      let artistAnswer = artistSearchResult;
       const followers = phase1SpotifyInfo?.followers || 0;
+      let nameCollisionDetected = false;
+
+      // ── Name collision detection ──────────────────────────────────────
+      // If Spotify resolved the correct artist (via track ID), cross-check
+      // whether the Exa results actually discuss that artist's work.
+      // If the results mention the name but none of the known discography,
+      // a name collision is likely — retry with album in includeText.
+      if (album && artistAnswer.answer && phase1SpotifyInfo) {
+        const ansLower = artistAnswer.answer.toLowerCase();
+        const albumLow = album.toLowerCase();
+        const titleLow = title.toLowerCase();
+        const spAlbums = (phase1SpotifyInfo.albumNames || []).map(a => a.toLowerCase()).filter(a => a.length > 3);
+        const spTracks = (phase1SpotifyInfo.topTrackNames || []).map(t => t.toLowerCase()).filter(t => t.length > 3);
+        const mentionsAlbum = albumLow.length > 3 && ansLower.includes(albumLow);
+        const mentionsTitle = titleLow.length > 3 && ansLower.includes(titleLow);
+        const mentionsKnown = spAlbums.some(a => ansLower.includes(a)) || spTracks.some(t => ansLower.includes(t));
+
+        if (!mentionsAlbum && !mentionsTitle && !mentionsKnown) {
+          console.log(`[Exa] Name collision detected — Phase 1 results don't mention album "${album}" or any known tracks. Retrying with album filter.`);
+          artistAnswer = await searchExaPages(questions.artistQ, "artist", EXA_API_KEY, 0, [artist, album]);
+          nameCollisionDetected = true;
+        }
+      }
+
       const artistStrictCount = filterRelevantCitations(
         artistAnswer.citations, artist, title, "strict"
       ).length;
@@ -1922,9 +2014,10 @@ Return ONLY valid JSON:
         // ARTIST-HEAVY: has artist coverage but track is not mentioned — 2nd broader artist search
         console.log(`[Exa] Strategy: ARTIST-HEAVY (${artistStrictCount} strict cites, track "${title}" NOT mentioned)`);
         const broadQuery = buildBroadArtistQuery(artist);
+        const broadInclude = nameCollisionDetected && album ? [artist, album] : [artist];
         // Use citIndex 10-19 (track range) so image grouping treats this as "track" group
         // More results (8) to maximize coverage for mid-tier artists
-        const broadResult = await searchExaPages(broadQuery, "artist-broad", EXA_API_KEY, 10, [artist], undefined, { numResults: 8 });
+        const broadResult = await searchExaPages(broadQuery, "artist-broad", EXA_API_KEY, 10, broadInclude, undefined, { numResults: 8 });
         if (broadResult.answer) {
           answers.push(broadResult);
           totalCost += broadResult.costDollars;
@@ -1938,7 +2031,8 @@ Return ONLY valid JSON:
 
         // Strategy A: Broader auto search with more results (catches interview/profile pages)
         const broadQuery = buildBroadArtistQuery(artist);
-        const broadResult = await searchExaPages(broadQuery, "artist-broad", EXA_API_KEY, 10, [artist], undefined, { numResults: 8 });
+        const sparseInclude = nameCollisionDetected && album ? [artist, album] : [artist];
+        const broadResult = await searchExaPages(broadQuery, "artist-broad", EXA_API_KEY, 10, sparseInclude, undefined, { numResults: 8 });
         if (broadResult.answer) {
           answers.push(broadResult);
           totalCost += broadResult.costDollars;
@@ -1966,7 +2060,7 @@ Return ONLY valid JSON:
       }
 
       if (answers.length > 0) {
-        const { context, allCitations } = buildExaPromptContext(answers, artist, title);
+        const { context, allCitations } = buildExaPromptContext(answers, artist, title, album, phase1SpotifyInfo);
         // Loose filter for prompt context (artist OR title match)
         const filteredCitations = filterRelevantCitations(allCitations, artist, title, "loose");
         // Strict filter for images and external links (artist name must appear)
@@ -2160,10 +2254,12 @@ Return ONLY valid JSON:
             n.imageSearchQuery = `${album || title} album cover ${artist}`;
             n.imageCaption = n.imageCaption || `${album || title} album artwork`;
           } else if (n.kind === "artist") {
-            n.imageSearchQuery = `${artist}${genreCtx} musician`;
+            // Include album/genre for disambiguation when artist names may collide
+            const albumHint = album ? ` "${album}"` : "";
+            n.imageSearchQuery = `${artist}${albumHint}${genreCtx} musician`;
             n.imageCaption = n.imageCaption || artist;
           } else {
-            n.imageSearchQuery = `${artist} ${title} song`;
+            n.imageSearchQuery = `${artist} "${title}" song`;
             n.imageCaption = n.imageCaption || `${title} by ${artist}`;
           }
         }
