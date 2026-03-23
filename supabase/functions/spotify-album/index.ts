@@ -40,9 +40,9 @@ serve(async (req) => {
 
   try {
     const { albumId } = await req.json();
-    if (!albumId || typeof albumId !== "string") {
+    if (!albumId || typeof albumId !== "string" || !/^[a-zA-Z0-9]{1,30}$/.test(albumId)) {
       return new Response(
-        JSON.stringify({ error: "albumId required" }),
+        JSON.stringify({ error: "albumId required (alphanumeric, max 30 chars)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

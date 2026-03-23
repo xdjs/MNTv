@@ -48,9 +48,9 @@ async function generateArtistBio(
   genres: string[],
   topTrackNames: string[],
   albumNames: string[],
-): Promise<string> {
+): Promise<{ text: string; grounded: boolean }> {
   const apiKey = Deno.env.get("GOOGLE_AI_API_KEY");
-  if (!apiKey) return "";
+  if (!apiKey) return { text: "", grounded: false };
 
   const genreStr = genres.length ? genres.join(", ") : "unknown genre";
   const trackStr = topTrackNames.slice(0, 5).join(", ") || "unknown";
@@ -65,7 +65,7 @@ Be factual and vivid. No hedging ("is known for", "is considered"). No markdown.
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     const baseBody = {
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } },
+      generationConfig: { temperature: 0.7, maxOutputTokens: 400, thinkingConfig: { thinkingBudget: 0 } },
     };
 
     // First attempt: with Google Search grounding
@@ -74,7 +74,7 @@ Be factual and vivid. No hedging ("is known for", "is considered"). No markdown.
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...baseBody, tools: [{ google_search: {} }] }),
     });
-    if (!res.ok) return "";
+    if (!res.ok) return { text: "", grounded: false };
     const data = await res.json();
 
     const finishReason = data.candidates?.[0]?.finishReason;
@@ -86,14 +86,14 @@ Be factual and vivid. No hedging ("is known for", "is considered"). No markdown.
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(baseBody),
       });
-      if (!retryRes.ok) return "";
+      if (!retryRes.ok) return { text: "", grounded: false };
       const retryData = await retryRes.json();
-      return retryData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+      return { text: retryData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "", grounded: false };
     }
 
-    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+    return { text: data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "", grounded: true };
   } catch {
-    return "";
+    return { text: "", grounded: false };
   }
 }
 
@@ -225,7 +225,7 @@ serve(async (req) => {
     }
 
     // 3. Generate AI bio with track/album context for grounding (prevents hallucination)
-    const bio = await generateArtistBio(
+    const bioResult = await generateArtistBio(
       artist.name,
       artist.genres || [],
       topTracks.map((t: any) => t.title),
@@ -241,7 +241,8 @@ serve(async (req) => {
         imageUrl: artist.images?.[0]?.url || artist.images?.[1]?.url || "",
         genres: artist.genres || [],
         followers: artist.followers?.total || 0,
-        bio,
+        bio: bioResult.text,
+        bioGrounded: bioResult.grounded,
       },
       topTracks,
       albums: (albumsData?.items || []).map((a: any) => ({

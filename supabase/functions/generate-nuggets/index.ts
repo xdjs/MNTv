@@ -655,7 +655,7 @@ async function prepareImageCandidates(
 
   // Start Spotify image fetch in parallel with Exa images (not sequentially after)
   const spotifyImagePromise = spotifyArtistImageUrl
-    ? fetchImageAsBase64(spotifyArtistImageUrl)
+    ? fetchImageAsBase64(spotifyArtistImageUrl).catch(() => null)
     : Promise.resolve(null);
 
   if (tasks.length === 0 && !spotifyArtistImageUrl) return [];
