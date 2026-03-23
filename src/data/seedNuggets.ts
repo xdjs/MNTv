@@ -11,7 +11,7 @@
 interface SeedNuggetData {
   headline: string;
   text: string;
-  kind: "artist" | "track" | "discovery";
+  kind: "artist" | "track" | "discovery" | "context";
   listenFor?: boolean;
   imageUrl?: string;
   imageCaption?: string;
