@@ -479,7 +479,7 @@ export default function Listen() {
   // AI-generated nuggets with real sources
   const tier = (profile?.calculatedTier as "casual" | "curious" | "nerd") || "casual";
   const artistImageUrl = (track?.artist && profile?.spotifyArtistImages?.[track.artist]) || track?.coverArtUrl || "";
-  const { nuggets: aiNuggets, sources: aiSources, loading: aiLoading, error: aiError, listenCount } = useAINuggets(
+  const { nuggets: aiNuggets, sources: aiSources, loading: aiLoading, error: aiError, listenCount, artistSummary } = useAINuggets(
     trackId,
     track?.artist || "",
     track?.title || "",
@@ -569,6 +569,7 @@ export default function Listen() {
             prebuiltNuggets,
             coverArtUrl: effectiveCoverArt || undefined,
             artistImage: artistImageUrl || effectiveCoverArt || undefined,
+            artistSummary,
           },
         });
         if (cancelled) return;
