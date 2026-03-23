@@ -261,6 +261,8 @@ serve(async (req) => {
     };
 
     // Write to cache (fire-and-forget — don't block response)
+    // Note: concurrent cold-cache requests for the same artist will both generate a bio,
+    // but upsert is idempotent so the second write just overwrites with equivalent data.
     db.from("artist_cache")
       .upsert({ artist_id: artistId, data: result, created_at: new Date().toISOString() })
       .then(({ error }) => { if (error) console.error("[spotify-artist] cache write failed:", error.message); })

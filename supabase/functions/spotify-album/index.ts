@@ -48,9 +48,13 @@ serve(async (req) => {
     }
 
     const token = await getAppToken();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
     const res = await fetch(`https://api.spotify.com/v1/albums/${albumId}?market=US`, {
       headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
 
     if (!res.ok) {
       return new Response(
