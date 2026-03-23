@@ -193,7 +193,7 @@ function RealArtistProfile({ artistName, spotifyId }: { artistName: string; spot
 
   const { artist, topTracks, albums, relatedArtists } = data;
 
-  const trackTiles = topTracks.map((t, i) => ({
+  const trackTiles = useMemo(() => topTracks.map((t, i) => ({
     id: `real-track-${i}`,
     title: t.title,
     artist: t.artist,
@@ -201,9 +201,9 @@ function RealArtistProfile({ artistName, spotifyId }: { artistName: string; spot
     imageUrl: t.imageUrl,
     uri: t.uri,
     durationMs: t.durationMs,
-  }));
+  })), [topTracks]);
 
-  const albumTiles = albums.map((a, i) => {
+  const albumTiles = useMemo(() => albums.map((a, i) => {
     const spotifyAlbumId = a.uri?.replace("spotify:album:", "") || "";
     return {
       id: `real-album-${i}`,
@@ -214,9 +214,9 @@ function RealArtistProfile({ artistName, spotifyId }: { artistName: string; spot
         ? `/album/spotify::${spotifyAlbumId}::${encodeURIComponent(artist.name)}::${artist.id}`
         : "#",
     };
-  });
+  }), [albums, artist.name, artist.id]);
 
-  const relatedTiles = relatedArtists.map((a, i) => ({
+  const relatedTiles = useMemo(() => relatedArtists.map((a, i) => ({
     id: `related-${i}`,
     imageUrl: a.imageUrl,
     title: a.name,
@@ -224,7 +224,7 @@ function RealArtistProfile({ artistName, spotifyId }: { artistName: string; spot
     href: a.id
       ? `/artist/spotify::${a.id}::${encodeURIComponent(a.name)}`
       : `/artist/real::${encodeURIComponent(a.name)}`,
-  }));
+  })), [relatedArtists]);
 
   return (
     <RealArtistProfileInner

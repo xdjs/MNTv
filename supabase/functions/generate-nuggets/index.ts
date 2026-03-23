@@ -2627,7 +2627,7 @@ Return ONLY valid JSON:
     _timings.total = Date.now() - functionStartTime;
     console.timeEnd("[Timing] TOTAL");
     console.log(`[Timing] Breakdown:`, JSON.stringify(_timings));
-    return new Response(JSON.stringify({ nuggets: validatedNuggets, artistSummary, externalLinks, noTrackData, _timings }), {
+    return new Response(JSON.stringify({ nuggets: validatedNuggets, artistSummary, externalLinks, noTrackData }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

@@ -62,20 +62,35 @@ Focus on specific facts: where they're from, when they formed/started, key caree
 Be factual and vivid. No hedging ("is known for", "is considered"). No markdown. Plain text only.`;
 
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } },
-          tools: [{ google_search: {} }],
-        }),
-      }
-    );
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const baseBody = {
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.7, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } },
+    };
+
+    // First attempt: with Google Search grounding
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...baseBody, tools: [{ google_search: {} }] }),
+    });
     if (!res.ok) return "";
     const data = await res.json();
+
+    const finishReason = data.candidates?.[0]?.finishReason;
+    if (finishReason === "RECITATION") {
+      // Retry without grounding — RECITATION means grounding triggered copyright filter
+      console.warn(`[spotify-artist] RECITATION for "${name}", retrying without grounding`);
+      const retryRes = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(baseBody),
+      });
+      if (!retryRes.ok) return "";
+      const retryData = await retryRes.json();
+      return retryData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+    }
+
     return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
   } catch {
     return "";
@@ -248,7 +263,8 @@ serve(async (req) => {
     // Write to cache (fire-and-forget — don't block response)
     db.from("artist_cache")
       .upsert({ artist_id: artistId, data: result, created_at: new Date().toISOString() })
-      .then(({ error }) => { if (error) console.error("artist_cache write error:", error); });
+      .then(({ error }) => { if (error) console.error("[spotify-artist] cache write failed:", error.message); })
+      .catch((err) => console.error("[spotify-artist] cache write exception:", err));
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

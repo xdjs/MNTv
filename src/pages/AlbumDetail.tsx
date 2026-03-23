@@ -27,7 +27,6 @@ interface SpotifyAlbumData {
     albumType: string;
     totalTracks: number;
     artist: { id: string; name: string };
-    genres: string[];
     label: string;
   };
   tracks: SpotifyTrack[];
