@@ -163,6 +163,8 @@ export default function PlaybackBar({
         {/* Transport controls row */}
         <div className="flex flex-col items-center gap-2">
           <div className="flex items-center justify-center gap-3 md:gap-6">
+            {/* Invisible spacer to balance Shuffle on the right — keeps Play centered with cover art */}
+            <div className="h-9 w-9" aria-hidden="true" />
             {/* Dislike - index 0 */}
             <button
               onClick={onDislike}

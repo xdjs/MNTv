@@ -648,7 +648,7 @@ export default function Listen() {
   const [liked, setLiked] = useState<boolean | null>(null);
 
   // --- Auto-hide bar logic ---
-  const [barVisible, setBarVisible] = useState(true);
+  const [barVisible, setBarVisible] = useState(false);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showBar = useCallback((keepVisible?: boolean) => {
@@ -657,11 +657,6 @@ export default function Listen() {
     if (!keepVisible) {
       hideTimerRef.current = setTimeout(() => setBarVisible(false), HIDE_DELAY);
     }
-  }, []);
-
-  useEffect(() => {
-    hideTimerRef.current = setTimeout(() => setBarVisible(false), HIDE_DELAY);
-    return () => { if (hideTimerRef.current) clearTimeout(hideTimerRef.current); };
   }, []);
 
   useEffect(() => {

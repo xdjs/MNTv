@@ -2298,6 +2298,14 @@ Return ONLY valid JSON:
       }
     }
 
+    // Sanitize sentinel values Gemini may return for imageSearchQuery / imageCaption
+    const SENTINEL_VALUES = new Set(["omit", "none", "n/a", "null", "skip", ""]);
+    const isSentinel = (v?: string) => !v || SENTINEL_VALUES.has(v.toLowerCase().trim());
+    for (const n of rawNuggets) {
+      if (isSentinel(n.imageSearchQuery)) n.imageSearchQuery = undefined;
+      if (isSentinel(n.imageCaption)) n.imageCaption = undefined;
+    }
+
     // Step 3.5: Resolve images for each nugget
     // Priority: 1) Gemini visually selected image (selectedImageLabel) — multimodal inspection
     //           2) Gemini text-selected Exa image (selectedImageUrl) — URL-based fallback
@@ -2386,8 +2394,9 @@ Return ONLY valid JSON:
       }
     }
     console.time("[Timing] Wiki image resolution"); _ts("wikiImages");
+    const isValidImageQuery = (q?: string) => q && q.length > 2 && !SENTINEL_VALUES.has(q.toLowerCase().trim());
     const wikiSearchNeeded = rawNuggets.map((n) =>
-      !n._resolvedImageUrl && n.imageSearchQuery ? resolveNuggetImage(n.imageSearchQuery) : Promise.resolve(null)
+      !n._resolvedImageUrl && isValidImageQuery(n.imageSearchQuery) ? resolveNuggetImage(n.imageSearchQuery!) : Promise.resolve(null)
     );
     const wikiResults = await Promise.allSettled(wikiSearchNeeded);
     console.timeEnd("[Timing] Wiki image resolution"); _te("wikiImages");
@@ -2467,7 +2476,8 @@ Return ONLY valid JSON:
         const cleaned = cleanImageUrl(n._resolvedImageUrl);
         if (isActualImageUrl(cleaned) || cleaned.includes("wikipedia.org") || cleaned.includes("wikimedia.org")) {
           result.imageUrl = cleaned;
-          result.imageCaption = n.imageCaption || n._resolvedImageTitle || n.imageSearchQuery;
+          result.imageCaption = (!isSentinel(n.imageCaption) ? n.imageCaption : undefined)
+            || n._resolvedImageTitle || n.headline;
         } else {
           console.log(`[Image] Final check rejected non-image URL for "${n.headline?.slice(0, 40)}": ${cleaned}`);
         }
