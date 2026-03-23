@@ -19,9 +19,13 @@ serve(async (req) => {
 
   try {
     const { artist, title, album, tier = "casual", listenCount = 1, prebuiltNuggets = null, coverArtUrl = null, artistImage = null, artistSummary: rawArtistSummary = null } = await req.json();
-    // Sanitize client-provided artistSummary (length cap + strip newlines)
+    // Sanitize client-provided artistSummary (length cap, strip newlines, remove injection markers)
     const passedArtistSummary = typeof rawArtistSummary === "string"
-      ? rawArtistSummary.slice(0, 500).replace(/[\r\n]/g, " ")
+      ? rawArtistSummary
+          .slice(0, 500)
+          .replace(/[\r\n]/g, " ")
+          .replace(/```|<\/?[a-z][^>]*>|(\bsystem\b|\bignore\b|\binstruction\b|\bprompt\b).*?:/gi, "")
+          .trim()
       : null;
 
     if (!artist || !title) {

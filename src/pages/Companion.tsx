@@ -167,7 +167,7 @@ export default function Companion() {
 
     return data.nuggets.map((n) => {
       if (n.imageUrl) return n;
-      if (n.category === "history" && isReal(artistImg)) {
+      if ((n.category === "history" || n.category === "context") && isReal(artistImg)) {
         return { ...n, imageUrl: artistImg, imageCaption: artistName };
       }
       if ((n.category === "track" || n.category === "explore") && isReal(coverArt)) {

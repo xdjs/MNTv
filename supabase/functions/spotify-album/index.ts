@@ -14,7 +14,7 @@ let tokenExpiresAt = 0;
 async function getAppToken(): Promise<string> {
   if (cachedToken && Date.now() < tokenExpiresAt) return cachedToken;
 
-  const clientId = Deno.env.get("SPOTIFY_CLIENT_ID") || Deno.env.get("VITE_SPOTIFY_CLIENT_ID");
+  const clientId = Deno.env.get("SPOTIFY_CLIENT_ID");
   const clientSecret = Deno.env.get("SPOTIFY_CLIENT_SECRET");
   if (!clientId || !clientSecret) throw new Error("Missing Spotify credentials");
 
@@ -41,6 +41,15 @@ serve(async (req) => {
   }
 
   try {
+    // Verify request comes through Supabase gateway (apikey header required)
+    const apikey = req.headers.get("apikey");
+    if (!apikey) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const { albumId } = await req.json();
     if (!albumId || typeof albumId !== "string" || !/^[a-zA-Z0-9]{22}$/.test(albumId)) {
       return new Response(

@@ -660,6 +660,11 @@ export default function Listen() {
     }
   }, []);
 
+  // Brief auto-show on mount for discoverability (desktop/TV first-time visitors)
+  useEffect(() => {
+    showBar();
+  }, [showBar]);
+
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
       if (e.clientY > window.innerHeight * 0.85) showBar();

@@ -44,6 +44,7 @@ interface RealArtistData {
     genres: string[];
     followers: number;
     bio?: string;
+    bioGrounded?: boolean;
   };
   topTracks: RealTrack[];
   albums: RealAlbum[];

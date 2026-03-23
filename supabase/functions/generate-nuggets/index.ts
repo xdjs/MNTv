@@ -102,7 +102,7 @@ let spotifyTokenExpiry = 0;
 
 async function getSpotifyAppToken(): Promise<string | null> {
   if (spotifyTokenCache && Date.now() < spotifyTokenExpiry) return spotifyTokenCache;
-  const clientId = Deno.env.get("SPOTIFY_CLIENT_ID") || Deno.env.get("VITE_SPOTIFY_CLIENT_ID");
+  const clientId = Deno.env.get("SPOTIFY_CLIENT_ID");
   const clientSecret = Deno.env.get("SPOTIFY_CLIENT_SECRET");
   if (!clientId || !clientSecret) return null;
   try {
@@ -1241,7 +1241,40 @@ Return ONLY valid JSON:
 
     const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     const parsed = JSON.parse(cleaned);
-    console.log(`[Curator] Origin: ${parsed.artistOrigin}, ${parsed.artistFacts?.length || 0} artist facts, ${parsed.trackFacts?.length || 0} track facts`);
+    const artistFactCount = parsed.artistFacts?.length || 0;
+    const trackFactCount = parsed.trackFacts?.length || 0;
+    console.log(`[Curator] Origin: ${parsed.artistOrigin}, ${artistFactCount} artist facts, ${trackFactCount} track facts`);
+
+    // Quality gate: if Exa context was rich (>2000 chars) but Curator extracted very little,
+    // retry with 2.5-flash which has better comprehension for complex articles.
+    const contextIsRich = exaContext.length > 2000;
+    const extractionIsSparse = artistFactCount < 2 && trackFactCount === 0;
+    if (contextIsRich && extractionIsSparse && curatorModelUsed === "gemini-2.0-flash") {
+      console.log(`[Curator] Sparse extraction from rich context (${exaContext.length} chars) — retrying with gemini-2.5-flash`);
+      const upgradeUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+      const upgradeRes = await fetch(upgradeUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: requestBody,
+      });
+      if (upgradeRes.ok) {
+        const upgradeData = await upgradeRes.json();
+        const upgradeText = upgradeData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        if (upgradeText.trim()) {
+          const upgradeCleaned = upgradeText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+          try {
+            const upgradeParsed = JSON.parse(upgradeCleaned);
+            const upgradeArtistFacts = upgradeParsed.artistFacts?.length || 0;
+            const upgradeTrackFacts = upgradeParsed.trackFacts?.length || 0;
+            console.log(`[Curator] 2.5-flash retry: ${upgradeArtistFacts} artist facts, ${upgradeTrackFacts} track facts`);
+            if (upgradeArtistFacts > artistFactCount || upgradeTrackFacts > trackFactCount) {
+              return upgradeParsed as CuratedResearch;
+            }
+          } catch { /* fall through to original result */ }
+        }
+      }
+    }
+
     return parsed as CuratedResearch;
   } catch (e) {
     console.error("[Curator] Error:", e);
