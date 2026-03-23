@@ -18,7 +18,11 @@ serve(async (req) => {
   }
 
   try {
-    const { artist, title, album, tier = "casual", listenCount = 1, prebuiltNuggets = null, coverArtUrl = null, artistImage = null, artistSummary: passedArtistSummary = null } = await req.json();
+    const { artist, title, album, tier = "casual", listenCount = 1, prebuiltNuggets = null, coverArtUrl = null, artistImage = null, artistSummary: rawArtistSummary = null } = await req.json();
+    // Sanitize client-provided artistSummary (length cap + strip newlines)
+    const passedArtistSummary = typeof rawArtistSummary === "string"
+      ? rawArtistSummary.slice(0, 500).replace(/[\r\n]/g, " ")
+      : null;
 
     if (!artist || !title) {
       return new Response(JSON.stringify({ error: "artist and title required" }), {

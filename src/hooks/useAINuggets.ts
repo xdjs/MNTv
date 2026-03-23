@@ -29,7 +29,7 @@ interface UseAINuggetsResult {
   loading: boolean;
   error: string | null;
   listenCount: number;
-  artistSummary: string;
+  artistSummary: string | null;
 }
 
 // ── Sentinel poll helper ──────────────────────────────────────────────────────
@@ -80,7 +80,7 @@ export function useAINuggets(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [listenCount, setListenCount] = useState(1);
-  const [artistSummary, setArtistSummary] = useState("");
+  const [artistSummary, setArtistSummary] = useState<string | null>(null);
 
   const { getNuggetCache, setNuggetCache, getTrackListenCount, setTrackListenCount } = usePlayer();
   const cancelledRef = useRef(false);

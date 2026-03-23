@@ -664,8 +664,14 @@ export default function Listen() {
     const onMouseMove = (e: MouseEvent) => {
       if (e.clientY > window.innerHeight * 0.85) showBar();
     };
+    // Show bar on keyboard/remote interaction (TV-style devices)
+    const onKeyDown = () => showBar();
     window.addEventListener("mousemove", onMouseMove);
-    return () => window.removeEventListener("mousemove", onMouseMove);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("keydown", onKeyDown);
+    };
   }, [showBar]);
 
   // Click nugget card to open deep dive

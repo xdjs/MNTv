@@ -6,6 +6,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// In-memory token cache. Concurrent cold-start requests may both fetch a token;
+// the second write clobbers the first harmlessly (both tokens are valid).
 let cachedToken: string | null = null;
 let tokenExpiresAt = 0;
 
@@ -40,9 +42,9 @@ serve(async (req) => {
 
   try {
     const { albumId } = await req.json();
-    if (!albumId || typeof albumId !== "string" || !/^[a-zA-Z0-9]{1,30}$/.test(albumId)) {
+    if (!albumId || typeof albumId !== "string" || !/^[a-zA-Z0-9]{22}$/.test(albumId)) {
       return new Response(
-        JSON.stringify({ error: "albumId required (alphanumeric, max 30 chars)" }),
+        JSON.stringify({ error: "albumId required (22-char Spotify ID)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

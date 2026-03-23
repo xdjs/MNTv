@@ -1,6 +1,12 @@
 // Route URL parsing utilities for spotify:: and real:: prefixed routes.
 // CONSTRAINT: "::" is the delimiter — names containing "::" would break parsing.
 // Safe for Spotify data (IDs/names don't contain "::"), but not arbitrary user input.
+//
+// Segment formats:
+//   Artist: spotify::{spotifyId}::{artistName}
+//   Album:  spotify::{albumId}::{artistName}::{artistSpotifyId}
+//   Real:   real::{artistName}
+//   Listen: real::{artist}::{title}::{album}::{spotifyUri}
 
 /** Detect if a raw route param has a spotify:: prefix (URL-encoded or raw) */
 export function isSpotifyPrefix(raw: string | undefined): boolean {

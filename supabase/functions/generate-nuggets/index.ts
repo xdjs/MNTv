@@ -862,6 +862,7 @@ async function searchCommonsImage(query: string): Promise<{ url: string; title: 
 
 // Resolve image for a single nugget's search query
 async function resolveNuggetImage(query: string): Promise<{ url: string; title: string } | null> {
+  // Fire both in parallel for lower latency. Wikipedia is preferred; Commons is fallback only.
   const [wikiResult, commonsResult] = await Promise.allSettled([
     searchWikipediaImage(query),
     searchCommonsImage(query),
@@ -1525,7 +1526,7 @@ IMAGE SELECTION — at least 1 nugget MUST include an image:
   // keyCollaborators is artist-level; collab bias must only feature people on THIS track.
   const trackFactsText = (curatedFacts?.trackFacts ?? []).join(" ").toLowerCase();
   const trackSpecificCollabs = creativeCollabs.filter(c => {
-    const name = c.split(/\s*[—–-]\s*/)[0].trim().toLowerCase();
+    const name = c.split(/\s*[—–]\s*/)[0].trim().toLowerCase();
     const nameWords = name.split(/\s+/);
     return nameWords.length <= 2
       ? trackFactsText.includes(name)
@@ -1833,12 +1834,8 @@ Regenerate the nuggets now with REAL sources only.` }],
       }
 
       // Stamp "context" kind on nugget 2 when no track data exists.
-      // Don't rely on Gemini to return the right kind — force it programmatically.
+      // Flag sparse track data — the main handler enforces kind order via expectedKinds.
       const noTrackData = !curatedFacts?.trackFacts?.length && trackSearchSkipped;
-      if (noTrackData && parsed.nuggets?.[1]) {
-        parsed.nuggets[1].kind = "context";
-        parsed.nuggets[1].listenFor = false;
-      }
 
       console.timeEnd("[Timing] Writer (Agent 2)"); _te("writer");
       return { nuggets: parsed.nuggets || [], artistSummary: parsed.artistSummary || "", groundingChunks, exaCitations, noTrackData };
@@ -2048,6 +2045,7 @@ Return ONLY valid JSON:
         spotifyInfoPromise,
       ]);
       console.timeEnd("[Timing] Exa Phase 1"); _te("exaPhase1");
+      checkTimeout();
 
       let artistAnswer = artistSearchResult;
       const followers = phase1SpotifyInfo?.followers || 0;
@@ -2081,6 +2079,7 @@ Return ONLY valid JSON:
       ).length;
       const trackMentioned = trackMentionedInResults(artistAnswer, title);
       console.timeEnd("[Timing] Name collision check"); _te("nameCollision");
+      checkTimeout();
 
       console.log(`[Exa] Phase 1 signals: followers=${followers.toLocaleString()}, strictCitations=${artistStrictCount}, trackMentioned=${trackMentioned}`);
 
@@ -2170,6 +2169,7 @@ Return ONLY valid JSON:
       }
 
       console.timeEnd("[Timing] Exa Phase 2"); _te("exaPhase2");
+      checkTimeout();
 
       if (answers.length > 0) {
         const { context, allCitations } = buildExaPromptContext(answers, artist, title, album, phase1SpotifyInfo);
@@ -2402,6 +2402,7 @@ Return ONLY valid JSON:
     );
     const wikiResults = await Promise.allSettled(wikiSearchNeeded);
     console.timeEnd("[Timing] Wiki image resolution"); _te("wikiImages");
+    checkTimeout();
     for (let i = 0; i < rawNuggets.length; i++) {
       if (rawNuggets[i]._resolvedImageUrl) continue;
       const result = wikiResults[i];

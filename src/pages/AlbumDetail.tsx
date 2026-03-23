@@ -240,7 +240,7 @@ function SpotifyAlbumInner({
           navigate(`/artist/spotify::${artistSpotifyId}::${encodeURIComponent(artistName)}`);
         } else if (zone === "tracks") {
           const t = tracks[colIndex];
-          if (t) {
+          if (t?.uri) {
             const href = `/listen/real::${encodeURIComponent(t.artist)}::${encodeURIComponent(t.title)}::${encodeURIComponent(t.album)}::${encodeURIComponent(t.uri)}`;
             navigate(href);
           }
@@ -324,6 +324,7 @@ function SpotifyAlbumInner({
               key={`${t.uri}-${i}`}
               ref={(el) => { trackRefs.current[i] = el; }}
               onClick={() => {
+                if (!t.uri) return;
                 const href = `/listen/real::${encodeURIComponent(t.artist)}::${encodeURIComponent(t.title)}::${encodeURIComponent(t.album)}::${encodeURIComponent(t.uri)}`;
                 navigate(href);
               }}
