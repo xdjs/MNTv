@@ -8,7 +8,7 @@ import { getSeedListenNuggets } from "@/data/seedNuggets";
 interface AINuggetData {
   headline: string;
   text: string;
-  kind: "artist" | "track" | "discovery";
+  kind: "artist" | "track" | "discovery" | "context";
   listenFor?: boolean;
   imageUrl?: string;
   imageCaption?: string;
@@ -392,6 +392,11 @@ export function useAINuggets(
           nugget.imageUrl = aiNugget.imageUrl;
           nugget.imageCaption = aiNugget.imageCaption || nugget.headline;
           contextualImageIndices.add(idx);
+        }
+        // "context" kind: keep backend-resolved image, only fallback to artist photo
+        else if (nugget.kind === "context" && isRealImage(artistImageUrl)) {
+          nugget.imageUrl = artistImageUrl;
+          nugget.imageCaption = artist;
         }
         // Fall back to Spotify images (only real URLs, not DiceBear placeholders)
         else if (nugget.kind === "artist" && isRealImage(artistImageUrl)) {

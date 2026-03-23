@@ -31,6 +31,9 @@ dist-ssr
 scripts/fix-caches.sh
 scripts/seed-demo-resumable.sh
 
+# Pipeline comparison results
+scripts/pipeline-comparison/results/
+
 # Claude Code session/memory
 .claude/
 

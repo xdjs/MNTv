@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Compass } from "lucide-react";
+import { Compass, BookOpen } from "lucide-react";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import type { Nugget, AnimationStyle, Source } from "@/mock/types";
 
@@ -16,6 +16,7 @@ interface Props {
 const kindLabels: Record<string, string> = {
   artist: "History",
   track: "The Track",
+  context: "Behind the Music",
   discovery: "Explore Next",
 };
 
@@ -172,7 +173,8 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
               className="mb-2 flex items-center gap-2 text-xs md:text-sm text-muted-foreground"
             >
               {nugget.kind === "discovery" && <Compass size={12} className="text-primary" />}
-              <span className={`uppercase tracking-wider ${nugget.kind === "discovery" ? "text-primary" : ""}`}>
+              {nugget.kind === "context" && <BookOpen size={12} className="text-amber-400" />}
+              <span className={`uppercase tracking-wider ${nugget.kind === "discovery" ? "text-primary" : nugget.kind === "context" ? "text-amber-400" : ""}`}>
                 {kindLabels[nugget.kind] || nugget.kind}
               </span>
               {currentTime && (

@@ -19,6 +19,7 @@ interface CompanionData {
 
 const SECTIONS: { key: CompanionNugget["category"]; label: string; color: string }[] = [
   { key: "track", label: "The Track", color: "bg-blue-500/20 text-blue-400" },
+  { key: "context", label: "Behind the Music", color: "bg-amber-500/20 text-amber-400" },
   { key: "history", label: "History", color: "bg-primary/20 text-primary" },
   { key: "explore", label: "Explore Next", color: "bg-emerald-500/20 text-emerald-400" },
 ];

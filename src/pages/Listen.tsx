@@ -535,6 +535,7 @@ export default function Listen() {
           const kindToCategory: Record<string, string> = {
             artist: "history",
             track: "track",
+            context: "context",
             discovery: "explore",
           };
           const now = Date.now();
