@@ -4,7 +4,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-DATA_DIR="$SCRIPT_DIR/seed-data"
+DATA_DIR="$SCRIPT_DIR/../src/data/seed"
 
 # Helper: add imageUrl + imageCaption to the "discovery" nugget in a listen JSON file
 add_image() {

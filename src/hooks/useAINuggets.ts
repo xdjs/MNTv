@@ -338,6 +338,10 @@ export function useAINuggets(
       // Companion metadata from generate-nuggets (Exa-sourced)
       const aiArtistSummary: string = data?.artistSummary || "";
       const aiExternalLinks: { label: string; url: string }[] = data?.externalLinks || [];
+      const aiNoTrackData: boolean = !!data?.noTrackData;
+      if (aiNoTrackData) {
+        console.log("[NuggetGen] Sparse artist — no track data, nugget 2 is 'context' kind");
+      }
 
       const newSources = new Map<string, Source>();
       const newNuggets: Nugget[] = aiNuggets.map((n, i) => {

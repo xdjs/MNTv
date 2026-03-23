@@ -1835,6 +1835,7 @@ Regenerate the nuggets now with REAL sources only.` }],
       const noTrackData = !curatedFacts?.trackFacts?.length && trackSearchSkipped;
       if (noTrackData && parsed.nuggets?.[1]) {
         parsed.nuggets[1].kind = "context";
+        parsed.nuggets[1].listenFor = false;
       }
 
       console.timeEnd("[Timing] Writer (Agent 2)"); _te("writer");
