@@ -479,7 +479,7 @@ export default function Listen() {
   // AI-generated nuggets with real sources
   const tier = (profile?.calculatedTier as "casual" | "curious" | "nerd") || "casual";
   const artistImageUrl = (track?.artist && profile?.spotifyArtistImages?.[track.artist]) || track?.coverArtUrl || "";
-  const { nuggets: aiNuggets, sources: aiSources, loading: aiLoading, error: aiError, listenCount } = useAINuggets(
+  const { nuggets: aiNuggets, sources: aiSources, loading: aiLoading, error: aiError, listenCount, artistSummary } = useAINuggets(
     trackId,
     track?.artist || "",
     track?.title || "",
@@ -569,6 +569,7 @@ export default function Listen() {
             prebuiltNuggets,
             coverArtUrl: effectiveCoverArt || undefined,
             artistImage: artistImageUrl || effectiveCoverArt || undefined,
+            artistSummary,
           },
         });
         if (cancelled) return;
@@ -648,7 +649,7 @@ export default function Listen() {
   const [liked, setLiked] = useState<boolean | null>(null);
 
   // --- Auto-hide bar logic ---
-  const [barVisible, setBarVisible] = useState(true);
+  const [barVisible, setBarVisible] = useState(false);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showBar = useCallback((keepVisible?: boolean) => {
@@ -657,11 +658,6 @@ export default function Listen() {
     if (!keepVisible) {
       hideTimerRef.current = setTimeout(() => setBarVisible(false), HIDE_DELAY);
     }
-  }, []);
-
-  useEffect(() => {
-    hideTimerRef.current = setTimeout(() => setBarVisible(false), HIDE_DELAY);
-    return () => { if (hideTimerRef.current) clearTimeout(hideTimerRef.current); };
   }, []);
 
   useEffect(() => {

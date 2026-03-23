@@ -1,10 +1,19 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function getSupabaseAdmin() {
+  const url = Deno.env.get("SUPABASE_URL")!;
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  return createClient(url, key);
+}
 
 // Reuse the same Client Credentials flow as spotify-search
 let cachedToken: string | null = null;
@@ -59,7 +68,7 @@ Cover their origin, musical style, and significance. Be factual and vivid. Compl
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 600 },
+          generationConfig: { temperature: 0.7, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } },
         }),
       }
     );
@@ -126,6 +135,20 @@ serve(async (req) => {
       artistId = artist.id;
     }
 
+    // --- Cache check ---
+    const db = getSupabaseAdmin();
+    const { data: cached } = await db
+      .from("artist_cache")
+      .select("data, created_at")
+      .eq("artist_id", artistId)
+      .single();
+
+    if (cached && Date.now() - new Date(cached.created_at).getTime() < CACHE_TTL_MS) {
+      return new Response(JSON.stringify(cached.data), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // 2. Fetch top tracks, albums, and related artists in parallel
     // Some endpoints may be unavailable (Spotify deprecated related-artists and
     // top-tracks for dev-mode apps in Feb 2026), so we handle nulls gracefully.
@@ -168,7 +191,7 @@ serve(async (req) => {
       }
     }
 
-    // 3. Generate AI bio (non-blocking — if it fails, we return empty string)
+    // 3. Generate AI bio with track/album context for grounding (prevents hallucination)
     const bio = await generateArtistBio(
       artist.name,
       artist.genres || [],
@@ -203,6 +226,11 @@ serve(async (req) => {
         genres: (a.genres || []).slice(0, 2),
       })),
     };
+
+    // Write to cache (fire-and-forget — don't block response)
+    db.from("artist_cache")
+      .upsert({ artist_id: artistId, data: result, created_at: new Date().toISOString() })
+      .then(({ error }) => { if (error) console.error("artist_cache write error:", error); });
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
