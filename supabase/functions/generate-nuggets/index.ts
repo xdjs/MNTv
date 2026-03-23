@@ -102,7 +102,7 @@ let spotifyTokenExpiry = 0;
 
 async function getSpotifyAppToken(): Promise<string | null> {
   if (spotifyTokenCache && Date.now() < spotifyTokenExpiry) return spotifyTokenCache;
-  const clientId = Deno.env.get("VITE_SPOTIFY_CLIENT_ID");
+  const clientId = Deno.env.get("SPOTIFY_CLIENT_ID") || Deno.env.get("VITE_SPOTIFY_CLIENT_ID");
   const clientSecret = Deno.env.get("SPOTIFY_CLIENT_SECRET");
   if (!clientId || !clientSecret) return null;
   try {
@@ -739,23 +739,25 @@ async function prepareImageCandidates(
   }
 
   // Cap at 5 total candidates to limit multimodal payload size (base64 images inflate Gemini requests)
-  // Keep IMG-A0 (Spotify) first, then best from each group
+  // Strategy: keep IMG-A0 (Spotify) first, then fill remaining 4 slots by priority from all candidates.
   if (candidates.length > 5) {
-    const capped: ImageCandidate[] = [];
     const a0 = candidates.find(c => c.label === "IMG-A0");
-    if (a0) capped.push(a0);
+    const rest = candidates.filter(c => c !== a0);
+    // Prioritize: 1 per group first (round-robin), then fill remaining from any group
+    const seen = new Set<string>();
+    const prioritized: ImageCandidate[] = [];
+    // Round 1: one from each group (ensures diversity)
     for (const group of ["artist", "track", "discovery"] as const) {
-      const groupItems = candidates.filter(c => c.group === group && !capped.includes(c));
-      const perGroup = group === "artist" ? (a0 ? 1 : 2) : 2;
-      capped.push(...groupItems.slice(0, perGroup));
+      const pick = rest.find(c => c.group === group && !seen.has(c.label));
+      if (pick) { prioritized.push(pick); seen.add(pick.label); }
     }
-    // Fill remaining slots if we're under 5
-    for (const c of candidates) {
-      if (capped.length >= 5) break;
-      if (!capped.includes(c)) capped.push(c);
+    // Round 2: fill remaining from any group
+    for (const c of rest) {
+      if (!seen.has(c.label)) { prioritized.push(c); seen.add(c.label); }
     }
+    const capped = a0 ? [a0, ...prioritized.slice(0, 4)] : prioritized.slice(0, 5);
     candidates.length = 0;
-    candidates.push(...capped.slice(0, 5));
+    candidates.push(...capped);
     console.log(`[ImagePrep] Capped from ${tasks.length} to ${candidates.length} candidates to reduce payload`);
   }
 

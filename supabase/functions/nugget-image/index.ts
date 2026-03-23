@@ -64,7 +64,7 @@ let spotifyTokenExpiry = 0;
 async function getSpotifyToken(): Promise<string | null> {
   if (spotifyToken && Date.now() < spotifyTokenExpiry) return spotifyToken;
 
-  const clientId = Deno.env.get("VITE_SPOTIFY_CLIENT_ID");
+  const clientId = Deno.env.get("SPOTIFY_CLIENT_ID") || Deno.env.get("VITE_SPOTIFY_CLIENT_ID");
   const clientSecret = Deno.env.get("SPOTIFY_CLIENT_SECRET");
   if (!clientId || !clientSecret) return null;
 

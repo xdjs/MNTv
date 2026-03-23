@@ -54,7 +54,9 @@ interface RealArtistData {
 export default function ArtistProfile() {
   const { artistId: rawArtistId } = useParams<{ artistId: string }>();
 
-  // Detect spotify:: or real:: prefix (URL-encoded or raw)
+  // Route format: spotify::{id}::{name} or real::{name}
+  // CONSTRAINT: "::" is used as delimiter — artist/track names containing "::" would break parsing.
+  // Safe for Spotify data (names don't contain "::"), but do not use for arbitrary user input.
   const isSpotifyArtist = rawArtistId?.startsWith("spotify%3A%3A") || rawArtistId?.startsWith("spotify::");
   const isRealArtist = rawArtistId?.startsWith("real%3A%3A") || rawArtistId?.startsWith("real::");
 

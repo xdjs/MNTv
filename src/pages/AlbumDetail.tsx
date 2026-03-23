@@ -37,6 +37,8 @@ interface SpotifyAlbumData {
 export default function AlbumDetail() {
   const { albumId: rawAlbumId } = useParams<{ albumId: string }>();
 
+  // Route format: spotify::{albumId}::{artistName}::{artistId}
+  // CONSTRAINT: "::" delimiter — safe for Spotify data but not arbitrary user input.
   const isSpotifyAlbum = rawAlbumId?.startsWith("spotify%3A%3A") || rawAlbumId?.startsWith("spotify::");
 
   const parsedSpotify = useMemo(() => {
