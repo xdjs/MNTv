@@ -37,7 +37,6 @@ interface SpotifyAlbumData {
 
 export default function AlbumDetail() {
   const { albumId: rawAlbumId } = useParams<{ albumId: string }>();
-  const navigate = useNavigate();
 
   const isSpotifyAlbum = rawAlbumId?.startsWith("spotify%3A%3A") || rawAlbumId?.startsWith("spotify::");
 
@@ -59,7 +58,6 @@ export default function AlbumDetail() {
           albumId={parsedSpotify.spotifyAlbumId}
           artistName={parsedSpotify.artistName}
           artistSpotifyId={parsedSpotify.artistSpotifyId}
-          navigate={navigate}
         />
       </PageTransition>
     );
@@ -82,7 +80,7 @@ export default function AlbumDetail() {
 
   return (
     <PageTransition>
-      <MockAlbumInner album={album} artist={artist} albumTracks={albumTracks} navigate={navigate} />
+      <MockAlbumInner album={album} artist={artist} albumTracks={albumTracks} />
     </PageTransition>
   );
 }
@@ -93,13 +91,12 @@ function SpotifyAlbumDetail({
   albumId,
   artistName,
   artistSpotifyId,
-  navigate,
 }: {
   albumId: string;
   artistName: string;
   artistSpotifyId: string;
-  navigate: ReturnType<typeof useNavigate>;
 }) {
+  const navigate = useNavigate();
   const [data, setData] = useState<SpotifyAlbumData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -161,7 +158,6 @@ function SpotifyAlbumDetail({
       tracks={tracks}
       artistName={resolvedArtistName}
       artistSpotifyId={resolvedArtistId}
-      navigate={navigate}
     />
   );
 }
@@ -173,14 +169,13 @@ function SpotifyAlbumInner({
   tracks,
   artistName,
   artistSpotifyId,
-  navigate,
 }: {
   album: SpotifyAlbumData["album"];
   tracks: SpotifyTrack[];
   artistName: string;
   artistSpotifyId: string;
-  navigate: ReturnType<typeof useNavigate>;
 }) {
+  const navigate = useNavigate();
   const trackRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   type ZoneType = "back" | "artist" | "tracks";
@@ -376,13 +371,12 @@ function MockAlbumInner({
   album,
   artist,
   albumTracks,
-  navigate,
 }: {
   album: NonNullable<ReturnType<typeof getAlbumById>>;
   artist: ReturnType<typeof getArtistById>;
   albumTracks: ReturnType<typeof getTracksForAlbum>;
-  navigate: ReturnType<typeof useNavigate>;
 }) {
+  const navigate = useNavigate();
   type ZoneType = "back" | "artist" | "tracks";
   const [zone, setZone] = useState<ZoneType>("back");
   const [colIndex, setColIndex] = useState(0);

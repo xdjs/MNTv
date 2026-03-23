@@ -53,7 +53,6 @@ interface RealArtistData {
 
 export default function ArtistProfile() {
   const { artistId: rawArtistId } = useParams<{ artistId: string }>();
-  const navigate = useNavigate();
 
   // Detect spotify:: or real:: prefix (URL-encoded or raw)
   const isSpotifyArtist = rawArtistId?.startsWith("spotify%3A%3A") || rawArtistId?.startsWith("spotify::");
@@ -76,7 +75,7 @@ export default function ArtistProfile() {
   if (isSpotifyArtist && parsedSpotify?.spotifyId) {
     return (
       <PageTransition>
-        <RealArtistProfile artistName={parsedSpotify.artistName} spotifyId={parsedSpotify.spotifyId} navigate={navigate} />
+        <RealArtistProfile artistName={parsedSpotify.artistName} spotifyId={parsedSpotify.spotifyId} />
       </PageTransition>
     );
   }
@@ -84,7 +83,7 @@ export default function ArtistProfile() {
   if (isRealArtist && realArtistName) {
     return (
       <PageTransition>
-        <RealArtistProfile artistName={realArtistName} navigate={navigate} />
+        <RealArtistProfile artistName={realArtistName} />
       </PageTransition>
     );
   }
@@ -131,7 +130,6 @@ export default function ArtistProfile() {
         tracksData={tracksData}
         albumTiles={albumTiles}
         relatedTiles={relatedTiles}
-        navigate={navigate}
       />
     </PageTransition>
   );
@@ -139,7 +137,8 @@ export default function ArtistProfile() {
 
 // ── Real Spotify artist ──────────────────────────────────────────────
 
-function RealArtistProfile({ artistName, spotifyId, navigate }: { artistName: string; spotifyId?: string; navigate: ReturnType<typeof useNavigate> }) {
+function RealArtistProfile({ artistName, spotifyId }: { artistName: string; spotifyId?: string }) {
+  const navigate = useNavigate();
   const [data, setData] = useState<RealArtistData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -233,7 +232,6 @@ function RealArtistProfile({ artistName, spotifyId, navigate }: { artistName: st
       trackTiles={trackTiles}
       albumTiles={albumTiles}
       relatedTiles={relatedTiles}
-      navigate={navigate}
     />
   );
 }
@@ -245,10 +243,10 @@ interface RealInnerProps {
   trackTiles: { id: string; title: string; artist: string; album: string; imageUrl: string; uri: string; durationMs: number }[];
   albumTiles: { id: string; imageUrl: string; title: string; subtitle: string; href: string }[];
   relatedTiles: { id: string; imageUrl: string; title: string; subtitle: string; href: string }[];
-  navigate: ReturnType<typeof useNavigate>;
 }
 
-function RealArtistProfileInner({ artist, trackTiles, albumTiles, relatedTiles, navigate }: RealInnerProps) {
+function RealArtistProfileInner({ artist, trackTiles, albumTiles, relatedTiles }: RealInnerProps) {
+  const navigate = useNavigate();
   const heroImage = useArtistImage(artist.name, artist.imageUrl);
   const trackRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -453,10 +451,10 @@ interface MockInnerProps {
   tracksData: ReturnType<typeof getTracksForArtist>;
   albumTiles: { id: string; imageUrl: string; title: string; subtitle: string; href: string }[];
   relatedTiles: { id: string; imageUrl: string; title: string; subtitle: string; href: string }[];
-  navigate: ReturnType<typeof useNavigate>;
 }
 
-function MockArtistProfileInner({ artist, tracksData, albumTiles, relatedTiles, navigate }: MockInnerProps) {
+function MockArtistProfileInner({ artist, tracksData, albumTiles, relatedTiles }: MockInnerProps) {
+  const navigate = useNavigate();
   const heroImage = useArtistImage(artist.name, artist.imageUrl);
   const trackRefs = useRef<(HTMLButtonElement | null)[]>([]);
 

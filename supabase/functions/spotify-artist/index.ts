@@ -106,6 +106,23 @@ serve(async (req) => {
       );
     }
 
+    const db = getSupabaseAdmin();
+
+    // Early cache check when we already have a Spotify ID — avoids Spotify API call entirely
+    if (providedId && typeof providedId === "string") {
+      const { data: cached } = await db
+        .from("artist_cache")
+        .select("data, created_at")
+        .eq("artist_id", providedId)
+        .single();
+
+      if (cached && Date.now() - new Date(cached.created_at).getTime() < CACHE_TTL_MS) {
+        return new Response(JSON.stringify(cached.data), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     const token = await getAppToken();
 
     let artist: any;
@@ -135,20 +152,19 @@ serve(async (req) => {
         );
       }
       artistId = artist.id;
-    }
 
-    // --- Cache check ---
-    const db = getSupabaseAdmin();
-    const { data: cached } = await db
-      .from("artist_cache")
-      .select("data, created_at")
-      .eq("artist_id", artistId)
-      .single();
+      // Cache check for name-resolved ID (couldn't check earlier without the ID)
+      const { data: cached } = await db
+        .from("artist_cache")
+        .select("data, created_at")
+        .eq("artist_id", artistId)
+        .single();
 
-    if (cached && Date.now() - new Date(cached.created_at).getTime() < CACHE_TTL_MS) {
-      return new Response(JSON.stringify(cached.data), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      if (cached && Date.now() - new Date(cached.created_at).getTime() < CACHE_TTL_MS) {
+        return new Response(JSON.stringify(cached.data), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     // 2. Fetch top tracks, albums, and related artists in parallel
