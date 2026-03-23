@@ -58,7 +58,8 @@ async function generateArtistBio(
 
   const prompt = `Write a concise, engaging 3-4 sentence biography of the musician/band "${name}".
 Genre: ${genreStr}. Notable tracks: ${trackStr}. Albums: ${albumStr}.
-Cover their origin, musical style, and significance. Be factual and vivid. Complete all sentences. No markdown formatting. Plain text only.`;
+Focus on specific facts: where they're from, when they formed/started, key career moments, and what makes them distinctive.
+Be factual and vivid. No hedging ("is known for", "is considered"). No markdown. Plain text only.`;
 
   try {
     const res = await fetch(
@@ -69,6 +70,7 @@ Cover their origin, musical style, and significance. Be factual and vivid. Compl
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: prompt }] }],
           generationConfig: { temperature: 0.7, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } },
+          tools: [{ google_search: {} }],
         }),
       }
     );

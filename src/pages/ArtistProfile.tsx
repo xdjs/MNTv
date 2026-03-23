@@ -204,13 +204,18 @@ function RealArtistProfile({ artistName, spotifyId, navigate }: { artistName: st
     durationMs: t.durationMs,
   }));
 
-  const albumTiles = albums.map((a, i) => ({
-    id: `real-album-${i}`,
-    imageUrl: a.imageUrl,
-    title: a.name,
-    subtitle: a.releaseDate.slice(0, 4),
-    href: "#", // No album page for real albums yet
-  }));
+  const albumTiles = albums.map((a, i) => {
+    const spotifyAlbumId = a.uri?.replace("spotify:album:", "") || "";
+    return {
+      id: `real-album-${i}`,
+      imageUrl: a.imageUrl,
+      title: a.name,
+      subtitle: a.releaseDate.slice(0, 4),
+      href: spotifyAlbumId
+        ? `/album/spotify::${spotifyAlbumId}::${encodeURIComponent(artist.name)}::${artist.id}`
+        : "#",
+    };
+  });
 
   const relatedTiles = relatedArtists.map((a, i) => ({
     id: `related-${i}`,
