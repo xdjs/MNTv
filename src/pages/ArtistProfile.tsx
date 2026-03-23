@@ -190,6 +190,10 @@ function RealArtistProfile({ artistName, spotifyId }: { artistName: string; spot
 
   const { artist, topTracks, albums, relatedArtists } = data;
 
+  // Extract stable primitives so useMemo doesn't re-run when the artist object ref changes
+  const stableName = artist.name;
+  const stableId = artist.id;
+
   const trackTiles = useMemo(() => topTracks.map((t, i) => ({
     id: `real-track-${i}`,
     title: t.title,
@@ -208,10 +212,10 @@ function RealArtistProfile({ artistName, spotifyId }: { artistName: string; spot
       title: a.name,
       subtitle: a.releaseDate.slice(0, 4),
       href: spotifyAlbumId
-        ? `/album/spotify::${spotifyAlbumId}::${encodeURIComponent(artist.name)}::${artist.id}`
+        ? `/album/spotify::${spotifyAlbumId}::${encodeURIComponent(stableName)}::${stableId}`
         : "#",
     };
-  }), [albums, artist.name, artist.id]);
+  }), [albums, stableName, stableId]);
 
   const relatedTiles = useMemo(() => relatedArtists.map((a, i) => ({
     id: `related-${i}`,

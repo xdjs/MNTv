@@ -660,10 +660,12 @@ export default function Listen() {
     }
   }, []);
 
-  // Brief auto-show on mount for discoverability (desktop/TV first-time visitors)
+  // Longer auto-show on mount for discoverability (desktop/TV first-time visitors)
   useEffect(() => {
-    showBar();
-  }, [showBar]);
+    setBarVisible(true);
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => setBarVisible(false), 5000);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {

@@ -67,12 +67,18 @@ Be factual and vivid. No hedging ("is known for", "is considered"). No markdown.
       generationConfig: { temperature: 0.7, maxOutputTokens: 400, thinkingConfig: { thinkingBudget: 0 } },
     };
 
+    const geminiTimeout = 25_000;
+
     // First attempt: with Google Search grounding
+    const controller1 = new AbortController();
+    const timer1 = setTimeout(() => controller1.abort(), geminiTimeout);
     const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...baseBody, tools: [{ google_search: {} }] }),
+      signal: controller1.signal,
     });
+    clearTimeout(timer1);
     if (!res.ok) return { text: "", grounded: false };
     const data = await res.json();
 
@@ -80,11 +86,15 @@ Be factual and vivid. No hedging ("is known for", "is considered"). No markdown.
     if (finishReason === "RECITATION") {
       // Retry without grounding — RECITATION means grounding triggered copyright filter
       console.warn(`[spotify-artist] RECITATION for "${name}", retrying without grounding`);
+      const controller2 = new AbortController();
+      const timer2 = setTimeout(() => controller2.abort(), geminiTimeout);
       const retryRes = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(baseBody),
+        signal: controller2.signal,
       });
+      clearTimeout(timer2);
       if (!retryRes.ok) return { text: "", grounded: false };
       const retryData = await retryRes.json();
       return { text: retryData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "", grounded: false };

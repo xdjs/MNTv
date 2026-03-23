@@ -51,7 +51,7 @@ serve(async (req) => {
     }
 
     const { albumId } = await req.json();
-    if (!albumId || typeof albumId !== "string" || !/^[a-zA-Z0-9]{22}$/.test(albumId)) {
+    if (!albumId || typeof albumId !== "string" || !/^[a-zA-Z0-9]{20,25}$/.test(albumId)) {
       return new Response(
         JSON.stringify({ error: "albumId required (22-char Spotify ID)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
