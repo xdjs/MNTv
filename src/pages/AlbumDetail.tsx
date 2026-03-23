@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { getAlbumById, getTracksForAlbum, getArtistById } from "@/mock/tracks";
 import { supabase } from "@/integrations/supabase/client";
 import PageTransition from "@/components/PageTransition";
+import { isSpotifyPrefix, parseSpotifyAlbum } from "@/lib/routeParsing";
 
 // ── Types for Spotify album data ─────────────────────────────────────
 
@@ -37,20 +38,12 @@ interface SpotifyAlbumData {
 export default function AlbumDetail() {
   const { albumId: rawAlbumId } = useParams<{ albumId: string }>();
 
-  // Route format: spotify::{albumId}::{artistName}::{artistId}
-  // CONSTRAINT: "::" delimiter — safe for Spotify data but not arbitrary user input.
-  const isSpotifyAlbum = rawAlbumId?.startsWith("spotify%3A%3A") || rawAlbumId?.startsWith("spotify::");
+  const isSpotifyAlbum = isSpotifyPrefix(rawAlbumId);
 
   const parsedSpotify = useMemo(() => {
-    if (!isSpotifyAlbum || !rawAlbumId) return null;
-    const decoded = decodeURIComponent(rawAlbumId);
-    const parts = decoded.split("::");
-    return {
-      spotifyAlbumId: parts[1] || "",
-      artistName: parts[2] || "",
-      artistSpotifyId: parts[3] || "",
-    };
-  }, [isSpotifyAlbum, rawAlbumId]);
+    if (!rawAlbumId) return null;
+    return parseSpotifyAlbum(rawAlbumId);
+  }, [rawAlbumId]);
 
   if (isSpotifyAlbum && parsedSpotify?.spotifyAlbumId) {
     return (

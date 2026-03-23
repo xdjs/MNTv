@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import PageTransition from "@/components/PageTransition";
 import TileRow from "@/components/TileRow";
 import { useArtistImage } from "@/hooks/useArtistImage";
+import { isSpotifyPrefix, isRealPrefix, parseSpotifyArtist, parseRealArtist } from "@/lib/routeParsing";
 
 // ── Types for real (Spotify) artist data ─────────────────────────────
 
@@ -54,25 +55,18 @@ interface RealArtistData {
 export default function ArtistProfile() {
   const { artistId: rawArtistId } = useParams<{ artistId: string }>();
 
-  // Route format: spotify::{id}::{name} or real::{name}
-  // CONSTRAINT: "::" is used as delimiter — artist/track names containing "::" would break parsing.
-  // Safe for Spotify data (names don't contain "::"), but do not use for arbitrary user input.
-  const isSpotifyArtist = rawArtistId?.startsWith("spotify%3A%3A") || rawArtistId?.startsWith("spotify::");
-  const isRealArtist = rawArtistId?.startsWith("real%3A%3A") || rawArtistId?.startsWith("real::");
+  const isSpotifyArtist = isSpotifyPrefix(rawArtistId);
+  const isRealArtist = isRealPrefix(rawArtistId);
 
   const parsedSpotify = useMemo(() => {
-    if (!isSpotifyArtist || !rawArtistId) return null;
-    const decoded = decodeURIComponent(rawArtistId);
-    const parts = decoded.split("::");
-    return { spotifyId: parts[1] || "", artistName: decodeURIComponent(parts[2] || "") };
-  }, [isSpotifyArtist, rawArtistId]);
+    if (!rawArtistId) return null;
+    return parseSpotifyArtist(rawArtistId);
+  }, [rawArtistId]);
 
   const realArtistName = useMemo(() => {
-    if (!isRealArtist || !rawArtistId) return null;
-    const decoded = decodeURIComponent(rawArtistId);
-    const parts = decoded.split("::");
-    return parts[1] || "";
-  }, [isRealArtist, rawArtistId]);
+    if (!rawArtistId) return null;
+    return parseRealArtist(rawArtistId);
+  }, [rawArtistId]);
 
   if (isSpotifyArtist && parsedSpotify?.spotifyId) {
     return (

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { CACHE_TTL_HOURS } from "../_shared/config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,7 +9,6 @@ const corsHeaders = {
 };
 
 const LASTFM_BASE = "https://ws.audioscrobbler.com/2.0/";
-const CACHE_TTL_HOURS = 24;
 
 async function lastfmGet(method: string, params: Record<string, string>, apiKey: string) {
   const url = new URL(LASTFM_BASE);
