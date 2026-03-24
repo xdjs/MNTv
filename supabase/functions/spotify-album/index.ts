@@ -100,7 +100,7 @@ serve(async (req) => {
         genres: album.genres || [],
         label: album.label || "",
       },
-      tracks: (album.tracks?.items || []).map((t: any) => ({
+      tracks: (album.tracks?.items || []).map((t: { name: string; artists?: { name: string }[]; uri?: string; duration_ms?: number; track_number?: number }) => ({
         title: t.name,
         artist: t.artists?.[0]?.name || album.artists?.[0]?.name || "",
         album: album.name,

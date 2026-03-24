@@ -67,11 +67,12 @@ Be factual and vivid. No hedging ("is known for", "is considered"). No markdown.
       generationConfig: { temperature: 0.7, maxOutputTokens: 400, thinkingConfig: { thinkingBudget: 0 } },
     };
 
-    const geminiTimeout = 25_000;
+    const totalBudgetMs = 25_000;
+    const startTime = Date.now();
 
     // First attempt: with Google Search grounding
     const controller1 = new AbortController();
-    const timer1 = setTimeout(() => controller1.abort(), geminiTimeout);
+    const timer1 = setTimeout(() => controller1.abort(), totalBudgetMs);
     const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -86,8 +87,14 @@ Be factual and vivid. No hedging ("is known for", "is considered"). No markdown.
     if (finishReason === "RECITATION") {
       // Retry without grounding — RECITATION means grounding triggered copyright filter
       console.warn(`[spotify-artist] RECITATION for "${name}", retrying without grounding`);
+      const elapsed = Date.now() - startTime;
+      const remaining = totalBudgetMs - elapsed;
+      if (remaining < 3_000) {
+        console.warn(`[spotify-artist] Only ${remaining}ms left after RECITATION — skipping retry`);
+        return { text: "", grounded: false };
+      }
       const controller2 = new AbortController();
-      const timer2 = setTimeout(() => controller2.abort(), geminiTimeout);
+      const timer2 = setTimeout(() => controller2.abort(), remaining);
       const retryRes = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -141,9 +148,13 @@ serve(async (req) => {
         .single();
 
       if (cached && Date.now() - new Date(cached.created_at).getTime() < CACHE_TTL_MS) {
-        return new Response(JSON.stringify(cached.data), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        const d = cached.data;
+        if (d && typeof d === "object" && d.artist && d.topTracks) {
+          return new Response(JSON.stringify(d), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        console.warn(`[spotify-artist] Malformed cache for ${providedId}, refetching`);
       }
     }
 
@@ -187,9 +198,13 @@ serve(async (req) => {
         .single();
 
       if (cached && Date.now() - new Date(cached.created_at).getTime() < CACHE_TTL_MS) {
-        return new Response(JSON.stringify(cached.data), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        const d = cached.data;
+        if (d && typeof d === "object" && d.artist && d.topTracks) {
+          return new Response(JSON.stringify(d), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        console.warn(`[spotify-artist] Malformed cache for ${artistId}, refetching`);
       }
     }
 
