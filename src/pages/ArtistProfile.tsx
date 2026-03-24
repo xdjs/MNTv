@@ -150,7 +150,7 @@ function RealArtistProfile({ artistName, spotifyId }: { artistName: string; spot
       .invoke("spotify-artist", { body })
       .then(({ data: d, error: e }) => {
         if (cancelled) return;
-        if (e || !d?.found) {
+        if (e || !d?.found || !d?.artist) {
           setError("Couldn't find this artist on Spotify.");
           setLoading(false);
           return;
@@ -168,31 +168,13 @@ function RealArtistProfile({ artistName, spotifyId }: { artistName: string; spot
     return () => { cancelled = true; };
   }, [artistName, spotifyId]);
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center gap-3">
-        <Loader2 className="h-5 w-5 animate-spin text-primary" />
-        <p className="text-muted-foreground">Loading artist…</p>
-      </div>
-    );
-  }
-
-  if (error || !data) {
-    return (
-      <div className="flex min-h-screen items-center justify-center flex-col gap-4">
-        <p className="text-foreground">{error || "Artist not found."}</p>
-        <button onClick={() => navigate("/browse")} className="text-sm text-muted-foreground hover:text-foreground">
-          ← Back to Browse
-        </button>
-      </div>
-    );
-  }
-
-  const { artist, topTracks, albums, relatedArtists } = data;
-
-  // Extract stable primitives so useMemo doesn't re-run when the artist object ref changes
-  const stableName = artist.name;
-  const stableId = artist.id;
+  // All hooks must be called unconditionally (Rules of Hooks)
+  const artist = data?.artist;
+  const topTracks = data?.topTracks || [];
+  const albums = data?.albums || [];
+  const relatedArtists = data?.relatedArtists || [];
+  const stableName = artist?.name || "";
+  const stableId = artist?.id || "";
 
   const trackTiles = useMemo(() => topTracks.map((t, i) => ({
     id: `real-track-${i}`,
@@ -226,6 +208,26 @@ function RealArtistProfile({ artistName, spotifyId }: { artistName: string; spot
       ? `/artist/spotify::${a.id}::${encodeURIComponent(a.name)}`
       : `/artist/real::${encodeURIComponent(a.name)}`,
   })), [relatedArtists]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center gap-3">
+        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+        <p className="text-muted-foreground">Loading artist…</p>
+      </div>
+    );
+  }
+
+  if (error || !artist) {
+    return (
+      <div className="flex min-h-screen items-center justify-center flex-col gap-4">
+        <p className="text-foreground">{error || "Artist not found."}</p>
+        <button onClick={() => navigate("/browse")} className="text-sm text-muted-foreground hover:text-foreground">
+          ← Back to Browse
+        </button>
+      </div>
+    );
+  }
 
   return (
     <RealArtistProfileInner

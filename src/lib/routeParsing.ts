@@ -27,7 +27,10 @@ export function parseSpotifyArtist(raw: string): { spotifyId: string; artistName
   const parts = decoded.split("::");
   const spotifyId = parts[1] || "";
   if (!spotifyId) return null;
-  return { spotifyId, artistName: decodeURIComponent(parts[2] || "") };
+  // Note: parts[2] is already decoded by the outer decodeURIComponent(raw).
+  // We do NOT double-decode here — a literal "%" in an artist name (e.g. "100%")
+  // would be corrupted by a second decodeURIComponent call.
+  return { spotifyId, artistName: parts[2] || "" };
 }
 
 /** Parse real::{name} from an artist route param */

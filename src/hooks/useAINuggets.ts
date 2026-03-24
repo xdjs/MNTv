@@ -30,6 +30,7 @@ interface UseAINuggetsResult {
   error: string | null;
   listenCount: number;
   artistSummary: string | null;
+  fromCache: boolean;
 }
 
 // ── Sentinel poll helper ──────────────────────────────────────────────────────
@@ -81,12 +82,14 @@ export function useAINuggets(
   const [error, setError] = useState<string | null>(null);
   const [listenCount, setListenCount] = useState(1);
   const [artistSummary, setArtistSummary] = useState<string | null>(null);
+  const [fromCache, setFromCache] = useState(false);
 
   const { getNuggetCache, setNuggetCache, getTrackListenCount, setTrackListenCount } = usePlayer();
   const cancelledRef = useRef(false);
 
   const generate = useCallback(async () => {
     if (!artist || !title) return;
+    setFromCache(false);
 
     // ── In-memory cache check ──────────────────────────────────────
     // Include regenerateKey so repeat listens (which bump the key) always
@@ -96,6 +99,7 @@ export function useAINuggets(
     const cached = getNuggetCache(cacheKey);
     if (cached) {
       console.log("[NuggetMemCache] Serving from in-memory cache:", cacheKey);
+      setFromCache(true);
       setNuggets(cached.nuggets);
       setSources(cached.sources);
       setListenCount(cached.listenCount);
@@ -516,5 +520,5 @@ export function useAINuggets(
     return () => { cancelledRef.current = true; };
   }, [generate, regenerateKey]);
 
-  return { nuggets, sources, loading, error, listenCount, artistSummary };
+  return { nuggets, sources, loading, error, listenCount, artistSummary, fromCache };
 }

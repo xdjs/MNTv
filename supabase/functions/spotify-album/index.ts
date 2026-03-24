@@ -50,27 +50,35 @@ serve(async (req) => {
       );
     }
 
-    const { albumId } = await req.json();
+    const { albumId, market } = await req.json();
     if (!albumId || typeof albumId !== "string" || !/^[a-zA-Z0-9]{20,25}$/.test(albumId)) {
       return new Response(
         JSON.stringify({ error: "albumId required (22-char Spotify ID)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    const safeMarket = (typeof market === "string" && /^[A-Z]{2}$/.test(market)) ? market : "US";
 
     const token = await getAppToken();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(`https://api.spotify.com/v1/albums/${albumId}?market=US`, {
+    const res = await fetch(`https://api.spotify.com/v1/albums/${albumId}?market=${safeMarket}`, {
       headers: { Authorization: `Bearer ${token}` },
       signal: controller.signal,
     });
     clearTimeout(timeout);
 
     if (!res.ok) {
+      console.error(`[spotify-album] Spotify API error: ${res.status} for albumId=${albumId}`);
+      if (res.status === 404) {
+        return new Response(
+          JSON.stringify({ found: false }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       return new Response(
-        JSON.stringify({ found: false }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: `Spotify API error: ${res.status}` }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 

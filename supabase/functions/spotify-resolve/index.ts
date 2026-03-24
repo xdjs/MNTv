@@ -54,12 +54,14 @@ serve(async (req) => {
       batch.map(async (name: string) => {
         const q = encodeURIComponent(name.trim());
         const res = await fetch(
-          `https://api.spotify.com/v1/search?type=artist&limit=1&q=${q}`,
+          `https://api.spotify.com/v1/search?type=artist&limit=5&q=${q}`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (!res.ok) return { name, id: null, imageUrl: null };
         const data = await res.json();
-        const artist = data.artists?.items?.[0];
+        const candidates = data.artists?.items || [];
+        const artist = candidates.find((a: any) => a.name.toLowerCase() === name.trim().toLowerCase())
+              || candidates[0];
         if (!artist) return { name, id: null, imageUrl: null };
         return {
           name,

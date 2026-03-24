@@ -166,8 +166,10 @@ serve(async (req) => {
     } else {
       // Fallback: search by name (backward compat for real:: URLs)
       const q = encodeURIComponent(artistName.trim());
-      const searchData = await spotifyGet(`/search?type=artist&limit=1&q=${q}`, token);
-      artist = searchData?.artists?.items?.[0];
+      const searchData = await spotifyGet(`/search?type=artist&limit=5&q=${q}`, token);
+      const candidates = searchData?.artists?.items || [];
+      artist = candidates.find((a: any) => a.name.toLowerCase() === artistName.trim().toLowerCase())
+            || candidates[0];
 
       if (!artist) {
         return new Response(
