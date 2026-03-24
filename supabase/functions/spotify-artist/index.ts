@@ -1,10 +1,18 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { CACHE_TTL_MS } from "../_shared/config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+function getSupabaseAdmin() {
+  const url = Deno.env.get("SUPABASE_URL")!;
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  return createClient(url, key);
+}
 
 // Reuse the same Client Credentials flow as spotify-search
 let cachedToken: string | null = null;
@@ -13,7 +21,7 @@ let tokenExpiresAt = 0;
 async function getAppToken(): Promise<string> {
   if (cachedToken && Date.now() < tokenExpiresAt) return cachedToken;
 
-  const clientId = Deno.env.get("VITE_SPOTIFY_CLIENT_ID");
+  const clientId = Deno.env.get("SPOTIFY_CLIENT_ID");
   const clientSecret = Deno.env.get("SPOTIFY_CLIENT_SECRET");
   if (!clientId || !clientSecret) throw new Error("Missing Spotify credentials");
 
@@ -39,9 +47,9 @@ async function generateArtistBio(
   genres: string[],
   topTrackNames: string[],
   albumNames: string[],
-): Promise<string> {
+): Promise<{ text: string; grounded: boolean }> {
   const apiKey = Deno.env.get("GOOGLE_AI_API_KEY");
-  if (!apiKey) return "";
+  if (!apiKey) return { text: "", grounded: false };
 
   const genreStr = genres.length ? genres.join(", ") : "unknown genre";
   const trackStr = topTrackNames.slice(0, 5).join(", ") || "unknown";
@@ -49,25 +57,59 @@ async function generateArtistBio(
 
   const prompt = `Write a concise, engaging 3-4 sentence biography of the musician/band "${name}".
 Genre: ${genreStr}. Notable tracks: ${trackStr}. Albums: ${albumStr}.
-Cover their origin, musical style, and significance. Be factual and vivid. Complete all sentences. No markdown formatting. Plain text only.`;
+Focus on specific facts: where they're from, when they formed/started, key career moments, and what makes them distinctive.
+Be factual and vivid. No hedging ("is known for", "is considered"). No markdown. Plain text only.`;
 
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const baseBody = {
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.7, maxOutputTokens: 400, thinkingConfig: { thinkingBudget: 0 } },
+    };
+
+    const totalBudgetMs = 25_000;
+    const startTime = Date.now();
+
+    // First attempt: with Google Search grounding
+    const controller1 = new AbortController();
+    const timer1 = setTimeout(() => controller1.abort(), totalBudgetMs);
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...baseBody, tools: [{ google_search: {} }] }),
+      signal: controller1.signal,
+    });
+    clearTimeout(timer1);
+    if (!res.ok) return { text: "", grounded: false };
+    const data = await res.json();
+
+    const finishReason = data.candidates?.[0]?.finishReason;
+    if (finishReason === "RECITATION") {
+      // Retry without grounding — RECITATION means grounding triggered copyright filter
+      console.warn(`[spotify-artist] RECITATION for "${name}", retrying without grounding`);
+      const elapsed = Date.now() - startTime;
+      const remaining = totalBudgetMs - elapsed;
+      if (remaining < 3_000) {
+        console.warn(`[spotify-artist] Only ${remaining}ms left after RECITATION — skipping retry`);
+        return { text: "", grounded: false };
+      }
+      const controller2 = new AbortController();
+      const timer2 = setTimeout(() => controller2.abort(), remaining);
+      const retryRes = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 600 },
-        }),
-      }
-    );
-    if (!res.ok) return "";
-    const data = await res.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+        body: JSON.stringify(baseBody),
+        signal: controller2.signal,
+      });
+      clearTimeout(timer2);
+      if (!retryRes.ok) return { text: "", grounded: false };
+      const retryData = await retryRes.json();
+      return { text: retryData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "", grounded: false };
+    }
+
+    return { text: data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "", grounded: true };
   } catch {
-    return "";
+    return { text: "", grounded: false };
   }
 }
 
@@ -95,6 +137,27 @@ serve(async (req) => {
       );
     }
 
+    const db = getSupabaseAdmin();
+
+    // Early cache check when we already have a Spotify ID — avoids Spotify API call entirely
+    if (providedId && typeof providedId === "string") {
+      const { data: cached } = await db
+        .from("artist_cache")
+        .select("data, created_at")
+        .eq("artist_id", providedId)
+        .single();
+
+      if (cached && Date.now() - new Date(cached.created_at).getTime() < CACHE_TTL_MS) {
+        const d = cached.data;
+        if (d && typeof d === "object" && d.artist && d.topTracks) {
+          return new Response(JSON.stringify(d), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        console.warn(`[spotify-artist] Malformed cache for ${providedId}, refetching`);
+      }
+    }
+
     const token = await getAppToken();
 
     let artist: any;
@@ -114,8 +177,10 @@ serve(async (req) => {
     } else {
       // Fallback: search by name (backward compat for real:: URLs)
       const q = encodeURIComponent(artistName.trim());
-      const searchData = await spotifyGet(`/search?type=artist&limit=1&q=${q}`, token);
-      artist = searchData?.artists?.items?.[0];
+      const searchData = await spotifyGet(`/search?type=artist&limit=5&q=${q}`, token);
+      const candidates = searchData?.artists?.items || [];
+      artist = candidates.find((a: any) => a.name.toLowerCase() === artistName.trim().toLowerCase())
+            || candidates[0];
 
       if (!artist) {
         return new Response(
@@ -124,6 +189,23 @@ serve(async (req) => {
         );
       }
       artistId = artist.id;
+
+      // Cache check for name-resolved ID (couldn't check earlier without the ID)
+      const { data: cached } = await db
+        .from("artist_cache")
+        .select("data, created_at")
+        .eq("artist_id", artistId)
+        .single();
+
+      if (cached && Date.now() - new Date(cached.created_at).getTime() < CACHE_TTL_MS) {
+        const d = cached.data;
+        if (d && typeof d === "object" && d.artist && d.topTracks) {
+          return new Response(JSON.stringify(d), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        console.warn(`[spotify-artist] Malformed cache for ${artistId}, refetching`);
+      }
     }
 
     // 2. Fetch top tracks, albums, and related artists in parallel
@@ -168,8 +250,8 @@ serve(async (req) => {
       }
     }
 
-    // 3. Generate AI bio (non-blocking — if it fails, we return empty string)
-    const bio = await generateArtistBio(
+    // 3. Generate AI bio with track/album context for grounding (prevents hallucination)
+    const bioResult = await generateArtistBio(
       artist.name,
       artist.genres || [],
       topTracks.map((t: any) => t.title),
@@ -185,7 +267,8 @@ serve(async (req) => {
         imageUrl: artist.images?.[0]?.url || artist.images?.[1]?.url || "",
         genres: artist.genres || [],
         followers: artist.followers?.total || 0,
-        bio,
+        bio: bioResult.text,
+        bioGrounded: bioResult.grounded,
       },
       topTracks,
       albums: (albumsData?.items || []).map((a: any) => ({
@@ -203,6 +286,14 @@ serve(async (req) => {
         genres: (a.genres || []).slice(0, 2),
       })),
     };
+
+    // Write to cache (fire-and-forget — don't block response)
+    // Note: concurrent cold-cache requests for the same artist will both generate a bio,
+    // but upsert is idempotent so the second write just overwrites with equivalent data.
+    db.from("artist_cache")
+      .upsert({ artist_id: artistId, data: result, created_at: new Date().toISOString() })
+      .then(({ error }) => { if (error) console.error("[spotify-artist] cache write failed:", error.message); })
+      .catch((err) => console.error("[spotify-artist] cache write exception:", err));
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

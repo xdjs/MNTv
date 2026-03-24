@@ -67,6 +67,7 @@ export interface SpotifyStateTrack {
   album: string;
   albumArtUrl: string;
   spotifyUri: string;
+  spotifyAlbumUri: string;
 }
 
 interface PlayerState {
@@ -85,6 +86,10 @@ interface PlayerState {
   isExternalListenMode: boolean;
   /** Track the Spotify SDK reports as currently playing (may differ from what we loaded). */
   spotifyStateTrack: SpotifyStateTrack | null;
+  /** Whether the NowPlayingBar has d-pad focus (shared between Browse/NowPlayingBar) */
+  nowPlayingFocused: boolean;
+  /** Which element within NowPlayingBar is focused (0=track-info, 1=prev, 2=play, 3=next) */
+  nowPlayingFocusIndex: number;
 }
 
 interface PlayerActions {
@@ -119,6 +124,15 @@ interface PlayerActions {
   getCompanionNuggets: (key: string) => CompanionNugget[];
   appendCompanionNuggets: (key: string, nuggets: CompanionNugget[]) => void;
   clearCompanionNuggets: (key: string) => void;
+  /** Session-scoped companion short ID cache — survives navigation */
+  getCompanionShortId: (key: string) => string | undefined;
+  setCompanionShortId: (key: string, shortId: string) => void;
+  /** Session history — track skip-repeat filtering */
+  addToSessionHistory: (artist: string, title: string) => void;
+  isInSessionHistory: (artist: string, title: string) => boolean;
+  /** NowPlayingBar d-pad focus control */
+  setNowPlayingFocused: (focused: boolean) => void;
+  setNowPlayingFocusIndex: (index: number) => void;
 }
 
 type PlayerContextType = PlayerState & PlayerActions;
@@ -196,6 +210,24 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     companionAccRef.current.set(key, [...existing, ...newOnes]);
   }, []);
   const clearCompanionNuggets = useCallback((key: string) => { companionAccRef.current.delete(key); }, []);
+
+  // Session-scoped companion short ID cache (survives navigation)
+  const companionShortIdRef = useRef<Map<string, string>>(new Map());
+  const getCompanionShortId = useCallback((key: string) => companionShortIdRef.current.get(key), []);
+  const setCompanionShortId = useCallback((key: string, shortId: string) => { companionShortIdRef.current.set(key, shortId); }, []);
+
+  // Session history — tracks played this session (for skip-repeat filtering)
+  const sessionHistoryRef = useRef<Set<string>>(new Set());
+  const addToSessionHistory = useCallback((artist: string, title: string) => {
+    sessionHistoryRef.current.add(`${artist.toLowerCase()}::${title.toLowerCase()}`);
+  }, []);
+  const isInSessionHistory = useCallback((artist: string, title: string) => {
+    return sessionHistoryRef.current.has(`${artist.toLowerCase()}::${title.toLowerCase()}`);
+  }, []);
+
+  // NowPlayingBar d-pad focus (shared between Browse and NowPlayingBar)
+  const [nowPlayingFocused, setNowPlayingFocused] = useState(false);
+  const [nowPlayingFocusIndex, setNowPlayingFocusIndex] = useState(0);
 
   // Track history for prev button (persists across Listen re-mounts)
   const trackHistoryRef = useRef<string[]>([]);
@@ -285,6 +317,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
             album: ct.album?.name || "",
             albumArtUrl: ct.album?.images?.[0]?.url || "",
             spotifyUri: ct.uri,
+            spotifyAlbumUri: ct.album?.uri || "",
           });
         }
         if (state.paused && state.position === 0 && ct.uri === lastSpUriRef.current && spHasPlayedRef.current && maxPositionRef.current > 5000) {
@@ -453,6 +486,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     externalPlayback: externalTrack,
     isExternalListenMode,
     spotifyStateTrack,
+    nowPlayingFocused,
+    nowPlayingFocusIndex,
     setCurrentTrack,
     setOnEnded,
     pushTrackHistory,
@@ -476,14 +511,21 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     getCompanionNuggets,
     appendCompanionNuggets,
     clearCompanionNuggets,
+    getCompanionShortId,
+    setCompanionShortId,
+    addToSessionHistory,
+    isInSessionHistory,
+    setNowPlayingFocused,
+    setNowPlayingFocusIndex,
   }), [
     spPlaying, spTime, spDuration, activePlayer, spReady, currentSpotifyUri,
-    currentTrack, prevTrackRoute, externalTrack, isExternalListenMode, spotifyStateTrack,
+    currentTrack, prevTrackRoute, externalTrack, isExternalListenMode, spotifyStateTrack, nowPlayingFocused, nowPlayingFocusIndex,
     setCurrentTrack, setOnEnded, pushTrackHistory, popTrackHistory, loadTrack,
     syncExternalTrack, play, pause, toggle, seek, stop, setExternalListenMode,
     getNuggetCache, setNuggetCache, clearNuggetCache, markTrackCompleted,
     isTrackCompleted, clearTrackCompleted, getTrackListenCount, setTrackListenCount,
     getCompanionNuggets, appendCompanionNuggets, clearCompanionNuggets,
+    getCompanionShortId, setCompanionShortId, addToSessionHistory, isInSessionHistory, setNowPlayingFocused, setNowPlayingFocusIndex,
   ]);
 
   return (

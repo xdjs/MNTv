@@ -1,3 +1,4 @@
+import { useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Play, Pause, SkipBack, SkipForward, Smartphone } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -12,7 +13,7 @@ const fmt = (s: number) => {
 export default function NowPlayingBar() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isPlaying, currentTrack, currentTime, duration, toggle, seek, popTrackHistory, externalPlayback, setExternalListenMode } = usePlayer();
+  const { isPlaying, currentTrack, currentTime, duration, toggle, seek, popTrackHistory, externalPlayback, setExternalListenMode, nowPlayingFocused, nowPlayingFocusIndex, setNowPlayingFocused, setNowPlayingFocusIndex } = usePlayer();
 
   // Don't show on Listen page (has its own bar) or companion pages (phone QR experience)
   const hiddenRoute = location.pathname.startsWith("/listen/")
@@ -65,6 +66,39 @@ export default function NowPlayingBar() {
     const pct = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
     seek(pct * duration);
   };
+
+  const NPB_ZONE_COUNT = 4; // 0=track-info, 1=prev, 2=play/pause, 3=next
+
+  const handleNpbAction = useCallback((index: number) => {
+    if (index === 0 && listenUrl) navigate(listenUrl);
+    else if (index === 1) handlePrev();
+    else if (index === 2) toggle();
+    else if (index === 3 && listenUrl) navigate(listenUrl);
+  }, [listenUrl, navigate, handlePrev, toggle]);
+
+  useEffect(() => {
+    if (!nowPlayingFocused || !visible) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setNowPlayingFocusIndex(Math.max(0, nowPlayingFocusIndex - 1));
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setNowPlayingFocusIndex(Math.min(NPB_ZONE_COUNT - 1, nowPlayingFocusIndex + 1));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setNowPlayingFocused(false);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        handleNpbAction(nowPlayingFocusIndex);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [nowPlayingFocused, nowPlayingFocusIndex, visible, setNowPlayingFocused, setNowPlayingFocusIndex, handleNpbAction]);
+
+  const npbFocusClass = (index: number) =>
+    nowPlayingFocused && nowPlayingFocusIndex === index ? "tv-focus-glow scale-110" : "";
 
   return (
     <AnimatePresence>
@@ -119,7 +153,7 @@ export default function NowPlayingBar() {
                 {/* Album art + track info — click to go to Listen */}
                 <button
                   onClick={() => navigate(listenUrl!)}
-                  className="flex flex-1 items-center gap-3 min-w-0 text-left"
+                  className={`flex flex-1 items-center gap-3 min-w-0 text-left rounded-lg transition-all ${npbFocusClass(0)}`}
                 >
                   <img
                     src={currentTrack.coverArtUrl}
@@ -137,19 +171,19 @@ export default function NowPlayingBar() {
                 <div className="flex items-center gap-1 shrink-0">
                   <button
                     onClick={handlePrev}
-                    className="flex h-9 w-9 items-center justify-center rounded-full text-foreground/70 transition-colors hover:text-foreground hover:bg-foreground/10"
+                    className={`flex h-9 w-9 items-center justify-center rounded-full text-foreground/70 transition-all hover:text-foreground hover:bg-foreground/10 ${npbFocusClass(1)}`}
                   >
                     <SkipBack size={16} />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); toggle(); }}
-                    className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/20 text-primary transition-all hover:bg-primary/30"
+                    className={`flex h-10 w-10 items-center justify-center rounded-full bg-primary/20 text-primary transition-all hover:bg-primary/30 ${npbFocusClass(2)}`}
                   >
                     {isPlaying ? <Pause size={18} /> : <Play size={18} className="ml-0.5" />}
                   </button>
                   <button
                     onClick={handleNext}
-                    className="flex h-9 w-9 items-center justify-center rounded-full text-foreground/70 transition-colors hover:text-foreground hover:bg-foreground/10"
+                    className={`flex h-9 w-9 items-center justify-center rounded-full text-foreground/70 transition-all hover:text-foreground hover:bg-foreground/10 ${npbFocusClass(3)}`}
                   >
                     <SkipForward size={16} />
                   </button>

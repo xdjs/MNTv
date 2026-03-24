@@ -30,6 +30,16 @@ dist-ssr
 # Scripts with DB credentials
 scripts/fix-caches.sh
 scripts/seed-demo-resumable.sh
+scripts/seed-daftpunk-radiohead.sh
+scripts/seed-kendrick-billie.sh
+scripts/seed-pete-jamee.sh
+scripts/seed-demo.sh
+
+# Duplicate seed data (canonical copy lives in src/data/seed/)
+scripts/seed-data/
+
+# Pipeline comparison (dev tooling)
+scripts/pipeline-comparison/
 
 # Claude Code session/memory
 .claude/

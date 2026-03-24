@@ -8,7 +8,7 @@ import { getSeedListenNuggets } from "@/data/seedNuggets";
 interface AINuggetData {
   headline: string;
   text: string;
-  kind: "artist" | "track" | "discovery";
+  kind: "artist" | "track" | "discovery" | "context";
   listenFor?: boolean;
   imageUrl?: string;
   imageCaption?: string;
@@ -29,6 +29,8 @@ interface UseAINuggetsResult {
   loading: boolean;
   error: string | null;
   listenCount: number;
+  artistSummary: string | null;
+  fromCache: boolean;
 }
 
 // ── Sentinel poll helper ──────────────────────────────────────────────────────
@@ -79,12 +81,15 @@ export function useAINuggets(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [listenCount, setListenCount] = useState(1);
+  const [artistSummary, setArtistSummary] = useState<string | null>(null);
+  const [fromCache, setFromCache] = useState(false);
 
   const { getNuggetCache, setNuggetCache, getTrackListenCount, setTrackListenCount } = usePlayer();
   const cancelledRef = useRef(false);
 
   const generate = useCallback(async () => {
     if (!artist || !title) return;
+    setFromCache(false);
 
     // ── In-memory cache check ──────────────────────────────────────
     // Include regenerateKey so repeat listens (which bump the key) always
@@ -94,6 +99,7 @@ export function useAINuggets(
     const cached = getNuggetCache(cacheKey);
     if (cached) {
       console.log("[NuggetMemCache] Serving from in-memory cache:", cacheKey);
+      setFromCache(true);
       setNuggets(cached.nuggets);
       setSources(cached.sources);
       setListenCount(cached.listenCount);
@@ -338,6 +344,10 @@ export function useAINuggets(
       // Companion metadata from generate-nuggets (Exa-sourced)
       const aiArtistSummary: string = data?.artistSummary || "";
       const aiExternalLinks: { label: string; url: string }[] = data?.externalLinks || [];
+      const aiNoTrackData: boolean = !!data?.noTrackData;
+      if (aiNoTrackData) {
+        console.log("[NuggetGen] Sparse artist — no track data, nugget 2 is 'context' kind");
+      }
 
       const newSources = new Map<string, Source>();
       const newNuggets: Nugget[] = aiNuggets.map((n, i) => {
@@ -393,6 +403,11 @@ export function useAINuggets(
           nugget.imageCaption = aiNugget.imageCaption || nugget.headline;
           contextualImageIndices.add(idx);
         }
+        // "context" kind: keep backend-resolved image, only fallback to artist photo
+        else if (nugget.kind === "context" && isRealImage(artistImageUrl)) {
+          nugget.imageUrl = artistImageUrl;
+          nugget.imageCaption = artist;
+        }
         // Fall back to Spotify images (only real URLs, not DiceBear placeholders)
         else if (nugget.kind === "artist" && isRealImage(artistImageUrl)) {
           nugget.imageUrl = artistImageUrl;
@@ -424,6 +439,7 @@ export function useAINuggets(
       if (cancelledRef.current) return;
       setNuggets(newNuggets);
       setSources(newSources);
+      setArtistSummary(aiArtistSummary);
 
       // Write to in-memory cache
       setNuggetCache(cacheKey, { nuggets: newNuggets, sources: newSources, listenCount: currentListenCount });
@@ -504,5 +520,5 @@ export function useAINuggets(
     return () => { cancelledRef.current = true; };
   }, [generate, regenerateKey]);
 
-  return { nuggets, sources, loading, error, listenCount };
+  return { nuggets, sources, loading, error, listenCount, artistSummary, fromCache };
 }

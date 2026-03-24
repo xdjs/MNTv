@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, LogOut } from "lucide-react";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
@@ -8,12 +8,14 @@ import PageTransition from "@/components/PageTransition";
 import { useUserProfile, tierGreeting, tierBadgeLabel, tierBadgeColor, tierGlowClass } from "@/hooks/useMusicNerdState";
 import { usePersonalizedCatalog } from "@/hooks/usePersonalizedCatalog";
 import { useTierAccent } from "@/hooks/useTierAccent";
+import { usePlayer } from "@/contexts/PlayerContext";
 
 export default function Browse() {
   const [searchOpen, setSearchOpen] = useState(false);
   const navigate = useNavigate();
   const { profile, saveProfile, clearProfile } = useUserProfile();
   const tier = profile?.calculatedTier;
+  const { currentTrack, isPlaying, nowPlayingFocused, setNowPlayingFocused, setNowPlayingFocusIndex } = usePlayer();
 
   const cycleTier = useCallback(() => {
     if (!profile) return;
@@ -57,7 +59,51 @@ export default function Browse() {
       subtitle: "Jamee Cornelia",
       href: "/listen/real::Jamee%20Cornelia::SLACK::HARVEST::spotify:track:5bU8cB57AfhTtO0qj9zy3X?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b273e9c4a69ecd5c43229cfd03f3",
     },
+    {
+      id: "demo-humble",
+      imageUrl: "https://i.scdn.co/image/ab67616d0000b2738b52c6b9bc4e43d873869699",
+      title: "HUMBLE.",
+      subtitle: "Kendrick Lamar",
+      href: "/listen/demo-humble?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b2738b52c6b9bc4e43d873869699",
+    },
+    {
+      id: "demo-bad-guy",
+      imageUrl: "https://i.scdn.co/image/ab67616d0000b27350a3147b4edd7701a876c6ce",
+      title: "bad guy",
+      subtitle: "Billie Eilish",
+      href: "/listen/demo-bad-guy?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b27350a3147b4edd7701a876c6ce",
+    },
   ];
+
+  // Total tile rows (personalized + demo)
+  const totalRows = allRows.length + 1;
+  const lastRowIndex = totalRows - 1; // index of Demo Tracks row = allRows.length
+  const npbVisible = !!currentTrack;
+  const lastRowRef = useRef(0);
+
+  // Auto-return to Listen after 10s idle when track is playing
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const listenUrl = currentTrack
+    ? `/listen/${currentTrack.trackId}?art=${encodeURIComponent(currentTrack.coverArtUrl)}`
+    : null;
+
+  useEffect(() => {
+    if (!isPlaying || !listenUrl) return;
+    const resetIdle = () => {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = setTimeout(() => navigate(listenUrl), 10000);
+    };
+    resetIdle();
+    window.addEventListener("keydown", resetIdle);
+    window.addEventListener("mousemove", resetIdle);
+    window.addEventListener("click", resetIdle);
+    return () => {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      window.removeEventListener("keydown", resetIdle);
+      window.removeEventListener("mousemove", resetIdle);
+      window.removeEventListener("click", resetIdle);
+    };
+  }, [isPlaying, listenUrl, navigate]);
 
   const tierLogoGlow: Record<string, string> = {
     casual: "#22c55e",
@@ -112,6 +158,7 @@ export default function Browse() {
   // ── D-pad keyboard navigation ──────────────────────────────────────
   useEffect(() => {
     if (searchOpen) return; // let search overlay handle its own keys
+    if (nowPlayingFocused) return; // NowPlayingBar handles its own keys
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "ArrowDown") {
@@ -124,14 +171,18 @@ export default function Browse() {
             setRowIndex(0);
             setColIndex(nextCol);
           }
-        } else if (rowIndex < allRows.length) {
-          // allRows.length accounts for the extra "Demo Tracks" row
+        } else if (rowIndex < lastRowIndex) {
           const centerX = getCurrentCenterX();
           const nextRow = rowIndex + 1;
           const nextLabel = nextRow < allRows.length ? allRows[nextRow].label : "Demo Tracks";
           const nextCol = findClosestColByViewport(nextLabel, centerX);
           setRowIndex(nextRow);
           setColIndex(nextCol);
+        } else if (rowIndex === lastRowIndex && npbVisible) {
+          // Last tile row → NowPlayingBar
+          lastRowRef.current = rowIndex;
+          setNowPlayingFocused(true);
+          setNowPlayingFocusIndex(0);
         }
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
@@ -174,7 +225,14 @@ export default function Browse() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [searchOpen, rowIndex, colIndex, allRows, navigate, cycleTier, getCurrentCenterX, findClosestColByViewport]);
+  }, [searchOpen, rowIndex, colIndex, allRows, navigate, cycleTier, getCurrentCenterX, findClosestColByViewport, nowPlayingFocused, npbVisible, lastRowIndex, setNowPlayingFocused, setNowPlayingFocusIndex]);
+
+  // When NowPlayingBar releases focus (user pressed Up), restore last tile row
+  useEffect(() => {
+    if (!nowPlayingFocused && lastRowRef.current >= 0) {
+      setRowIndex(lastRowRef.current);
+    }
+  }, [nowPlayingFocused]);
 
   const focusGlow = "tv-focus-glow";
   const glowClass = tier ? tierGlowClass(tier) : "";

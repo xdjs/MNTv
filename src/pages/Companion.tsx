@@ -19,6 +19,7 @@ interface CompanionData {
 
 const SECTIONS: { key: CompanionNugget["category"]; label: string; color: string }[] = [
   { key: "track", label: "The Track", color: "bg-blue-500/20 text-blue-400" },
+  { key: "context", label: "Behind the Music", color: "bg-amber-500/20 text-amber-400" },
   { key: "history", label: "History", color: "bg-primary/20 text-primary" },
   { key: "explore", label: "Explore Next", color: "bg-emerald-500/20 text-emerald-400" },
 ];
@@ -156,11 +157,31 @@ export default function Companion() {
     return Math.max(urlListenCount, maxFromData);
   }, [data?.nuggets, urlListenCount]);
 
+  // Enrich nuggets with fallback images when the edge function returned none.
+  // Mirrors the logic in useAINuggets.ts so companion cards aren't blank.
+  const enrichedNuggets = useMemo(() => {
+    if (!data?.nuggets) return [];
+    const coverArt = trackInfo?.coverArtUrl;
+    const artistImg = artistImage;
+    const isReal = (url?: string) => url && !url.includes("dicebear.com");
+
+    return data.nuggets.map((n) => {
+      if (n.imageUrl) return n;
+      if ((n.category === "history" || n.category === "context") && isReal(artistImg)) {
+        return { ...n, imageUrl: artistImg, imageCaption: artistName };
+      }
+      if ((n.category === "track" || n.category === "explore") && isReal(coverArt)) {
+        return { ...n, imageUrl: coverArt, imageCaption: n.category === "track" ? trackInfo?.title : n.headline };
+      }
+      return n;
+    });
+  }, [data?.nuggets, trackInfo?.coverArtUrl, trackInfo?.title, artistImage, artistName]);
+
   // Return nuggets for a section — show all nuggets up to the effective listen count.
   // Newer listens (higher listenUnlockLevel) appear first so fresh content is prominent.
   function getSectionNuggets(category: CompanionNugget["category"]): CompanionNugget[] {
-    if (!data?.nuggets) return [];
-    return data.nuggets
+    if (!enrichedNuggets.length) return [];
+    return enrichedNuggets
       .filter((n) => n.category === category && (n.listenUnlockLevel || 1) <= effectiveListenCount)
       .sort((a, b) => {
         const levelDiff = (b.listenUnlockLevel || 1) - (a.listenUnlockLevel || 1);

@@ -187,29 +187,38 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
 
     toFetch.forEach((name) => pendingFetches.current.add(name));
 
-    const batch = toFetch.slice(0, 20);
-    supabase.functions
-      .invoke("spotify-resolve", { body: { artists: batch } })
-      .then(({ data }) => {
-        if (cancelled || !data?.resolved) return;
-        const newImages = new Map(resolvedImages);
-        const newIds = new Map(resolvedIds);
-        for (const [name, info] of Object.entries(data.resolved as Record<string, { id: string; imageUrl: string }>)) {
-          if (info.imageUrl) {
-            artistImageCache.set(name, info.imageUrl);
-            newImages.set(name, info.imageUrl);
-          }
-          if (info.id) {
-            newIds.set(name, info.id);
-          }
-        }
-        setResolvedImages(newImages);
-        setResolvedIds(newIds);
-      })
-      .catch(console.warn);
+    // Resolve all artists in batches of 20 (spotify-resolve caps at 20 per call)
+    for (let i = 0; i < toFetch.length; i += 20) {
+      const batch = toFetch.slice(i, i + 20);
+      supabase.functions
+        .invoke("spotify-resolve", { body: { artists: batch } })
+        .then(({ data }) => {
+          if (cancelled || !data?.resolved) return;
+          setResolvedImages((prev) => {
+            const next = new Map(prev);
+            for (const [name, info] of Object.entries(data.resolved as Record<string, { id: string; imageUrl: string }>)) {
+              if (info.imageUrl) {
+                artistImageCache.set(name, info.imageUrl);
+                next.set(name, info.imageUrl);
+              }
+            }
+            return next;
+          });
+          setResolvedIds((prev) => {
+            const next = new Map(prev);
+            for (const [name, info] of Object.entries(data.resolved as Record<string, { id: string; imageUrl: string }>)) {
+              if (info.id) {
+                next.set(name, info.id);
+              }
+            }
+            return next;
+          });
+        })
+        .catch(console.warn);
+    }
     return () => {
       cancelled = true;
-      batch.forEach((name) => pendingFetches.current.delete(name));
+      toFetch.forEach((name) => pendingFetches.current.delete(name));
     };
   }, [profile, lastFmData, recommendations]);
 

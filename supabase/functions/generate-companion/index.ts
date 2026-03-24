@@ -18,7 +18,15 @@ serve(async (req) => {
   }
 
   try {
-    const { artist, title, album, tier = "casual", listenCount = 1, prebuiltNuggets = null, coverArtUrl = null, artistImage = null } = await req.json();
+    const { artist, title, album, tier = "casual", listenCount = 1, prebuiltNuggets = null, coverArtUrl = null, artistImage = null, artistSummary: rawArtistSummary = null } = await req.json();
+    // Sanitize client-provided artistSummary (length cap, strip newlines, remove injection markers)
+    const passedArtistSummary = typeof rawArtistSummary === "string"
+      ? rawArtistSummary
+          .slice(0, 500)
+          .replace(/[\r\n]/g, " ")
+          .replace(/```|<\/?[a-z][^>]*>|(\bsystem\b|\bignore\b|\binstruction\b|\bprompt\b).*?:/gi, "")
+          .trim()
+      : null;
 
     if (!artist || !title) {
       return new Response(JSON.stringify({ error: "artist and title required" }), {
@@ -51,8 +59,9 @@ serve(async (req) => {
         if (data) { nuggetCacheData = data; break; }
       }
 
-      // Extract artistSummary and externalLinks from the nugget_cache sources field
-      const artistSummary = nuggetCacheData?.sources?.artistSummary || "";
+      // Prefer artistSummary passed directly from the client (avoids cache key mismatch),
+      // fall back to nugget_cache lookup
+      const artistSummary = passedArtistSummary || nuggetCacheData?.sources?.artistSummary || "";
       const externalLinks = nuggetCacheData?.sources?.externalLinks || [];
 
       // Accumulate nuggets from previous listen tiers

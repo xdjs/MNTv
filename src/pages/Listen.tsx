@@ -16,7 +16,7 @@ import DevPanel from "@/components/DevPanel";
 import PlaybackBar from "@/components/PlaybackBar";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { useAINuggets } from "@/hooks/useAINuggets";
-import { getSeedCompanion, getDemoTrackById } from "@/data/seedNuggets";
+import { getSeedCompanion, getDemoTrackById, DEMO_TRACKS } from "@/data/seedNuggets";
 import { useSpotifyToken } from "@/hooks/useSpotifyToken";
 import { initiateSpotifyAuth } from "@/hooks/useSpotifyAuth";
 import { usePlayer } from "@/contexts/PlayerContext";
@@ -181,7 +181,9 @@ export default function Listen() {
   useEffect(() => {
     const artParam = urlArt ? `?art=${encodeURIComponent(urlArt)}` : "";
     player.pushTrackHistory(`/listen/${rawTrackId}${artParam}`);
-  }, [rawTrackId, urlArt, player]);
+    // Add current track to session history so it won't be picked again by navigateToRelated
+    if (track) player.addToSessionHistory(track.artist, track.title);
+  }, [rawTrackId, urlArt, player, track]);
 
   // If this track was previously listened to in this session, restore the listen depth.
   // This handles both track completion (onEnded) and returning to a track via prev/browse.
@@ -245,60 +247,108 @@ export default function Listen() {
     }
   }, [rawTrackId]);
 
-  // Fetch a related track from Spotify and navigate to it
+  // Navigate to the next track using a 5-level priority cascade:
+  // P1: Album continuation → P2: Spotify recs (taste-weighted) → P3: Same-artist top tracks
+  // → P4: User's catalog → P5: Demo track fallback
   const navigateToRelated = useCallback(async () => {
     if (!track) return;
     isNavigatingRef.current = true;
     setSkipLoading(true);
+    const titleLower = track.title.toLowerCase();
+    const artistLower = track.artist.toLowerCase();
+
+    const enc = encodeURIComponent;
+    const navigateTo = (pick: { artist: string; title: string; album?: string; uri?: string }) => {
+      if (!mountedRef.current) return;
+      player.addToSessionHistory(pick.artist, pick.title);
+      navigate(`/listen/real::${enc(pick.artist)}::${enc(pick.title)}::${enc(pick.album || "")}::${enc(pick.uri || "")}`);
+    };
+    const notPlayed = (a: string, t: string) => !player.isInSessionHistory(a, t);
+
     try {
-      const titleLower = track.title.toLowerCase();
+      // P1: Album continuation — play next track on the same album
+      const albumUri = player.spotifyStateTrack?.spotifyAlbumUri;
+      if (albumUri) {
+        const albumId = albumUri.replace("spotify:album:", "");
+        if (/^[a-zA-Z0-9]{20,25}$/.test(albumId)) {
+          const { data: albumData } = await supabase.functions.invoke("spotify-album", {
+            body: { albumId },
+          });
+          if (albumData?.tracks?.length) {
+            const currentIdx = albumData.tracks.findIndex(
+              (t: any) => t.uri === spotifyUri
+            );
+            if (currentIdx >= 0 && currentIdx < albumData.tracks.length - 1) {
+              const next = albumData.tracks[currentIdx + 1];
+              if (notPlayed(next.artist, next.title)) {
+                navigateTo(next);
+                return;
+              }
+            }
+          }
+        }
+      }
 
-      const navigateTo = (pick: SpotifyTrackResult) => {
-        if (!mountedRef.current) return; // stale call after unmount
-        navigate(
-          `/listen/real::${encodeURIComponent(pick.artist)}::${encodeURIComponent(pick.title)}::${encodeURIComponent(pick.album || "")}::${encodeURIComponent(pick.uri || "")}`
-        );
-      };
-
-      // Attempt 1: Spotify Recommendations (best — returns related artists + tracks)
+      // P2: Spotify Recommendations (taste-weighted — prefer user's top artists)
       if (spotifyUri) {
         const { data: recData } = await supabase.functions.invoke("spotify-search", {
           body: { recommend: spotifyUri },
         });
-        const recs = (recData?.tracks as SpotifyTrackResult[] || []).filter(
-          (t) => t.title.toLowerCase() !== titleLower
+        const recs = ((recData?.tracks || []) as SpotifyTrackResult[]).filter(
+          (t) => t.title.toLowerCase() !== titleLower && notPlayed(t.artist, t.title)
         );
         if (recs.length > 0) {
-          navigateTo(recs[Math.floor(Math.random() * Math.min(recs.length, 5))]);
+          const topArtists = new Set((profile?.spotifyTopArtists || []).map((a: string) => a.toLowerCase()));
+          const boosted = recs.filter((t) => topArtists.has(t.artist.toLowerCase()));
+          const pool = boosted.length > 0 ? boosted : recs;
+          navigateTo(pool[Math.floor(Math.random() * Math.min(pool.length, 3))]);
           return;
         }
       }
 
-      // Attempt 2: search for more tracks by same artist
-      const { data } = await supabase.functions.invoke("spotify-search", {
-        body: { query: track.artist },
+      // P3: Same-artist top tracks (via spotify-artist, which caches)
+      const { data: artistData } = await supabase.functions.invoke("spotify-artist", {
+        body: { artistName: track.artist },
       });
-      const artistLower = track.artist.toLowerCase();
-      const sameArtist = (data?.tracks as SpotifyTrackResult[] || []).filter(
-        (t) =>
-          t.title.toLowerCase() !== titleLower &&
-          t.artist.toLowerCase().includes(artistLower)
+      if (artistData?.topTracks?.length) {
+        const candidates = (artistData.topTracks as SpotifyTrackResult[]).filter(
+          (t) => t.title.toLowerCase() !== titleLower && notPlayed(t.artist, t.title)
+        );
+        if (candidates.length > 0) {
+          navigateTo(candidates[Math.floor(Math.random() * Math.min(candidates.length, 5))]);
+          return;
+        }
+      }
+
+      // P4: User's catalog (prefer different artist, relax if needed)
+      const userTracks = (profile?.spotifyTrackImages || []).filter(
+        (t) => t.uri && notPlayed(t.artist, t.title) && t.artist.toLowerCase() !== artistLower
       );
-      if (sameArtist.length > 0) {
-        navigateTo(sameArtist[Math.floor(Math.random() * Math.min(sameArtist.length, 5))]);
+      const relaxed = userTracks.length > 0 ? userTracks
+        : (profile?.spotifyTrackImages || []).filter((t) => t.uri && notPlayed(t.artist, t.title));
+      if (relaxed.length > 0) {
+        const pick = relaxed[Math.floor(Math.random() * relaxed.length)];
+        navigateTo({ artist: pick.artist, title: pick.title, album: "", uri: pick.uri });
         return;
       }
 
-      // No results at all — reset navigation lock
-      console.warn("[Listen] No related tracks found for", track.artist);
-      isNavigatingRef.current = false;
+      // P5: Demo track fallback
+      const demos = DEMO_TRACKS.filter((d) => notPlayed(d.artist, d.title));
+      if (demos.length > 0) {
+        const pick = demos[Math.floor(Math.random() * demos.length)];
+        navigateTo({ artist: pick.artist, title: pick.title, album: pick.album, uri: pick.spotifyUri });
+        return;
+      }
+
+      // True last resort: stay on current track
+      console.warn("[Listen] No next track found");
     } catch (err) {
       console.warn("[Listen] Skip next failed:", err);
-      isNavigatingRef.current = false;
     } finally {
+      isNavigatingRef.current = false;
       setSkipLoading(false);
     }
-  }, [track?.artist, track?.title, spotifyUri, navigate]);
+  }, [track, spotifyUri, navigate, player, profile]);
 
   const handlePrev = useCallback(() => {
     isNavigatingRef.current = true;
@@ -323,9 +373,10 @@ export default function Listen() {
   } = player;
   const realDuration = playerDuration > 0 ? playerDuration : (track?.durationSec || 300);
 
-  // 5-second listen threshold — counts as a "listen" for progression purposes.
-  // Marks the track as completed in session so next visit triggers fresh nuggets.
-  // Also increments the DB listen_count so the backend knows the depth.
+  // 5-second listen threshold — counts as a "listen" for DB progression only.
+  // Does NOT mark track as completed — that only happens on actual track end
+  // (handleTrackEnd). Otherwise, navigating Browse → Listen mid-track would
+  // incorrectly bump regenerateKey and trigger fresh generation.
   const listenThresholdMetRef = useRef(false);
   useEffect(() => {
     listenThresholdMetRef.current = false;
@@ -334,8 +385,6 @@ export default function Listen() {
   useEffect(() => {
     if (!track || !isPlaying || currentTime < 5 || listenThresholdMetRef.current) return;
     listenThresholdMetRef.current = true;
-    const key = `${track.artist}::${track.title}`;
-    player.markTrackCompleted(key);
 
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -479,7 +528,7 @@ export default function Listen() {
   // AI-generated nuggets with real sources
   const tier = (profile?.calculatedTier as "casual" | "curious" | "nerd") || "casual";
   const artistImageUrl = (track?.artist && profile?.spotifyArtistImages?.[track.artist]) || track?.coverArtUrl || "";
-  const { nuggets: aiNuggets, sources: aiSources, loading: aiLoading, error: aiError, listenCount } = useAINuggets(
+  const { nuggets: aiNuggets, sources: aiSources, loading: aiLoading, error: aiError, listenCount, artistSummary, fromCache: aiFromCache } = useAINuggets(
     trackId,
     track?.artist || "",
     track?.title || "",
@@ -512,13 +561,23 @@ export default function Listen() {
 
   useEffect(() => {
     if (aiLoading || aiNuggets.length === 0 || !track) return;
+    const trackKey = `${track.artist}::${track.title}`;
+
+    // Fast path: if companion was already pre-generated this session,
+    // restore the cached shortId immediately (no edge function call).
+    const cachedSid = player.getCompanionShortId(trackKey);
+    if (cachedSid) {
+      setShortId(cachedSid);
+      setCompanionReady(true);
+      return;
+    }
+
     let cancelled = false;
     (async () => {
       try {
         // Build prebuilt nuggets for the companion page.
         // Both demo (seed) and AI tracks go through the edge function — direct
         // DB writes from the client are blocked by RLS (service_role only).
-        const trackKey = `${track.artist}::${track.title}`;
         const seedCompanion = await getSeedCompanion(track.artist, track.title, tier);
 
         let prebuiltNuggets: any[];
@@ -535,6 +594,7 @@ export default function Listen() {
           const kindToCategory: Record<string, string> = {
             artist: "history",
             track: "track",
+            context: "context",
             discovery: "explore",
           };
           const now = Date.now();
@@ -568,6 +628,7 @@ export default function Listen() {
             prebuiltNuggets,
             coverArtUrl: effectiveCoverArt || undefined,
             artistImage: artistImageUrl || effectiveCoverArt || undefined,
+            artistSummary,
           },
         });
         if (cancelled) return;
@@ -586,8 +647,9 @@ export default function Listen() {
           if (cancelled) return;
           if (selErr) console.warn("[Listen] companion_links select error:", selErr);
 
+          let resolvedShortId: string | null = null;
           if (existing) {
-            setShortId(existing.short_id);
+            resolvedShortId = existing.short_id;
           } else {
             const arr = new Uint8Array(6);
             crypto.getRandomValues(arr);
@@ -599,7 +661,12 @@ export default function Listen() {
               album: track.album || null,
             });
             if (insErr) console.warn("[Listen] companion_links insert error:", insErr);
-            if (!cancelled && !insErr) setShortId(newId);
+            if (!insErr) resolvedShortId = newId;
+          }
+
+          if (!cancelled && resolvedShortId) {
+            setShortId(resolvedShortId);
+            player.setCompanionShortId(trackKey, resolvedShortId);
           }
         } catch (linkErr) {
           console.warn("[Listen] Short link creation failed:", linkErr);
@@ -647,7 +714,7 @@ export default function Listen() {
   const [liked, setLiked] = useState<boolean | null>(null);
 
   // --- Auto-hide bar logic ---
-  const [barVisible, setBarVisible] = useState(true);
+  const [barVisible, setBarVisible] = useState(false);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showBar = useCallback((keepVisible?: boolean) => {
@@ -658,17 +725,23 @@ export default function Listen() {
     }
   }, []);
 
+  // Brief auto-show on mount for discoverability (desktop/TV first-time visitors)
   useEffect(() => {
-    hideTimerRef.current = setTimeout(() => setBarVisible(false), HIDE_DELAY);
-    return () => { if (hideTimerRef.current) clearTimeout(hideTimerRef.current); };
-  }, []);
+    showBar();
+  }, [showBar]);
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
       if (e.clientY > window.innerHeight * 0.85) showBar();
     };
+    // Show bar on keyboard/remote interaction (TV-style devices)
+    const onKeyDown = () => showBar();
     window.addEventListener("mousemove", onMouseMove);
-    return () => window.removeEventListener("mousemove", onMouseMove);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("keydown", onKeyDown);
+    };
   }, [showBar]);
 
   // Click nugget card to open deep dive
@@ -688,16 +761,73 @@ export default function Listen() {
     showBar(true);
   }, [dismissedNuggets, showBar]);
 
+  // D-pad left/right: cycle through shown nuggets on the timeline
+  const handleNuggetNav = useCallback((direction: 'left' | 'right') => {
+    const navigable = trackNuggets.filter(n => shownNuggetIds.has(n.id));
+    if (navigable.length <= 1) return;
+
+    const currentIdx = activeNugget
+      ? navigable.findIndex(n => n.id === activeNugget.id)
+      : -1;
+
+    const nextIdx = direction === 'left'
+      ? (currentIdx <= 0 ? navigable.length - 1 : currentIdx - 1)
+      : (currentIdx >= navigable.length - 1 ? 0 : currentIdx + 1);
+
+    const target = navigable[nextIdx];
+    if (!target || target.id === activeNugget?.id) return;
+
+    // Swap: dismiss current → mini-logo, activate target
+    setDismissedNuggets(prev => {
+      const next = new Map(prev);
+      if (activeNugget) next.set(activeNugget.id, activeNugget);
+      next.delete(target.id);
+      return next;
+    });
+    setNuggetQueue([]);
+    setActiveNugget(target);
+    setReopenedNuggetId(target.id);
+  }, [trackNuggets, shownNuggetIds, activeNugget]);
+
   const [nuggetFocused, setNuggetFocused] = useState(false);
   const nuggetRef = useRef<HTMLDivElement>(null);
   const dwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [dwelling, setDwelling] = useState(false);
+  const activeNuggetRef = useRef<Nugget | null>(null);
+  useEffect(() => { activeNuggetRef.current = activeNugget; }, [activeNugget]);
 
   // Clear dwell timer helper
   const clearDwell = useCallback(() => {
     if (dwellTimerRef.current) { clearTimeout(dwellTimerRef.current); dwellTimerRef.current = null; }
     setDwelling(false);
   }, []);
+
+  // Enter nugget zone: re-activate most recent dismissed nugget if none active
+  const enterNuggetZone = useCallback(() => {
+    if (!activeNuggetRef.current && dismissedNuggets.size > 0) {
+      let mostRecent: Nugget | null = null;
+      for (const [, n] of dismissedNuggets) {
+        if (n.timestampSec <= currentTime && (!mostRecent || n.timestampSec > mostRecent.timestampSec))
+          mostRecent = n;
+      }
+      if (!mostRecent) {
+        for (const [, n] of dismissedNuggets) {
+          if (!mostRecent || n.timestampSec < mostRecent.timestampSec) mostRecent = n;
+        }
+      }
+      if (mostRecent) {
+        setDismissedNuggets(prev => { const next = new Map(prev); next.delete(mostRecent!.id); return next; });
+        setActiveNugget(mostRecent);
+        setReopenedNuggetId(mostRecent.id);
+      }
+    }
+    nuggetRef.current?.focus();
+    setDwelling(true);
+    dwellTimerRef.current = setTimeout(() => {
+      if (activeNuggetRef.current) handleNuggetClick(activeNuggetRef.current);
+      setDwelling(false);
+    }, 1500);
+  }, [dismissedNuggets, currentTime, handleNuggetClick]);
 
   // Focus zones: top (back=0, nerd=1), nugget, bar (dislike=0..like=4)
   type FocusZone = 'top' | 'nugget' | 'bar';
@@ -727,10 +857,10 @@ export default function Listen() {
   // Zone ordering for Up/Down navigation
   const getZonesInOrder = useCallback((): FocusZone[] => {
     const zones: FocusZone[] = ['top'];
-    if (activeNugget) zones.push('nugget');
+    if (activeNugget || dismissedNuggets.size > 0) zones.push('nugget');
     zones.push('bar');
     return zones;
-  }, [activeNugget]);
+  }, [activeNugget, dismissedNuggets.size]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -746,13 +876,7 @@ export default function Listen() {
           setFocusZone(newZone);
           setNuggetFocused(newZone === 'nugget');
           if (newZone === 'nugget') {
-            nuggetRef.current?.focus();
-            // Start dwell timer
-            setDwelling(true);
-            dwellTimerRef.current = setTimeout(() => {
-              if (activeNugget) handleNuggetClick(activeNugget);
-              setDwelling(false);
-            }, 1500);
+            enterNuggetZone();
           }
           if (newZone !== 'nugget') showBar();
         } else {
@@ -768,12 +892,7 @@ export default function Listen() {
           setFocusZone(newZone);
           setNuggetFocused(newZone === 'nugget');
           if (newZone === 'nugget') {
-            nuggetRef.current?.focus();
-            setDwelling(true);
-            dwellTimerRef.current = setTimeout(() => {
-              if (activeNugget) handleNuggetClick(activeNugget);
-              setDwelling(false);
-            }, 1500);
+            enterNuggetZone();
           }
           if (newZone === 'bar') showBar();
         } else {
@@ -782,13 +901,17 @@ export default function Listen() {
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
         clearDwell();
-        if (focusZone === 'bar') setBarFocusIndex((i) => Math.max(0, i - 1));
+        if (focusZone === 'nugget') {
+          handleNuggetNav('left');
+        } else if (focusZone === 'bar') setBarFocusIndex((i) => Math.max(0, i - 1));
         else if (focusZone === 'top') setTopFocusIndex((i) => Math.max(0, i - 1));
         showBar();
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
         clearDwell();
-        if (focusZone === 'bar') setBarFocusIndex((i) => Math.min(BAR_BUTTON_COUNT - 1, i + 1));
+        if (focusZone === 'nugget') {
+          handleNuggetNav('right');
+        } else if (focusZone === 'bar') setBarFocusIndex((i) => Math.min(BAR_BUTTON_COUNT - 1, i + 1));
         else if (focusZone === 'top') setTopFocusIndex((i) => Math.min(TOP_BUTTON_COUNT - 1, i + 1));
         showBar();
       } else if (e.key === "Enter") {
@@ -817,7 +940,7 @@ export default function Listen() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showBar, toggle, focusZone, barFocusIndex, topFocusIndex, activeNugget, handleNuggetClick, handleBarAction, handleTopAction, getZonesInOrder, deepDiveNugget, mediaOverlay, readingOverlay, clearDwell]);
+  }, [showBar, toggle, focusZone, barFocusIndex, topFocusIndex, activeNugget, handleNuggetClick, handleNuggetNav, handleBarAction, handleTopAction, getZonesInOrder, deepDiveNugget, mediaOverlay, readingOverlay, clearDwell, enterNuggetZone]);
 
   // Clean up dwell timer on unmount or nugget change
   useEffect(() => {
@@ -832,44 +955,75 @@ export default function Listen() {
   }, [play, isExternalListenMode, spotifyUri, player.currentSpotifyUri]);
 
   useEffect(() => {
-    if (aiNuggets.length === 0) return;
-    setActiveNugget(null);
-    setNuggetQueue([]);
-    setDismissedNuggets(new Map());
+    if (trackNuggets.length === 0) return;
     setReopenedNuggetId(null);
-    // Don't skip any nuggets on arrival — show all of them sequentially.
-    // The trigger logic below will fire them one by one via the queue.
-    setShownNuggetIds(new Set());
-  }, [aiNuggets]);
+
+    if (aiFromCache && currentTime > 5) {
+      // Re-navigation (cache hit, mid-track): restore past nuggets as mini-logos
+      const shown = new Set<string>();
+      const dismissed = new Map<string, Nugget>();
+      let mostRecent: typeof trackNuggets[0] | null = null;
+      for (const n of trackNuggets) {
+        if (n.timestampSec <= currentTime) {
+          shown.add(n.id);
+          // Previous "mostRecent" becomes a dismissed nugget → mini-logo
+          if (mostRecent) dismissed.set(mostRecent.id, mostRecent);
+          mostRecent = n;
+        }
+      }
+      setShownNuggetIds(shown);
+      setDismissedNuggets(dismissed);
+      setNuggetQueue([]);
+      setActiveNugget(mostRecent); // Most recent past nugget shows as card
+    } else {
+      // Fresh generation or start of track: clear everything and let the
+      // trigger effect handle nuggets as playback reaches each timestamp.
+      setShownNuggetIds(new Set());
+      setDismissedNuggets(new Map());
+      setNuggetQueue([]);
+      setActiveNugget(null);
+    }
+  }, [trackNuggets]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!nerdActive) { setActiveNugget(null); setNuggetQueue([]); }
   }, [nerdActive]);
 
   const handleSeek = useCallback((t: number) => {
-    // Find the nugget whose window contains the seek position
-    const targetNugget = trackNuggets.reduce<typeof trackNuggets[0] | null>((best, n) => {
-      if (t < n.timestampSec) return best; // haven't reached this nugget yet
-      if (!best) return n;
-      // Pick the nugget closest to (but not past) the seek time
-      return (t - n.timestampSec) < (t - best.timestampSec) ? n : best;
-    }, null);
+    // Find the nearest nugget within 5s of the seek position (bidirectional).
+    // Clicking slightly before OR after a marker dot should show that nugget.
+    const PROXIMITY_THRESHOLD = 5;
+    let targetNugget: typeof trackNuggets[0] | null = null;
+    let bestDist = Infinity;
+    for (const n of trackNuggets) {
+      const dist = Math.abs(t - n.timestampSec);
+      if (dist < bestDist && dist <= PROXIMITY_THRESHOLD) {
+        bestDist = dist;
+        targetNugget = n;
+      }
+    }
 
     setNuggetQueue([]);
     seek(t);
 
-    // Mark nuggets before the seek position as "shown" so they don't
-    // re-trigger. Exclude the target nugget (closest to seek time) so the
-    // trigger effect can fire it naturally when playback ticks.
+    // Mark nuggets at/before seek position as shown (won't re-trigger on tick).
+    // Also mark the target since we're showing it directly.
     const newShown = new Set<string>();
     for (const n of trackNuggets) {
-      if (n.timestampSec <= t && n !== targetNugget) newShown.add(n.id);
+      if (n.timestampSec <= t) newShown.add(n.id);
     }
+    if (targetNugget) newShown.add(targetNugget.id);
     setShownNuggetIds(newShown);
-    setActiveNugget(null);
 
-    // Preserve dismissed nuggets before seek point (except the target, which
-    // should re-trigger), clear ones after
+    // Directly show target nugget (bypasses trigger effect's isPlaying guard).
+    if (targetNugget) {
+      setActiveNugget(targetNugget);
+      setReopenedNuggetId(null);
+    } else {
+      setActiveNugget(null);
+    }
+
+    // Prune dismissedNuggets: keep before seek point, remove target + future
     setDismissedNuggets((prev) => {
       const next = new Map<string, Nugget>();
       for (const [id, nugget] of prev) {
@@ -886,7 +1040,15 @@ export default function Listen() {
       if (shownNuggetIds.has(n.id)) continue;
       if (currentTime >= n.timestampSec) {
         if (activeNugget) {
-          setNuggetQueue((q) => (q.find((x) => x.id === n.id) ? q : [...q, n]));
+          if (reopenedNuggetId) {
+            // Immediately swap: dismiss reopened nugget, show new one
+            setDismissedNuggets((prev) => new Map(prev).set(activeNugget.id, activeNugget));
+            setActiveNugget(n);
+            setReopenedNuggetId(null);
+            setShownNuggetIds((s) => new Set(s).add(n.id));
+          } else {
+            setNuggetQueue((q) => (q.find((x) => x.id === n.id) ? q : [...q, n]));
+          }
         } else {
           setActiveNugget(n);
           setReopenedNuggetId(null);
@@ -894,7 +1056,7 @@ export default function Listen() {
         }
       }
     }
-  }, [currentTime, isPlaying, nerdActive, trackNuggets, activeNugget, shownNuggetIds]);
+  }, [currentTime, isPlaying, nerdActive, trackNuggets, activeNugget, shownNuggetIds, reopenedNuggetId]);
 
   // Auto-dismiss nugget: quick swap if queued, otherwise fade after 8s
   useEffect(() => {
@@ -962,7 +1124,10 @@ export default function Listen() {
     return map;
   }, [trackNuggets, realDuration]);
 
-  const activeNuggetPct = activeNugget ? nuggetPositionMap.get(activeNugget.id) ?? null : null;
+  const activeNuggetPct = activeNugget
+    ? nuggetPositionMap.get(activeNugget.id)
+      ?? ((activeNugget.timestampSec / (realDuration || 300)) * 100)
+    : null;
 
   // Dismissed markers array for PlaybackBar
   const dismissedMarkers = useMemo(() => {

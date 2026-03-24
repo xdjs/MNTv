@@ -49,7 +49,7 @@ export type Nugget = {
   durationMs: number;
   headline?: string;
   text: string;
-  kind: "artist" | "track" | "discovery";
+  kind: "artist" | "track" | "discovery" | "context";
   listenFor?: boolean;
   relatedMomentSec?: number;
   sourceId: string;
@@ -71,7 +71,7 @@ export interface CompanionNugget {
   imageCaption?: string;
   sourceName: string;     // e.g. "Pitchfork", "Discogs", "Reddit"
   sourceUrl: string;      // strict direct citation link
-  category: "track" | "history" | "explore";
+  category: "track" | "history" | "explore" | "context";
   listenUnlockLevel: number; // 1, 2, or 3
 }
 
