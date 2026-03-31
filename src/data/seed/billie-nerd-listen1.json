@@ -1,1 +1,76 @@
-{"nuggets":[{"headline":"A #1 Album With Only Four People Credited","text":"The entirety of *When We All Fall Asleep, Where Do We Go?* was the product of an incredibly insular team: Billie, her brother and sole producer Finneas, mixing engineer Rob Kinelski, and mastering engineer John Greenham. This tight-knit unit, working out of bedrooms and hotel rooms, intentionally mixed the album without using external reference tracks. This protected their unique, lo-fi aesthetic and allowed them to create a sound that was entirely their own, beholden to no contemporary trends.","kind":"artist","listenFor":false,"source":{"type":"article","title":"Rob Kinelski Interview: Mixing for Billie Eilish","publisher":"ProSoundNews","quoteSnippet":"I met with Finneas, who said, ‘My one note is that when you mix this, I don’t want you to reference anything else. I don’t want you to listen to any other music.’","locator":"Interview","url":"https://www.billboard.com/music/pop/rob-kinelski-billie-eilish-engineer-interview-8512952/","verified":true},"imageUrl":"https://americansongwriter.com/wp-content/uploads/2020/07/Billie-Eilish.png?fit=1129%2C677","imageCaption":"Billie Eilish and her brother/producer Finneas O'Connell on stage."},{"headline":"The \"Loudest Quiet Track\": How 'bad guy' Creates Claustrophobia","text":"Critics have called \"bad guy\" the \"loudest 'quiet' track\" ever made, a perfect description of its unique dynamic tension. The production is deliberately sparse, bordering on claustrophobic, with Billie's dry, intimate vocal sitting right in your ear. This minimalism creates a massive amount of space for the deep, synth-bass pulse and kick drum to hit with seismic force, giving the track its signature blend of quiet menace and explosive power.","kind":"track","listenFor":true,"source":{"type":"article","title":"Billie Eilish When We All Fall Asleep Song Guide","publisher":"Rolling Stone","quoteSnippet":"Eilish’s dance tracks can be quiet to the point of claustrophobia.","locator":"Overview","url":"https://www.vulture.com/2019/04/the-making-of-billie-eilish-when-we-all-fall-asleep.html","verified":true},"imageUrl":"https://www.billboard.com/wp-content/uploads/media/Billie-Eilish-album-press-Kenneth-Cappello-2019-billboard-1548.jpg?w=1024","imageCaption":"The album's imagery often reflects its intimate, dark, and home-produced sound."},{"headline":"If 'bad guy''s Polished Menace Connects, Listen to Madison Beer","text":"For another artist navigating the intersection of mainstream pop and a darker, more complex interior world, turn to Madison Beer. Her work similarly employs crisp, trap-influenced percussion and layered, atmospheric vocals. Like Eilish, she crafts songs that feel both commercially polished and deeply personal, exploring themes of mental health and power dynamics with a sharp, contemporary edge.","kind":"discovery","listenFor":false,"source":{"type":"article","title":"AllMusic Artist Biography: Madison Beer","publisher":"AllMusic","quoteSnippet":"Madison Beer is a singer/songwriter with a soulful, smoky voice who makes moody, R&B- and soul-inflected pop.","locator":"Biography","url":"https://www.google.com/search?q=AllMusic%20Artist%20Biography%3A%20Madison%20Beer%20AllMusic%20Billie%20Eilish%20bad%20guy","verified":false},"imageUrl":"https://upload.wikimedia.org/wikipedia/commons/thumb/6/61/Madison_Beer_%40_Greek_Theatre_L.A._06_13_2024_%2853839434064%29_%28cropped_3x4%29.jpg/500px-Madison_Beer_%40_Greek_Theatre_L.A._06_13_2024_%2853839434064%29_%28cropped_3x4%29.jpg","imageCaption":"Singer-songwriter Madison Beer, known for her dark-pop aesthetic."}],"artistSummary":"Billie Eilish shattered pop conventions with her debut, becoming the first artist born in the 21st century to top the charts. Working with her brother Finneas, her DIY, genre-bending music pairs eerie melodies with raw, candid lyrics, defining a new era of pop stardom.","externalLinks":[{"label":"Billie Eilish When We All Fall Asleep Song Guide","url":"https://www.vulture.com/2019/04/the-making-of-billie-eilish-when-we-all-fall-asleep.html"},{"label":"Rob Kinelski Interview: Mixing for Billie Eilish","url":"https://www.billboard.com/music/pop/rob-kinelski-billie-eilish-engineer-interview-8512952/"},{"label":"Billie Eilish, Finneas Songwriting Has Fueled the Phenomenon","url":"https://americansongwriter.com/billie-eillish-interview/"},{"label":"Billie Eilish's Bad Guy samples an Australian pedestrian crossing","url":"http://www.smh.com.au/culture/music/billie-eilish-s-bad-guy-samples-a-surprising-aussie-invention-20200128-p53vec.html"},{"label":"Billie Eilish explains what 'Bad Guy' is about","url":"https://www.nme.com/news/music/billie-eilish-breaks-down-bad-guy-lyrics-2543500"},{"label":"Billie Eilish — Wikipedia","url":"https://en.wikipedia.org/wiki/Bad_Guy_(Billie_Eilish_song)"}]}
+{
+  "nuggets": [
+    {
+      "headline": "Billie Eilish recorded this entire album in her brother's bedroom studio",
+      "text": "This track, and the whole of \"WHEN WE ALL FALL ASLEEP, WHERE DO WE GO?\", was co-written and produced by Billie Eilish and her brother Finneas O'Connell in his small bedroom in their parents' Highland Park home. Using a minimal setup of Apple's Logic Pro, a Universal Audio interface, and Yamaha monitors, Eilish often recorded her vocals while sitting on Finneas's bed, giving the album its signature intimacy.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Why Billie Eilish's When We All Fall Asleep, Where Do We Go? is a modern masterpiece",
+        "publisher": "Yahoo",
+        "quoteSnippet": "This was not one of those 'bedroom studios' which was secretly more tantamount to a pro studio, but an*actual*bedroom with a bed... Eilish would sit on the bed to record her vocals.",
+        "url": "https://www.yahoo.com/entertainment/why-billie-eilishs-fall-asleep-115403243.html",
+        "verified": true
+      },
+      "imageUrl": "https://cdn.mos.cms.futurecdn.net/SEKxusbdrFQbcVwGKzi3NK.jpg",
+      "imageCaption": "Billie Eilish in 2019, the year \"bad guy\" redefined the pop landscape."
+    },
+    {
+      "headline": "The primary synth hook in 'bad guy' is a recording of a Sydney traffic signal",
+      "text": "While on a walk in Sydney, Australia, Billie Eilish was struck by the sound of a pedestrian crosswalk signal. She recorded the distinctive 'doop, doop' sound on her phone, and her brother Finneas later polished the sample and incorporated it as a key rhythmic and melodic element in the track. It's a piece of the everyday urban environment transformed into a Grammy-winning hook.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "Billie Eilish says her Grammy-winning song 'Bad Guy' used sound samples from a traffic signal in Sydney \u2013 Firstpost",
+        "publisher": "Firstpost",
+        "quoteSnippet": "In a 2019 interview with Rolling Stone, she had revealed that the song sampled the sound that pedestrian crossing signals make... Eilish says she recorded the sound on her phone.",
+        "url": "https://www.firstpost.com/entertainment/billie-eilish-says-her-grammy-winning-song-bad-guy-used-sound-samples-from-a-traffic-signal-in-sydney-7967621.html",
+        "verified": true
+      },
+      "imageUrl": "https://static.wixstatic.com/media/723a6a_b8f42b8e81de4fe5923005ffedc64282~mv2.jpg/v1/fill/w_1000,h_563,al_c,q_85,usm_0.66_1.00_0.01/723a6a_b8f42b8e81de4fe5923005ffedc64282~mv2.jpg",
+      "imageCaption": "bad guy by Billie Eilish"
+    },
+    {
+      "headline": "If you hear the cinematic scope of Lana Del Rey in Billie Eilish's work, you're hearing a direct influence",
+      "text": "The dark, atmospheric, and genre-blending style of \"WHEN WE ALL FALL ASLEEP, WHERE DO WE GO?\" draws from clear influences, including the work of Lana Del Rey. Eilish and Finneas built upon that foundation of cinematic pop to create a sound that is wholly their own. For a taste of that musical lineage, start with Del Rey's 2012 album \"Born to Die.\"",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "\u201cIronic, self-aware, intimate, DIY... a song that builds power as it unfolds\u201d: The making of Bad Guy, Billie\u2026",
+        "publisher": "MusicRadar",
+        "quoteSnippet": "The album showcased an artist of exceptional talent, one who drew on clear influences such as Lana Del Ray and Lorde and yet created a sound and a style that is wholly her own.",
+        "url": "https://musicradar.com/artists/ironic-self-aware-intimate-diy-a-song-that-builds-power-as-it-unfolds-the-making-of-bad-guy-billie-eilishs-biggest-hit",
+        "verified": true
+      },
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/Lana_Del_Rey_%40_Grammy_Museum_10_13_2019_%2849311023203%29_%282%29.jpg/500px-Lana_Del_Rey_%40_Grammy_Museum_10_13_2019_%2849311023203%29_%282%29.jpg",
+      "imageCaption": "Lana Del Rey, whose cinematic pop was a clear influence on Eilish."
+    }
+  ],
+  "artistSummary": "Billie Eilish and her brother Finneas O'Connell redefined pop from a bedroom in Los Angeles, proving that a DIY ethos could lead to global domination. Their music merges avant-garde electronics and trap with intimate, often dark lyricism, creating a sound that's entirely their own.",
+  "externalLinks": [
+    {
+      "label": "\u201cIronic, self-aware, intimate, DIY... a song that builds power as it unfolds\u201d: The making of Bad Guy, Billie\u2026",
+      "url": "https://musicradar.com/artists/ironic-self-aware-intimate-diy-a-song-that-builds-power-as-it-unfolds-the-making-of-bad-guy-billie-eilishs-biggest-hit"
+    },
+    {
+      "label": "Why Billie Eilish's When We All Fall Asleep, Where Do We Go? is a modern masterpiece",
+      "url": "https://www.yahoo.com/entertainment/why-billie-eilishs-fall-asleep-115403243.html"
+    },
+    {
+      "label": "FEATURE: you should see me in a crown: Billie Eilish\u2019s Phenomenal Debut Album, WHEN WE ALL FALL ASLEEP, WHERE DO WE GO?, at Five \u2014 Music Musings & Such",
+      "url": "https://www.musicmusingsandsuch.com/musicmusingsandsuch/2024/3/10/feature-you-should-see-me-in-a-crown-billie-eilishs-phenomenal-debut-album-when-we-all-fall-asleep-where-do-we-go-at-five"
+    },
+    {
+      "label": "[Analysis] Billie Eilish \u2013 Bad Guy by PianoX",
+      "url": "https://blog.mymusicfive.com/post/analysis-billie-eilish-bad-guy-by-pianox"
+    },
+    {
+      "label": "Billie Eilish explains what 'Bad Guy' is about",
+      "url": "https://www.nme.com/news/music/billie-eilish-breaks-down-bad-guy-lyrics-2543500"
+    }
+  ],
+  "noTrackData": false
+}

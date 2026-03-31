@@ -1,1 +1,76 @@
-{"nuggets":[{"headline":"Daft Punk's transformative rave experience in Paris redirected them from rock to electronic music.","text":"Before Daft Punk, Thomas Bangalter and Guy-Manuel de Homem-Christo were immersed in Paris's burgeoning rave scene in late 1992, finding the atmosphere electrifying and unlike the rock concerts they deemed boring. This pivotal experience led Thomas to buy electronic music equipment in January 1993, prompting them to abandon their indie rock project Darlin' in favor of turntables, samplers, and drum machines.","kind":"artist","listenFor":false,"source":{"type":"article","title":"In Depth History - the daft punk historian","publisher":"Decoded Magazine","quoteSnippet":"Thomas and Guy-Man became immersed in the rave scene that had begun to invade Paris between Fall 1992 and April 1993. They found the rave atmosphere completely different and were in awe of people enjoying new music, unlike rock concerts which they found boring.","locator":"section on early career","url":"https://thedaftpunkhistorian.weebly.com/in-depth-history.html","verified":true},"imageUrl":"https://www.decodedmagazine.com/wp-content/uploads/2025/09/maxresdefault-1-scaled.jpg","imageCaption":"Young Thomas Bangalter and Guy-Manuel de Homem-Christo before their robot personas."},{"headline":"Released as society approached the new millennium, 'Around the World' became a unifying anthem.","text":"Released in April 1997, 'Around the World' arrived at a pivotal moment as society teetered toward the turn of the millennium, resonating globally and spooling the energies of an increasingly connected world. It quickly rallied the collective spirit, becoming a U.S. *Billboard* Hot Dance/Club Play number-one single and reaching number 61 on the *Billboard* Hot 100.","kind":"track","listenFor":true,"source":{"type":"article","title":"Rediscover Daft Punk’s Debut Album ‘Homework’ (1997) | Tribute","publisher":"Tribute","quoteSnippet":"It rallied the collective as society teetered toward the turn of the millennium. It spooled the energies of an increasingly global, connected society.","locator":"track section","url":"https://albumism.com/features/daft-punk-debut-album-homework-turns-25-anniversary-retrospective","verified":true},"imageUrl":"https://qph.cf2.quoracdn.net/main-custom-t-3880-600x315-bcdkwkbmayfuaauxewxoxrgrpaxlizqo.jpeg","imageCaption":"Around the World by Daft Punk"},{"headline":"For more French house funk, dive into Cassius's equally groovy tracks.","text":"If 'Around the World' has your head nodding, you'll want to explore Cassius, another pioneering French electronic duo from the same vibrant scene. Their tracks share Daft Punk's knack for infectious, groove-driven house music with a distinct funk sensibility, often built around cleverly layered samples and a feel-good energy. [CIT 10, Last.fm]","kind":"discovery","listenFor":false,"source":{"type":"platform","title":"Homework (Daft Punk album)","publisher":"Spotify","quoteSnippet":"Daft Punk's Homework's genres include French house, techno, disco, Chicago house, and electropop.","locator":"similar artists data","url":"https://en.wikipedia.org/wiki/Homework_(Daft_Punk_album)","verified":true},"imageUrl":"https://www.nme.com/wp-content/uploads/2023/01/tyler-pope-lcd-soundystem-daft-punk-gary-miller-jeff-kravitz.jpg","imageCaption":"Cassius, another iconic French electronic duo."}],"artistSummary":"Daft Punk, the French electronic music duo of Thomas Bangalter and Guy-Manuel de Homem-Christo, revolutionized dance music. They brought electronic sounds to the mainstream, influencing generations with their iconic robot personas and innovative productions.","externalLinks":[{"label":"Daft Punk - Homework, The Blueprint That Rewrote Electronic Music's DNA - Decoded Magazine","url":"https://www.decodedmagazine.com/daft-punk-homework-the-blueprint-that-rewrote-electronic-musics-dna/"},{"label":"Daft Punk’s ‘Homework’ at 25: Teachers and Students | DJ Mag","url":"https://djmag.com/longreads/daft-punk-s-homework-25-teachers-and-students"},{"label":"Rediscover Daft Punk’s Debut Album ‘Homework’ (1997) | Tribute","url":"https://albumism.com/features/daft-punk-debut-album-homework-turns-25-anniversary-retrospective"},{"label":"The Past, Present, and Future of Daft Punk's Homework","url":"https://consequence.net/2017/01/the-past-present-and-future-of-daft-punks-homework/"},{"label":"In Depth History - the daft punk historian","url":"https://thedaftpunkhistorian.weebly.com/in-depth-history.html"},{"label":"Daft Punk — Wikipedia","url":"https://en.wikipedia.org/wiki/Homework_(Daft_Punk_album)"}]}
+{
+  "nuggets": [
+    {
+      "headline": "Daft Punk's \"Around the World\" music video was directed by an acclaimed filmmaker",
+      "text": "The captivating, highly stylized music video for \"Around the World\" was directed by Michel Gondry, who would later earn an Oscar for 'Eternal Sunshine of the Spotless Mind.' His innovative visual storytelling helped introduce Daft Punk's unique blend of Chicago house and French touch to a global MTV audience, transforming them into visual artists beyond the club scene.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Daft Punk Charted Pop's Future Then Rewrote Its Past",
+        "publisher": "Stereogum",
+        "quoteSnippet": "When Michel Gondry's surreal visuals Trojan-horsed \"Around The World\" into MTV rotation, the song's Chicago house and French touch elements sounded entirely foreign to most American teenagers.",
+        "url": "https://www.stereogum.com/2117015/daft-punk-changed-pop-music/columns/the-week-in-pop/",
+        "verified": true
+      },
+      "imageUrl": "https://thedaftpunkhistorian.weebly.com/uploads/1/2/1/8/121809886/d8723d65-6818-4b70-ace4-705a611acc63-1-201-a.jpeg",
+      "imageCaption": "Michel Gondry's work helped define Daft Punk's early visual aesthetic."
+    },
+    {
+      "headline": "Daft Punk recorded much of 'Homework' in a Paris bedroom",
+      "text": "Before their iconic robot helmets and stadium shows, Thomas Bangalter and Guy-Manuel de Homem-Christo crafted their debut album, 'Homework,' primarily in Thomas's Paris bedroom studio, affectionately known as 'Daft House.' This DIY approach, utilizing analog gear like the Roland TB-303 for acid basslines and the TR-909 drum machine, captures the raw, unpolished energy of the Parisian rave scene that profoundly influenced them in the early 90s.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "Homework (Daft Punk album)",
+        "publisher": "Grokipedia",
+        "quoteSnippet": "The recording of Homework primarily occurred at Daft Punk's home studio, Daft House, located in Paris, spanning from 1993 to 1996. ... Daft Punk relied heavily on analog hardware to shape the album's raw, energetic sound, including the Roland TB-303 for its iconic acid basslines, the TR-909 drum machine for punchy percussion patterns",
+        "url": "https://grokipedia.com/page/Homework_(Daft_Punk_album)",
+        "verified": true
+      },
+      "imageUrl": "https://lede-admin.stereogum.com/wp-content/uploads/sites/64/2021/02/GettyImages-465384097-1614010346-scaled.jpg",
+      "imageCaption": "Daft Punk's debut album 'Homework' was largely a DIY effort."
+    },
+    {
+      "headline": "Daft Punk's Thomas Bangalter co-created the French house anthem \"Music Sounds Better With You\" as Stardust",
+      "text": "If you're digging this track, you should definitely check out Stardust's \"Music Sounds Better With You.\" This massive French house hit was a one-off collaboration featuring Daft Punk's Thomas Bangalter alongside Alan Braxe and vocalist Benjamin Diamond. It was recorded during an impromptu session at Bangalter's studio and famously sampled Chaka Khan's \"Fate,\" becoming an undeniable cornerstone of the French touch sound.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Homework (Daft Punk album)",
+        "publisher": "Grokipedia",
+        "quoteSnippet": "In 1998, Braxe formed the one-off trio Stardust alongside Bangalter and vocalist Benjamin Diamond, creating a collaborative project... The group recorded their sole single, 'Music Sounds Better with You,' which sampled Chaka Khan's 'Fate' and featured infectious disco-inflected house grooves, during an impromptu session at Bangalter's studio.",
+        "url": "https://grokipedia.com/page/Homework_(Daft_Punk_album)",
+        "verified": true
+      },
+      "imageUrl": "https://static.wikia.nocookie.net/daftpunk/images/5/5c/ALANbraxe.jpeg/revision/latest?cb=20230423235957",
+      "imageCaption": "Alan Braxe, co-creator of Stardust, pictured here."
+    }
+  ],
+  "artistSummary": "Daft Punk, the French electronic duo of Thomas Bangalter and Guy-Manuel de Homem-Christo, rose from the Parisian rave scene in 1993 to global superstardom. Known for their mysterious robot personas, they helped bring electronic music to the mainstream and influenced generations of artists.",
+  "externalLinks": [
+    {
+      "label": "In Depth History - the daft punk historian",
+      "url": "https://thedaftpunkhistorian.weebly.com/in-depth-history.html"
+    },
+    {
+      "label": "Daft Punk: The Complete Story of Electronic Music\u2019s Most Iconic Duo - EDM Archives",
+      "url": "https://edmarchives.com/daft-punk-the-complete-story-of-electronic-musics-most-iconic-duo/"
+    },
+    {
+      "label": "Homework (Daft Punk album)",
+      "url": "https://grokipedia.com/page/Homework_(Daft_Punk_album)"
+    },
+    {
+      "label": "Daft Punk Charted Pop's Future Then Rewrote Its Past",
+      "url": "https://www.stereogum.com/2117015/daft-punk-changed-pop-music/columns/the-week-in-pop/"
+    },
+    {
+      "label": "New Daft Punk book, After Daft, will explore the duo\u2019s career and cultural impact | DJ Mag",
+      "url": "https://djmag.com/news/new-daft-punk-book-after-daft-will-explore-duo-s-career-and-cultural-impact"
+    }
+  ],
+  "noTrackData": false
+}

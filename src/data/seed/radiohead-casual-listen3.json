@@ -1,1 +1,76 @@
-{"nuggets":[{"headline":"After 'OK Computer,' Radiohead abandoned their label to release 'In Rainbows' as 'pay-what-you-want.'","text":"Radiohead isn't just known for their innovative sound; they're also trailblazers in how they do business. After their landmark album *OK Computer* solidified their status, they consciously moved away from traditional industry practices. They left their longtime label, EMI, and famously released *In Rainbows* directly to fans as a 'pay-what-you-want' digital download, a move that redefined how artists could connect with their audience.","kind":"artist","listenFor":false,"source":{"type":"article","title":"Radiohead: The Inside Story","publisher":"Pitchfork","quoteSnippet":"Radiohead's approach to business since OK Computer is a significant source of their mystique... left their label, EMI, after delivering Hail to the Thief (2003)... In Rainbows (2007) was released on their own as a pay-what-you-want digital download.","locator":"paragraph 5","url":"https://www.google.com/search?q=Radiohead%3A%20The%20Inside%20Story%20Pitchfork%20Radiohead%20Weird%20Fishes%2FArpeggi","verified":false},"imageUrl":"https://substackcdn.com/image/fetch/$s_!nL95!,w_1200,h_675,c_fill,f_jpg,q_auto:good,fl_progressive:steep,g_auto/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Ffbdd4520-d067-482a-be6e-ac9e8c3ddcb3_960x896.webp","imageCaption":"Radiohead, known for unconventional music and business practices."},{"headline":"The 'weird fishes' in the lyrics symbolize irresistible temptations you might try to escape.","text":"As these intricate arpeggios swirl around you, notice how Thom Yorke sings of 'weird fishes.' These aren't just random images; they're often interpreted as symbols of strong temptations that pull you in, even when you know they might lead you astray. The feeling of being drawn in, then realizing you need to hit rock bottom to escape, is a profound journey of self-preservation that plays out through the song's ever-present musical currents.","kind":"track","listenFor":true,"source":{"type":"article","title":"The meaning of Weird Fishes Arpeggi","publisher":"Music Grotto","quoteSnippet":"The 'weird fishes' are interpreted as symbols for enticement and temptation... Yorke is drawn to these 'weird fishes'... The lyrics also speak about Yorke hitting the bottom and escaping... a metaphor for hitting rock bottom in life and realizing it's time for an ascent.","locator":"paragraph 2, 3","url":"https://lyricalinsight.io/radiohead/weird-fishes-arpeggi","verified":true},"imageUrl":"https://www.songfacts.com/img-artalbums-145-9b76d395782a665504e8352f790a98ef.png","imageCaption":"Weird Fishes/Arpeggi by Radiohead"},{"headline":"If you love the sweeping, melancholic drama of 'Weird Fishes,' try Muse's earlier work.","text":"If the layered, dramatic, and emotionally charged sound of 'Weird Fishes/Arpeggi' really grabs you, you should check out the band Muse, especially their albums from the early to mid-2000s. They often create epic, almost theatrical rock songs with intricate guitar lines and powerful, high-ranging vocals that share that same sense of beautiful melancholy and grand scope you hear in this track.","kind":"discovery","listenFor":false,"source":{"type":"api","title":"Similar Artists","publisher":"Last.fm","quoteSnippet":"Muse (34% match)","locator":"discovery recommendation","url":"https://www.google.com/search?q=Similar%20Artists%20Last.fm%20Radiohead%20Weird%20Fishes%2FArpeggi","verified":false},"imageUrl":"https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Muse_reading_Louvre_CA2220.jpg/500px-Muse_reading_Louvre_CA2220.jpg","imageCaption":"Muse creates dramatic rock with intricate guitar and soaring vocals."}],"artistSummary":"Radiohead consistently defies expectations, evolving from an Abingdon school band into rock pioneers. They challenge their own sound and industry conventions, crafting complex music that invites deep analysis.","externalLinks":[{"label":"Radiohead's Ed O'Brien on going solo: 'Something was missing' | Toronto Sun","url":"http://www.torontosun.com/entertainment/music/radioheads-ed-obrien-finds-own-voice-on-earth-something-was-missing"},{"label":"The meaning of Weird Fishes Arpeggi","url":"https://lyricalinsight.io/radiohead/weird-fishes-arpeggi"},{"label":"S11E5 - Weird Fishes / Arpeggi by Radiohead Transcript - Dissect","url":"https://podcasts.musixmatch.com/podcast/dissect-01heq7k7ncf2vg2mbjzar7pcgq/episode/s11e5-weird-fishes-arpeggi-by-radiohead-01heq7k7ncf2vg2mbjzar7pcgt"},{"label":"Weird Fishes / Arpeggi by Radiohead - Songfacts","url":"https://www.songfacts.com/facts/radiohead/weird-fishes-arpeggi"},{"label":"Radiohead - Wikipedia","url":"https://en.wikipedia.org/wiki/Radiohead"}]}
+{
+  "nuggets": [
+    {
+      "headline": "radiohead's thom yorke once played glastonbury unable to hear himself perform",
+      "text": "Imagine headlining one of the world's biggest festivals, the Pyramid Stage at Glastonbury in 1997, only to have the sound system fail during your set. That's exactly what happened to Thom Yorke and Radiohead amidst a massive downpour, meaning they couldn't hear what they were playing. Despite the technical disaster, many still consider it one of their greatest gigs.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "25 things Radiohead have done since OK Computer",
+        "publisher": "BBC",
+        "quoteSnippet": "Radiohead's front-man wasn't entirely keen to perform at Glastonbury back in 1997. In June 1997, just a few weeks after OK Computer came out, Radiohead headlinedGlastonbury's Pyramid Stage for the first time... The rain fell and the sound system failed during Radiohead's set, so the band couldn't actually hear what they were doing.",
+        "url": "https://www.bbc.co.uk/programmes/articles/5zRPy1CgV2vZ75h6pF9Yt1C/25-things-radiohead-have-done-since-ok-computer",
+        "verified": true
+      },
+      "imageUrl": "https://ichef.bbci.co.uk/images/ic/1200x675/p055p6xr.jpg",
+      "imageCaption": "Thom Yorke on stage in 2017, years after his challenging 1997 Glastonbury performance."
+    },
+    {
+      "headline": "the guitar arpeggios in \"weird fishes/arpeggi\" are distinct, layered parts",
+      "text": "The song's title, \"Arpeggi,\" is a direct nod to its core musical structure. What you're hearing are not just complex chords, but three distinct guitar arpeggios, played by Ed O'Brien, Thom Yorke, and Jonny Greenwood, layered together. Each part has its own subtly shifted accents, creating a rich, shimmering texture that builds the song's momentum.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "Harmonic Analysis of Radiohead\u2019s \u201cWeird Fishes/Arpeggi\u201d",
+        "publisher": "Hypebot",
+        "quoteSnippet": "The first guitar arpeggio (the plural of which gives the song its title) is played by Ed O\u2019Brien... On the fourth chord in the progression... a second guitar (in live versions, this is played by Thom Yorke) superimposes another arpeggio... A third arpeggio, played by Jonny Greenwood, is added to the texture at 1:48... this layering of different accents becomes more evident... it forms a shimmeringeffect",
+        "url": "https://www.hypebot.com/hypebot/2020/11/harmonic-analysis-of-radioheads-weird-fishes-arpeggi.html",
+        "verified": true
+      },
+      "imageUrl": "https://www.hypebot.com/content/images/www-hypebot-com/wp-content/uploads/2020/11/radiohead-header.jpg",
+      "imageCaption": "A musical transcription of the layered guitar arpeggios in Radiohead's song."
+    },
+    {
+      "headline": "radiohead's thom yorke has collaborated with the electronic artist burial",
+      "text": "If you're drawn to the atmospheric depth of Radiohead, you absolutely need to hear Burial. Thom Yorke himself has teamed up with the enigmatic electronic producer Burial and Four Tet on multiple 12\" vinyl releases, creating experimental electronic tracks that share a similar sense of intricate texture and mood.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Similar artists - Thom Yorke | Last.fm",
+        "publisher": "Last.fm",
+        "quoteSnippet": "In March 2011,Burial,Four Tet, andThom YorkeofRadioheadteamed up to release a 12\" vinyl containing \"Ego\" and \"Mirror\"... In late 2020 the three of them released a single on XL Recordings, 'Her Revolution' b/w 'His Rope'.",
+        "url": "https://www.google.com/search?q=Similar%20artists%20-%20Thom%20Yorke%20%7C%20Last.fm%20Last.fm%20Radiohead%20Weird%20Fishes%2FArpeggi",
+        "verified": false
+      },
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/93/Erik_Werenskiold_-_Peasant_Burial_-_Google_Art_Project.jpg/500px-Erik_Werenskiold_-_Peasant_Burial_-_Google_Art_Project.jpg",
+      "imageCaption": "Burial, known for his atmospheric electronic music and collaborations with Thom Yorke."
+    }
+  ],
+  "artistSummary": "Radiohead, the English alternative rock band from Abingdon, Oxfordshire, formed in the mid-1980s when the members were still in school. Consisting of Thom Yorke, Jonny Greenwood, Colin Greenwood, Ed O\u2019Brien, and Phil Selway, they've built a prolific and acclaimed catalog, evolving from college rock to electronics-embracing art rock. They've consistently worked with producer Nigel Godrich and artist Stanley Donwood since 1994.",
+  "externalLinks": [
+    {
+      "label": "Radiohead, \u2018In Rainbows\u2019 - Rolling Stone Australia",
+      "url": "https://au.rollingstone.com/music/music-lists/-72621/radiohead-in-rainbows-4-72817/"
+    },
+    {
+      "label": "The Best Radiohead Songs: All 158 Tracks, Ranked",
+      "url": "https://vulture.com/2016/05/every-radiohead-song-ranked.html"
+    },
+    {
+      "label": "25 things Radiohead have done since OK Computer",
+      "url": "https://www.bbc.co.uk/programmes/articles/5zRPy1CgV2vZ75h6pF9Yt1C/25-things-radiohead-have-done-since-ok-computer"
+    },
+    {
+      "label": "Album Review: Radiohead\u2019s In Rainbows - Tune Tempest",
+      "url": "https://tunetempest.co.uk/album-review-radioheads-in-rainbows/"
+    },
+    {
+      "label": "What's the meaning of the song 'Faust Arp' by Radiohead? - Quora",
+      "url": "https://www.quora.com/Whats-the-meaning-of-the-song-Faust-Arp-by-Radiohead"
+    }
+  ],
+  "noTrackData": false
+}

@@ -1,1 +1,76 @@
-{"nuggets":[{"headline":"Radiohead's Post-EMI 'Unemployment' Led to In Rainbows' Radical Release","text":"Radiohead found themselves without a label in 2007, following the end of their 12-year contract with Parlophone/EMI. This 'unemployed' status, coupled with the ten-weeks-premature leak of their previous album, *Hail to the Thief*, spurred their groundbreaking decision to release *In Rainbows* as a pay-what-you-wish digital download, prioritizing direct audience access over traditional industry models.","kind":"artist","listenFor":false,"source":{"type":"article","title":"Pitchfork's Guide to Radiohead's In Rainbows | Pitchfork","publisher":"Pitchfork","quoteSnippet":"Radiohead was technically unemployed, without a label following the end of their 12-year contract with Parlophone/EMI... The band wanted to get the music to the public in the fastest way possible by giving it away (basically) for free on the internet.","locator":"Introduction / Context","url":"https://www.pitchfork.com/features/article/6707-pitchforks-guide-to-radioheads-in-rainbows/","verified":true},"imageUrl":"https://media.pitchfork.com/photos/59386d742eace76f4d9964f9/16:9/w_1280,c_limit/8457f001.jpg","imageCaption":"Radiohead's innovative 'pay-what-you-want' digital release strategy for *In Rainbows*."},{"headline":"'Weird Fishes/Arpeggi's' Layered Guitars Echo Balinese Gamelan Traditions","text":"The captivating momentum in 'Weird Fishes/Arpeggi' comes from its intricate layering of three distinct guitar arpeggios, creating a 'shimmering' effect that builds density texturally, rather than through drum changes. This method of unevenly placed accents across multiple similar timbres, reminiscent of minimalist composers like Steve Reich, also shares sonic patterning principles with global music traditions such as Balinese Gamelan.","kind":"track","listenFor":true,"source":{"type":"article","title":"A Harmonic Analysis of Radiohead’s “Weird Fishes/Arpeggi” – Flypaper","publisher":"Flypaper","quoteSnippet":"The layering of parts creates an interesting rhythmical and contrapuntal effect... This layering method with similar timbres reminds the author of minimalist works by Steve Reich and Terry Riley. The patterning of accents in 'Weird Fishes/Arpeggi' also occurs in various global music traditions like Balinese Gamelan...","locator":"Guitar Parts / Rhythmic Complexity","url":"https://flypaper.soundfly.com/write/a-harmonic-analysis-of-radioheads-weird-fishes-arpeggi/","verified":true},"imageUrl":"https://flypaper.soundfly.com/wp-content/uploads/2020/11/radiohead-header-1024x683.jpg","imageCaption":"Musical notation showing the layered arpeggios in 'Weird Fishes/Arpeggi'."},{"headline":"Weezer's Guitar-Driven Hooks Share Radiohead's Alternative Rock Lineage","text":"For another journey into guitar-driven alternative rock, explore Weezer's catalog. While 'Weird Fishes/Arpeggi' showcases intricate arpeggios, *In Rainbows* marked Radiohead's deliberate return to the guitar-centric sound of their 1990s LPs like *OK Computer*. Weezer, too, built their distinct identity on powerful, melodic guitar arrangements, offering a different, yet equally impactful, facet of the genre.","kind":"discovery","listenFor":false,"source":{"type":"article","title":"Engineering the Sound: Radiohead's 'In Rainbows'","publisher":"Medium","quoteSnippet":"In Rainbows paid homage to the guitar-driven sound of their 1990s LPs, The Bends and OK Computer.","locator":"Musical Direction","url":"https://happymag.tv/engineering-the-sound-radioheads-in-rainbows/","verified":true},"imageUrl":"https://upload.wikimedia.org/wikipedia/commons/thumb/7/77/Rivers_Cuomo_Weezer_Tons_of_Rock_2025-23_%28cropped%29.jpg/500px-Rivers_Cuomo_Weezer_Tons_of_Rock_2025-23_%28cropped%29.jpg","imageCaption":"Rivers Cuomo, frontman of the alternative rock band Weezer."}],"artistSummary":"Radiohead is an English rock band, formed in Oxfordshire in 1985, renowned for their innovative approach to music. With members Thom Yorke, Jonny Greenwood, Colin Greenwood, Ed O'Brien, and Philip Selway, they continually evolve their soundscapes, often exploring themes of neurosis and technology's impact.","externalLinks":[{"label":"Pitchfork's Guide to Radiohead's In Rainbows | Pitchfork","url":"https://www.pitchfork.com/features/article/6707-pitchforks-guide-to-radioheads-in-rainbows/"},{"label":"Radiohead, In Rainbows. and how giving away a near perfect… | by Stephen Blackford | Medium","url":"https://medium.com/%40stephenblackford561/radiohead-in-rainbows-1bfa52957961"},{"label":"Engineering the Sound: Radiohead's 'In Rainbows'","url":"https://happymag.tv/engineering-the-sound-radioheads-in-rainbows/"},{"label":"MTO 19.1: Hesselink, Radiohead's “Pyramid Song”","url":"https://mtosmt.org/issues/mto.13.19.1/mto.13.19.1.hesselink.html"},{"label":"Radiohead","url":"https://en.wikipedia.org/wiki/Radiohead"}]}
+{
+  "nuggets": [
+    {
+      "headline": "Radiohead's producer Nigel Godrich started as an engineer on *The Bends*",
+      "text": "Before becoming Radiohead's long-time producer, Nigel Godrich was initially hired as an engineer for their 1995 album, *The Bends*. The band, already approving of his efforts to take their sound in new directions, nicknamed him \"Nihilist.\" This early collaboration evolved into a partnership where Godrich would go on to produce every Radiohead album from *OK Computer* onwards.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Radiohead producer, Nigel Godrich debuts Ultraista LP.",
+        "publisher": "Wikipedia",
+        "quoteSnippet": "Godrich first worked with the rock band Radiohead when John Leckie hired him at RAK to engineer their EP My Iron Lung (1994) and their second album, The Bends (1995). The band nicknamed him \"Nihilist\", approving of his efforts to take their sound in new directions. ... Radiohead invited Godrich to co-produce their third album, OK Computer (1997). ... He has produced all of Radiohead's albums since...",
+        "url": "https://www.rollingstone.com/music/news/ultraistas-nigel-godrich-pop-doesnt-always-have-to-be-crass-20121107",
+        "verified": true
+      },
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/61/ThomYorkeRHouse080618-63_%2842003110364%29_%28cropped%29.jpg/500px-ThomYorkeRHouse080618-63_%2842003110364%29_%28cropped%29.jpg",
+      "imageCaption": "Nigel Godrich, long-time producer for Radiohead and other iconic artists."
+    },
+    {
+      "headline": "Radiohead's \"Weird Fishes/Arpeggi\" features an arpeggiated melody musicians love to explore",
+      "text": "The intricate, arpeggiated guitar melody central to \"Weird Fishes/Arpeggi\" holds a special appeal for musicians. Many describe it as a \"hypnotic raga,\" a loop that's compelling to play around with for extended periods, easily drawing a musician into its depths. This technical aspect of the song offers a unique insight into its creation and enduring appeal.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "19 Thoughts on Radiohead's In Rainbows",
+        "publisher": "last-donut-of-the-night.ghost.io",
+        "quoteSnippet": "The arpeggiated melody that anchors the song sounds like a real pleasant loop for a musician to play around with for hours on end\u2014a hypnotic raga of sorts that one can get lost in forever if they\u2019re not careful.",
+        "url": "https://last-donut-of-the-night.ghost.io/1708012-19-thoughts-on-radioheads-in-rainbows/",
+        "verified": true
+      },
+      "imageUrl": "https://img.buzzfeed.com/buzzfeed-static/static/2016-05/11/9/tmp/webdr12/810ec433a7cfcd7fe56a6fedc3b14b58-1.jpg?crop=625:415;0,102&resize=1250:830",
+      "imageCaption": "The arpeggiated guitar line is a captivating element for musicians."
+    },
+    {
+      "headline": "explore Atoms for Peace, featuring Radiohead's Thom Yorke and drummer Joey Waronker",
+      "text": "Atoms for Peace presents a fascinating extension of Radiohead's rhythmic explorations. This supergroup features Thom Yorke and Nigel Godrich alongside acclaimed drummer Joey Waronker, known for his work with Beck and R.E.M. Waronker's unique ability to translate complicated electronic rhythms into live instrumentation was central to the band's sound, creating a blend of electronic and acoustic elements. Start with their debut album, *Amok*, to hear this fusion in action.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "A New Career in a New Town: Thom Yorke and Nigel Godrich run AMOK as Atoms for Peace - Fact Magazine",
+        "publisher": "Fact Magazine",
+        "quoteSnippet": "Atoms for Peace\u2013 a collaboration between Radiohead frontman Thom Yorke and the band\u2019s producer Nigel Godrich \u2013 release their debut album AMOK. Enlisting musicians Flea (Red Hot Chili Peppers, The Mars Volta), Joey Waronker (drummer for Beck and later REM) and Mauro Refosco (percussionist for David Byrne and others), Atoms for Peace formed as an attempt to recreate music from Yorke\u2019s 2006 solo album The Eraser in a live setting, but swiftly morphed into something different.",
+        "url": "https://www.google.com/search?q=A%20New%20Career%20in%20a%20New%20Town%3A%20Thom%20Yorke%20and%20Nigel%20Godrich%20run%20AMOK%20as%20Atoms%20for%20Peace%20-%20Fact%20Magazine%20Fact%20Magazine%20Radiohead%20Weird%20Fishes%2FArpeggi",
+        "verified": false
+      },
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Atoms_for_peace.jpg/500px-Atoms_for_peace.jpg",
+      "imageCaption": "Atoms for Peace, featuring Thom Yorke, Nigel Godrich, and Joey Waronker."
+    }
+  ],
+  "artistSummary": "Radiohead consistently pushes boundaries, earning a reputation as one of the most influential bands of their generation. Their albums are often characterized by innovative production and evolving musical styles, creating a distinctive and impactful sound that continues to inspire.",
+  "externalLinks": [
+    {
+      "label": "\u201cIt pretty much half killed us. Whether the band would continue was in the balance\u201d: The Radiohead album that almost broke up the band, turned the music industry on its head - and became their best record",
+      "url": "https://musicradar.com/artists/it-pretty-much-half-killed-us-whether-the-band-would-continue-was-in-the-balance-the-radiohead-album-that-almost-broke-up-the-band-turned-the-music-industry-on-its-head-and-became-their-best-record"
+    },
+    {
+      "label": "Chasing rainbows: inside the battle between Radiohead and EMI's Guy Hands | Radiohead | The Guardian",
+      "url": "https://amp.theguardian.com/music/2019/feb/18/chasing-rainbows-radiohead-emi-guy-hands-terra-firma"
+    },
+    {
+      "label": "19 Thoughts on Radiohead's In Rainbows",
+      "url": "https://last-donut-of-the-night.ghost.io/1708012-19-thoughts-on-radioheads-in-rainbows/"
+    },
+    {
+      "label": "Radiohead, \u2018In Rainbows\u2019 - Rolling Stone Australia",
+      "url": "https://au.rollingstone.com/music/music-lists/-72621/radiohead-in-rainbows-4-72817/"
+    },
+    {
+      "label": "All 164 Radiohead Songs, Ranked In Order From Worst To Best",
+      "url": "https://www.buzzfeed.com/scott/reckoner"
+    }
+  ],
+  "noTrackData": false
+}

@@ -1,1 +1,76 @@
-{"nuggets":[{"headline":"Thomas Bangalter's dad was a 70s disco hitmaker who helped Daft Punk sign with Virgin Records.","text":"That iconic Daft Punk sound, blending disco and house? Part of that might stem from a family legacy. Thomas Bangalter's father, Daniel Vangarde, was a highly successful disco producer and songwriter in the 1970s, responsible for hits like Ottawan's 'D.I.S.C.O.' Not only that, but Vangarde was instrumental in helping the duo navigate their early career, even securing their deal with Virgin Records, guiding them through the music industry maze.","kind":"artist","listenFor":false,"source":{"type":"article","title":"Daft Punk - Homework, The Blueprint That Rewrote Electronic Music's DNA - Decoded Magazine","publisher":"Decoded Magazine","quoteSnippet":"Thomas Bangalter’s father, Daniel Vangarde, was a very successful disco producer and songwriter in the 70s...","locator":"Early Career","url":"https://www.decodedmagazine.com/daft-punk-homework-the-blueprint-that-rewrote-electronic-musics-dna/","verified":true},"imageUrl":"https://www.decodedmagazine.com/wp-content/uploads/2025/09/maxresdefault-1-scaled.jpg","imageCaption":"Young Guy-Manuel de Homem-Christo and Thomas Bangalter, pre-robot personas."},{"headline":"Michel Gondry said 'Around the World' used only five instruments to create its magic.","text":"When you listen to this track, the genius is in its simplicity. Director Michel Gondry, who created the iconic music video for 'Around the World,' once pointed out how brilliant and minimal the composition truly is. He noted that the song was crafted using only five instruments and very few patterns, showcasing Daft Punk's ability to create a massive, hypnotic groove from essential elements, seamlessly blending disco, funk, and house.","kind":"track","listenFor":true,"source":{"type":"article","title":"Daft Punk ‘Around the World’: A Timeless Electronic Anthem","publisher":"Electronic Global Music","quoteSnippet":"Gondry noted the genius simplicity of the music, emphasizing the use of only five instruments and minimal patterns.","locator":"Production and Composition","url":"https://weraveyou.com/2023/11/daft-punk-around-the-world-2/","verified":true},"imageUrl":"https://weraveyou.com/wp-content/uploads/2023/11/Daft-Punk-Around-The-World-1.png","imageCaption":"Vibrant, synchronized dancers in the iconic 'Around the World' music video."},{"headline":"If you love this groove, check out Modjo's feel-good French house sound.","text":"If you're digging the infectious, feel-good groove of 'Around the World,' you've got to check out Modjo. This French house duo, active around the same era, captures a similar energy with their blend of disco, funk, and dance music. They often feature catchy, memorable vocal hooks and driving basslines that will keep you moving. Start with their huge hit 'Lady (Hear Me Tonight)' for an instant connection.","kind":"discovery","listenFor":false,"source":{"type":"article","title":"Around the World (Daft Punk song)","publisher":"Wikipedia","quoteSnippet":"Its genres include French house, funk, disco, and dance.","locator":"Release and reception","url":"https://en.wikipedia.org/wiki/Around_the_World_(Daft_Punk_song)#:~:text=The%20music%20video%20was%20directed,and%20choreographed%20by%20Blanca%20Li.","verified":true},"imageUrl":"https://upload.wikimedia.org/wikipedia/commons/d/d5/Duta_Sheila_On_7%2C_2018.jpg","imageCaption":"French house duo Modjo, known for their dancefloor hits."}],"artistSummary":"Daft Punk, the iconic French electronic duo of Thomas Bangalter and Guy-Manuel de Homem-Christo, redefined dance music with their groundbreaking sound. Known for their robot personas and dedication to keeping the focus on the music, they left an indelible mark on the electronic genre from 1993 to 2021.","externalLinks":[{"label":"Daft Punk - Homework, The Blueprint That Rewrote Electronic Music's DNA - Decoded Magazine","url":"https://www.decodedmagazine.com/daft-punk-homework-the-blueprint-that-rewrote-electronic-musics-dna/"},{"label":"The Untold Truth Of Daft Punk","url":"https://www.grunge.com/263000/the-untold-truth-of-daft-punk/"},{"label":"Daft Punk","url":"https://en.wikipedia.org/wiki/Daft_Punk"},{"label":"Daft Punk ‘Around the World’: A Timeless Electronic Anthem","url":"https://weraveyou.com/2023/11/daft-punk-around-the-world-2/"},{"label":"Daft Punk: 'We thought EDM was all made by just one guy'","url":"https://www.reddit.com/r/electronicmusic/comments/1ee2kn/daft_punk_we_thought_edm_was_all_made_by_just_one/"}]}
+{
+  "nuggets": [
+    {
+      "headline": "DAFT PUNK INVENTED A ROBOT ACCIDENT TO EXPLAIN THEIR HELMETS",
+      "text": "Thomas Bangalter and Guy-Manuel de Homem-Christo consciously chose to become the iconic helmeted robots. Their official origin story\u2014that a home studio accident in 1999 transformed them\u2014was a fabrication. This anonymity was a deliberate artistic and philosophical statement, allowing them to remain private while focusing attention squarely on the music and visual experience.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Daft Punk: The Complete Story of Electronic Music\u2019s Most Iconic Duo - EDM Archives",
+        "publisher": "EDM Archives",
+        "quoteSnippet": "The official origin story, shared in rare interviews, is that an accident in their home studio on September 9, 1999, transformed Bangalter and de Homem-Christo into robots. This was, of course, a fabrication \u2014 but a purposeful one. The helmets served as both artistic statement and philosophical position.",
+        "url": "https://edmarchives.com/daft-punk-the-complete-story-of-electronic-musics-most-iconic-duo/",
+        "verified": true
+      },
+      "imageUrl": "https://edmarchives.com/wp-content/uploads/2026/03/640px-DaftAlive.jpeg",
+      "imageCaption": "Daft Punk deliberately cultivated their robot personas."
+    },
+    {
+      "headline": "\"AROUND THE WORLD\" REPEATS ITS TITLE EXACTLY 144 TIMES",
+      "text": "That hypnotic chant you hear in \"Around the World\" is the track's title repeated precisely 144 times. This extreme repetition became a signature strength of the song, transforming it into a \"pop art disguised as a dance record.\" A British journalist initially found it silly, but quickly couldn't get it out of his head.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "Rediscover Daft Punk\u2019s Debut Album \u2018Homework\u2019 (1997) | Tribute",
+        "publisher": "Albumism",
+        "quoteSnippet": "Indulgently repetitious, echoing the phrase \u201caround the world\u201d precisely 144 times like some soothing vocoded mantra, the song rallies the collective as together we teetered toward the turn of the millennium.",
+        "url": "https://albumism.com/features/daft-punk-debut-album-homework-turns-25-anniversary-retrospective",
+        "verified": true
+      },
+      "imageUrl": "https://substackcdn.com/image/fetch/w_1200,h_600,c_fill,f_jpg,q_auto:good,fl_progressive:steep,g_auto/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fa9be44fa-0759-48d2-8de4-992113b27556_2500x2500.jpeg",
+      "imageCaption": "Around the World by Daft Punk"
+    },
+    {
+      "headline": "DAFT PUNK'S LONGTIME MANAGER ALSO GUIDED JUSTICE",
+      "text": "If this French house groove is hitting you, you need to check out Justice. Daft Punk's longtime manager, Pedro Winter, who guided the duo from 1996 to 2008, later founded his own Ed Banger Records. Justice was one of the key acts he signed, picking up on Daft Punk's vision to push rock distortion into electronic music.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "What Does Daft Punk Leave Behind? : NPR",
+        "publisher": "NPR",
+        "quoteSnippet": "Longtime Daft Punk manager Pedro Winter explored a hundred juicy tangents of the duo's sound with his Ed Banger label: Justice, picking up where 'Robot Rock' left off, took rock distortion in electronic to the nth degree;",
+        "url": "https://www.npr.org/2021/02/24/970896489/what-does-daft-punk-leave-behind",
+        "verified": true
+      },
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/RF_2806_Justice_Krists_Luhaers-16_%2835520092001%29_%28cropped%29.jpg/500px-RF_2806_Justice_Krists_Luhaers-16_%2835520092001%29_%28cropped%29.jpg",
+      "imageCaption": "Justice, managed by Daft Punk's former manager, continued their electronic legacy."
+    }
+  ],
+  "artistSummary": "Daft Punk, comprised of Thomas Bangalter and Guy-Manuel de Homem-Christo, are pioneers of French house music. They became globally influential by transforming dance music, redefining live electronic concerts, and maintaining an enigmatic robot persona for decades.",
+  "externalLinks": [
+    {
+      "label": "Daft Punk: The Complete Story of Electronic Music\u2019s Most Iconic Duo - EDM Archives",
+      "url": "https://edmarchives.com/daft-punk-the-complete-story-of-electronic-musics-most-iconic-duo/"
+    },
+    {
+      "label": "Rediscover Daft Punk\u2019s Debut Album \u2018Homework\u2019 (1997) | Tribute",
+      "url": "https://albumism.com/features/daft-punk-debut-album-homework-turns-25-anniversary-retrospective"
+    },
+    {
+      "label": "What Does Daft Punk Leave Behind? : NPR",
+      "url": "https://www.npr.org/2021/02/24/970896489/what-does-daft-punk-leave-behind"
+    },
+    {
+      "label": "Daft Punk - Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Daft_Punk"
+    },
+    {
+      "label": "Daft Punk - 'Homework'",
+      "url": "https://ghostdeep.substack.com/p/daft-punk-homework"
+    }
+  ],
+  "noTrackData": false
+}

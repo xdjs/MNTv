@@ -1,1 +1,76 @@
-{"nuggets":[{"headline":"From Metalcore Band 'In Alcatraz 1962' to Producing for Anderson .Paak","text":"Before crafting beats, Pete Rango's musical foundation was in a high school metal/hardcore band called In Alcatraz 1962. That experience was the direct catalyst for his obsession with production, pushing him to learn how to record, mix, and master his own records. This evolution from live band percussion to in-the-box production defines his hands-on, multi-genre approach, which eventually led to him creating demos with artists like Anderson .Paak.","kind":"artist","listenFor":false,"source":{"type":"article","title":"Meet Pete Rango - Voyage MIA Magazine | Miami City Guide","publisher":"RVA Mag","quoteSnippet":"I was in a metal/hardcore band in high school called In Alcatraz 1962... That was the catalyst for me wanting to learn how to record, mix, and produce my own records.","locator":"Music","url":"https://voyagemia.com/interview/meet-peter-rango/","verified":true},"imageUrl":"https://lifechangesnetwork.com/wp-content/uploads/2024/01/240129.TLCS_.Ep744.Profile-Pic.Performance-Guest.Pete-Rango.on-The-LIFE-CHANGES-Show.jpg","imageCaption":"Pete Rango in the studio, reflecting his hands-on production approach."},{"headline":"The Philosophy Driving The Beat: Disrupting The System with XUE Records","text":"This track is more than just a beat; it's a product of Rango's core mission to \"disrupt, uplift, and make the system nervous.\" He founded the nonprofit L.I.V. Corp and his own label, XUE Records, to build a world where community and technology collide, completely outside the traditional industry machine. As you listen, hear the arrangement as a manifestation of that DIY ethos — a self-contained world built from the ground up.","kind":"track","listenFor":true,"source":{"type":"website","title":"rush | PETE RANGO","publisher":"peterango.com","quoteSnippet":"A Colombian Artist, Producer and Culture-Builder... His mission: Disrupt. Uplift. And make the System nervous.","locator":"Bio","url":"https://peterango.bandcamp.com/","verified":true},"imageUrl":"https://voyagemia.com/wp-content/uploads/2019/01/2018-07-27-14_45_52.140-1000x600.jpg","imageCaption":"Oms at Play by Pete Rango"},{"headline":"If 'Oms at Play' Resonates, You Need Samiyam's 'Animals Have Feelings'","text":"The off-kilter rhythm and textural grit of this track are direct descendants of the L.A. beat scene. For a deeper cut into that sound, get into Ann Arbor producer Samiyam. His 2016 album for Stones Throw, \"Animals Have Feelings,\" is a masterclass in the kind of warped, video-game-influenced instrumental hip-hop that clearly informs Rango's work on \"Savage Planet.\"","kind":"discovery","listenFor":false,"source":{"type":"article","title":"Meet Pete Rango - Voyage MIA Magazine | Miami City Guide","publisher":"RVA Mag","quoteSnippet":"During college, I started discovering electronic music. I was on my Grizzly Bear, Animal Collective shit, and then I started getting into mashups and mixing different genres.","locator":"Music","url":"https://voyagemia.com/interview/meet-peter-rango/","verified":true},"imageUrl":"https://f4.bcbits.com/img/a1295556644_5.jpg","imageCaption":"Producer Samiyam, a key figure in the experimental beat scene."}],"artistSummary":"Bogota-born, Virginia-based producer Pete Rango is a culture-builder with a DIY ethos. His sound pulls from hardcore, hip-hop, and electronic music, driven by a mission to disrupt the system through his label XUE Records.","externalLinks":[{"label":"rush | PETE RANGO","url":"https://peterango.bandcamp.com/"},{"label":"Music Producer, Pete Rango on The LIFE CHANGES Show – Ep774","url":"https://lifechangesnetwork.com/music-producer-pete-rango-on-the-life-changes-show-ep774/"},{"label":"Meet Pete Rango - Voyage MIA Magazine | Miami City Guide","url":"https://voyagemia.com/interview/meet-peter-rango/"},{"label":"Music review: Maviii, Pete Rango - Time, on Nagamag Magazine","url":"https://www.nagamag.com/the-latest/maviii-pete-rango-time-spotify"}]}
+{
+  "nuggets": [
+    {
+      "headline": "the artist Xmane is featured on every track of Pete Rango's 'Savage Planet' EP",
+      "text": "You're hearing one of three tracks Pete Rango created for the 2022 EP *Savage Planet*. The entire project is a collaboration with the artist Xmane, who is featured on this song, \"Oms at Play,\" as well as \"Traag Park\" and \"Planet X.\"",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Download Pete Rango album songs: Savage Planet | Boomplay Music",
+        "publisher": "Boomplay Music",
+        "quoteSnippet": "Savage Planet has 3 songs sung by Pete Rango... 1. Oms at Play ft. Xmane / 2. Traag Park ft. Xmane / 3. Planet X ft. Xmane",
+        "url": "https://www.boomplay.com/albums/56626158?from=",
+        "verified": true
+      },
+      "imageUrl": "https://lifechangesnetwork.com/wp-content/uploads/2024/01/240129.TLCS_.Ep744.Profile-Pic.Performance-Guest.Pete-Rango.on-The-LIFE-CHANGES-Show.jpg",
+      "imageCaption": "Producer and artist developer Pete Rango at work in the studio."
+    },
+    {
+      "headline": "Pete Rango learned production to record his high school metal band",
+      "text": "Before developing his electronic and hip-hop sound, Rango was in a metal/hardcore band called In Alcatraz 1962. His desire to record, mix, and produce his own band's records was the catalyst that launched his entire production career, years before he would begin working in other genres.",
+      "kind": "context",
+      "listenFor": false,
+      "source": {
+        "type": "interview",
+        "title": "Meet Pete Rango - Voyage MIA Magazine | Miami City Guide",
+        "publisher": "Voyage MIA",
+        "quoteSnippet": "When I was in high school, I started a metal/hardcore band called In Alcatraz 1962, and that became the catalyst for me wanting to learn how to record/mix/produce our own records.",
+        "url": "https://voyagemia.com/interview/meet-peter-rango/",
+        "verified": true
+      },
+      "imageUrl": "https://source.boomplaymusic.com/group10/M00/10/13/9dbae5b50e0546368812db5f501209fc_464_464.webp",
+      "imageCaption": "Oms at Play by Pete Rango"
+    },
+    {
+      "headline": "hear Pete Rango's production work with Jesse Boykins III",
+      "text": "After winning a producer competition in Miami, Rango and his production partner Parris Pierce landed a placement on Jesse Boykins III's 2016 EP, *Bartholomew WAVE I*. It was an early career break that put him in the same sessions as collaborators like Hudson Mohawke and Abjo.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "interview",
+        "title": "Meet Pete Rango - Voyage MIA Magazine | Miami City Guide",
+        "publisher": "Voyage MIA",
+        "quoteSnippet": "That\u2019s when we ended up landing a song on Jesse Boykins III EP Bartholomew WAVE I with Hudson Mowhake and Abjo.",
+        "url": "https://voyagemia.com/interview/meet-peter-rango/",
+        "verified": true
+      },
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/Jesseboykinsiii_%28300dpi%29.jpg/500px-Jesseboykinsiii_%28300dpi%29.jpg",
+      "imageCaption": "Experimental R&B artist Jesse Boykins III has collaborated with Pete Rango."
+    }
+  ],
+  "artistSummary": "Born in Bogota, Colombia, Pete Rango's musical journey began in metal/hardcore bands before pivoting to electronic and hip-hop production. He is a producer, creative director, and artist developer who has landed sync placements on HBO and founded the non-profit L.I.V. (Life Is Valuable).",
+  "externalLinks": [
+    {
+      "label": "Download Pete Rango album songs: Savage Planet | Boomplay Music",
+      "url": "https://www.boomplay.com/albums/56626158?from="
+    },
+    {
+      "label": "Meet Pete Rango - Voyage MIA Magazine | Miami City Guide",
+      "url": "https://voyagemia.com/interview/meet-peter-rango/"
+    },
+    {
+      "label": "Music Producer, Pete Rango on The LIFE CHANGES Show \u2013 Ep774",
+      "url": "https://lifechangesnetwork.com/music-producer-pete-rango-on-the-life-changes-show-ep774/"
+    },
+    {
+      "label": "\u200ePete Rango - Apple Music",
+      "url": "https://music.apple.com/us/artist/pete-rango/1513734272"
+    },
+    {
+      "label": "Pete Rango",
+      "url": "https://peterango.com/"
+    }
+  ],
+  "noTrackData": true
+}

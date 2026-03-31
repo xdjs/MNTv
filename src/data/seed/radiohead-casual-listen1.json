@@ -1,1 +1,76 @@
-{"nuggets":[{"headline":"From school band 'On a Friday' to music industry innovators","text":"Before they were Radiohead, Thom Yorke, Colin Greenwood, Jonny Greenwood, Ed O’Brien, and Phil Selway started out as 'On a Friday' while still at Abingdon School in Oxfordshire. They were signed just out of college, right when the shoegaze and Britpop scenes were buzzing, but quickly made a name for themselves by always pushing rock music's boundaries and even their own creative limits. This drive to do things differently has been their hallmark, even allowing them to successfully release albums like _In Rainbows_ on their own terms.","kind":"artist","listenFor":false,"source":{"type":"article","title":"A Guide to Radiohead’s Studio Albums, from 'Pablo Honey' to 'A Moon Shaped Pool'","publisher":"Uproxx","quoteSnippet":"Radiohead emerged from Abingdon School in Oxfordshire, England, originally called On a Friday. The band, consisting of Thom Yorke, Colin Greenwood, Jonny Greenwood, Ed O’Brien, and Phil Selway, was signed just out of college.","locator":"Introduction","url":"https://www.google.com/search?q=A%20Guide%20to%20Radiohead%E2%80%99s%20Studio%20Albums%2C%20from%20'Pablo%20Honey'%20to%20'A%20Moon%20Shaped%20Pool'%20Uproxx%20Radiohead%20Weird%20Fishes%2FArpeggi","verified":false},"imageUrl":"https://substackcdn.com/image/fetch/$s_!nL95!,w_1200,h_675,c_fill,f_jpg,q_auto:good,fl_progressive:steep,g_auto/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Ffbdd4520-d067-482a-be6e-ac9e8c3ddcb3_960x896.webp","imageCaption":"Radiohead in their early career, embodying their unique approach."},{"headline":"This song builds its hypnotic drive with three distinct guitar layers","text":"Notice how the drums stay steady throughout this track? Radiohead creates all the forward motion in 'Weird Fishes/Arpeggi' through a brilliant layering technique, adding textures and intricate arpeggios that shimmer and build. Ed O’Brien kicks things off with the first arpeggio, establishing the main harmony, then Thom Yorke joins in with a complementary arpeggio, and finally, Jonny Greenwood adds a third layer, twisting and inverting the progression to form a richer, more complex sound. It's a journey about fighting life's currents, resisting temptations, and ultimately resurfacing stronger.","kind":"track","listenFor":true,"source":{"type":"article","title":"Harmonic Analysis of Radiohead’s “Weird Fishes/Arpeggi”","publisher":"Filippo Faustini","quoteSnippet":"Radiohead creates momentum in 'Weird Fishes/Arpeggi' in a textural way, by increasing the density of the arrangement with the addition of several layers.","locator":"Analysis section","url":"https://www.hypebot.com/hypebot/2020/11/harmonic-analysis-of-radioheads-weird-fishes-arpeggi.html","verified":true},"imageUrl":"https://www.hypebot.com/content/images/www-hypebot-com/wp-content/uploads/2020/11/radiohead-header.jpg","imageCaption":"Musical notation shows the intricate, layered arpeggios of 'Weird Fishes.'"},{"headline":"If Thom Yorke's emotive voice hooks you, try Jeff Buckley's 'Grace'","text":"If the melancholic beauty and intricate guitar work of 'Weird Fishes/Arpeggi' is hitting just right, then you absolutely need to dive into Jeff Buckley. Like Thom Yorke, Buckley was celebrated for his powerful, often falsetto, vocals and his ability to craft songs that were both complex and deeply emotional. His most iconic album, _Grace_, shares that atmospheric, introspective, and beautifully layered quality that you're hearing right now with Radiohead.","kind":"discovery","listenFor":false,"source":{"type":"website","title":"Radiohead Similar Artists","publisher":"Last.fm","quoteSnippet":"Jeff Buckley (40% match)","locator":"Similar Artists section","url":"https://www.google.com/search?q=Radiohead%20Similar%20Artists%20Last.fm%20Radiohead%20Weird%20Fishes%2FArpeggi","verified":false},"imageUrl":"https://upload.wikimedia.org/wikipedia/commons/5/58/Jeff_Buckley_yearbook_%281984%29.png","imageCaption":"Jeff Buckley's soaring vocals and intricate music parallel Radiohead's artistry."}],"artistSummary":"Radiohead, originally On a Friday from Oxfordshire, consistently redefined rock music by challenging conventions and their own artistic boundaries. They famously released their album _In Rainbows_ as a pay-what-you-want download, thriving by doing things differently in the music industry.","externalLinks":[{"label":"Radiohead's Ed O'Brien on going solo: 'Something was missing' | Toronto Sun","url":"http://www.torontosun.com/entertainment/music/radioheads-ed-obrien-finds-own-voice-on-earth-something-was-missing"},{"label":"Weird Fishes / Arpeggi by Radiohead Transcript - Dissect","url":"https://podcasts.musixmatch.com/podcast/dissect-01heq7k7ncf2vg2mbjzar7pcgq/episode/s11e5-weird-fishes-arpeggi-by-radiohead-01heq7k7ncf2vg2mbjzar7pcgt"},{"label":"The meaning of Weird Fishes Arpeggi","url":"https://lyricalinsight.io/radiohead/weird-fishes-arpeggi"},{"label":"A Harmonic Analysis of Radiohead’s “Weird Fishes/Arpeggi” – Flypaper","url":"https://flypaper.soundfly.com/write/a-harmonic-analysis-of-radioheads-weird-fishes-arpeggi/"},{"label":"Harmonic Analysis of Radiohead’s “Weird Fishes/Arpeggi”","url":"https://www.hypebot.com/hypebot/2020/11/harmonic-analysis-of-radioheads-weird-fishes-arpeggi.html"}]}
+{
+  "nuggets": [
+    {
+      "headline": "Thom Yorke envisioned 'In Rainbows' as a response to modern life's challenges",
+      "text": "After their previous album, 'Hail to the Thief,' delved into political disquiet, Radiohead frontman Thom Yorke aimed for a striking shift with 'In Rainbows.' He described the album as a reaction to the 'fractiousness of modern life,' seeking to reconnect with something more elemental. The band intentionally captured the 'spontaneous energy' of live performance in every track.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Album Review: Radiohead\u2019s In Rainbows - Tune Tempest",
+        "publisher": "Tune Tempest",
+        "quoteSnippet": "In interviews, frontman Thom Yorke described the album as a reaction to the fractiousness of modern life, seeking to reconnect with something elemental. The band emphasized capturing the \u201cspontaneous energy\u201d of live performance",
+        "url": "https://tunetempest.co.uk/album-review-radioheads-in-rainbows/",
+        "verified": true
+      },
+      "imageUrl": "https://ichef.bbci.co.uk/images/ic/1200x675/p055p6xr.jpg",
+      "imageCaption": "Thom Yorke, Radiohead's frontman, performing live."
+    },
+    {
+      "headline": "the intricate rhythms of 'Weird Fishes/Arpeggi' make it difficult to decipher by ear",
+      "text": "While you might hear a steady drumbeat, 'Weird Fishes/Arpeggi' is a masterclass in rhythmic complexity. The drums maintain a solid 4/4 beat, but other instruments interweave in shifting patterns of 3/8 and 5/8 beats. This polyrhythmic layering makes the song surprisingly hard to analyze, even for musicians, and its lyrics\u2014penned by Jonny Greenwood\u2014have been on Radiohead's website since at least 2004, telling a story of a fish contemplating its existence at the bottom of the sea.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "Weird Fishes/Arpeggi",
+        "publisher": "NamuWiki",
+        "quoteSnippet": "One of the songs emphasizing the polyhydration, the drums are played in 4/4 beats, but other parts are played in 3/8 and 5/8 beats, respectively. ... this is a song composed by Tom with lyrics written by Johnny, and the lyrics of the song have appeared on Radiohead's official website since at least 2004.",
+        "url": "https://en.namu.wiki/w/Weird%20Fishes/Arpeggi",
+        "verified": true
+      },
+      "imageUrl": "https://tunetempest.co.uk/wp-content/uploads/2024/12/Inrainbowscover.png",
+      "imageCaption": "The vibrant cover art for Radiohead's 2007 album, In Rainbows."
+    },
+    {
+      "headline": "Radiohead's Thom Yorke executive produced electronic artist Clark's 2023 album",
+      "text": "If this track is hitting right now, you need to hear Thom Yorke's solo work and collaborations. Beyond his role as Radiohead's frontman, Yorke is a prolific artist, recently executive producing Clark's 2023 electronic album 'Sus Dog.' He also contributed vocals to the track 'Medicine' on that record, showcasing his continued exploration of diverse musical landscapes outside of Radiohead.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Clark announces new album \u2018Sus Dog\u2019, executive produced by Thom Yorke",
+        "publisher": "NME",
+        "quoteSnippet": "Hertfordshire electronic artist Clark has unveiled his 14th album, \u2018Sus Dog\u2019, which was executive produced by Thom Yorke(of Radiohead, Atoms For Peace and The Smile fame). ... Alongside his own singing, \u2018Sus Dog\u2019 will feature contributions from Yorke (on the song \u2018Medicine\u2019)",
+        "url": "https://www.google.com/search?q=Clark%20announces%20new%20album%20%E2%80%98Sus%20Dog%E2%80%99%2C%20executive%20produced%20by%20Thom%20Yorke%20NME%20Radiohead%20Weird%20Fishes%2FArpeggi",
+        "verified": false
+      },
+      "imageUrl": "https://media.pitchfork.com/photos/592c5e64d7a71d1ea569c5c3/16:9/w_1280,c_limit/991ed126.jpg",
+      "imageCaption": "Thom Yorke, Radiohead's enigmatic vocalist and songwriter."
+    }
+  ],
+  "artistSummary": "Radiohead is an English alternative rock band from Abingdon, Oxfordshire, known for their sonic innovation and raw emotional depth. They famously challenged industry models with their pay-what-you-want release for 'In Rainbows'.",
+  "externalLinks": [
+    {
+      "label": "Album Review: Radiohead\u2019s In Rainbows - Tune Tempest",
+      "url": "https://tunetempest.co.uk/album-review-radioheads-in-rainbows/"
+    },
+    {
+      "label": "25 things Radiohead have done since OK Computer",
+      "url": "https://www.bbc.co.uk/programmes/articles/5zRPy1CgV2vZ75h6pF9Yt1C/25-things-radiohead-have-done-since-ok-computer"
+    },
+    {
+      "label": "Internet Explorers: The Curious Case of Radiohead\u2019s Online Fandom | Pitchfork",
+      "url": "https://pitchfork.com/features/article/9890-internet-explorers-the-curious-case-of-radioheads-online-fandom"
+    },
+    {
+      "label": "Radiohead, \u2018In Rainbows\u2019 - Rolling Stone Australia",
+      "url": "https://au.rollingstone.com/music/music-lists/-72621/radiohead-in-rainbows-4-72817/"
+    },
+    {
+      "label": "What's the meaning of the song 'Faust Arp' by Radiohead? - Quora",
+      "url": "https://www.quora.com/Whats-the-meaning-of-the-song-Faust-Arp-by-Radiohead"
+    }
+  ],
+  "noTrackData": false
+}

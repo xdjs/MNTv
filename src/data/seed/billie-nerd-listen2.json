@@ -1,1 +1,76 @@
-{"nuggets":[{"headline":"Billie Eilish, Not Finneas, Initiated the 'bad guy' Beat","text":"While Finneas O'Connell is credited as the sole producer, the initial beat for \"bad guy\" was started by Billie herself in a separate bedroom studio. This contradicts the common assumption that she solely handles vocals and lyrics, underscoring the depth of their fluid creative partnership where she is deeply involved in the production and sonic architecture of her music.","kind":"artist","listenFor":false,"source":{"type":"article","title":"The Number Ones: Billie Eilish's \"Bad Guy\"","publisher":"Stereogum","quoteSnippet":"But Eilish started the “Bad Guy” beat herself, in her own separate bedroom studio.","locator":"Paragraph 19","url":"https://www.stereogum.com/2307834/the-number-ones-billie-eilishs-bad-guy/columns/the-number-ones","verified":true},"imageUrl":"https://pyxis.nymag.com/v1/imgs/cb6/1ca/05b0f7913b9de8175058f86229b9372692-09-billie-eilish-finneas-connell.1x.rsocial.w1200.jpg","imageCaption":"Billie Eilish and her brother and primary collaborator, Finneas O'Connell."},{"headline":"The 'Spookylight' In The 'bad guy' Mix Is A Treated Laugh","text":"Listen for the high-pitched, ethereal sound effect nicknamed \"Spookylight\" in the mix. It's actually a heavily treated laugh, an example of the unusual sonic elements mixer Rob Kinelski was tasked with preserving. Kinelski finalized the track's sound through a master chain featuring the UAD Ampex ATR-102 tape simulator—with the hiss disabled at the artists' request—and the UAD Thermionic Culture Vulture for saturation.","kind":"track","listenFor":true,"source":{"type":"article","title":"Inside Track: Billie Eilish 'Bad Guy' - Sound On Sound","publisher":"Sound on Sound","quoteSnippet":"Another aspect of the weirdness is a sound that Kinelski calls 'Spookylight'... it’s a high-pitched laugh that’s been heavily treated.","locator":"The Mix","url":"https://www.soundonsound.com/techniques/inside-track-billie-eilish-bad-guy","verified":true},"imageUrl":"https://lede-admin.stereogum.com/wp-content/uploads/sites/64/2025/05/Billie-Eilish-Bad-Guy-1747157933.jpg","imageCaption":"bad guy by Billie Eilish"},{"headline":"The Artist Whose Video Sparked Billie Eilish's Career at Age 12","text":"If the art-pop theatricality of \"bad guy\" connects, you need to listen to AURORA. At age 12, Eilish saw the music video for AURORA's song \"Runaway\" and it was a lightning-bolt moment that made her realize she wanted to make music her life. You can hear the shared DNA in their blend of ethereal vocals, unconventional pop structures, and inventive electronic production—Finneas has even praised AURORA's lo-fi percussion.","kind":"discovery","listenFor":false,"source":{"type":"article","title":"AURORA opens up about ‘Runaway’ – the song that inspired Billie Eilish","publisher":"NME","quoteSnippet":"Eilish has previously revealed that AURORA’s music inspired her to start making music of her own.","locator":"Opening paragraph","url":"https://www.nme.com/news/music/aurora-runaway-lyrics-meaning-video-billie-eilish-2482989","verified":true},"imageUrl":"https://www.nme.com/wp-content/uploads/2019/05/Aurora_runaway_2000.jpg","imageCaption":"Norwegian artist AURORA, a formative influence on Billie Eilish."}],"artistSummary":"Billie Eilish and her brother Finneas O'Connell rewrote the rules of pop from a Los Angeles bedroom. Her music pairs whispered, intimate vocals with dark, minimalist production, challenging genre norms. This unique vision made her the first artist born in the 21st century to top the album and singles charts.","externalLinks":[{"label":"Billie Eilish When We All Fall Asleep Song Guide","url":"https://www.vulture.com/2019/04/the-making-of-billie-eilish-when-we-all-fall-asleep.html"},{"label":"Billie Eilish, Finneas Songwriting Has Fueled the Phenomenon","url":"https://americansongwriter.com/billie-eillish-interview/"},{"label":"Billie Eilish","url":"https://www.soundonsound.com/people/billie-eilish?page=1"},{"label":"The Number Ones: Billie Eilish's \"Bad Guy\"","url":"https://www.stereogum.com/2307834/the-number-ones-billie-eilishs-bad-guy/columns/the-number-ones"},{"label":"Billie Eilish explains what 'Bad Guy' is about","url":"https://www.nme.com/news/music/billie-eilish-breaks-down-bad-guy-lyrics-2543500"},{"label":"Billie Eilish — Wikipedia","url":"https://en.wikipedia.org/wiki/Bad_Guy_(Billie_Eilish_song)"}]}
+{
+  "nuggets": [
+    {
+      "headline": "mixer Rob Kinelski was hired for the album after being recommended for his skill with low-end",
+      "text": "Billie Eilish and her brother Finneas had a very specific vision for the album's sound, particularly its massive low-end. Mastering engineer John Greenham recommended mixer Rob Kinelski, noting he was \"good with low end\" and had an urban music background that aligned with Eilish's hip-hop fandom. The collaboration was almost entirely remote, with Finneas and Eilish sending feedback as voice notes, sometimes with Billie singing the exact part she was referencing.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Inside Track: Billie Eilish 'Bad Guy'",
+        "publisher": "Sound on Sound",
+        "quoteSnippet": "John [Greenham] had mastered, and he recommended me, saying I'm good with low end... for the album they sent me voice notes for the revisions. They'd be talking into their phones... Sometimes Billie would sing the vocal parts she was referring to.",
+        "url": "https://www.soundonsound.com/techniques/inside-track-billie-eilish-bad-guy",
+        "verified": true
+      },
+      "imageUrl": "https://cdn.mos.cms.futurecdn.net/mCVc4AKyFiYSmH4S2nSTkB.jpg",
+      "imageCaption": "John Greenham recommended mixer Rob Kinelski"
+    },
+    {
+      "headline": "the stark, dry sound of 'bad guy' was defined by a strict 'no reverb' rule",
+      "text": "That claustrophobic, right-in-your-ear feeling on this track is no accident\u2014it\u2019s a core production principle for the entire album. When mixer Rob Kinelski sent an early mix back with some reverb added for space, the directive from Billie and Finneas was immediate: \"Get rid of the reverb.\" This decision to keep nearly every element, especially the vocals, super-dry became a signature of the record, forcing an intimacy and aggression that defies conventional pop production.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "Inside Track: Billie Eilish 'Bad Guy'",
+        "publisher": "Sound on Sound",
+        "quoteSnippet": "I added some reverb to an early mix, and they immediately said: 'Get rid of the reverb.' When I heard they didn't want much reverb, I was super happy and inspired... The plan with the album was for most things to be super-dry.",
+        "url": "https://www.soundonsound.com/techniques/inside-track-billie-eilish-bad-guy",
+        "verified": true
+      },
+      "imageUrl": "https://static.wixstatic.com/media/723a6a_b8f42b8e81de4fe5923005ffedc64282~mv2.jpg/v1/fill/w_1000,h_563,al_c,q_85,usm_0.66_1.00_0.01/723a6a_b8f42b8e81de4fe5923005ffedc64282~mv2.jpg",
+      "imageCaption": "bad guy by Billie Eilish"
+    },
+    {
+      "headline": "the architect of the 'bad guy' sound has a parallel solo career as FINNEAS",
+      "text": "The person responsible for the entire production of this album is Billie Eilish's brother, Finneas O'Connell, who co-wrote and produced every track. While his sound is inseparable from his sister's, he channels a different, more classic singer-songwriter sensibility into his own solo work. To hear the same musical mind behind \"bad guy\" applied to piano ballads and intricate pop arrangements, start with his debut album, \"Optimist.\"",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Billie Eilish When We All Fall Asleep Song Guide",
+        "publisher": "Vulture",
+        "quoteSnippet": "He\u2019s now slipped into a less-visible role, but his most crucial one yet, as the sole producer of his younger sister Billie Eilish\u2019s captivating debut album, When We All Fall Asleep, Where Do We Go?.",
+        "url": "https://vulture.com/2019/04/the-making-of-billie-eilish-when-we-all-fall-asleep.html",
+        "verified": true
+      },
+      "imageUrl": "https://pyxis.nymag.com/v1/imgs/cb6/1ca/05b0f7913b9de8175058f86229b9372692-09-billie-eilish-finneas-connell.1x.rsocial.w1200.jpg",
+      "imageCaption": "Billie Eilish with her brother and sole producer, Finneas O'Connell."
+    }
+  ],
+  "artistSummary": "Billie Eilish subverts pop stardom with a sound forged in a bedroom studio alongside her brother Finneas. Her music pairs whispered, intimate vocals with minimalist, bass-heavy production, exploring themes of night terrors, mental health, and satire with a Gen Z perspective.",
+  "externalLinks": [
+    {
+      "label": "Inside Track: Billie Eilish 'Bad Guy'",
+      "url": "https://www.soundonsound.com/techniques/inside-track-billie-eilish-bad-guy"
+    },
+    {
+      "label": "Billie Eilish When We All Fall Asleep Song Guide",
+      "url": "https://vulture.com/2019/04/the-making-of-billie-eilish-when-we-all-fall-asleep.html"
+    },
+    {
+      "label": "\u201cIronic, self-aware, intimate, DIY... a song that builds power as it unfolds\u201d: The making of Bad Guy, Billie\u2026",
+      "url": "https://musicradar.com/artists/ironic-self-aware-intimate-diy-a-song-that-builds-power-as-it-unfolds-the-making-of-bad-guy-billie-eilishs-biggest-hit"
+    },
+    {
+      "label": "FEATURE: you should see me in a crown: Billie Eilish\u2019s Phenomenal Debut Album, WHEN WE ALL FALL ASLEEP, WHERE DO WE GO?, at Five \u2014 Music Musings & Such",
+      "url": "https://www.musicmusingsandsuch.com/musicmusingsandsuch/2024/3/10/feature-you-should-see-me-in-a-crown-billie-eilishs-phenomenal-debut-album-when-we-all-fall-asleep-where-do-we-go-at-five"
+    },
+    {
+      "label": "Billie Eilish When We All Fall Asleep Where Do We Go? - Loud And Quiet",
+      "url": "https://www.loudandquiet.com/reviews/billie-eilish-when-we-all-fall-asleep-where-do-we-go/"
+    }
+  ],
+  "noTrackData": false
+}

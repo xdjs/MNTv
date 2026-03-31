@@ -1,1 +1,80 @@
-{"nuggets":[{"headline":"Daft Punk's Studio dynamic: No Ego, Just Instruments","text":"Inside Daft Punk's creative process, there was no fixed instrumental hierarchy. While Guy-Manuel de Homem-Christo generally handled more guitar and Thomas Bangalter played more keyboards and bass, they both played all three instruments. Their philosophy was ego-less, with instrument duties assigned based purely on what the track needed, ensuring their focus remained on the final composition rather than individual roles.","kind":"artist","listenFor":false,"source":{"type":"interview","title":"DAFT PUNK","publisher":"Remix Magazine","quoteSnippet":"Guy-Manuel de Homem-Christo usually plays more guitar, and Thomas Bangalter plays more keyboards and bass. 'But we both play all three, so it's not like, 'You do this, and I do that.' We don't have any ego problems.'","locator":"Online Archive","url":"https://www.mixonline.com/recording/daft-punk-372628","verified":true},"imageUrl":"https://tunetempest.co.uk/wp-content/uploads/2024/11/Daft_Punk_analog_Digital.webp","imageCaption":"Daft Punk"},{"headline":"This Bassline Is a Direct Homage to Nile Rodgers' Chic","text":"The driving, funky bassline you're hearing is Thomas Bangalter's direct attempt to create a Chic record using only the gear in his bedroom. He explicitly stated the goal was to channel Nile Rodgers' iconic funk style, but since they couldn't afford to collaborate with him, Bangalter played the bassline on a synthesizer and processed the vocals through a talk box to achieve that distinctive groove. It's a testament to their philosophy of recontextualizing past sounds with their available tools.","kind":"track","listenFor":true,"source":{"type":"article","title":"Around the World (Daft Punk song)","publisher":"Wikipedia","quoteSnippet":"Bangalter drew direct inspiration from Nile Rodgers and Chic's funk style, describing the process as 'making a Chic record with a talk box and just playing the bass on the synthesizer.'","locator":"Recording and production section","url":"https://grokipedia.com/page/Around_the_World_(Daft_Punk_song)","verified":true},"imageUrl":"https://www.decodedmagazine.com/wp-content/uploads/2025/09/maxresdefault-1-scaled.jpg","imageCaption":"Guy-Manuel de Homem-Christo and Thomas Bangalter around the release of 'Homework'."},{"headline":"For More French Touch Bass, Listen to Bangalter's Stardust Collaborator Alan Braxe","text":"If the hypnotic, filtered bass of 'Around the World' is your target, go directly to Alan Braxe. He was Thomas Bangalter's partner in the one-off supergroup Stardust, and his solo work, particularly with Fred Falke, is foundational to the French Touch sound. Their track 'Intro' is pure gold—a masterclass in building a track around a relentlessly groovy, filtered bass loop that shares the exact same DNA as this Daft Punk classic.","kind":"discovery","listenFor":false,"source":{"type":"article","title":"30 Best House Tracks of the '90s","publisher":"Spin","quoteSnippet":"Spin listed 'Around the World' as one of the '30 Best House Tracks of the '90s,' a scene Alan Braxe was instrumental in defining.","locator":"List item","url":"https://www.google.com/search?q=30%20Best%20House%20Tracks%20of%20the%20'90s%20Spin%20Daft%20Punk%20Around%20the%20World","verified":false},"imageUrl":"https://upload.wikimedia.org/wikipedia/commons/thumb/0/01/Alan_Braxe_press_shot.jpg/500px-Alan_Braxe_press_shot.jpg","imageCaption":"French DJ and producer Alan Braxe, a key figure in the French Touch scene."}],"artistSummary":"Daft Punk, the enigmatic Parisian duo of Thomas Bangalter and Guy-Manuel de Homem-Christo, redefined dance music by fusing analog warmth with digital precision. Their work is a dialogue between human and machine, honoring the history of funk and disco while pushing electronic music into the future.","externalLinks":[{"label":"How Daft Punk Blended Analog and Digital to Redefine Electronic Music","url":"https://tunetempest.co.uk/how-daft-punk-blended-analog-and-digital/"},{"label":"Daft Punk - Homework, The Blueprint That Rewrote Electronic Music's DNA - Decoded Magazine","url":"https://www.decodedmagazine.com/daft-punk-homework-the-blueprint-that-rewrote-electronic-musics-dna/"},{"label":"DAFT PUNK","url":"https://www.mixonline.com/recording/daft-punk-372628"},{"label":"Daft Punk: Homework Album Review | Pitchfork","url":"https://www.pitchfork.com/reviews/albums/daft-punk-homework/"},{"label":"Around the World (Daft Punk song)","url":"https://grokipedia.com/page/Around_the_World_(Daft_Punk_song)"}]}
+{
+  "nuggets": [
+    {
+      "headline": "Daft Punk's secret weapon was Thomas Bangalter's disco-producer father",
+      "text": "Thomas Bangalter\u2019s father, Daniel Vangarde, was a successful disco producer behind 70s hits like Ottawan\u2019s \u201cD.I.S.C.O.\u201d Vangarde's industry experience proved invaluable, as he guided the duo in navigating their early career and helped them secure the crucial deal with Virgin Records that launched *Homework* globally.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Daft Punk - Homework, The Blueprint That Rewrote Electronic Music's DNA - Decoded Magazine",
+        "publisher": "Decoded Magazine",
+        "quoteSnippet": "His father, Daniel Vangarde, was a successful disco producer and songwriter... Vangarde proved instrumental in helping the young duo navigate their early career, particularly when it came to securing their crucial deal with Virgin Records.",
+        "url": "https://www.decodedmagazine.com/daft-punk-homework-the-blueprint-that-rewrote-electronic-musics-dna/",
+        "verified": true
+      },
+      "imageUrl": "https://tunetempest.co.uk/wp-content/uploads/2024/11/Daft_Punk_analog_Digital.webp",
+      "imageCaption": "Daft Punk"
+    },
+    {
+      "headline": "Daft Punk mixed 'Around the World' on a JVC boombox from 1986",
+      "text": "The entirety of *Homework* was produced in Thomas Bangalter\u2019s childhood bedroom on modest equipment. The final mixdowns, including this track, were done on an old JVC boombox Bangalter had owned since he was 11. They credited this unconventional monitor for the album's distinctive lo-fi warmth and punch.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "Around the World (Daft Punk song)",
+        "publisher": "Grokipedia",
+        "quoteSnippet": "Final mixing occurred on an old JVC boombox that Bangalter had owned since age 11, which the duo credited for imparting a distinctive lo-fi warmth to both Homework and their follow-up Discovery.",
+        "url": "https://grokipedia.com/page/Around_the_World_(Daft_Punk_song)",
+        "verified": true
+      },
+      "imageUrl": "https://www.decodedmagazine.com/wp-content/uploads/2025/09/maxresdefault-1-scaled.jpg",
+      "imageCaption": "Thomas Bangalter and Guy-Manuel de Homem-Christo in their pre-robot, Homework era."
+    },
+    {
+      "headline": "Daft Punk's 'Teachers' track shouts out an artist they 'creatively repurposed'",
+      "text": "On *Homework*, the track \"Teachers\" is a roll call of Daft Punk's influences. One name mentioned is Scottish producer Neil Landstrumm, whose track \"Sniff And Destroy\" bears a striking resemblance to their own raw, distorted banger, \"Rollin' & Scratchin'\". For a taste of the acidic, grinding techno that informed *Homework*'s harder edges, listen to Landstrumm's work from that same mid-90s period.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Daft Punk\u2019s \u2018Homework\u2019 at 25: Teachers and Students | DJ Mag",
+        "publisher": "DJ Mag",
+        "quoteSnippet": "To take one example: malevolent 4am favourite \u2018Rollin & Scratchin\u2019\u2019 bears blatant similarities to \u2018Sniff And Destroy\u2019, made by Neil Landstrumm, a listed Teacher.",
+        "url": "http://djmag.com/longreads/daft-punk-s-homework-25-teachers-and-students",
+        "verified": true
+      },
+      "imageUrl": "https://djmag.com/sites/default/files/styles/djm_23_1005x565/public/article/image/1-header.jpg.webp?itok=MYWQKOU-",
+      "imageCaption": "A collage of artists named on the track 'Teachers,' including Neil Landstrumm."
+    }
+  ],
+  "artistSummary": "The French duo of Thomas Bangalter and Guy-Manuel de Homem-Christo, Daft Punk redefined electronic music by fusing analog warmth with digital precision. Their work filtered disco, funk, and house through a futuristic lens, creating a sound that was both reverent of the past and a blueprint for the future.",
+  "externalLinks": [
+    {
+      "label": "How Daft Punk Blended Analog and Digital to Redefine Electronic Music",
+      "url": "https://tunetempest.co.uk/how-daft-punk-blended-analog-and-digital/"
+    },
+    {
+      "label": "Daft Punk\u2019s \u2018Random Access Memories\u2019: The Art of Blending Analogue and Digital \u2013 James Osterlund Music",
+      "url": "https://jamesosterlundmusic.com/2025/03/03/daft-punks-random-access-memories-the-art-of-blending-analogue-and-digital/"
+    },
+    {
+      "label": "What Drum Machine Did Daft Punk Use | Robots.net",
+      "url": "https://robots.net/digital-media-and-creative-tech/content-creation-tools/what-drum-machine-did-daft-punk-use/"
+    },
+    {
+      "label": "Daft Punk: The Robots Who Revolutionized Music \u2013 Alan Dotchin Blog",
+      "url": "https://blog.alandotchin.com/daft-punk-the-robots-who-revolutionized-music/"
+    },
+    {
+      "label": "Daft Punk \u2018Around the World\u2019: A Timeless Electronic Anthem",
+      "url": "https://weraveyou.com/2023/11/daft-punk-around-the-world-2/"
+    },
+    {
+      "label": "Daft Punk \u2014 Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Around_the_World_(Daft_Punk_song)"
+    }
+  ],
+  "noTrackData": false
+}

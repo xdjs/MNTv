@@ -1,1 +1,76 @@
-{"nuggets":[{"headline":"OK Computer's DNA: DJ Shadow, Talk Talk, and Early Genesis","text":"The critical rapture for *OK Computer* often cited influences like DJ Shadow and Talk Talk, but the record's architecture also pulls from the band's deeper roots. You can hear the Eno-drenched textures of U2's *The Unforgettable Fire* and the structural ambition of early Genesis and Queen. This synthesis of press-approved experimentalism with foundational progressive rock is a key to their 'disruptive musical language'.","kind":"artist","listenFor":false,"source":{"type":"article","title":"Radiohead | Tim Bowness","publisher":"Louder","quoteSnippet":"The logical, sophisticated continuation of The Bends’ more exotic aspects, OK Computer also provided an insight into the band’s musical roots: U2‘s Eno-drenched Unforgettable Fire, Kraut Rock and hints of early Genesis and Queen.","locator":"Analysis of OK Computer","url":"https://timbowness.co.uk/radiohead/","verified":true},"imageUrl":"https://timbowness.co.uk/wp-content/uploads/2022/01/radiohead.jpg","imageCaption":"Radiohead, circa their mid-90s evolution into a globally acclaimed act."},{"headline":"Listen For Thom Yorke's Vocal Reverb as a Rhythmic Instrument","text":"Pay close attention to Thom Yorke's vocals. At the end of each line, the reverb effect has an unusually long pre-delay time. This choice makes the reverberated tail of the last syllable pop out of the mix, functioning as its own rhythmic, high-end instrument that cuts through the dense web of guitars.","kind":"track","listenFor":true,"source":{"type":"article","title":"A Harmonic Analysis of Radiohead’s “Weird Fishes/Arpeggi” – Flypaper","publisher":"Heavy Reverb","quoteSnippet":"Yorke’s vocals enter, with a very interesting reverb effect on the last syllable of each line. Its long pre-delay time helps the high-end cut through the mix, almost like another instrument.","locator":"Vocal Production section","url":"https://flypaper.soundfly.com/write/a-harmonic-analysis-of-radioheads-weird-fishes-arpeggi/","verified":true},"imageUrl":"https://www.hypebot.com/content/images/www-hypebot-com/wp-content/uploads/2020/11/radiohead-header.jpg","imageCaption":"The foundational arpeggios that create the track's hypnotic, layered harmony."},{"headline":"If This Track's Textural Depth Grips You, Explore Talk Talk's 'Spirit of Eden'","text":"Radiohead's ability to build worlds from layered, repeating motifs owes a debt to Talk Talk, a press-approved influence during the *OK Computer* era. Mark Hollis's band famously abandoned pop for the atmospheric, improvisational territory of albums like *Spirit of Eden*. It's the same DNA: creating overwhelming emotional weight not through power chords, but through meticulously arranged, hypnotic texture.","kind":"discovery","listenFor":false,"source":{"type":"article","title":"Radiohead | Tim Bowness","publisher":"Louder","quoteSnippet":"Press-approved influences abounded (Plastic Ono-era Lennon, DJ Shadow, Tortoise, Talk Talk), and the oft-repeated assertion that OK Computer was the first 21st Century Rock album was born.","locator":"Analysis of OK Computer","url":"https://timbowness.co.uk/radiohead/","verified":true},"imageUrl":"https://upload.wikimedia.org/wikipedia/commons/thumb/5/54/July_Talk_OBSF_%286%29.jpg/500px-July_Talk_OBSF_%286%29.jpg","imageCaption":"Talk Talk, whose later work pioneered the atmospheric textures Radiohead would explore."}],"artistSummary":"Formed in 1985, Radiohead are one of the most innovative and influential English rock bands of their generation [CIT 2]. They evolved from atmospheric rock to experimental electronica, constantly pushing sonic boundaries and earning massive critical and commercial success [CIT 2, CIT 23].","externalLinks":[{"label":"The Key Figures Behind Radiohead’s Innovative Sound – BoySetsFire","url":"https://www.boysetsfire.net/the-key-figures-behind-radioheads-innovative-sound/"},{"label":"A Harmonic Analysis of Radiohead’s “Weird Fishes/Arpeggi” – Flypaper","url":"https://flypaper.soundfly.com/write/a-harmonic-analysis-of-radioheads-weird-fishes-arpeggi/"},{"label":"Harmonic Analysis of Radiohead’s “Weird Fishes/Arpeggi”","url":"https://www.hypebot.com/hypebot/2020/11/harmonic-analysis-of-radioheads-weird-fishes-arpeggi.html"},{"label":"Radiohead - Ok Computer - Thesis | PDF | Music Theory","url":"https://www.scribd.com/document/200257826/Radiohead-Ok-Computer-Thesis"},{"label":"What is so special about the music of Radiohead?","url":"https://www.quora.com/What-is-so-special-about-the-music-of-Radiohead"}]}
+{
+  "nuggets": [
+    {
+      "headline": "Mastering engineer Bob Ludwig transformed 'In Rainbows' from its raw mixes",
+      "text": "The final version of *In Rainbows* you're hearing is a significant departure from the mixes producer Nigel Godrich brought to mastering. Legendary engineer Bob Ludwig revealed that his job was to realize the sound Godrich was imagining, noting that some of the records \"sound nothing like the mix.\" According to Ludwig, every bit of distortion on the album was meticulously planned and carefully sculpted in the final mastering stage at his famously secret, intern-free Gateway Mastering studio.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Nigel Godrich and the Studio",
+        "publisher": "Tumblr",
+        "quoteSnippet": "Every Radiohead record, we just keep working on it until Nigel\u2019s happy... some of these records sound nothing like the mix. You\u2019ll be surprised at what some of the mixes sound like, but they\u2019re all malleable. What I ended up with is what he was imagining.",
+        "url": "https://www.google.com/search?q=Nigel%20Godrich%20and%20the%20Studio%20Tumblr%20Radiohead%20Weird%20Fishes%2FArpeggi",
+        "verified": false
+      },
+      "imageUrl": "https://flypaper.soundfly.com/wp-content/uploads/2020/11/radiohead-facebook.jpg",
+      "imageCaption": "Mastering engineer Bob Ludwig, who shaped the final sound of 'In Rainbows'."
+    },
+    {
+      "headline": "Radiohead first performed 'Weird Fishes/Arpeggi' with an orchestra in 2005",
+      "text": "This intricate, guitar-driven track began its life in a completely different form. Thom Yorke and Jonny Greenwood premiered the song at London's Ether Festival on March 27, 2005, more than two years before *In Rainbows* was released. They performed it not with the full band, but with the Nazareth Orchestra, showcasing a version built around orchestral arrangements rather than the interlocking guitar arpeggios that now define it.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "Weird Fishes / Arpeggi by Radiohead - Songfacts",
+        "publisher": "Songfacts",
+        "quoteSnippet": "Thom Yorke and Jonny Greenwood from Radiohead together with the Nazareth Orchestra premiered this song at the Ether Festival (Royal Festival Hall, London) on March 27, 2005.",
+        "url": "https://www.songfacts.com/facts/radiohead/weird-fishes-arpeggi",
+        "verified": true
+      },
+      "imageUrl": "https://www.hypebot.com/content/images/www-hypebot-com/wp-content/uploads/2020/11/radiohead-header.jpg",
+      "imageCaption": "Ether Festival"
+    },
+    {
+      "headline": "Muse producer Mark Stent worked on scrapped sessions for 'In Rainbows'",
+      "text": "Before Radiohead reunited with Nigel Godrich to create the album you know, they spent months in early 2005 working with a different producer: Mark \u201cSpike\u201d Stent. Those sessions were ultimately a dead end and the band scrapped the work. Stent is a key figure in the sound of some of Radiohead's most prominent contemporaries, having mixed and produced major albums for Muse, connecting the two bands through a shared, albeit abandoned, creative path.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "The Making of Radiohead's 'In Rainbows'",
+        "publisher": "Rolling Stone",
+        "quoteSnippet": "The band finally got back to work in early 2005, recording on their own and later with producer Mark \u201cSpike\u201d Stent... But the sessions \u2013 their first in a decade with a producer other than Godrich... were a dead end.",
+        "url": "https://www.rollingstone.com/music/news/the-making-of-radioheads-in-rainbows-20120427",
+        "verified": true
+      },
+      "imageUrl": "https://www.rollingstone.com/wp-content/uploads/2018/06/rs-5179-rectangle.jpg?w=624&h=420&crop=1",
+      "imageCaption": "The Making of Radiohead's 'In Rainbows'"
+    }
+  ],
+  "artistSummary": "Radiohead redefined alternative rock by treating the recording studio as an instrument itself. The band, fronted by Thom Yorke and guided by producer Nigel Godrich, transformed from guitar-rock heroes into experimentalists who embraced electronics, jazz, and ambient textures without losing their melodic core.",
+  "externalLinks": [
+    {
+      "label": "The Key Figures Behind Radiohead\u2019s Innovative Sound \u2013 BoySetsFire",
+      "url": "https://www.boysetsfire.net/the-key-figures-behind-radioheads-innovative-sound/"
+    },
+    {
+      "label": "Radiohead and the Global Movement for Change - Inlibra",
+      "url": "https://www.inlibra.com/10.5771/9781611478617.pdf"
+    },
+    {
+      "label": "A Harmonic Analysis of Radiohead\u2019s \u201cWeird Fishes/Arpeggi\u201d \u2013 Flypaper",
+      "url": "https://flypaper.soundfly.com/write/a-harmonic-analysis-of-radioheads-weird-fishes-arpeggi/"
+    },
+    {
+      "label": "Harmonic Analysis of Radiohead\u2019s \u201cWeird Fishes/Arpeggi\u201d",
+      "url": "https://www.hypebot.com/hypebot/2020/11/harmonic-analysis-of-radioheads-weird-fishes-arpeggi.html"
+    },
+    {
+      "label": "Music Reviews and Song Meanings: Weird Fishes / Arpeggi by Radiohead - Ratings, Reviews and Song Meanings",
+      "url": "https://www.tailem.com/weird-fishes-arpeggi-song-in-rainbows/reviews/radiohead-artist"
+    }
+  ],
+  "noTrackData": false
+}

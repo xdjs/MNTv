@@ -1,1 +1,76 @@
-{"nuggets":[{"headline":"Radiohead's 'Kid A' Sessions Forced Members to Abandon Their Instruments","text":"Following creative burnout after *OK Computer*, the band intentionally deconstructed their sound. During the *Kid A* and *Amnesiac* sessions, members swapped instruments and abandoned their typical roles, forcing a new, often chaotic creative process that rejected their established guitar-based methods and embraced electronic textures.","kind":"artist","listenFor":false,"source":{"type":"article","title":"Study Guide - Radiohead and the Architecture of Modern Sound - Radiohead and the Architecture of Modern Sound","publisher":"Music History Monthly","quoteSnippet":"During Kid A and Amnesiac, band members swapped instruments and abandoned typical roles, forcing a new, collaborative, and often chaotic creative process.","locator":"The Post-OK Computer Shift","url":"https://oboe.com/learn/radiohead-and-the-architecture-of-modern-sound-1hdycsi/study-guide-2bz95m","verified":true},"imageUrl":"https://oboe-storage.s3.amazonaws.com/antonio-local/covers/v1/sequence-72448/65c59377-5dfa-4de5-b75a-b67c4910fbec.jpeg","imageCaption":"Radiohead in the late 90s, on the verge of a major sonic shift."},{"headline":"Phil Selway's Snare on Beat 3 Drives 'Weird Fishes' Forward","text":"The track's propulsive momentum is built texturally, not through typical pop arrangements. Listen for how Phil Selway’s snare drum consistently lands on beat 3, rather than the standard 2 and 4. This displacement provides a unique rhythmic engine, allowing the three layered guitar arpeggios to create the feeling of acceleration and urgency.","kind":"track","listenFor":true,"source":{"type":"article","title":"A Look at Radiohead's 'Weird Fishes / Arpeggi'","publisher":"PopMatters","quoteSnippet":"The placement of the snare on beat 3 (rather than 2 and 4) contributes to a shift in musical style and mood.","locator":"Rhythmic Analysis","url":"https://www.google.com/search?q=A%20Look%20at%20Radiohead's%20'Weird%20Fishes%20%2F%20Arpeggi'%20PopMatters%20Radiohead%20Weird%20Fishes%2FArpeggi","verified":false},"imageUrl":"https://www.hypebot.com/content/images/www-hypebot-com/wp-content/uploads/2020/11/radiohead-header.jpg","imageCaption":"The layered arpeggios that give 'Weird Fishes/Arpeggi' its propulsive feel."},{"headline":"Find Radiohead's Sonic DNA in Producer Nigel Godrich's Band Ultraísta","text":"If the meticulous, multi-layered production here is what grabs you, go directly to Ultraísta. This is the band of Nigel Godrich, Radiohead's long-time producer and 'sixth member.' His fingerprints are all over this track's textural density, a signature sound he explores further with Ultraísta's synth-driven, rhythmically complex pop.","kind":"discovery","listenFor":false,"source":{"type":"interview","title":"Nigel Godrich Q&A","publisher":"The Guardian","quoteSnippet":"I do all my own artwork and videos for Ultraísta.","locator":"Creative Control","url":"https://www.google.com/search?q=Nigel%20Godrich%20Q%26A%20The%20Guardian%20Radiohead%20Weird%20Fishes%2FArpeggi","verified":false},"imageUrl":"https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Ultraista.jpg/500px-Ultraista.jpg","imageCaption":"Ultraísta, the electronic project from producer and 'sixth Radiohead member' Nigel Godrich."}],"artistSummary":"Radiohead are the English art-rock band that balanced massive commercial success with constant sonic deconstruction. Moving from 90s guitar rock to dense, electronic compositions, their music balances expectation and surprise, exploring themes of technological anxiety and urban isolation.","externalLinks":[{"label":"Study Guide - Radiohead and the Architecture of Modern Sound - Radiohead and the Architecture of Modern Sound","url":"https://oboe.com/learn/radiohead-and-the-architecture-of-modern-sound-1hdycsi/study-guide-2bz95m"},{"label":"Download <!-- -->Everything in its Right Place: Analyzing Radiohead<!-- --> PDF <!-- -->by Brad Osborn","url":"https://en.pdfdrive.to/dl/everything-in-its-right-place-analyzing-radiohead"},{"label":"A Harmonic Analysis of Radiohead’s “Weird Fishes/Arpeggi” – Flypaper","url":"https://flypaper.soundfly.com/write/a-harmonic-analysis-of-radioheads-weird-fishes-arpeggi/"},{"label":"Harmonic Analysis of Radiohead’s “Weird Fishes/Arpeggi”","url":"https://www.hypebot.com/hypebot/2020/11/harmonic-analysis-of-radioheads-weird-fishes-arpeggi.html"},{"label":"The meaning of Weird Fishes Arpeggi","url":"https://lyricalinsight.io/radiohead/weird-fishes-arpeggi"}]}
+{
+  "nuggets": [
+    {
+      "headline": "Radiohead scrapped the initial sessions for *In Rainbows* before reuniting with producer Nigel Godrich",
+      "text": "The journey to *In Rainbows* was fraught with difficulty. After tense sessions for their previous album, the band tried working with producer Mark \"Spike\" Stent, but the results felt dead. Frustrated, they scrapped the work and called their crucial collaborator, Nigel Godrich, who prescribed an \"adventure\": recording in a crumbling, supposedly haunted Georgian mansion to reset their chemistry and start from scratch.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "The Making of Radiohead's 'In Rainbows'",
+        "publisher": "Rolling Stone",
+        "quoteSnippet": "The sessions \u2013 their first in a decade with a producer other than Godrich... were a dead end. 'Nigel thought we needed an adventure,' guitarist Ed O\u2019Brien told Rolling Stone. The producer dragged them to Tottenham House... 'It was really old and literally crumbling,' Godrich says. 'Like a Scooby Doo mansion.'",
+        "url": "https://www.rollingstone.com/music/news/the-making-of-radioheads-in-rainbows-20120427",
+        "verified": true
+      },
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/61/ThomYorkeRHouse080618-63_%2842003110364%29_%28cropped%29.jpg/500px-ThomYorkeRHouse080618-63_%2842003110364%29_%28cropped%29.jpg",
+      "imageCaption": "Producer Nigel Godrich, often called Radiohead's \"sixth member.\""
+    },
+    {
+      "headline": "the shimmering effect in \"Weird Fishes/Arpeggi\" comes from three interlocking, rhythmically distinct guitar parts",
+      "text": "The song's subtitle, \"Arpeggi,\" points to its core structure. You're hearing three separate guitar arpeggios layered together, played by Ed O'Brien, Thom Yorke, and Jonny Greenwood. Each guitarist uses a different accent pattern over the eighth-note grid, creating a complex polyrhythmic texture that feels like it's phasing in and out of time\u2014an effect often compared to the work of minimalist composer Steve Reich.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "A Harmonic Analysis of Radiohead\u2019s \u201cWeird Fishes/Arpeggi\u201d \u2013 Flypaper",
+        "publisher": "Flypaper",
+        "quoteSnippet": "The accents are here summarized (counted in eighth notes over 4-bar patterns...): Gtr III (Greenwood): 232323 2323232*, Gtr II (Yorke): 323232 323232*, Gtr I (O\u2019Brien): 233332 233332.",
+        "url": "https://flypaper.soundfly.com/write/a-harmonic-analysis-of-radioheads-weird-fishes-arpeggi/",
+        "verified": true
+      },
+      "imageUrl": "https://www.hypebot.com/content/images/www-hypebot-com/wp-content/uploads/2020/11/radiohead-header.jpg",
+      "imageCaption": "A transcription of Ed O'Brien's opening arpeggio for the track."
+    },
+    {
+      "headline": "Thom Yorke and Nigel Godrich formed Atoms for Peace to perform Yorke's solo album live",
+      "text": "If the dense, rhythmic layering of this track resonates, explore Atoms for Peace. The band, which includes Thom Yorke, producer Nigel Godrich, and Flea of the Red Hot Chili Peppers, was originally formed to play the songs from Yorke's solo album *The Eraser* live. Start with their 2013 album *AMOK* to hear where these rhythmic ideas went next.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Nigel Godrich",
+        "publisher": "Wikipedia",
+        "quoteSnippet": "Godrich is a member of the bands Atoms for Peace (with Yorke) and Ultra\u00edsta.",
+        "url": "https://www.google.com/search?q=Nigel%20Godrich%20Wikipedia%20Radiohead%20Weird%20Fishes%2FArpeggi",
+        "verified": false
+      },
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Atoms_for_peace.jpg/500px-Atoms_for_peace.jpg",
+      "imageCaption": "The supergroup Atoms for Peace, featuring Thom Yorke and Nigel Godrich."
+    }
+  ],
+  "artistSummary": "Radiohead are masters of texture and tension, evolving from '90s alt-rock icons to experimental electronic pioneers. Their long-standing collaboration with producer Nigel Godrich has defined their sound, pushing them to create meticulously crafted albums that reward deep listening.",
+  "externalLinks": [
+    {
+      "label": "The Key Figures Behind Radiohead\u2019s Innovative Sound \u2013 BoySetsFire",
+      "url": "https://www.boysetsfire.net/the-key-figures-behind-radioheads-innovative-sound/"
+    },
+    {
+      "label": "Radiohead, \u2018In Rainbows\u2019 - Rolling Stone Australia",
+      "url": "https://au.rollingstone.com/music/music-lists/-72621/radiohead-in-rainbows-4-72817/"
+    },
+    {
+      "label": "A Harmonic Analysis of Radiohead\u2019s \u201cWeird Fishes/Arpeggi\u201d \u2013 Flypaper",
+      "url": "https://flypaper.soundfly.com/write/a-harmonic-analysis-of-radioheads-weird-fishes-arpeggi/"
+    },
+    {
+      "label": "Harmonic Analysis of Radiohead\u2019s \u201cWeird Fishes/Arpeggi\u201d",
+      "url": "https://www.hypebot.com/hypebot/2020/11/harmonic-analysis-of-radioheads-weird-fishes-arpeggi.html"
+    },
+    {
+      "label": "Weird Fishes Arpeggi by Radiohead Lyrics Meaning \u2013 The Descent Into the Abyss of Emotion",
+      "url": "https://www.songmeaningsandfacts.com/weird-fishes-arpeggi-by-radiohead-lyrics-meaning-the-descent-into-the-abyss-of-emotion/"
+    }
+  ],
+  "noTrackData": false
+}

@@ -1,1 +1,76 @@
-{"nuggets":[{"headline":"From Highland Park to global fame, Billie Eilish and Finneas crafted an album in a brother’s bedroom.","text":"This track, like Billie’s entire debut album, was born in her older brother Finneas O’Connell's small bedroom studio in Highland Park, Los Angeles. Their creative partnership goes back to when Billie was just 13, recording their viral hit 'Ocean Eyes,' and continues today, with Finneas producing and co-writing all her music. The intimacy of that small space is integral to their sound, even captured on the album's opening where they laugh about Billie taking out her Invisalign before a take.","kind":"artist","listenFor":false,"source":{"type":"article","title":"FEATURE: you should see me in a crown: Billie Eilish’s Phenomenal Debut Album, WHEN WE ALL FALL ASLEEP, WHERE DO WE GO?, at Five — Music Musings & Such","publisher":"Music Musings & Such","quoteSnippet":"The album was produced by her brother Finneas O’Connell and released through Darkroom and Interscope. The album was written by both Billie Eilish and Finneas O’Connell and produced at Finneas’s small bedroom studio in Highland Park, Los Angeles.","locator":"paragraph 1, paragraph 3","url":"https://www.musicmusingsandsuch.com/musicmusingsandsuch/2024/3/10/feature-you-should-see-me-in-a-crown-billie-eilishs-phenomenal-debut-album-when-we-all-fall-asleep-where-do-we-go-at-five","verified":true},"imageUrl":"http://static1.squarespace.com/static/593070a42994cad2710a6439/594242e930454416d69bc81f/65edf2a58b0baf5183f3aed6/1710094150874/ssssssssssveerkj.jpeg?format=1500w","imageCaption":"Billie Eilish’s debut album, recorded in her brother’s bedroom."},{"headline":"Billie Eilish’s 'bad guy' toppled 'Old Town Road' and made a 21st-century chart-topper.","text":"The moment Billie drawls “baaaaaad guy,” followed by a pause and “Duh,” is the undeniable hook in this track, recorded right down the hall from her own dark bedroom. She explained the song pokes fun at personas, noting how “you will never catch a bad bitch telling everyone she’s a bad bitch.” This playful, powerful track, with its bass-pulse hinting at dance and underground rap, spent nine weeks at #2 on the Billboard Hot 100 before finally unseating Lil Nas X’s 'Old Town Road' to claim the top spot, making Billie the first artist born in the 21st century to achieve a #1 hit.","kind":"track","listenFor":true,"source":{"type":"article","title":"The Number Ones: Billie Eilish's \"Bad Guy\"","publisher":"Stereogum","quoteSnippet":"The obvious hook moment occurs when the music drops out, and she drawls 'baaaaaad guy,' followed by a pause and 'Duh.'...The bass-pulse of 'bad guy' approaches actual dance music and underground rap....It eventually reached #1 on the Billboard Hot 100 for one week after 'Old Town Road' dropped from the top spot. With 'bad guy' reaching #1, Billie Eilish became the first artist born in the 21st century to top the Hot 100.","locator":"paragraph 5, paragraph 10, paragraph 12","url":"https://www.stereogum.com/2307834/the-number-ones-billie-eilishs-bad-guy/columns/the-number-ones","verified":true},"imageUrl":"https://www.nme.com/wp-content/uploads/2019/08/Billie-Eilish-performs-live-in-2019.jpg","imageCaption":"'bad guy' music video, known for its surreal imagery."},{"headline":"For more dark pop personas and theatrical flair, dive into Melanie Martinez.","text":"If you’re captivated by the distinctive character and dark, playful vibe of 'bad guy,' you should definitely explore Melanie Martinez. She similarly crafts unique, almost theatrical pop music, blending a delicate vocal delivery with often unsettling themes and innovative production. Like Billie, Melanie creates vivid musical worlds, using striking imagery and genre-bending sounds to explore complex emotional landscapes.","kind":"discovery","listenFor":false,"source":{"type":"spotify","title":"Melanie Martinez","publisher":"Spotify","quoteSnippet":"Melanie Martinez is a similar artist based on musical qualities and shared genre elements.","locator":"Artist page","url":"https://www.google.com/search?q=Melanie%20Martinez%20Spotify%20Billie%20Eilish%20bad%20guy","verified":false},"imageUrl":"https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/Melanie_Martinez_%282024%29_%28cropped%29.jpg/500px-Melanie_Martinez_%282024%29_%28cropped%29.jpg","imageCaption":"Melanie Martinez creates theatrical pop with dark, playful themes."}],"artistSummary":"Billie Eilish Pirate Baird O'Connell is an American singer-songwriter who became a global sensation at 17, known for her unique sound and introspective lyrics. Often collaborating with her brother Finneas, her ethereal voice and distinct style have garnered multiple Grammys and Oscars, while she uses her platform to advocate for mental health and environmental sustainability.","externalLinks":[{"label":"FEATURE: you should see me in a crown: Billie Eilish’s Phenomenal Debut Album, WHEN WE ALL FALL ASLEEP, WHERE DO WE GO?, at Five — Music Musings & Such","url":"https://www.musicmusingsandsuch.com/musicmusingsandsuch/2024/3/10/feature-you-should-see-me-in-a-crown-billie-eilishs-phenomenal-debut-album-when-we-all-fall-asleep-where-do-we-go-at-five"},{"label":"Billie Eilish Would Like to Reintroduce Herself - Rolling Stone","url":"https://www.rollingstone.com/music/music-features/billie-eilish-hit-me-hard-and-soft-mental-health-fame-1235003585/"},{"label":"Billie Eilish Debut Album Interview - Billie Eilish When We All Fall Asleep","url":"https://www.elle.com/culture/music/a26984783/billie-eilish-when-we-all-fall-asleep/"},{"label":"Billie Eilish: When We All Fall Asleep","url":"https://www.billboard.com/music/pop/billie-eilish-debut-album-review-when-we-all-fall-asleep-8504706/"},{"label":"A Celebration of Billie Eilish's Impact in Music - Lemon8","url":"https://www.lemon8-app.com/@billieeilishwave/7402088562046304773?region=us"}]}
+{
+  "nuggets": [
+    {
+      "headline": "Billie Eilish's debut album was recorded in her brother Finneas's bedroom",
+      "text": "The entirety of \"WHEN WE ALL FALL ASLEEP, WHERE DO WE GO?\" \u2014 including \"bad guy\" \u2014 was written and produced by Billie Eilish and her older brother, Finneas O'Connell, in his small bedroom studio in Highland Park, Los Angeles. Billie was only seventeen when the album was released, making the intimate, DIY recording process a cornerstone of their early success. This personal approach is fundamental to the album's distinct feel.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "FEATURE: you should see me in a crown: Billie Eilish\u2019s Phenomenal Debut Album, WHEN WE ALL FALL ASLEEP, WHERE DO WE GO?, at Five \u2014 Music Musings & Such",
+        "publisher": "Music Musings & Such",
+        "quoteSnippet": "WHEN WE ALL FALL ASLEEP, WHERE DO WE GO? was written by Billie Eilish and Finneas O\u2019Connell, who produced it at his small bedroom studio in Highland Park, Los Angeles.",
+        "url": "https://www.musicmusingsandsuch.com/musicmusingsandsuch/2024/3/10/feature-you-should-see-me-in-a-crown-billie-eilishs-phenomenal-debut-album-when-we-all-fall-asleep-where-do-we-go-at-five",
+        "verified": true
+      },
+      "imageUrl": "http://static1.squarespace.com/static/593070a42994cad2710a6439/594242e930454416d69bc81f/65edf2a58b0baf5183f3aed6/1710094150874/ssssssssssveerkj.jpeg?format=1500w",
+      "imageCaption": "Billie Eilish's debut album cover captures her distinctive aesthetic."
+    },
+    {
+      "headline": "Billie Eilish's brother Finneas sampled a street crossing signal for \"bad guy\"",
+      "text": "The distinct production of \"bad guy\" includes an unusual sonic element: a pedestrian street crossing signal. While on tour in Australia, Finneas O'Connell and Billie Eilish recorded the rhythmic sound made when the 'walk' sign turns on in Sydney and Melbourne, incorporating it into the song's melody. Finneas often seeks out unique, everyday sounds to add a textural quality to his productions, aiming to set his work apart from others.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "Meaning Behind the Song: \"Bad Guy\" by Billie Eilish -",
+        "publisher": "American Songwriter",
+        "quoteSnippet": "One example is when he and his sister were on tour in Australia, they noticed that the street crossing signal for pedestrians made a distinct sound that they recorded and incorporated into part of the melody of \u201cBad Guy.\u201d",
+        "url": "https://americansongwriter.com/meaning-behind-the-song-bad-guy-by-billie-eilish/",
+        "verified": true
+      },
+      "imageUrl": "https://cdn.mos.cms.futurecdn.net/mCVc4AKyFiYSmH4S2nSTkB.jpg",
+      "imageCaption": "bad guy by Billie Eilish"
+    },
+    {
+      "headline": "Lana Del Rey influenced Billie Eilish's early musical direction",
+      "text": "If you're looking to explore more artists who helped shape the sound of Billie Eilish, turn to Lana Del Rey. Eilish has cited Lana Del Rey as a clear influence on her own music, with early tracks like \"Ocean Eyes\" featuring a vocal style described as \"Lana Del Rey-indebted crooning.\" Del Rey's ability to blend emotional depth with innovative production elements set a precedent that Eilish followed. Dive into Lana Del Rey's 2019 album, \"Norman F***ing Rockwell!\", for a masterclass in atmospheric pop.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Billie Eilish: When We All Fall Asleep, Where Do We Go? Album Review | Pitchfork",
+        "publisher": "Pitchfork",
+        "quoteSnippet": "At 14, she put the song \u201c Ocean Eyes\u201d on SoundCloud, a glassy, straightforward ballad with tearful synths and woozy, Lana Del Rey\u2013indebted crooning.",
+        "url": "http://pitchfork.com/reviews/albums/billie-eilish-when-we-all-fall-asleep-where-do-we-go/",
+        "verified": true
+      },
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/Lana_Del_Rey_%40_Grammy_Museum_10_13_2019_%2849311023203%29_%282%29.jpg/500px-Lana_Del_Rey_%40_Grammy_Museum_10_13_2019_%2849311023203%29_%282%29.jpg",
+      "imageCaption": "Lana Del Rey, a noted influence on Billie Eilish's artistic journey."
+    }
+  ],
+  "artistSummary": "Billie Eilish Pirate Baird O'Connell, known professionally as Billie Eilish, exploded onto the music scene as a teenager with her genre-defying sound. She quickly became a global icon, recognized for her haunting vocals, introspective lyrics, and unique artistic vision.",
+  "externalLinks": [
+    {
+      "label": "FEATURE: you should see me in a crown: Billie Eilish\u2019s Phenomenal Debut Album, WHEN WE ALL FALL ASLEEP, WHERE DO WE GO?, at Five \u2014 Music Musings & Such",
+      "url": "https://www.musicmusingsandsuch.com/musicmusingsandsuch/2024/3/10/feature-you-should-see-me-in-a-crown-billie-eilishs-phenomenal-debut-album-when-we-all-fall-asleep-where-do-we-go-at-five"
+    },
+    {
+      "label": "WHEN WE ALL FALL ASLEEP, WHERE DO WE GO? by Billie Eilish // 5 Year Anniversary Album Review",
+      "url": "https://www.melissakacar.com/2024/03/when-we-all-fall-asleep-where-do-we-go.html"
+    },
+    {
+      "label": "Exploring the Artistic Growth of Billie Eilish | popjustice.co.uk",
+      "url": "https://popjustice.co.uk/exploring-the-artistic-growth-of-billie-eilish/"
+    },
+    {
+      "label": "Billie Eilish: When We All Fall Asleep, Where Do We Go? Album Review | Pitchfork",
+      "url": "http://pitchfork.com/reviews/albums/billie-eilish-when-we-all-fall-asleep-where-do-we-go/"
+    },
+    {
+      "label": "Billie Eilish: When We All Fall Asleep, Where Do We Go? review \u2013 mature beyond her years",
+      "url": "https://www.irishtimes.com/culture/music/album-reviews/billie-eilish-when-we-all-fall-asleep-where-do-we-go-review-mature-beyond-her-years-1.3835185"
+    }
+  ],
+  "noTrackData": false
+}

@@ -1,1 +1,76 @@
-{"nuggets":[{"headline":"Before the helmets, Daft Punk was a lo-fi indie punk band called Darlin'","text":"Thomas Bangalter and Guy-Manuel de Homem-Christo met at secondary school in Paris in 1987, bonding over music and film. At 17, they formed Darlin', a lo-fi indie punk band named after a Beach Boys song. After their single 'Cindy So Loud' received a negative review in *Melody Maker*, which described it as 'daft punk,' the duo loved the phrase and adopted it for their next musical venture, embracing the thriving Parisian rave scene.","kind":"artist","listenFor":false,"source":{"type":"article","title":"The Untold Truth Of Daft Punk","publisher":"Grunge.com","quoteSnippet":"In 1993, Homem-Christo and Bangalter adopted \"Daft Punk\" as the name for their next musical venture.","locator":"Early Career","url":"https://www.grunge.com/263000/the-untold-truth-of-daft-punk/","verified":true},"imageUrl":"https://www.grunge.com/img/gallery/the-untold-truth-of-daft-punk/l-intro-1602872234.jpg","imageCaption":"Daft Punk's iconic robot helmets provide acclaim and anonymity."},{"headline":"'Around the World' repeats its title 144 times, engineered for pure groove","text":"You're hearing 'Around the World,' a global phenomenon from their debut album *Homework* that dominated dance charts upon its 1997 release. Daft Punk described its creation as 'making a Chic record with a talk box and just playing the bass on the synthesizer'. The track's hypnotic groove, driven by a steady bassline and that iconic robotic vocal, repeats 'around the world' a staggering 144 times on the album version, a masterclass in infectious rhythm.","kind":"track","listenFor":true,"source":{"type":"article","title":"Daft Punk ‘Around the World’: A Timeless Electronic Anthem","publisher":"We Rave You","quoteSnippet":"The album version echoes the phrase 'around the world' a staggering 144 times.","locator":"The Creative Process","url":"https://weraveyou.com/2023/11/daft-punk-around-the-world-2/","verified":true},"imageUrl":"https://weraveyou.com/wp-content/uploads/2023/11/Daft-Punk-Around-The-World-1.png","imageCaption":"Michel Gondry's video for 'Around the World' features synchronized dancers."},{"headline":"If you love this groove, check out Stardust's timeless French house classic","text":"If 'Around the World' has you moving, you'll absolutely love Stardust. This French house supergroup featured Daft Punk's own Thomas Bangalter, and their hit 'Music Sounds Better with You' shares that irresistible, repetitive vocal hook and funky, dancefloor-ready production that makes Daft Punk so catchy. It's pure, accessible French house with a similar warmth and undeniable rhythm that builds and evolves, perfect for continuing that groove.","kind":"discovery","listenFor":false,"source":{"type":"article","title":"The enduring legacy of Stardust’s ‘Music Sounds Better With You’","publisher":"DJ Mag","quoteSnippet":"Stardust, the short-lived French house supergroup consisting of Thomas Bangalter, Alan Braxe and Benjamin Diamond...","locator":"introduction","url":"https://www.google.com/search?q=The%20enduring%20legacy%20of%20Stardust%E2%80%99s%20%E2%80%98Music%20Sounds%20Better%20With%20You%E2%80%99%20DJ%20Mag%20Daft%20Punk%20Around%20the%20World","verified":false},"imageUrl":"https://imgix.bustle.com/mic/meemqbmpfercolxazpp9b9ezhaefw7iqybqspayepqft79qsnjsbgwzppl2q2wbw.jpg?w=1200&h=630&fit=crop&crop=faces&fm=jpg","imageCaption":"Stardust, featuring Thomas Bangalter, created a French house classic."}],"artistSummary":"Daft Punk, the iconic French electronic music duo of Thomas Bangalter and Guy-Manuel de Homem-Christo, rose from a punk band to global EDM titans [CIT 0]. Renowned for their universally respected records and maintaining anonymity through robot helmets, they consistently delivered genre-defying music while shifting culture [CIT 0, CIT 1].","externalLinks":[{"label":"The Incredible Story of Who Daft Punk Is Behind the Helmets","url":"https://www.mic.com/articles/120187/the-incredible-story-of-who-daft-punk-is-behind-the-helmets"},{"label":"Daft Punk’s Breakup & How the Duo Changed Music","url":"https://www.vulture.com/article/essay-daft-punk-breakup-tribute.html"},{"label":"The Untold Truth Of Daft Punk","url":"https://www.grunge.com/263000/the-untold-truth-of-daft-punk/"},{"label":"Daft Punk","url":"https://en.wikipedia.org/wiki/Daft_Punk"},{"label":"Daft Punk ‘Around the World’: A Timeless Electronic Anthem","url":"https://weraveyou.com/2023/11/daft-punk-around-the-world-2/"}]}
+{
+  "nuggets": [
+    {
+      "headline": "DAFT PUNK TOOK THEIR NAME FROM A CRITIC'S INSULT",
+      "text": "Before they were Daft Punk, Thomas Bangalter and Guy-Manuel de Homem-Christo played in an indie rock band called Darlin'. After a British music magazine called their sound 'a daft punky thrash,' the two friends, still under 20, embraced the insult and rebranded. They would later record their debut album, 'Homework,' from Thomas's bedroom in Paris, emphasizing their DIY approach.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Daft Punk - Wikipedia",
+        "publisher": "Wikimedia Foundation",
+        "quoteSnippet": "Darlin' disbanded...Their name was taken from a negative review of Darlin' in Melody Maker by Dave Jennings, who dubbed their music 'a daft punky thrash'.",
+        "url": "https://en.wikipedia.org/wiki/Daft_Punk",
+        "verified": true
+      },
+      "imageUrl": "https://substackcdn.com/image/fetch/w_1200,h_600,c_fill,f_jpg,q_auto:good,fl_progressive:steep,g_auto/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fa9be44fa-0759-48d2-8de4-992113b27556_2500x2500.jpeg",
+      "imageCaption": "The iconic logo for Daft Punk's debut album, \"Homework.\""
+    },
+    {
+      "headline": "\"AROUND THE WORLD\" WAS MIXED ON A BOOMBOX IN A BEDROOM",
+      "text": "This track was crafted in Thomas Bangalter's childhood bedroom in Paris between 1995 and 1996, using a very DIY setup without professional engineers. Daft Punk relied on drum machines and synthesizers, running the repetitive \"around the world\" phrase through a talk box. Bangalter even mixed the final track on an old JVC boombox he'd owned since he was 11, imparting a distinctive lo-fi warmth to the sound, as they couldn't yet afford to collaborate with disco influences like Chic.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "Around the World (Daft Punk song)",
+        "publisher": "Grokipedia",
+        "quoteSnippet": "\"Around the World\" was developed and recorded during the creation of Daft Punk's debut album Homework between 1995 and 1996. The track emerged from the duo's experimental home studio sessions in Thomas Bangalter's childhood bedroom in Paris, where they embraced a DIY approach without professional engineers or external producers...Final mixing occurred on an old JVC boombox that Bangalter had owned since age 11, which the duo credited for imparting a distinctive lo-fi warmth to both Homework and their follow-up Discovery. This unconventional method...emphasized tactile experimentation over polished production...",
+        "url": "https://grokipedia.com/page/Around_the_World_(Daft_Punk_song)",
+        "verified": true
+      },
+      "imageUrl": "https://mediaproxy.tvtropes.org/width/1200/https://static.tvtropes.org/pmwiki/pub/images/daftpunk_2.png",
+      "imageCaption": "Around the World by Daft Punk"
+    },
+    {
+      "headline": "DAFT PUNK'S THOMAS BANGALTER HAD ANOTHER HIT WITH STARDUST",
+      "text": "If this is hitting right now, you need to hear Stardust. Daft Punk's Thomas Bangalter co-founded the group Stardust with Alan Braxe and Benjamin Diamond. Together, they released the massive 1998 hit single \"Music Sounds Better With You,\" which sold over three million copies and became a defining track of the burgeoning French house scene.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Alan Braxe",
+        "publisher": "Wikimedia Foundation",
+        "quoteSnippet": "In 1998, Braxe, Bangalter, and Benjamin Diamond decided to form collaborative project called Stardust, and their single 'Music Sounds Better With You', which was released in the same year, was a hit, selling over 3 million copies.",
+        "url": "https://www.google.com/search?q=Alan%20Braxe%20Wikimedia%20Foundation%20Daft%20Punk%20Around%20the%20World",
+        "verified": false
+      },
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/0/08/Stardust_-_Music_Sounds_Better_with_You_vinyl.png",
+      "imageCaption": "Thomas Bangalter co-created the hit single with Stardust in 1998."
+    }
+  ],
+  "artistSummary": "Daft Punk, the French electronic duo of Thomas Bangalter and Guy-Manuel de Homem-Christo, pioneered the French house sound and revolutionized electronic music. Known for their iconic robot personas and inventive production, they achieved global superstardom while maintaining creative control.",
+  "externalLinks": [
+    {
+      "label": "Rediscover Daft Punk\u2019s Debut Album \u2018Homework\u2019 (1997) | Tribute",
+      "url": "https://albumism.com/features/daft-punk-debut-album-homework-turns-25-anniversary-retrospective"
+    },
+    {
+      "label": "\u201cDaft Punk\u2019s \u2018Discovery\u2019 changed my life\u201d: 21 tales of the iconic album\u2019s endless influence | DJ Mag",
+      "url": "http://djmag.com/features/daft-punks-discovery-changed-my-life-21-tales-of-iconic-albums-endless-influence"
+    },
+    {
+      "label": "Familiar Faces I\u2019ve Never Seen: A Tribute to Daft Punk \u2013 The Vault Publication",
+      "url": "https://thevaultpublication.com/2021/05/17/familiar-faces-ive-never-seen-a-tribute-to-daft-punk/"
+    },
+    {
+      "label": "Daft Punk - Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Daft_Punk"
+    },
+    {
+      "label": "Daft Punk - 'Homework'",
+      "url": "https://ghostdeep.substack.com/p/daft-punk-homework"
+    }
+  ],
+  "noTrackData": false
+}

@@ -1,1 +1,76 @@
-{"nuggets":[{"headline":"Daft Punk Crafted 'Homework' Working Just 8 Hours a Week","text":"Thomas Bangalter and Guy-Manuel de Homem-Christo assembled the 16 tracks for _Homework_ over five months, working casually in Bangalter's bedroom. Their work ethic was deliberately relaxed—no more than eight hours a week—as they initially had no intention of making a full album, focusing instead on crafting standalone singles.","kind":"artist","listenFor":false,"source":{"type":"article","title":"Daft Punk: Homework Album Review | Pitchfork","publisher":"Pitchfork","quoteSnippet":"They casually worked on the 16 tunes for Homework in Thomas Bangalter's bedroom, and their work ethic while assembling it was no more than eight hours a week, over five months.","locator":"Review text","url":"https://pitchfork.com/reviews/albums/daft-punk-homework/","verified":true},"imageUrl":"https://www.decodedmagazine.com/wp-content/uploads/2025/09/maxresdefault-1-scaled.jpg","imageCaption":"Thomas Bangalter and Guy-Manuel de Homem-Christo, circa the Homework era."},{"headline":"'Around the World' Got Its Final Mix on an 11-Year-Old's Boombox","text":"After tracking the song's elements to DAT tape and looping them in samplers like the E-mu SP-1200, the final mixdown happened on a JVC boombox Thomas Bangalter had owned since he was 11. The duo credited this unconventional method for giving the track its distinctive lo-fi warmth, a character that defined the sound of the entire _Homework_ album. Listen for that slightly compressed, unified texture that glues the bass, drums, and synth together.","kind":"track","listenFor":true,"source":{"type":"article","title":"Around the World (Daft Punk song)","publisher":"MasterClass","quoteSnippet":"Final mixing occurred on an old JVC boombox that Bangalter had owned since age 11. The duo credited this unconventional mixing method for imparting a distinctive lo-fi warmth to both Homework and their follow-up Discovery.","locator":"Production section","url":"https://grokipedia.com/page/Around_the_World_(Daft_Punk_song)","verified":true},"imageUrl":"https://consequence.net/wp-content/uploads/2017/01/daftpunk-homework-1024x1024.jpg","imageCaption":"Around the World by Daft Punk"},{"headline":"For Another Take on French Retro-Futurism, Explore Kavinsky","text":"While \"Around the World\" recontextualizes '70s funk, fellow French producer Kavinsky applies a similar retro-futurist lens to '80s synth-noir and film scores. His work shares Daft Punk's affinity for analog gear and strong narrative concepts, creating cinematic electronic music that feels like a direct descendant of the scene _Homework_ helped build.","kind":"discovery","listenFor":false,"source":{"type":"interview","title":"DAFT PUNK","publisher":"Remix Magazine","quoteSnippet":"Guy-Manuel de Homem-Christo describes their sound as 'A mix between the past and the future, maybe the present.'","locator":"Interview text","url":"https://www.mixonline.com/recording/daft-punk-372628","verified":true},"imageUrl":"https://upload.wikimedia.org/wikipedia/commons/0/02/Kavinsky.jpg","imageCaption":"French electronic artist Kavinsky, known for his '80s-inspired synthwave sound."}],"artistSummary":"Daft Punk, the Parisian duo of Thomas Bangalter and Guy-Manuel de Homem-Christo, revolutionized dance music with their enigmatic robot personas and a sound that fused analog warmth with digital precision. They twisted the past of funk and disco into a futuristic vision, ascending to pop iconography. Their work is a dialogue between the human and the machine, celebrating both soulful imperfection and synthetic perfection.","externalLinks":[{"label":"How Daft Punk Blended Analog and Digital to Redefine Electronic Music","url":"https://tunetempest.co.uk/how-daft-punk-blended-analog-and-digital/"},{"label":"DAFT PUNK","url":"https://www.mixonline.com/recording/daft-punk-372628"},{"label":"The Past, Present, and Future of Daft Punk's Homework","url":"https://consequence.net/2017/01/the-past-present-and-future-of-daft-punks-homework/"},{"label":"Daft Punk: Homework Album Review | Pitchfork","url":"https://pitchfork.com/reviews/albums/daft-punk-homework/"},{"label":"Around the World (Daft Punk song)","url":"https://grokipedia.com/page/Around_the_World_(Daft_Punk_song)"}]}
+{
+  "nuggets": [
+    {
+      "headline": "Daft Punk's video for 'Around the World' visualizes the song's five instruments",
+      "text": "Director Michel Gondry designed the iconic video's choreography to represent the song's layered structure. Each group of dancers corresponds to a specific instrument: the robots for the vocals, athletes for the bassline, synchronized swimmers for the synth, skeletons for the guitar, and mummies for the drum machine.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Daft Punk \u2018Around the World\u2019: A Timeless Electronic Anthem",
+        "publisher": "We Rave You",
+        "quoteSnippet": "Gondry noted the genius simplicity of the music, emphasizing the use of only five instruments and minimal patterns. The video features synchronized movements of colorfully clad dancers, each group representing a different instrument in the song.",
+        "url": "https://weraveyou.com/2023/11/daft-punk-around-the-world-2/",
+        "verified": true
+      },
+      "imageUrl": "https://tunetempest.co.uk/wp-content/uploads/2024/11/Daft_Punk_analog_Digital.webp",
+      "imageCaption": "Director Michel Gondry, who translated the song's structure into iconic choreography."
+    },
+    {
+      "headline": "the 'robot' voice in 'Around the World' is a talk box, not a vocoder",
+      "text": "While Daft Punk became famous for their use of vocoders, the distinct vocal effect on this track was created with a talk box. The duo fed a synthesizer through a tube into the vocalist's mouth to shape the sound, specifically aiming to create what they called \"a Chic record with a talk box and just playing the bass on the synthesizer.\"",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "The vocal effects of Daft Punk",
+        "publisher": "Bjango",
+        "quoteSnippet": "There\u2019s no mention of using a talk box, despite Around The World almost certainly using one.",
+        "url": "https://bjango.com/articles/daftpunkvocaleffects/",
+        "verified": true
+      },
+      "imageUrl": "https://cdn.mos.cms.futurecdn.net/LNSPWQw7RgPtzzLR7obb6o-1654-80.jpg",
+      "imageCaption": "The Roland TR-909, a key drum machine in Daft Punk's Homework-era studio."
+    },
+    {
+      "headline": "Daft Punk's Thomas Bangalter formed Stardust for one iconic track",
+      "text": "If you want to trace the DNA of French house, the next stop is Stardust. The supergroup consisted of Daft Punk's Thomas Bangalter, producer Alan Braxe, and vocalist Benjamin Diamond. They released only one song, 1998's \"Music Sounds Better with You,\" an essential track that defined the \"French Touch\" sound *Homework* helped export to the world.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "The Impact of Daft Punk\u2019s Homework, 29 Years On - Four/Four Magazine",
+        "publisher": "Four/Four Magazine",
+        "quoteSnippet": "Prior to Homework, the \u201cFrench Touch\u201d movement was taking shape through artists like Thomas Bangalter and Alan Braxe, with tracks released on Bangalter\u2019s label Roul\u00e9, including... Music Sounds Better With You.",
+        "url": "https://fourfourmag.com/the-impact-of-daft-punks-homework-29-years-on/",
+        "verified": true
+      },
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/0/08/Stardust_-_Music_Sounds_Better_with_You_vinyl.png",
+      "imageCaption": "The single art for Stardust's \"Music Sounds Better with You.\""
+    }
+  ],
+  "artistSummary": "Daft Punk pioneered the French Touch movement by fusing the warmth of analog gear with digital precision. The duo of Thomas Bangalter and Guy-Manuel de Homem-Christo redefined electronic music by honoring its disco and funk roots while crafting a futuristic sound.",
+  "externalLinks": [
+    {
+      "label": "How Daft Punk Blended Analog and Digital to Redefine Electronic Music",
+      "url": "https://tunetempest.co.uk/how-daft-punk-blended-analog-and-digital/"
+    },
+    {
+      "label": "Daft Punk: The Complete Story of Electronic Music\u2019s Most Iconic Duo - EDM Archives",
+      "url": "https://edmarchives.com/daft-punk-the-complete-story-of-electronic-musics-most-iconic-duo/"
+    },
+    {
+      "label": "Daft Punk\u2019s \u2018Random Access Memories\u2019: The Art of Blending Analogue and Digital \u2013 James Osterlund Music",
+      "url": "https://jamesosterlundmusic.com/2025/03/03/daft-punks-random-access-memories-the-art-of-blending-analogue-and-digital/"
+    },
+    {
+      "label": "Daft Punk production",
+      "url": "https://gearspace.com/board/electronic-music-instruments-and-electronic-music-production/99950-daft-punk-production-4.html"
+    },
+    {
+      "label": "What Drum Machine Did Daft Punk Use | Robots.net",
+      "url": "https://robots.net/digital-media-and-creative-tech/content-creation-tools/what-drum-machine-did-daft-punk-use/"
+    }
+  ],
+  "noTrackData": false
+}

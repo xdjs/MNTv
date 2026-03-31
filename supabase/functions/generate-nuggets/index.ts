@@ -1360,6 +1360,28 @@ function validateNuggetQuality(nuggets: GeminiNugget[], artist?: string): { vali
     }
     // Artist name in headlines is fine — better than vague "he"/"she" pronouns.
 
+    // Check for pure-tease headlines that withhold the interesting fact
+    const TEASE_HEADLINE_PATTERNS = [
+      /^the secret (?:behind|of|to)\b/i,
+      /^the reason (?:behind|why|that)\b/i,
+      /^what happened when\b/i,
+      /^you won['\u2019]t believe\b/i,
+      /^the surprising (?:truth|reason|story)\b/i,
+      /^the real reason\b/i,
+      /^what really happened\b/i,
+      /^the hidden (?:meaning|story|truth)\b/i,
+      /^why nobody (?:knows|talks) about\b/i,
+      /^the untold (?:story|truth)\b/i,
+      /^how .+ (?:really|actually) (?:happened|started|began)\b/i,
+      /^what most (?:people|fans) don['\u2019]t know\b/i,
+    ];
+    for (const pat of TEASE_HEADLINE_PATTERNS) {
+      if (pat.test(headline)) {
+        issues.push(`Nugget ${i} (${n.kind}): tease headline pattern "${pat.source}" — headline should state the fact, not tease it`);
+        break;
+      }
+    }
+
     // Check for hallucinated source types and publishers
     const sourceType = (n.source?.type || "").toLowerCase();
     const sourcePublisher = (n.source?.publisher || "").toLowerCase();
@@ -1380,7 +1402,7 @@ function validateNuggetQuality(nuggets: GeminiNugget[], artist?: string): { vali
     }
   }
   const hallucinated = hallucinatedSourceCount >= 2; // majority of nuggets have fake sources
-  const vagueHeadlines = issues.some(i => i.includes("vague headline") || i.includes("headline leads with artist"));
+  const vagueHeadlines = issues.some(i => i.includes("vague headline") || i.includes("tease headline") || i.includes("headline leads with artist"));
   return { valid: issues.length === 0, issues, hallucinated, vagueHeadlines };
 }
 
@@ -1560,9 +1582,10 @@ WRITING QUALITY — LESSER-KNOWN does NOT mean BORING:
 - It is better to write one vivid sentence about a real detail than three safe sentences about nothing.
 
 SPARSE-DATA HEADLINE STRATEGY:
-- Even with limited info, create a curiosity gap: "3 EPs and zero interviews — on purpose", "The city that keeps producing artists like this"
-- Lean into the mystery with a specific anchor: a number, a city, a platform, a release count
-- FORBIDDEN: "An Emerging Voice in Modern Music", "A Fresh Take on [Genre]", "The Rise of [Name]" — these say nothing and create zero curiosity
+- Even with limited info, lead with a real fact: "3 EPs deep and hasn't done a single interview", "started uploading from a bedroom in [City] in 2019"
+- Anchor every headline in something concrete: a number, a city, a platform, a year, a release count
+- FORBIDDEN TEASES: "the mystery behind this artist", "what makes this different" — these withhold the fact. State it.
+- FORBIDDEN VAGUE: "An Emerging Voice in Modern Music", "A Fresh Take on [Genre]", "The Rise of [Name]" — these say nothing specific.
 
 GOOGLE SEARCH: You have Google Search available. USE IT. For lesser-known artists, your search results are more valuable than the thin research context. Ground your writing in what you find.
 
@@ -1776,13 +1799,15 @@ WRITING RULES — NON-NEGOTIABLE:
 2. Dig like Nardwuar — find the specific detail nobody else would. Prioritize "almost didn't happen" stories, unlikely origins, specific people who changed the trajectory.
 3. VOICE GUARD: Never hedge ("likely", "suggests", "perhaps") — state facts or skip them. Never describe sound ("sonic landscape", "soundscape") — the listener can hear it. Write with the confidence of someone who KNOWS this, not someone guessing.
 4. If uncertain about a fact, OMIT IT. One confident true sentence beats three hedged guesses.
-5. Headlines must CREATE A CURIOSITY GAP — say just enough to intrigue, withhold enough that the reader MUST read the body. If someone can skip the body after reading your headline, you failed.
-   SAME FACT, TWO WAYS:
-   - SUMMARY (bad): "A scrapped Gucci Mane beat became 'HUMBLE.'" → gives away the whole story, nothing left to read
-   - CURIOSITY (good): "HUMBLE. was never meant for Kendrick" → wait, whose beat was it? I need to read more
-   MORE GOOD: "the bedroom demo that almost got deleted" / "they only met because of a wrong phone number" / "a scrapped beat turned ${artist}'s biggest hit into an accident"
-   MORE BAD: "He recorded his first EP in a closet at 16" / "Aaron Doh's Early Digital Footprint Takes Shape" / "The Creative Evolution Behind the Music" / "this artist's creative path"
-   The test: does the headline make you ask "wait, what?" or "tell me more"? If it just states a fact, rewrite it.
+5. Headlines must DELIVER A REAL FACT — the reader should learn something concrete just from the headline. The body then deepens it with the story, context, or surprising detail behind that fact. Think: headline = the WHAT, body = the WHY/HOW/STORY.
+   THREE FAILURE MODES:
+   - TEASE (bad): "the secret behind the robot voice on this track" → tells you nothing, forces you to read the body just to learn the basic fact. Manipulative.
+   - SUMMARY (bad): "Daft Punk used a talk box not a vocoder combined with a Roland Juno-106 repeated 144 times" → tells the whole story, no reason to read the body.
+   - VAGUE (bad): "The Creative Evolution Behind the Music" / "this artist's creative path" → says nothing specific.
+   BALANCED (good): "Daft Punk used a talk box, not a vocoder, for the robot voice on this" → you learned a real fact, now you want to know why they chose it and how it worked.
+   MORE GOOD: "this beat was originally made for Gucci Mane" / "Radiohead first played this as an orchestral piece with a full orchestra in 2005" / "${artist} recorded the vocals in a single take at 3am"
+   MORE BAD: "the secret behind how this was recorded" / "what happened when ${artist} walked into the studio" / "you won't believe who almost sang this"
+   The test: (1) did the reader learn a specific fact from the headline alone? If not, it's a tease — rewrite. (2) Is there a story/reason/context behind that fact that the body can tell? If not, it's a summary — trim the headline.
    Use "${artist}" by name in headlines — never say "this artist" or "he"/"she" without naming them.
    NEVER use title case. NEVER use "[Name]'s [Abstract Noun]".
 6. NO VAGUE FILLER. If a sentence could apply to any artist (e.g., "promoting messages of love and hope", "unique blend of genres", "committed to authentic artistry"), it's worthless. Every sentence must contain a detail that ONLY applies to THIS artist.
@@ -1814,7 +1839,7 @@ Return ONLY valid JSON:
   "artistSummary": "...",
   "nuggets": [
     {
-      "headline": "Tease the story — make them need to read more",
+      "headline": "a specific fact that teaches something — body tells the story behind it",
       "text": "2-3 sentences delivering on the headline",
       "kind": "artist|track|context|discovery",
       "listenFor": false,
@@ -1862,9 +1887,11 @@ WRITING RULES — NON-NEGOTIABLE:
 2. Dig like Nardwuar — find the specific detail nobody else would. Prioritize "almost didn't happen" stories, unlikely origins, specific people who changed the trajectory.
 3. VOICE GUARD: Never hedge ("likely", "suggests", "perhaps") — state facts or skip them. Never describe sound ("sonic landscape", "soundscape") — the listener can hear it. Write with the confidence of someone who KNOWS this, not someone guessing.
 4. If uncertain, OMIT IT rather than hedging.
-5. Headlines must CREATE A CURIOSITY GAP — say just enough to intrigue, withhold enough that the reader MUST read the body. If someone can skip the body after reading the headline, you failed.
+5. Headlines must DELIVER A REAL FACT — the reader learns something concrete from the headline alone. The body deepens it with story, context, or the surprising WHY/HOW behind the fact. Never tease without substance ("the secret behind..."), never summarize the whole story in the headline.
+   BALANCED: "this beat was originally made for Gucci Mane" → real fact, body tells how Kendrick got it.
+   TEASE (bad): "this beat was never meant for Kendrick" → withholds the interesting part. SUMMARY (bad): "A scrapped Gucci Mane beat became HUMBLE after Mike WiLL sent it to Top Dawg" → nothing left to read.
    Use "${artist}" by name in headlines — never say "this artist" or "he"/"she" without naming them.
-   NEVER use title case. NEVER use "[Name]'s [Abstract Noun]". Never summarize — tease.
+   NEVER use title case. NEVER use "[Name]'s [Abstract Noun]".
 6. NO VAGUE FILLER. If a sentence could apply to any artist (e.g., "promoting messages of love and hope", "unique blend of genres"), it's worthless. Every sentence must contain a detail that ONLY applies to THIS artist.
    SWAP TEST: if you can replace "${artist}" with any other artist's name and the sentence still works, DELETE IT. It means you wrote nothing specific.
 7. NEVER fabricate collaborations with famous people unless verifiable.
@@ -1895,7 +1922,7 @@ Return ONLY valid JSON:
   "artistSummary": "...",
   "nuggets": [
     {
-      "headline": "Tease the story — make them need to read more",
+      "headline": "a specific fact that teaches something — body tells the story behind it",
       "text": "2-3 sentences",
       "kind": "artist|track|context|discovery",
       "listenFor": false,
@@ -2032,16 +2059,19 @@ Regenerate the nuggets now with REAL sources only.` }],
           console.log(`[Validator] Vague headlines detected — retrying: ${vagueIssues.join("; ")}`);
           const headlineFixPart = {
             role: "user",
-            parts: [{ text: `CORRECTION: Some headlines are too vague or generic. Specific issues: ${vagueIssues.join("; ")}.
+            parts: [{ text: `CORRECTION: Some headlines are too vague, too tease-y, or too complete. Specific issues: ${vagueIssues.join("; ")}.
 
-REWRITE RULES — headlines must create a CURIOSITY GAP:
-- The reader should think "wait, what?" or "tell me more" — NOT feel like they got the whole story
-- Tease the surprising detail, don't summarize it. Withhold just enough that the body text is essential.
+REWRITE RULES — headlines must DELIVER A REAL FACT while leaving story for the body:
+- The reader should LEARN SOMETHING CONCRETE from the headline alone — a name, a place, a technique, a number, a surprising origin.
+- The body then tells the STORY behind that fact — the why, the how, the context.
+- Never withhold the core fact to create fake mystery ("the secret behind...", "what happened when...")
+- Never summarize the entire story in the headline either — give the WHAT, save the WHY/HOW for the body.
 - Never start with "${artist}'s" — the reader already knows who the artist is
 - Never use framing titles like "The Story Behind...", "Beyond the...", "A Deeper Look At..."
-- GOOD: "The demo that almost got deleted", "They only met because someone dialed the wrong number", "Nobody at the label wanted to release it"
-- BAD: "An Emerging Voice in Modern Music", "The Creative Vision Takes Shape", "${artist}'s Unique Approach", "He recorded his first EP at 16"
-- The last "bad" example states a fact but doesn't make you curious. "The first EP was recorded in a place you'd never guess" does.
+- GOOD: "${artist} recorded the vocals in a hospital waiting room", "this beat was originally produced for a completely different rapper", "the guitar riff came from a 4-track demo recorded in 1997"
+- BAD TEASE: "the secret behind how this was recorded", "you won't believe where the vocals were tracked"
+- BAD VAGUE: "An Emerging Voice in Modern Music", "The Creative Vision Takes Shape", "${artist}'s Unique Approach"
+- BAD SUMMARY: "He recorded his first EP in a closet at 16 using a $200 mic and uploaded it to SoundCloud where it went viral" — too much, nothing left
 
 Return the complete JSON with all nuggets, with improved headlines.` }],
           };

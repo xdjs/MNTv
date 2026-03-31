@@ -1,1 +1,76 @@
-{"nuggets":[{"headline":"Cornelia Is Head of Artist Relations at Web3 Firm Glass Protocol","text":"Beyond her own releases, Jamee Cornelia is deeply integrated into the music-tech space. She serves as the Head of Artist Relations for Glass Protocol and has been actively dropping her own music as NFTs since 2021, placing her at the forefront of alternative distribution and monetization models.","kind":"artist","listenFor":false,"source":{"type":"article","title":"NOISE - Matthew Chaim (feat. Jamee Cornelia) - Flavors","publisher":"anotherblock","quoteSnippet":"Jamee Cornelia, a multi-disciplinary artist and Head of Artist Relations at Glass Protocol, has been dropping music NFTs since 2021.","locator":"Artist Bio section","url":"https://www.sound.xyz/noise/matthew-chaim-feat-jamee-cornelia-flavors","verified":true},"imageUrl":"https://f4.bcbits.com/img/a3210002466_5.jpg","imageCaption":"Jamee Cornelia"},{"headline":"Cornelia's Defiance Was Forged by Demands for Fair Pay","text":"The unflinching confidence in her delivery is rooted in direct experience. Early in her career, Cornelia faced constant challenges getting new clients to work with her or provide fair pay, citing her youth, gender, race, and sexual orientation as obstacles in a male-dominated Southern scene. Listen for how that history of self-advocacy fuels the track's raw, unapologetic energy.","kind":"track","listenFor":true,"source":{"type":"interview","title":"Conversations with the Inspiring Jamee Cornelia","publisher":"Voyage ATL","quoteSnippet":"Being a young Queer Black Woman in a male-dominated field in the South was very difficult when it came to getting new people to work with me or even just pay me what I asked for...","locator":"Interview section","url":"https://voyageatl.com/interview/conversations-inspiring-jamee-cornelia/","verified":true},"imageUrl":"https://voyageatl.com/wp-content/uploads/2018/08/personal_photo-343-1000x600.jpg","imageCaption":"Atlanta-based artist Jamee Cornelia navigates the industry with raw authenticity."},{"headline":"For 'SLACK's' Punk Energy, Explore Pink Siifu's 'NEGRO'","text":"Cornelia's fusion of punk and hip-hop comes from a real place—she fronted the punk band Howling Star for four years. For another artist operating at that same intersection, turn to Pink Siifu. His 2020 album 'NEGRO' is a raw, abrasive collision of hardcore punk, industrial noise, and experimental rap that mirrors Cornelia's own stated belief that the two genres are intrinsically linked through skate culture.","kind":"discovery","listenFor":false,"source":{"type":"interview","title":"Meet Me @ The Altar, Jamee Cornelia and vintage Producers","publisher":"Pancakes and Whiskey","quoteSnippet":"Punk bands are like, the first ones to really accept hip-hop early on. And I’ve been skateboarding since I was maybe 10 years old, and hip-hop and punk are always intertwined in skate culture.","locator":"Interview section","url":"https://www.artsatl.org/atlanta-soundtrack-meet-me-the-altar-jamee-cornelia-and-vintage-producers/","verified":true},"imageUrl":"https://f4.bcbits.com/img/a2396872334_5.jpg","imageCaption":"Pink Siifu, whose album 'NEGRO' fuses punk and experimental hip-hop."}],"artistSummary":"Jamee Cornelia is a multi-disciplinary artist who smashes hip-hop and punk together, a direct result of her history in skate culture. Based in Atlanta, her work is defined by a raw, authentic connection to her audience, whether she's rapping, directing music videos, or running her indie label L7 Records.","externalLinks":[{"label":"live from the bottom., by Jamee Cornelia","url":"https://jameecornelia.bandcamp.com/album/live-from-the-bottom"},{"label":"Meet Me @ The Altar, Jamee Cornelia and vintage Producers","url":"https://www.artsatl.org/atlanta-soundtrack-meet-me-the-altar-jamee-cornelia-and-vintage-producers/"},{"label":"Bandcamp Picks: Jamee Cornelia & Cecily Renns - MGRM","url":"https://merrygoroundmagazine.com/bandcamp-picks-of-the-week-1-26-2023/"},{"label":"Conversations with the Inspiring Jamee Cornelia","url":"https://voyageatl.com/interview/conversations-inspiring-jamee-cornelia/"},{"label":"NOISE - Matthew Chaim (feat. Jamee Cornelia) - Flavors","url":"https://www.sound.xyz/noise/matthew-chaim-feat-jamee-cornelia-flavors"}]}
+{
+  "nuggets": [
+    {
+      "headline": "A radio host first spotted Jamee Cornelia in a collaborator's Instagram reel",
+      "text": "The host of WEFT 90.1 FM's \"The Midnight Drive\" was already following Jamee Cornelia's visual art, but it was seeing her in a reel by fellow creative June Jizzel that prompted the interview. This moment of peer-to-peer amplification reflects a conscious shift for Cornelia, who has made it a goal to collaborate more after years of handling most creative duties herself.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "interview",
+        "title": "The Midnight Drive with Damien Jaxxyn: Interview with Jamee ...",
+        "publisher": "WEFT 90.1 FM, Community Radio for East Central Illinois",
+        "quoteSnippet": "I originally like I saw you on my my my rock page... but apparently I I originally saw you in a in a June Jizzel like uh reel.",
+        "url": "https://www.google.com/search?q=The%20Midnight%20Drive%20with%20Damien%20Jaxxyn%3A%20Interview%20with%20Jamee%20...%20WEFT%2090.1%20FM%2C%20Community%20Radio%20for%20East%20Central%20Illinois%20Jamee%20Cornelia%20SLACK",
+        "verified": false
+      },
+      "imageUrl": "https://voyageatl.com/wp-content/uploads/2018/08/personal_photo-343-1000x600.jpg",
+      "imageCaption": "Jamee Cornelia, a multi-talented artist with roots in the Atlanta creative scene."
+    },
+    {
+      "headline": "Jamee Cornelia's hip-hop is built on a four-year punk rock foundation",
+      "text": "Before establishing her solo career, Jamee Cornelia spent four years as the lead vocalist for the punk band Howling Star. During that time, she and her bandmates founded Punk Black, their own concert series. This background in Atlanta's punk scene provides the framework for the raw energy and genre-agnostic approach you hear in her music today.",
+      "kind": "context",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Conversations with the Inspiring Jamee Cornelia",
+        "publisher": "Voyage ATL Magazine | ATL City Guide",
+        "quoteSnippet": "I was also a lead vocalist for a punk band called Howling Star for 4 years and we started our own concert series called Punk Black while I was also in a hip-hop collective called Visibly Inflight for my solo work.",
+        "url": "https://voyageatl.com/interview/conversations-inspiring-jamee-cornelia/",
+        "verified": true
+      },
+      "imageUrl": "https://miro.medium.com/v2/resize:fit:1080/1*oSwK8igBnBZ3aSJciOmd_Q.png",
+      "imageCaption": "SLACK by Jamee Cornelia"
+    },
+    {
+      "headline": "The next step after Jamee Cornelia is Nashville's Namir Blade",
+      "text": "Jamee Cornelia's work is part of a larger movement of Southern artists redefining hip-hop with a focus on humanity and organic connection over posturing. Namir Blade operates on that same wavelength, creating from a similar multi-disciplinary, DIY ethos. Both artists repurpose nostalgia with a brutal effectiveness that feels distinctly post-2020. Start with Blade's album *Metropolis*.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Bandcamp Picks: Jamee Cornelia & Cecily Renns - MGRM",
+        "publisher": "Merry-Go-Round Magazine",
+        "quoteSnippet": "it\u2019s a true post-COVID record. Which is to say, it\u2019s a kind of blueprint for what might come next\u2014a robust sense of humanity; a tendency for organic connection over needless posturing...",
+        "url": "https://merrygoroundmagazine.com/bandcamp-picks-of-the-week-1-26-2023/",
+        "verified": true
+      },
+      "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/AMCArtistImages211/v4/7a/0f/a4/7a0fa458-5430-6c40-7f99-ba183ac5c32e/ami-identity-eacfa2ad48cd2e626b13162a49651b25-2026-02-09T13-05-15.379Z_cropped.png/1200x630cw.png",
+      "imageCaption": "Namir Blade, a key figure in Nashville's alternative hip-hop scene."
+    }
+  ],
+  "artistSummary": "Jamee Cornelia is a multi-disciplinary artist from Marietta, Georgia, whose work is informed by a deep history in punk rock, skate culture, and DIY video production. Her music channels the raw, direct energy of her past projects into an unflinching and personal take on alternative hip-hop. She is also a music video director and co-runs the indie label L7 Records.",
+  "externalLinks": [
+    {
+      "label": "Full Interview with Jamee Cornelia - The Mint Lines - Medium",
+      "url": "https://medium.com/@hanifahwalidah/full-interview-with-jamee-cornelia-b5e8b61a8d26"
+    },
+    {
+      "label": "Conversations with the Inspiring Jamee Cornelia",
+      "url": "https://voyageatl.com/interview/conversations-inspiring-jamee-cornelia/"
+    },
+    {
+      "label": "Bandcamp Picks: Jamee Cornelia & Cecily Renns - MGRM",
+      "url": "https://merrygoroundmagazine.com/bandcamp-picks-of-the-week-1-26-2023/"
+    },
+    {
+      "label": "Jamee Cornelia, rapper, filmmaker & producer - Immersive Atlanta",
+      "url": "https://immersiveatlanta.com/times-are-changing-clutch-gives-back/jameecornelia/"
+    },
+    {
+      "label": "Jamee Cornelia - Apple Music",
+      "url": "https://music.apple.com/us/artist/jamee-cornelia/978718551"
+    }
+  ],
+  "noTrackData": true
+}

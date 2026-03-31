@@ -1,1 +1,76 @@
-{"nuggets":[{"headline":"Thom Yorke once said working without Radiohead was like 'taking off the big flag'.","text":"Even with immense success, frontman Thom Yorke found a different kind of freedom in solo work. He stated that it was an \"odd situation to just sort of start again without the big Radiohead flag, which guarantees this insane level of scrutiny.\" He found it \"nice to take it off,\" though it also \"throws you a bit as well.\"","kind":"artist","listenFor":false,"source":{"type":"interview","title":"Thom Yorke Is Radiohead's Archetypal Frontman","publisher":"Interview Magazine","quoteSnippet":"'It’s an odd situation to just sort of start again without the big Radiohead flag, which guarantees this insane level of scrutiny. It’s nice to take it off, but it sort of throws you a bit as well.'","locator":"online article","url":"https://www.google.com/search?q=Thom%20Yorke%20Is%20Radiohead's%20Archetypal%20Frontman%20Interview%20Magazine%20Radiohead%20Weird%20Fishes%2FArpeggi","verified":false},"imageUrl":"https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/RadioheadO2241125-12_%2854952217862%29_%28cropped%29.jpg/500px-RadioheadO2241125-12_%2854952217862%29_%28cropped%29.jpg","imageCaption":"Thom Yorke finds different creative freedom outside Radiohead's spotlight."},{"headline":"\"Weird Fishes/Arpeggi\" premiered two years early with an orchestra.","text":"This track, with its intricate arpeggios, first debuted live on March 27, 2005, at the Ether Festival in London. Thom Yorke and Jonny Greenwood performed it with the Nazareth Orchestra, two years before *In Rainbows* officially came out. The title 'Arpeggi' is simply the Italian plural for 'arpeggio', meaning to play notes from a chord in succession.","kind":"track","listenFor":true,"source":{"type":"article","title":"Weird Fishes / Arpeggi by Radiohead - Songfacts","publisher":"Songfacts","quoteSnippet":"Thom Yorke and Jonny Greenwood from Radiohead, together with the Nazareth Orchestra, premiered this song at the Ether Festival (Royal Festival Hall, London) on March 27, 2005.","locator":"online article","url":"https://www.songfacts.com/facts/radiohead/weird-fishes-arpeggi","verified":true},"imageUrl":"https://flypaper.soundfly.com/wp-content/uploads/2020/11/radiohead-facebook.jpg","imageCaption":"Ether Festival"},{"headline":"If you love this track's intricate mood, try Thom Yorke's other project, Atoms for Peace.","text":"If the multi-layered, atmospheric beauty and distinctive arpeggios of \"Weird Fishes/Arpeggi\" are hitting just right, then you absolutely need to check out Atoms for Peace. This band, which Thom Yorke was formerly a member of, shares Radiohead's art rock and electronic leanings, delivering complex rhythms and haunting melodies with a similar cerebral and experimental feel.","kind":"discovery","listenFor":false,"source":{"type":"database","title":"Thom Yorke","publisher":"Wikipedia","quoteSnippet":"Thom Yorke was formerly a member of Atoms for Peace","locator":"online entry","url":"https://www.google.com/search?q=Thom%20Yorke%20Wikipedia%20Radiohead%20Weird%20Fishes%2FArpeggi","verified":false},"imageUrl":"https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Atoms_for_peace.jpg/500px-Atoms_for_peace.jpg","imageCaption":"Atoms for Peace delivers intricate, experimental sounds, similar to Radiohead's 'Weird Fishes'."}],"artistSummary":"Radiohead, an English rock band hailing from Abingdon, Oxfordshire, began as 'On a Friday' before challenging rock conventions and the music industry itself. Consistently releasing critically acclaimed albums like *OK Computer* and *In Rainbows*, they've become known for their cerebral and idiosyncratic approach.","externalLinks":[{"label":"Radiohead's Ed O'Brien on going solo: 'Something was missing' | Toronto Sun","url":"http://www.torontosun.com/entertainment/music/radioheads-ed-obrien-finds-own-voice-on-earth-something-was-missing"},{"label":"The meaning of Weird Fishes Arpeggi","url":"https://lyricalinsight.io/radiohead/weird-fishes-arpeggi"},{"label":"A Harmonic Analysis of Radiohead’s “Weird Fishes/Arpeggi” – Flypaper","url":"https://flypaper.soundfly.com/write/a-harmonic-analysis-of-radioheads-weird-fishes-arpeggi/"},{"label":"All 164 Radiohead Songs, Ranked In Order From Worst To Best","url":"https://www.buzzfeed.com/scott/reckoner"},{"label":"Weird Fishes / Arpeggi by Radiohead - Songfacts","url":"https://www.songfacts.com/facts/radiohead/weird-fishes-arpeggi"}]}
+{
+  "nuggets": [
+    {
+      "headline": "Radiohead were pioneers of the internet, building their online presence decades ago",
+      "text": "Before social media made every artist accessible, Radiohead were already connecting with fans online. In 1997, when less than one percent of the world had web access, they were one of the first bands to launch an official website, albeit a sparse and cryptic one. This early digital hub laid the groundwork for the intensely dedicated online community that still scrutinizes every rumored move the band makes today. Their foresight into the technological age was so deep, frontman Thom Yorke sang about the experience of using a message board on a track from their 1997 album, *OK Computer*.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Internet Explorers: The Curious Case of Radiohead\u2019s Online Fandom | Pitchfork",
+        "publisher": "Pitchfork",
+        "quoteSnippet": "Radiohead isn\u2019t the only band whose mere gestures get turned into news stories, of course, but they\u2019re unique in that the underlying architecture of their internet fan network has been in place for more than 20 years. As the internet developed, so did Radiohead\u2026 20 years ago, though, most bands didn\u2019t even have a website. Radiohead were an exception.",
+        "url": "https://pitchfork.com/features/article/9890-internet-explorers-the-curious-case-of-radioheads-online-fandom",
+        "verified": true
+      },
+      "imageUrl": "https://www.thetimes.com/imageserver/image/%2F33d2308d-b7da-458e-ad08-141b4d72ff1c.jpg?crop=6667%2C3750%2C0%2C0&resize=1200",
+      "imageCaption": "Radiohead members in a black and white portrait."
+    },
+    {
+      "headline": "Radiohead's *In Rainbows* pioneered the 'pay-what-you-want' album model",
+      "text": "When *In Rainbows* was released in 2007, Radiohead turned the music industry on its head by offering the digital download via a revolutionary 'pay-what-you-want' model. This bold move challenged traditional distribution norms at a time when digital music was flourishing but industry models were crumbling. The band was so meticulous, they spent six hours debating the optimal bit rate for the downloaded files, aiming for a quality better than iTunes but not quite CD-level. This attention to detail ensured that even their groundbreaking business decision was backed by a commitment to immaculate sound.",
+      "kind": "context",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Album Review: Radiohead\u2019s In Rainbows - Tune Tempest",
+        "publisher": "Tune Tempest",
+        "quoteSnippet": "Radiohead\u2019s decision to release the album via a pay-what-you-want model was revolutionary, challenging conventional distribution norms and asserting the band\u2019s commitment to artistry over commerce.",
+        "url": "https://tunetempest.co.uk/album-review-radioheads-in-rainbows/",
+        "verified": true
+      },
+      "imageUrl": "https://pyxis.nymag.com/v1/imgs/31e/9d0/eaa50c8c897245723f4e243f8bb66e3e70-11-radiohead-albums-1.1x.rsocial.w1200.jpg",
+      "imageCaption": "Weird Fishes/Arpeggi by Radiohead"
+    },
+    {
+      "headline": "if 'Weird Fishes/Arpeggi' is hitting right now, you need to hear Atoms for Peace",
+      "text": "If you're digging this track, you absolutely need to dive into Atoms for Peace. This experimental rock and electronic supergroup was formed in 2009 and features Radiohead's own frontman, Thom Yorke, on vocals, guitars, and piano, alongside Red Hot Chili Peppers bassist Flea and longtime Radiohead producer Nigel Godrich. It's a direct lineage to more of Yorke's unique melodic and rhythmic sensibilities outside of Radiohead, exploring glitchy electronic sounds and intricate grooves.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Similar artists - Thom Yorke | Last.fm",
+        "publisher": "Last.fm",
+        "quoteSnippet": "Atoms for Peace is an experimental rock and electronic group formed in late 2009 in Los Angeles, California, United States. The group consists of Radiohead lead singer Thom Yorke (vocals, guitars, and piano), Red Hot Chili Peppers bassist Flea (bass guitar), longtime Radiohead producer Nigel Godrich",
+        "url": "https://www.google.com/search?q=Similar%20artists%20-%20Thom%20Yorke%20%7C%20Last.fm%20Last.fm%20Radiohead%20Weird%20Fishes%2FArpeggi",
+        "verified": false
+      },
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Atoms_for_peace.jpg/500px-Atoms_for_peace.jpg",
+      "imageCaption": "Atoms for Peace members on stage."
+    }
+  ],
+  "artistSummary": "Radiohead are a British alternative rock band formed in the mid-1980s, known for their innovative sound and deeply devoted fanbase. Comprising Thom Yorke, Jonny Greenwood, Colin Greenwood, Ed O'Brien, and Philip Selway, they've consistently pushed genre boundaries, blending rock, electronica, jazz, and classical elements across their acclaimed discography.",
+  "externalLinks": [
+    {
+      "label": "Internet Explorers: The Curious Case of Radiohead\u2019s Online Fandom | Pitchfork",
+      "url": "https://pitchfork.com/features/article/9890-internet-explorers-the-curious-case-of-radioheads-online-fandom"
+    },
+    {
+      "label": "Album Review: Radiohead\u2019s In Rainbows - Tune Tempest",
+      "url": "https://tunetempest.co.uk/album-review-radioheads-in-rainbows/"
+    },
+    {
+      "label": "The Best Radiohead Songs: All 158 Tracks, Ranked",
+      "url": "https://vulture.com/2016/05/every-radiohead-song-ranked.html"
+    },
+    {
+      "label": "25 things Radiohead have done since OK Computer",
+      "url": "https://www.bbc.co.uk/programmes/articles/5zRPy1CgV2vZ75h6pF9Yt1C/25-things-radiohead-have-done-since-ok-computer"
+    },
+    {
+      "label": "Radiohead's Impact on Alternative Rock Music",
+      "url": "https://www.vibrationmag.com/radiohead/"
+    }
+  ],
+  "noTrackData": true
+}

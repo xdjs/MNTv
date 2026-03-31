@@ -1,1 +1,76 @@
-{"nuggets":[{"headline":"A Snarky Review Accidentally Gave Daft Punk Their Iconic Name","text":"Before they became the robot superstars we know, Thomas Bangalter and Guy-Manuel de Homem-Christo started a lo-fi indie punk band called Darlin'. After one of their singles was panned by Britain's *Melody Maker* as 'daft punk,' the duo enjoyed the insult so much they decided to keep it for their next musical venture.","kind":"artist","listenFor":false,"source":{"type":"article","title":"The Incredible Story of Who Daft Punk Is Behind the Helmets","publisher":"The Ringer","quoteSnippet":"Melody Maker ... panned their single as 'daft punk'... The duo enjoyed the phrase 'daft punk' and kept it for their next musical development.","locator":"2021","url":"https://www.mic.com/articles/120187/the-incredible-story-of-who-daft-punk-is-behind-the-helmets","verified":true},"imageUrl":"https://djmag.com/sites/default/files/styles/djm_23_1005x565/public/article/image/1-header.jpg.webp?itok=MYWQKOU-","imageCaption":"Daft Punk (center) early in their career, pre-helmets, alongside influences."},{"headline":"'Around the World' Was Once Named the Most Repetitive Billboard Hit","text":"You’re listening to a track that a computer scientist, Colin Morris, identified as the most repetitive among 15,000 Billboard Hot 100 hits in a 2017 analysis. But that repetition is exactly what gives 'Around the World' its magic, serving as a hypnotic baseline while the song subtly evolves and builds its irresistible groove.","kind":"track","listenFor":true,"source":{"type":"article","title":"Daft Punk ‘Around the World’: A Timeless Electronic Anthem","publisher":"Music Talkers","quoteSnippet":"Computer scientist Colin Morris... identified 'Around the World' as the most repetitive among the songs analyzed.","locator":"2023","url":"https://weraveyou.com/2023/11/daft-punk-around-the-world-2/","verified":true},"imageUrl":"https://weraveyou.com/wp-content/uploads/2023/11/Daft-Punk-Around-The-World-1.png","imageCaption":"Synchronized dancers from the iconic \"Around the World\" music video."},{"headline":"For more French house energy, check out Daft Punk's like-minded peers, Justice","text":"If the pumping, driving energy and French house swagger of 'Around the World' has you hooked, you absolutely need to explore Justice. This fellow Parisian duo shares Daft Punk's knack for creating powerful, often aggressive, electronic beats that still get a dance floor moving with an unmistakable groove.","kind":"discovery","listenFor":false,"source":{"type":"website","title":"Daft Punk Similar Artists","publisher":"Last.fm","quoteSnippet":"Justice (100% match)","locator":"last.fm/music/Daft+Punk/+similar","url":"https://www.google.com/search?q=Daft%20Punk%20Similar%20Artists%20Last.fm%20Daft%20Punk%20Around%20the%20World","verified":false},"imageUrl":"https://upload.wikimedia.org/wikipedia/commons/thumb/d/dc/Justice_Yeldham_portrait.jpg/500px-Justice_Yeldham_portrait.jpg","imageCaption":"French electronic duo Justice, known for their driving beats."}],"artistSummary":"Daft Punk, the iconic French electronic duo of Thomas Bangalter and Guy-Manuel de Homem-Christo, revolutionized dance music with their universally respected records. Active from 1993 to 2021, they maintained anonymity through evolving robot helmets, allowing their engineering approach to music to shift culture globally.","externalLinks":[{"label":"The Incredible Story of Who Daft Punk Is Behind the Helmets","url":"https://www.mic.com/articles/120187/the-incredible-story-of-who-daft-punk-is-behind-the-helmets"},{"label":"Daft Punk’s Breakup & How the Duo Changed Music","url":"https://www.vulture.com/article/essay-daft-punk-breakup-tribute.html"},{"label":"The Untold Truth Of Daft Punk","url":"https://www.grunge.com/263000/the-untold-truth-of-daft-punk/"},{"label":"Daft Punk","url":"https://en.wikipedia.org/wiki/Daft_Punk"},{"label":"Daft Punk ‘Around the World’: A Timeless Electronic Anthem","url":"https://weraveyou.com/2023/11/daft-punk-around-the-world-2/"}]}
+{
+  "nuggets": [
+    {
+      "headline": "daft punk formed from a schoolboy rock band called darlin'",
+      "text": "Before they became Daft Punk, Thomas Bangalter and Guy-Manuel de Homem-Christo were schoolboy friends in Paris who played in a rock band named Darlin', after a Beach Boys song. It was a negative review of Darlin' that described their music as \"a daft punky thrash,\" which the duo found amusing enough to adopt as their new moniker.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Daft Punk: Homework Album Review | Pitchfork",
+        "publisher": "Pitchfork",
+        "quoteSnippet": "schoolboy friends Bangalter and Homem-Christo\u2019s rock band with future Phoenix guitarist Laurent Brancowitz, Darlin\u2019\u2014named after a track from the 1967 Beach Boys album Wild Honey that the three shared an affinity for\u2014had disbanded... Melody Maker writer Dave Jennings notoriously referred to their songs as possessing \u201ca daft punky thrash,\u201d which led to the pair assuming the Daft Punk moniker.",
+        "url": "https://ap-prod.pitchfork.com/reviews/albums/daft-punk-homework/",
+        "verified": true
+      },
+      "imageUrl": "https://entertainment.time.com/wp-content/uploads/sites/3/2013/05/culmusic_0527.jpeg?w=485",
+      "imageCaption": "Daft Punk embraced their robot personas after their early band disbanded."
+    },
+    {
+      "headline": "daft punk aimed to make a chic record without chic",
+      "text": "When crafting \"Around the World\" in Thomas Bangalter's childhood bedroom, Daft Punk had a clear vision: emulate the funk and elegance of disco legends Chic. Bangalter openly stated their goal was \"making a Chic record with a talk box and just playing the bass on the synthesizer,\" because at the time, collaborating with Chic's Nile Rodgers wasn't an option.",
+      "kind": "track",
+      "listenFor": true,
+      "source": {
+        "type": "article",
+        "title": "Around the World (Daft Punk song)",
+        "publisher": "Grokipedia",
+        "quoteSnippet": "Bangalter later described the process as \"making a Chic record with a talk box and just playing the bass on the synthesizer,\" since they couldn't afford to collaborate with Rodgers at the time.",
+        "url": "https://grokipedia.com/page/Around_the_World_(Daft_Punk_song)",
+        "verified": true
+      },
+      "imageUrl": "https://substackcdn.com/image/fetch/w_1200,h_600,c_fill,f_jpg,q_auto:good,fl_progressive:steep,g_auto/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fa9be44fa-0759-48d2-8de4-992113b27556_2500x2500.jpeg",
+      "imageCaption": "Around the World by Daft Punk"
+    },
+    {
+      "headline": "daft punk's thomas bangalter helped launch fellow french house producer alan braxe",
+      "text": "If this is hitting right now, you need to hear Alan Braxe. Thomas Bangalter, one half of Daft Punk, helped champion Braxe's early career by releasing his debut single, \"Vertigo,\" on Bangalter's own Roul\u00e9 label in 1997. Braxe became a pivotal figure in the French house scene, known for his unique blend of filter disco and '80s pop.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Daft Punk - Wikipedia",
+        "publisher": "Wikipedia",
+        "quoteSnippet": "Within a year, Braxe's early demos attracted the attention of Thomas Bangalter, and Braxe's debut single, \"Vertigo\", was released in 1997 via Bangalter's Roul\u00e9 label.",
+        "url": "https://en.wikipedia.org/wiki/Daft_Punk",
+        "verified": true
+      },
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/01/Alan_Braxe_press_shot.jpg/500px-Alan_Braxe_press_shot.jpg",
+      "imageCaption": "Alan Braxe was an early artist on Thomas Bangalter's label."
+    }
+  ],
+  "artistSummary": "Daft Punk, the iconic French duo of Thomas Bangalter and Guy-Manuel de Homem-Christo, rose from a schoolboy rock band to become pioneers of French house music. Known for their robot personas and genre-bending sound, they left an indelible mark on electronic dance music.",
+  "externalLinks": [
+    {
+      "label": "Daft Punk: Homework Album Review | Pitchfork",
+      "url": "https://ap-prod.pitchfork.com/reviews/albums/daft-punk-homework/"
+    },
+    {
+      "label": "A Collaborative History with Daft Punk",
+      "url": "https://consequence.net/2013/05/a-collaborative-history-with-daft-punk/9/"
+    },
+    {
+      "label": "Robocall: A Conversation with Daft Punk\u2028\u2028 \u2028\u2028 | TIME.com",
+      "url": "https://entertainment.time.com/2013/05/21/robocall-a-conversation-with-daft-punk%e2%80%a8%e2%80%a8-%e2%80%a8%e2%80%a8/"
+    },
+    {
+      "label": "What Does Daft Punk Leave Behind? : NPR",
+      "url": "https://www.npr.org/2021/02/24/970896489/what-does-daft-punk-leave-behind"
+    },
+    {
+      "label": "Daft Punk - Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Daft_Punk"
+    }
+  ],
+  "noTrackData": false
+}

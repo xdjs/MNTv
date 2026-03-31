@@ -1,1 +1,76 @@
-{"nuggets":[{"headline":"At Nine, Pete Rango Taught Himself Guitar Due to a Tricky Teacher","text":"Pete Rango's deep musical commitment started incredibly early, picking up the guitar at just nine years old. Interestingly, he actually taught himself to play because he just couldn't quite gel with his appointed guitar teacher. That early, self-reliant approach clearly laid the groundwork for the powerful DIY spirit he embodies today, pushing him to build his own creative path as an artist and producer.","kind":"artist","listenFor":false,"source":{"type":"article","title":"Meet Pete Rango - Voyage MIA Magazine | Miami City Guide","publisher":"The Sound of VA","quoteSnippet":"He became interested in music when he was nine years old. He taught himself how to play guitar because he couldn't get along with his teacher.","locator":"Early life and career","url":"https://voyagemia.com/interview/meet-peter-rango/","verified":true},"imageUrl":"https://lifechangesnetwork.com/wp-content/uploads/2024/01/240129.TLCS_.Ep744.Profile-Pic.Performance-Guest.Pete-Rango.on-The-LIFE-CHANGES-Show.jpg","imageCaption":"Pete Rango in the studio, continuing his musical journey."},{"headline":"From Metal Bands to Live Audio for ASAP Ferg, Pete Rango's Expansive Journey","text":"As 'Oms at Play' sets its vibe, think about Pete Rango's incredible musical journey and how it shapes his sound. He went from fronting a metal/hardcore band in high school, to producing electronic and hip-hop, and even spent years freelancing as a live audio engineer for major artists like Dom Kennedy and ASAP Ferg. This broad experience—from raw punk energy to intricate electronic production and managing live sound for huge concerts—all feeds into the unique, genre-colliding musical worlds he meticulously crafts in the studio.","kind":"track","listenFor":true,"source":{"type":"article","title":"Meet Pete Rango - Voyage MIA Magazine | Miami City Guide","publisher":"The Sound of VA","quoteSnippet":"In high school, he started a metal/hardcore band... He has freelanced in the Audio/Visual world for over 4 years. His freelance work includes doing live audio for concerts and conferences. Concerts he has done live audio for include Dom Kennedy, DJ Mustard, ASAP Ferg...","locator":"Career journey and experience","url":"https://voyagemia.com/interview/meet-peter-rango/","verified":true},"imageUrl":"https://voyagemia.com/wp-content/uploads/2019/01/2018-07-27-14_45_52.140-1000x600.jpg","imageCaption":"for major artists like Dom Kennedy and ASAP Ferg"},{"headline":"If 'Oms at Play' has you grooving, check out SG Lewis's refined electronica","text":"If Pete Rango's blend of electronic and smooth rhythms on 'Oms at Play' is hitting just right, then you absolutely need to dive into SG Lewis. He's a master at crafting lush, dance-ready tracks that often feature incredible vocalists, perfectly fusing disco, house, and R&B elements into a sound that feels both classic and fresh. Start with his album *times* or his EPs like *Dark*.","kind":"discovery","listenFor":false,"source":{"type":"website","title":"rush | PETE RANGO","publisher":"Spotify","quoteSnippet":"Pete Rango's work is associated with genres including electronic, experimental, hip hop, house, pop, and popindie. SG Lewis is a British musician, DJ, and record producer. He is known for his blend of electronic, disco, house and R&B music.","locator":"Artist catalog and genre associations","url":"https://peterango.bandcamp.com/","verified":true},"imageUrl":"https://upload.wikimedia.org/wikipedia/commons/thumb/f/fc/Mike_Lewis_%28Welsh_musician%29_Lostprophets_in_Pontypridd%2C_2007.jpg/500px-Mike_Lewis_%28Welsh_musician%29_Lostprophets_in_Pontypridd%2C_2007.jpg","imageCaption":"SG Lewis blends house, disco, and R&B."}],"artistSummary":"Pete Rango is a dynamic Colombian artist, producer, and culture-builder based in Richmond, Virginia, known for fusing electronic, hip-hop, and experimental sounds. He champions a DIY spirit, creating vibrant worlds where community, creativity, and technology converge through his work with XUE Records and L.I.V. Corp nonprofit.","externalLinks":[{"label":"rush | PETE RANGO","url":"https://peterango.bandcamp.com/"},{"label":"Meet Pete Rango - Voyage MIA Magazine | Miami City Guide","url":"https://voyagemia.com/interview/meet-peter-rango/"},{"label":"Music Producer, Pete Rango on The LIFE CHANGES Show","url":"https://lifechangesnetwork.com/music-producer-pete-rango-on-the-life-changes-show-ep774/"},{"label":"LIL LIL ROUND N ROUND ft. Pete Rango Lyrics | Boomplay","url":"https://www.boomplay.com/lyrics/185966544"}]}
+{
+  "nuggets": [
+    {
+      "headline": "pete rango's musical path began with self-taught guitar and a metal/hardcore band",
+      "text": "Before he was crafting tracks like \"Oms at Play,\" Pete Rango's musical foundation was laid in unexpected ways. Born in Bogota, Colombia, he taught himself guitar at age nine after clashing with his teacher, and later formed a metal/hardcore band called In Alcatraz 1962 in high school. This early experience in a band became the catalyst for him to learn how to record, mix, and produce his own records, setting the stage for his future in music production.",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "interview",
+        "title": "Meet Pete Rango - Voyage MIA Magazine | Miami City Guide",
+        "publisher": "Voyage MIA Magazine",
+        "quoteSnippet": "I was born in Bogota, Colombia. I became interested in music when I was nine years old. I started teaching myself how to play guitar because I couldn\u2019t get along with my teacher. ... When I was in high school, I started a metal/hardcore band called In Alcatraz 1962, and that became the catalyst for me wanting to learn how to record/mix/produce our own records.",
+        "url": "https://voyagemia.com/interview/meet-peter-rango/",
+        "verified": true
+      },
+      "imageUrl": "https://lifechangesnetwork.com/wp-content/uploads/2024/01/240129.TLCS_.Ep744.Profile-Pic.Performance-Guest.Pete-Rango.on-The-LIFE-CHANGES-Show.jpg",
+      "imageCaption": "Pete Rango, known for his production work, playing bass."
+    },
+    {
+      "headline": "pete rango's productions have appeared in shows on hbo, bet, and vh1",
+      "text": "Beyond his work on albums, Pete Rango has a significant presence in television and film, with numerous sync placements for his music. His tracks have been featured in a variety of popular shows, including HBO's \"DTF St. Louis\" and \"Rap Sh!t\" Season 2, BET's \"Tyler Perry's Sistas,\" and VH1's \"My Celebrity Dream Wedding.\" This extensive behind-the-scenes work highlights his versatility as a producer whose sound resonates across different media platforms.",
+      "kind": "context",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Pete Rango",
+        "publisher": "peterango.com",
+        "quoteSnippet": "Music featured in TV shows, films, commercials, and other media: DTF St. Louis - HBOView, Rap Sh!t - HBO Max Season 2View, Tyler Perry's Sistas - BETView, My Celebrity Dream Wedding - VH1View",
+        "url": "https://peterango.com/",
+        "verified": true
+      },
+      "imageUrl": "https://source.boomplaymusic.com/group10/M00/10/13/9dbae5b50e0546368812db5f501209fc_464_464.webp",
+      "imageCaption": "whose sound resonates across different media platforms"
+    },
+    {
+      "headline": "if you're digging this, you need to check out nia sultana",
+      "text": "If Pete Rango's unique production style is grabbing you right now, then you absolutely need to add Nia Sultana to your playlist. Both artists have worked with Saki Engineering for their mixing, mastering, and production needs, meaning there's a shared sonic expertise behind their tracks. You can hear that high-quality, meticulous approach in both their catalogs, making Nia Sultana a perfect next listen.",
+      "kind": "discovery",
+      "listenFor": false,
+      "source": {
+        "type": "article",
+        "title": "Mixing & Mastering Engineers, Producers & Songwriters who ...",
+        "publisher": "SoundBetter",
+        "quoteSnippet": "Saki Engineering... Credits: - Pete Rango - Black Youngsta - Nia Sultana",
+        "url": "https://www.soundbetter.com/s/pete-rango",
+        "verified": true
+      },
+      "imageUrl": "https://voyagemia.com/wp-content/uploads/2019/01/2018-07-27-14_45_52.140-1000x600.jpg",
+      "imageCaption": "Nia Sultana, an artist with a shared production connection to Pete Rango."
+    }
+  ],
+  "artistSummary": "Pete Rango is a music producer, creative director, and Web3 consultant originally from Bogota, Colombia. His diverse career spans from early punk rock roots to extensive sync placements in television, and he's also known for his work as a live audio engineer.",
+  "externalLinks": [
+    {
+      "label": "Download Pete Rango album songs: Savage Planet | Boomplay Music",
+      "url": "https://www.boomplay.com/albums/56626158?from="
+    },
+    {
+      "label": "Meet Pete Rango - Voyage MIA Magazine | Miami City Guide",
+      "url": "https://voyagemia.com/interview/meet-peter-rango/"
+    },
+    {
+      "label": "Music Producer, Pete Rango on The LIFE CHANGES Show \u2013 Ep774",
+      "url": "https://lifechangesnetwork.com/music-producer-pete-rango-on-the-life-changes-show-ep774/"
+    },
+    {
+      "label": "\u200ePete Rango - Apple Music",
+      "url": "https://music.apple.com/us/artist/pete-rango/1513734272"
+    },
+    {
+      "label": "Pete Rango",
+      "url": "https://peterango.com/"
+    }
+  ],
+  "noTrackData": true
+}
