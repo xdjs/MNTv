@@ -8,8 +8,30 @@ import time
 import urllib.request
 import urllib.error
 
-API_URL = "https://rglhkxgknszkgdtzopsh.supabase.co/functions/v1/generate-nuggets"
-API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJnbGhreGdrbnN6a2dkdHpvcHNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MzcwNzQsImV4cCI6MjA4ODIxMzA3NH0.Pil_lBTL8nRAWb2R4vLXbjFM4Dy5VPa3QYmtr_k5qcM"
+SUPABASE_URL = os.environ.get("SUPABASE_URL") or os.environ.get("VITE_SUPABASE_URL")
+SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY") or os.environ.get("VITE_SUPABASE_PUBLISHABLE_KEY")
+
+if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+    # Try loading from .env file
+    env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+    if os.path.exists(env_path):
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    val = val.strip().strip('"').strip("'")
+                    if key == "VITE_SUPABASE_URL" and not SUPABASE_URL:
+                        SUPABASE_URL = val
+                    elif key == "VITE_SUPABASE_PUBLISHABLE_KEY" and not SUPABASE_ANON_KEY:
+                        SUPABASE_ANON_KEY = val
+
+if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+    print("Error: Set SUPABASE_URL and SUPABASE_ANON_KEY env vars, or ensure .env exists.")
+    sys.exit(1)
+
+API_URL = f"{SUPABASE_URL}/functions/v1/generate-nuggets"
+API_KEY = SUPABASE_ANON_KEY
 
 SEED_DIR = os.path.join(os.path.dirname(__file__), "..", "src", "data", "seed")
 

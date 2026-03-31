@@ -1374,6 +1374,7 @@ function validateNuggetQuality(nuggets: GeminiNugget[], artist?: string): { vali
       /^the untold (?:story|truth)\b/i,
       /^how .+ (?:really|actually) (?:happened|started|began)\b/i,
       /^what most (?:people|fans) don['\u2019]t know\b/i,
+      /^the story (?:behind|of)\b/i,
     ];
     for (const pat of TEASE_HEADLINE_PATTERNS) {
       if (pat.test(headline)) {
