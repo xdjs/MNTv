@@ -1,4 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import teasePatternStrings from "../../shared/tease-headline-patterns.json" with { type: "json" };
+
+// ── Tease headline patterns (loaded from shared JSON) ────────────────
+const TEASE_HEADLINE_PATTERNS: RegExp[] = teasePatternStrings.map(
+  (s: string) => new RegExp(s, "i")
+);
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1361,21 +1367,7 @@ function validateNuggetQuality(nuggets: GeminiNugget[], artist?: string): { vali
     // Artist name in headlines is fine — better than vague "he"/"she" pronouns.
 
     // Check for pure-tease headlines that withhold the interesting fact
-    const TEASE_HEADLINE_PATTERNS = [
-      /^the secret (?:behind|of|to)\b/i,
-      /^the reason (?:behind|why|that)\b/i,
-      /^what happened when\b/i,
-      /^you won['\u2019]t believe\b/i,
-      /^the surprising (?:truth|reason|story)\b/i,
-      /^the real reason\b/i,
-      /^what really happened\b/i,
-      /^the hidden (?:meaning|story|truth)\b/i,
-      /^why nobody (?:knows|talks) about\b/i,
-      /^the untold (?:story|truth)\b/i,
-      /^how .+ (?:really|actually) (?:happened|started|began)\b/i,
-      /^what most (?:people|fans) don['\u2019]t know\b/i,
-      /^the story (?:behind|of)\b/i,
-    ];
+    // (patterns loaded at module scope from shared/tease-headline-patterns.json)
     for (const pat of TEASE_HEADLINE_PATTERNS) {
       if (pat.test(headline)) {
         issues.push(`Nugget ${i} (${n.kind}): tease headline pattern "${pat.source}" — headline should state the fact, not tease it`);

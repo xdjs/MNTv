@@ -1,0 +1,18 @@
+[
+  "^the secret (?:behind|of|to)\\b",
+  "^the reason (?:behind|why|that)\\b",
+  "^what happened when\\b",
+  "^you won['\\u2019]t believe\\b",
+  "^the surprising (?:truth|reason|story)\\b",
+  "^the real reason\\b",
+  "^what really happened\\b",
+  "^the hidden (?:meaning|story|truth)\\b",
+  "^why nobody (?:knows|talks) about\\b",
+  "^the untold (?:story|truth)\\b",
+  "^how .+ (?:really|actually) (?:happened|started|began)\\b",
+  "^what most (?:people|fans) don['\\u2019]t know\\b",
+  "^the story (?:behind|of)\\b",
+  "^the truth about\\b",
+  "^the mystery (?:behind|of)\\b",
+  "^find out (?:why|how|what)\\b"
+]

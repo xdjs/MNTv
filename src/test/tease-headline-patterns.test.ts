@@ -1,22 +1,10 @@
 import { describe, it, expect } from "vitest";
+import teasePatternStrings from "../../shared/tease-headline-patterns.json";
 
-// Mirror of TEASE_HEADLINE_PATTERNS from generate-nuggets edge function.
-// Keep in sync when patterns change.
-const TEASE_HEADLINE_PATTERNS = [
-  /^the secret (?:behind|of|to)\b/i,
-  /^the reason (?:behind|why|that)\b/i,
-  /^what happened when\b/i,
-  /^you won['\u2019]t believe\b/i,
-  /^the surprising (?:truth|reason|story)\b/i,
-  /^the real reason\b/i,
-  /^what really happened\b/i,
-  /^the hidden (?:meaning|story|truth)\b/i,
-  /^why nobody (?:knows|talks) about\b/i,
-  /^the untold (?:story|truth)\b/i,
-  /^how .+ (?:really|actually) (?:happened|started|began)\b/i,
-  /^what most (?:people|fans) don['\u2019]t know\b/i,
-  /^the story (?:behind|of)\b/i,
-];
+// Shared source of truth — same JSON imported by the edge function (Deno) and tests (Vitest).
+const TEASE_HEADLINE_PATTERNS = teasePatternStrings.map(
+  (s: string) => new RegExp(s, "i")
+);
 
 function isTease(headline: string): boolean {
   return TEASE_HEADLINE_PATTERNS.some((pat) => pat.test(headline));
@@ -47,6 +35,11 @@ describe("TEASE_HEADLINE_PATTERNS", () => {
       "what most fans don\u2019t know about Kendrick",
       "the story behind the making of this track",
       "the story of Daft Punk's robot personas",
+      "the truth about Kendrick's writing process",
+      "the mystery behind Daft Punk's helmets",
+      "the mystery of the missing vocal take",
+      "find out why this track was almost scrapped",
+      "find out how Billie recorded this at home",
     ];
 
     for (const headline of teaseHeadlines) {
