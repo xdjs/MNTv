@@ -375,11 +375,6 @@ export default function ImmersiveNuggetView({
                                   (e.target as HTMLImageElement).parentElement!.style.display = "none";
                                 }}
                               />
-                              {activeNugget.imageCaption && (
-                                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent px-4 pb-2 pt-8">
-                                  <p className="text-[10px] text-white/60">{activeNugget.imageCaption}</p>
-                                </div>
-                              )}
                             </div>
                           ) : null}
 
