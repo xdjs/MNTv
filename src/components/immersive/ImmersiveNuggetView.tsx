@@ -212,10 +212,20 @@ export default function ImmersiveNuggetView({
         <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60" />
       </div>
 
+      {/* Collapse chevron — top-left like Spotify */}
+      <div className="relative z-30 flex items-center px-4 pt-2" style={{ paddingTop: "max(env(safe-area-inset-top, 8px), 8px)" }}>
+        <button
+          className="h-9 w-9 rounded-full bg-white/10 flex items-center justify-center active:scale-90 transition-transform"
+          onClick={onClose}
+        >
+          <svg className="w-5 h-5 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+      </div>
+
       {/* Main content area */}
-      <div className="relative z-10 flex-1 flex flex-col items-center px-4 pt-6 min-h-0 mb-1"
-        style={{ paddingTop: "max(env(safe-area-inset-top, 16px), 16px)" }}
-      >
+      <div className="relative z-10 flex-1 flex flex-col items-center px-4 min-h-0 mb-1">
         <AnimatePresence mode="wait">
           {showCard ? (
             <motion.div
@@ -391,7 +401,6 @@ export default function ImmersiveNuggetView({
           isPlaying={isPlaying}
           progress={progress}
           onToggle={toggle}
-          onCollapse={onClose}
         />
       </div>
     </motion.div>

@@ -1,14 +1,12 @@
-import { useRef, useCallback, useState } from "react";
-import { Play, Pause, ChevronDown } from "lucide-react";
+import { Play, Pause } from "lucide-react";
 
 interface MiniPlayerProps {
   artUrl: string;
   trackTitle: string;
   artist: string;
   isPlaying: boolean;
-  progress: number; // 0-100
+  progress: number;
   onToggle: () => void;
-  onCollapse: () => void;
 }
 
 export default function MiniPlayer({
@@ -18,38 +16,10 @@ export default function MiniPlayer({
   isPlaying,
   progress,
   onToggle,
-  onCollapse,
 }: MiniPlayerProps) {
-  // Swipe down to collapse
-  const startYRef = useRef(0);
-  const [dragY, setDragY] = useState(0);
-
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    startYRef.current = e.touches[0].clientY;
-  }, []);
-
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    const dy = e.touches[0].clientY - startYRef.current;
-    if (dy > 0) setDragY(dy); // only track downward drag
-  }, []);
-
-  const handleTouchEnd = useCallback(() => {
-    if (dragY > 60) onCollapse();
-    setDragY(0);
-  }, [dragY, onCollapse]);
-
   return (
-    <div
-      className="relative"
-      style={{
-        transform: dragY > 0 ? `translateY(${dragY * 0.5}px)` : undefined,
-        transition: dragY > 0 ? "none" : "transform 0.2s ease-out",
-      }}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-    >
-      {/* Progress bar — thin line at top of mini player */}
+    <div className="relative">
+      {/* Progress bar — thin line at top */}
       <div className="absolute top-0 inset-x-0 h-[2px] bg-white/10">
         <div
           className="h-full bg-white/50 rounded-full"
@@ -57,16 +27,8 @@ export default function MiniPlayer({
         />
       </div>
 
-      {/* Mini player content */}
+      {/* Player content */}
       <div className="flex items-center gap-3 px-4 py-2.5 bg-white/5 backdrop-blur-xl border-t border-white/10">
-        {/* Collapse handle */}
-        <button
-          className="flex-shrink-0 active:scale-90 transition-transform"
-          onClick={onCollapse}
-        >
-          <ChevronDown className="w-5 h-5 text-white/40" />
-        </button>
-
         {/* Cover art */}
         {artUrl && (
           <img

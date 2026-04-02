@@ -247,7 +247,7 @@ export default function Listen() {
     trackLoadTimestampRef.current = Date.now();
 
     if (isTrackSwitch) {
-      player.stop();
+      player.pause();
       if (isExternalListenMode) setExternalListenMode(false);
     }
   }, [rawTrackId]);
