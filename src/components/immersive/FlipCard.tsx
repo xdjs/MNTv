@@ -19,21 +19,15 @@ export default function FlipCard({ flipped, onFlip, front, back, className = "" 
   }, []);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
-    // Don't flip when clicking buttons, links, or interactive elements
     const target = e.target as HTMLElement;
     if (target.closest("button") || target.closest("a") || target.closest("[data-no-flip]")) return;
-
-    // Don't flip if this was a drag (pointer moved significantly)
     if (pointerStartRef.current) {
       const dx = Math.abs(e.clientX - pointerStartRef.current.x);
       const dy = Math.abs(e.clientY - pointerStartRef.current.y);
-      if (dx > 10 || dy > 10) return; // was a drag or scroll, not a tap
+      if (dx > 10 || dy > 10) return;
     }
-
-    // Don't flip if parent SwipeableNuggetStack is dragging
     const dragging = (e.currentTarget as HTMLElement).closest("[data-dragging]");
     if (dragging) return;
-
     onFlip();
   }, [onFlip]);
 
@@ -44,6 +38,15 @@ export default function FlipCard({ flipped, onFlip, front, back, className = "" 
       onPointerDown={handlePointerDown}
       onClick={handleClick}
     >
+      {/* Glow element behind the card — separate div so it's not clipped by overflow:hidden */}
+      <div
+        className="absolute inset-0 rounded-3xl pointer-events-none"
+        style={{
+          background: "hsl(var(--neon-glow) / 0.08)",
+          boxShadow: "0 0 30px 8px hsl(var(--neon-glow) / 0.15), 0 0 80px 20px hsl(var(--neon-glow) / 0.06)",
+        }}
+      />
+
       <motion.div
         className="relative w-full h-full"
         style={{ transformStyle: "preserve-3d" }}
@@ -53,10 +56,7 @@ export default function FlipCard({ flipped, onFlip, front, back, className = "" 
         {/* Front face */}
         <div
           className="absolute inset-0 apple-glass rounded-3xl overflow-hidden"
-          style={{
-            backfaceVisibility: "hidden",
-            boxShadow: "0 0 20px 4px hsl(var(--neon-glow) / 0.2), 0 0 60px 10px hsl(var(--neon-glow) / 0.08)",
-          }}
+          style={{ backfaceVisibility: "hidden" }}
         >
           {front}
         </div>
@@ -64,11 +64,7 @@ export default function FlipCard({ flipped, onFlip, front, back, className = "" 
         {/* Back face */}
         <div
           className="absolute inset-0 apple-glass rounded-3xl overflow-hidden"
-          style={{
-            backfaceVisibility: "hidden",
-            transform: "rotateY(180deg)",
-            boxShadow: "0 0 20px 4px hsl(var(--neon-glow) / 0.2), 0 0 60px 10px hsl(var(--neon-glow) / 0.08)",
-          }}
+          style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
         >
           {back}
         </div>

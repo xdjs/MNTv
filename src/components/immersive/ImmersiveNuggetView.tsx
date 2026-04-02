@@ -456,36 +456,47 @@ export default function ImmersiveNuggetView({
             <SkipForward className="w-4 h-4 text-white/50" fill="white" fillOpacity={0.5} />
           </button>
         </div>
-        {/* Progress bar — tall touch target, thin visual bar */}
+        {/* Progress bar — tall touch target for scrubbing */}
         <div
-          className="relative py-2 cursor-pointer"
-          onClick={(e) => {
+          className="relative py-3 cursor-pointer touch-none"
+          onPointerDown={(e) => {
+            const bar = e.currentTarget.querySelector("[data-bar]") as HTMLElement;
+            if (!bar) return;
+            (e.target as HTMLElement).setPointerCapture(e.pointerId);
+            const rect = bar.getBoundingClientRect();
+            seek(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration);
+          }}
+          onPointerMove={(e) => {
+            if (e.buttons === 0 && e.pressure === 0) return; // not pressing
             const bar = e.currentTarget.querySelector("[data-bar]") as HTMLElement;
             if (!bar) return;
             const rect = bar.getBoundingClientRect();
             seek(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration);
           }}
-          onTouchMove={(e) => {
-            const bar = e.currentTarget.querySelector("[data-bar]") as HTMLElement;
-            if (!bar) return;
-            const rect = bar.getBoundingClientRect();
-            const pct = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
-            seek(pct * duration);
-          }}
         >
           <div data-bar className="relative h-[3px] bg-white/15 rounded-full">
-            <div className="absolute inset-y-0 left-0 bg-white/60 rounded-full transition-[width] duration-150" style={{ width: `${progress}%` }} />
-            {/* Nugget markers on timeline */}
+            <div className="absolute inset-y-0 left-0 bg-white/60 rounded-full" style={{ width: `${progress}%` }} />
+            {/* Nugget markers — MusicNerd logos */}
             {nuggets.map((n) => {
               if (duration <= 0) return null;
               const pct = (n.timestampSec / duration) * 100;
+              const isUnlocked = unlockedIds.has(n.id);
               return (
                 <div
                   key={n.id}
-                  className="absolute top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-white/30"
+                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2"
                   style={{ left: `${pct}%` }}
-                  title={n.headline}
-                />
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const idx = nuggets.indexOf(n);
+                    if (isUnlocked && idx >= 0) {
+                      handleSwipe(idx);
+                      setNuggetDismissed(false);
+                    }
+                  }}
+                >
+                  <MusicNerdLogo size={12} glow={isUnlocked} />
+                </div>
               );
             })}
           </div>
