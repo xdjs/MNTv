@@ -252,14 +252,14 @@ export default function ImmersiveNuggetView({
 
                       {/* Scrollable card */}
                       <div className="relative w-full h-full apple-glass rounded-3xl overflow-hidden overflow-y-auto glass-scrollbar">
-                        {/* Image hero section */}
-                        <div className="relative w-full" style={{ minHeight: "50%" }}>
+                        {/* Image hero — takes most of the screen, scroll down to see body */}
+                        <div className="relative w-full" style={{ minHeight: "75%" }}>
                           {imgUrl && (
                             <img
                               src={imgUrl}
                               alt=""
                               className={`w-full h-full object-cover ${!isNuggetImage ? "scale-110 blur-sm" : ""}`}
-                              style={{ minHeight: "300px" }}
+                              style={{ minHeight: "65vh" }}
                               onError={(e) => {
                                 if (isNuggetImage && activeNugget?.imageUrl) {
                                   failedImagesRef.current.add(activeNugget.imageUrl);
@@ -401,6 +401,8 @@ export default function ImmersiveNuggetView({
           isPlaying={isPlaying}
           progress={progress}
           onToggle={toggle}
+          onPrev={onPrev}
+          onNext={onNext}
         />
       </div>
     </motion.div>

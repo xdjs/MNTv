@@ -1203,8 +1203,8 @@ export default function Listen() {
               {topFocusIndex === 0 ? "Back" : "Open Companion"}
             </motion.p>
           )}
-          <div className="flex flex-col items-center gap-1.5">
-            {!showImmersive && <MusicNerdLoadingOrchestrator
+          <div className={`flex flex-col items-center gap-1.5 ${showImmersive ? "fixed top-3 right-3 z-[70]" : ""}`}>
+            <MusicNerdLoadingOrchestrator
               aiLoading={aiLoading}
               shortId={shortId}
               trackId={trackId}
@@ -1217,7 +1217,7 @@ export default function Listen() {
                   window.open(`${window.location.origin}/c/${shortId}?tier=${tier}&listen=${listenCount}`, "_blank");
                 }
               }}
-            />}
+            />
             <button
               onClick={() => setDevOpen((o) => !o)}
               className="rounded-md bg-foreground/5 px-2.5 py-0.5 text-[10px] text-muted-foreground/50 hover:bg-foreground/10 hover:text-muted-foreground transition-colors"
@@ -1563,16 +1563,16 @@ export default function Listen() {
           </AnimatePresence>
         </Suspense>
         {/* Immersive nugget overlay (mobile auto, desktop opt-in) */}
-        {showImmersive && track && (
+        {showImmersive && (
           <Suspense fallback={null}>
             <ImmersiveNuggetView
               nuggets={trackNuggets}
               sources={aiSources}
               coverArtUrl={effectiveCoverArt}
               loading={aiLoading}
-              trackTitle={track.title}
-              artist={track.artist}
-              album={track.album}
+              trackTitle={track?.title || ""}
+              artist={track?.artist || ""}
+              album={track?.album}
               onClose={() => { if (isMobile) { navigate("/browse"); } else { setImmersiveMode(false); } }}
               onPrev={handlePrev}
               onNext={handleNext}
