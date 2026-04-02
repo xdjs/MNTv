@@ -252,11 +252,7 @@ export default function ImmersiveNuggetView({
                 disabled={flipped}
               >
                 {() => (
-                  <div
-                    data-card
-                    className="w-full h-full rounded-3xl"
-                    style={{ boxShadow: "0 0 25px 5px hsl(var(--neon-glow) / 0.25), 0 0 80px 15px hsl(var(--neon-glow) / 0.08)" }}
-                  >
+                  <div data-card className="w-full h-full">
                     <FlipCard
                       flipped={flipped}
                       onFlip={handleFlip}
@@ -460,13 +456,39 @@ export default function ImmersiveNuggetView({
             <SkipForward className="w-4 h-4 text-white/50" fill="white" fillOpacity={0.5} />
           </button>
         </div>
-        <div className="relative h-1 bg-white/15 rounded-full overflow-hidden mb-1 cursor-pointer"
+        {/* Progress bar — tall touch target, thin visual bar */}
+        <div
+          className="relative py-2 cursor-pointer"
           onClick={(e) => {
-            const rect = e.currentTarget.getBoundingClientRect();
+            const bar = e.currentTarget.querySelector("[data-bar]") as HTMLElement;
+            if (!bar) return;
+            const rect = bar.getBoundingClientRect();
             seek(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration);
           }}
+          onTouchMove={(e) => {
+            const bar = e.currentTarget.querySelector("[data-bar]") as HTMLElement;
+            if (!bar) return;
+            const rect = bar.getBoundingClientRect();
+            const pct = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
+            seek(pct * duration);
+          }}
         >
-          <div className="absolute inset-y-0 left-0 bg-white/60 rounded-full transition-[width] duration-200" style={{ width: `${progress}%` }} />
+          <div data-bar className="relative h-[3px] bg-white/15 rounded-full">
+            <div className="absolute inset-y-0 left-0 bg-white/60 rounded-full transition-[width] duration-150" style={{ width: `${progress}%` }} />
+            {/* Nugget markers on timeline */}
+            {nuggets.map((n) => {
+              if (duration <= 0) return null;
+              const pct = (n.timestampSec / duration) * 100;
+              return (
+                <div
+                  key={n.id}
+                  className="absolute top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-white/30"
+                  style={{ left: `${pct}%` }}
+                  title={n.headline}
+                />
+              );
+            })}
+          </div>
         </div>
         <div className="flex justify-between text-[10px] text-white/30 tabular-nums">
           <span>{fmt(currentTime)}</span>

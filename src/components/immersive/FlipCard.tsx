@@ -53,7 +53,10 @@ export default function FlipCard({ flipped, onFlip, front, back, className = "" 
         {/* Front face */}
         <div
           className="absolute inset-0 apple-glass rounded-3xl overflow-hidden"
-          style={{ backfaceVisibility: "hidden" }}
+          style={{
+            backfaceVisibility: "hidden",
+            boxShadow: "0 0 20px 4px hsl(var(--neon-glow) / 0.2), 0 0 60px 10px hsl(var(--neon-glow) / 0.08)",
+          }}
         >
           {front}
         </div>
@@ -61,7 +64,11 @@ export default function FlipCard({ flipped, onFlip, front, back, className = "" 
         {/* Back face */}
         <div
           className="absolute inset-0 apple-glass rounded-3xl overflow-hidden"
-          style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
+          style={{
+            backfaceVisibility: "hidden",
+            transform: "rotateY(180deg)",
+            boxShadow: "0 0 20px 4px hsl(var(--neon-glow) / 0.2), 0 0 60px 10px hsl(var(--neon-glow) / 0.08)",
+          }}
         >
           {back}
         </div>
