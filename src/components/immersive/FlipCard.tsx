@@ -38,12 +38,12 @@ export default function FlipCard({ flipped, onFlip, front, back, className = "" 
       onPointerDown={handlePointerDown}
       onClick={handleClick}
     >
-      {/* Glow element behind the card — separate div so it's not clipped by overflow:hidden */}
+      {/* Glow element behind the card */}
       <div
-        className="absolute inset-0 rounded-3xl pointer-events-none"
+        className="absolute -inset-2 rounded-[2rem] pointer-events-none"
         style={{
-          background: "hsl(var(--neon-glow) / 0.08)",
-          boxShadow: "0 0 30px 8px hsl(var(--neon-glow) / 0.15), 0 0 80px 20px hsl(var(--neon-glow) / 0.06)",
+          background: "radial-gradient(ellipse at center, hsl(var(--neon-glow) / 0.15) 0%, transparent 70%)",
+          boxShadow: "0 0 40px 12px hsl(var(--neon-glow) / 0.2), 0 0 100px 30px hsl(var(--neon-glow) / 0.08)",
         }}
       />
 

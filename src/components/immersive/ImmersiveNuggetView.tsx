@@ -456,50 +456,60 @@ export default function ImmersiveNuggetView({
             <SkipForward className="w-4 h-4 text-white/50" fill="white" fillOpacity={0.5} />
           </button>
         </div>
-        {/* Progress bar — tall touch target for scrubbing */}
-        <div
-          className="relative py-3 cursor-pointer touch-none"
-          onPointerDown={(e) => {
-            const bar = e.currentTarget.querySelector("[data-bar]") as HTMLElement;
-            if (!bar) return;
-            (e.target as HTMLElement).setPointerCapture(e.pointerId);
-            const rect = bar.getBoundingClientRect();
-            seek(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration);
-          }}
-          onPointerMove={(e) => {
-            if (e.buttons === 0 && e.pressure === 0) return; // not pressing
-            const bar = e.currentTarget.querySelector("[data-bar]") as HTMLElement;
-            if (!bar) return;
-            const rect = bar.getBoundingClientRect();
-            seek(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration);
-          }}
-        >
-          <div data-bar className="relative h-[3px] bg-white/15 rounded-full">
-            <div className="absolute inset-y-0 left-0 bg-white/60 rounded-full" style={{ width: `${progress}%` }} />
-            {/* Nugget markers — MusicNerd logos */}
-            {nuggets.map((n) => {
-              if (duration <= 0) return null;
-              const pct = (n.timestampSec / duration) * 100;
-              const isUnlocked = unlockedIds.has(n.id);
-              return (
-                <div
-                  key={n.id}
-                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2"
-                  style={{ left: `${pct}%` }}
-                  onClick={(e) => {
-                    e.stopPropagation();
+        {/* Progress bar + nugget markers */}
+        <div className="relative">
+          {/* Scrub zone — tall invisible touch target */}
+          <div
+            className="relative py-3 cursor-pointer touch-none"
+            onPointerDown={(e) => {
+              // Don't scrub if tapping near a nugget marker
+              if ((e.target as HTMLElement).closest("[data-nugget-marker]")) return;
+              e.currentTarget.setPointerCapture(e.pointerId);
+              const bar = e.currentTarget.querySelector("[data-bar]") as HTMLElement;
+              if (!bar) return;
+              const rect = bar.getBoundingClientRect();
+              seek(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration);
+            }}
+            onPointerMove={(e) => {
+              if (e.buttons === 0 && e.pressure === 0) return;
+              const bar = e.currentTarget.querySelector("[data-bar]") as HTMLElement;
+              if (!bar) return;
+              const rect = bar.getBoundingClientRect();
+              seek(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration);
+            }}
+          >
+            <div data-bar className="relative h-[3px] bg-white/15 rounded-full">
+              <div className="absolute inset-y-0 left-0 bg-white/60 rounded-full" style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+
+          {/* Nugget markers — above scrub zone so they're tappable */}
+          {nuggets.map((n) => {
+            if (duration <= 0) return null;
+            const pct = (n.timestampSec / duration) * 100;
+            const isUnlocked = unlockedIds.has(n.id);
+            return (
+              <button
+                key={n.id}
+                data-nugget-marker
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 p-2"
+                style={{ left: `${pct}%` }}
+                onClick={() => {
+                  if (isUnlocked) {
                     const idx = nuggets.indexOf(n);
-                    if (isUnlocked && idx >= 0) {
+                    if (idx >= 0) {
                       handleSwipe(idx);
                       setNuggetDismissed(false);
                     }
-                  }}
-                >
-                  <MusicNerdLogo size={12} glow={isUnlocked} />
-                </div>
-              );
-            })}
-          </div>
+                  } else {
+                    seek(n.timestampSec);
+                  }
+                }}
+              >
+                <MusicNerdLogo size={14} glow={isUnlocked} />
+              </button>
+            );
+          })}
         </div>
         <div className="flex justify-between text-[10px] text-white/30 tabular-nums">
           <span>{fmt(currentTime)}</span>
