@@ -61,12 +61,16 @@ export default function SwipeableNuggetStack({
     }
 
     const dx = e.changedTouches[0].clientX - startXRef.current;
-    setDragX(0);
+    const swiped = (dx < -SWIPE_THRESHOLD && canGoRight) || (dx > SWIPE_THRESHOLD && canGoLeft);
 
-    if (dx < -SWIPE_THRESHOLD && canGoRight) {
-      onSwipe(activeIndex + 1);
-    } else if (dx > SWIPE_THRESHOLD && canGoLeft) {
-      onSwipe(activeIndex - 1);
+    if (swiped) {
+      // Batch: update content first, then reset position so there's no flash of old content
+      if (dx < -SWIPE_THRESHOLD && canGoRight) onSwipe(activeIndex + 1);
+      else if (dx > SWIPE_THRESHOLD && canGoLeft) onSwipe(activeIndex - 1);
+      // Reset drag on next frame after React processes the swipe
+      requestAnimationFrame(() => setDragX(0));
+    } else {
+      setDragX(0);
     }
   }, [disabled, activeIndex, canGoLeft, canGoRight, onSwipe]);
 

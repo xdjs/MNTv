@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 interface TypewriterTextProps {
   text: string;
@@ -23,40 +23,47 @@ export default function TypewriterText({
   const [started, setStarted] = useState(delay === 0);
   const completeFiredRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
+  const pausedRef = useRef(paused);
+  const textLenRef = useRef(text.length);
   onCompleteRef.current = onComplete;
+  pausedRef.current = paused;
+  textLenRef.current = text.length;
 
+  // Reset on text change
   useEffect(() => {
     setCharIndex(0);
     setStarted(delay === 0);
     completeFiredRef.current = false;
   }, [text, delay]);
 
+  // Start delay
   useEffect(() => {
     if (delay <= 0 || started) return;
     const timer = setTimeout(() => setStarted(true), delay);
     return () => clearTimeout(timer);
   }, [delay, started]);
 
+  // Single stable interval — reads paused/length from refs to avoid recreation
   useEffect(() => {
-    if (!started || paused || charIndex >= text.length) return;
+    if (!started || paused) return;
     const timer = setInterval(() => {
+      if (pausedRef.current) return; // skip tick while paused
       setCharIndex((prev) => {
-        const next = prev + 1;
-        if (next >= text.length) clearInterval(timer);
-        return next;
+        if (prev >= textLenRef.current) {
+          clearInterval(timer);
+          if (!completeFiredRef.current) {
+            completeFiredRef.current = true;
+            onCompleteRef.current?.();
+          }
+          return prev;
+        }
+        return prev + 1;
       });
     }, speed);
     return () => clearInterval(timer);
-  }, [started, paused, speed, text.length, charIndex]);
+  }, [started, paused, speed]);
 
-  useEffect(() => {
-    if (charIndex >= text.length && text.length > 0 && !completeFiredRef.current) {
-      completeFiredRef.current = true;
-      onCompleteRef.current?.();
-    }
-  }, [charIndex, text.length]);
-
-  // Render with a wider fade wave — 8 chars fading in, creating a visible "materializing" effect
+  // Render with fade wave
   const FADE_WIDTH = 8;
   const solidEnd = Math.max(0, charIndex - FADE_WIDTH);
   const revealed = text.slice(0, solidEnd);

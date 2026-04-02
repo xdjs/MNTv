@@ -12,16 +12,12 @@ interface FlipCardProps {
 const springTransition = { type: "spring" as const, stiffness: 300, damping: 30 };
 const GLOW = "0 0 20px 6px hsl(var(--neon-glow) / 0.4), 0 0 50px 12px hsl(var(--neon-glow) / 0.15)";
 
-// iOS Safari fix: -webkit-mask-image forces proper border-radius clipping
-// when inside a preserve-3d context
 const FACE_STYLE_FRONT = {
   backfaceVisibility: "hidden" as const,
-  WebkitMaskImage: "-webkit-radial-gradient(circle, white, black)",
 };
 const FACE_STYLE_BACK = {
   backfaceVisibility: "hidden" as const,
   transform: "rotateY(180deg)",
-  WebkitMaskImage: "-webkit-radial-gradient(circle, white, black)",
 };
 
 export default function FlipCard({ flipped, onFlip, front, back, className = "" }: FlipCardProps) {

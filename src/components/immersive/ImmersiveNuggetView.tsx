@@ -156,6 +156,7 @@ export default function ImmersiveNuggetView({
   const handleSwipe = useCallback((newIndex: number) => {
     setActiveIndex(newIndex);
     setFlipped(false);
+    setNuggetDismissed(false);
     setDeepDiveText(null);
     setDeepDiveFollowUp(null);
   }, []);
@@ -194,7 +195,8 @@ export default function ImmersiveNuggetView({
     } finally {
       setDeepDiveLoading(false);
     }
-  }, [activeNugget, activeSource, artist, trackTitle, deepDiveLoading]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeNugget, activeSource, artist, trackTitle]);
 
   // ── Track end detection — auto-advance to next track ─────────────
   const trackEndFiredRef = useRef(false);
