@@ -9,6 +9,8 @@ import TypewriterText from "./TypewriterText";
 import FlipCard from "./FlipCard";
 import SwipeableNuggetStack from "./SwipeableNuggetStack";
 
+const haptic = (ms = 10) => { try { navigator.vibrate?.(ms); } catch {} };
+
 interface ImmersiveNuggetViewProps {
   nuggets: Nugget[];
   sources: Map<string, Source>;
@@ -116,6 +118,7 @@ export default function ImmersiveNuggetView({
     const currentCount = unlockedIds.size;
     if (currentCount > prevUnlockedCountRef.current && currentCount > 0) {
       // A new nugget just unlocked — show it automatically
+      haptic(12);
       const unlockedArray = nuggets.filter((n) => unlockedIds.has(n.id));
       const latestIndex = nuggets.indexOf(unlockedArray[unlockedArray.length - 1]);
       if (latestIndex >= 0) {
@@ -151,8 +154,9 @@ export default function ImmersiveNuggetView({
   const isTypewriterDone = activeNugget ? typewriterDoneRef.current.has(activeNugget.id) : false;
   const showCard = activeNugget && !nuggetDismissed;
 
-  const handleFlip = useCallback(() => setFlipped((f) => !f), []);
+  const handleFlip = useCallback(() => { haptic(8); setFlipped((f) => !f); }, []);
   const handleSwipe = useCallback((newIndex: number) => {
+    haptic(6);
     setActiveIndex(newIndex);
     setFlipped(false);
     setDeepDiveText(null);
@@ -208,6 +212,7 @@ export default function ImmersiveNuggetView({
   }, [currentTime, duration, onNext]);
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const [scrubbing, setScrubbing] = useState(false);
   const fmt = (s: number) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
 
   return (
@@ -279,7 +284,11 @@ export default function ImmersiveNuggetView({
                       flipped={flipped}
                       onFlip={handleFlip}
                       front={
-                        <div className="relative flex flex-col justify-end h-full px-7 pb-10 pt-16 text-left">
+                        <motion.div
+                          className="relative flex flex-col justify-end h-full px-7 pb-10 pt-16 text-left"
+                          animate={{ y: [0, -2, 0] }}
+                          transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+                        >
                           {/* Background image — nugget image, or album art as fallback */}
                           {(() => {
                             const nuggetImg = activeNugget.imageUrl && !failedImagesRef.current.has(activeNugget.imageUrl)
@@ -332,7 +341,7 @@ export default function ImmersiveNuggetView({
                               tap to reveal more
                             </motion.p>
                           </div>
-                        </div>
+                        </motion.div>
                       }
                       back={
                         <div className="h-full rounded-3xl overflow-y-auto overflow-x-hidden glass-scrollbar flex flex-col">
@@ -484,9 +493,9 @@ export default function ImmersiveNuggetView({
           <div
             className="relative py-3 cursor-pointer touch-none"
             onPointerDown={(e) => {
-              // Don't scrub if tapping near a nugget marker
               if ((e.target as HTMLElement).closest("[data-nugget-marker]")) return;
               e.currentTarget.setPointerCapture(e.pointerId);
+              setScrubbing(true);
               const bar = e.currentTarget.querySelector("[data-bar]") as HTMLElement;
               if (!bar) return;
               const rect = bar.getBoundingClientRect();
@@ -499,9 +508,16 @@ export default function ImmersiveNuggetView({
               const rect = bar.getBoundingClientRect();
               seek(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration);
             }}
+            onPointerUp={() => setScrubbing(false)}
+            onPointerCancel={() => setScrubbing(false)}
           >
             <div data-bar className="relative h-[3px] bg-white/15 rounded-full">
               <div className="absolute inset-y-0 left-0 bg-white/60 rounded-full" style={{ width: `${progress}%` }} />
+              {/* Scrub thumb — appears on touch */}
+              <div
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-white transition-opacity duration-150"
+                style={{ left: `${progress}%`, opacity: scrubbing ? 1 : 0 }}
+              />
             </div>
           </div>
 

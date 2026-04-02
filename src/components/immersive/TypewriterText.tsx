@@ -56,16 +56,17 @@ export default function TypewriterText({
     }
   }, [charIndex, text.length]);
 
-  // Render visible text + fading characters using a single span with CSS transition.
-  // The "revealed" portion is fully opaque, the "revealing" chars (last 3) fade in.
-  const revealed = text.slice(0, Math.max(0, charIndex - 3));
-  const fading = text.slice(Math.max(0, charIndex - 3), charIndex);
+  // Render with a wider fade wave — 8 chars fading in, creating a visible "materializing" effect
+  const FADE_WIDTH = 8;
+  const solidEnd = Math.max(0, charIndex - FADE_WIDTH);
+  const revealed = text.slice(0, solidEnd);
+  const fading = text.slice(solidEnd, charIndex);
   const hidden = text.slice(charIndex);
 
   return (
     <Tag className={className}>
       <span>{revealed}</span>
-      <span style={{ opacity: 0.7, transition: "opacity 0.15s ease-out" }}>{fading}</span>
+      <span style={{ opacity: 0.6, transition: "opacity 0.2s ease-out" }}>{fading}</span>
       <span style={{ opacity: 0 }}>{hidden}</span>
     </Tag>
   );

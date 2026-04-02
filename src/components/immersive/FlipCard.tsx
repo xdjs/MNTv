@@ -11,6 +11,9 @@ interface FlipCardProps {
 
 const springTransition = { type: "spring" as const, stiffness: 300, damping: 30 };
 
+// Same glow style as desktop NuggetCard — box-shadow directly on the element
+const GLOW_SHADOW = "0 0 20px 6px hsl(var(--neon-glow) / 0.4), 0 0 50px 12px hsl(var(--neon-glow) / 0.15)";
+
 export default function FlipCard({ flipped, onFlip, front, back, className = "" }: FlipCardProps) {
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -38,24 +41,16 @@ export default function FlipCard({ flipped, onFlip, front, back, className = "" 
       onPointerDown={handlePointerDown}
       onClick={handleClick}
     >
-      {/* Glow — extends well beyond card edges so it's visible around the opaque card */}
-      <div
-        className="absolute -inset-4 rounded-[2.5rem] pointer-events-none"
-        style={{
-          boxShadow: "0 0 50px 15px hsl(var(--neon-glow) / 0.25), 0 0 120px 40px hsl(var(--neon-glow) / 0.1), inset 0 0 30px 5px hsl(var(--neon-glow) / 0.05)",
-        }}
-      />
-
       <motion.div
         className="relative w-full h-full"
         style={{ transformStyle: "preserve-3d" }}
         animate={{ rotateY: flipped ? 180 : 0 }}
         transition={springTransition}
       >
-        {/* Front face */}
+        {/* Front face — glow directly on the card element like desktop NuggetCard */}
         <div
           className="absolute inset-0 apple-glass rounded-3xl overflow-hidden"
-          style={{ backfaceVisibility: "hidden" }}
+          style={{ backfaceVisibility: "hidden", boxShadow: GLOW_SHADOW }}
         >
           {front}
         </div>
@@ -63,7 +58,7 @@ export default function FlipCard({ flipped, onFlip, front, back, className = "" 
         {/* Back face */}
         <div
           className="absolute inset-0 apple-glass rounded-3xl overflow-hidden"
-          style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
+          style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)", boxShadow: GLOW_SHADOW }}
         >
           {back}
         </div>
