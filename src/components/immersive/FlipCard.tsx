@@ -46,10 +46,11 @@ export default function FlipCard({ flipped, onFlip, front, back, className = "" 
       onPointerDown={handlePointerDown}
       onClick={handleClick}
     >
-      {/* Glow — rendered OUTSIDE the preserve-3d context so border-radius works on iOS */}
+      {/* Glow — outside preserve-3d context. rgba bg forces iOS to paint the
+          rounded rect so box-shadow follows border-radius correctly. */}
       <div
         className="absolute inset-0 rounded-3xl pointer-events-none"
-        style={{ boxShadow: GLOW }}
+        style={{ boxShadow: GLOW, background: "rgba(0,0,0,0.01)" }}
       />
 
       {/* 3D flip container */}
