@@ -1203,8 +1203,8 @@ export default function Listen() {
               {topFocusIndex === 0 ? "Back" : "Open Companion"}
             </motion.p>
           )}
-          <div className={`flex flex-col items-center gap-1.5 ${showImmersive ? "fixed top-2 right-2 z-[60]" : ""}`}>
-            <MusicNerdLoadingOrchestrator
+          <div className="flex flex-col items-center gap-1.5">
+            {!showImmersive && <MusicNerdLoadingOrchestrator
               aiLoading={aiLoading}
               shortId={shortId}
               trackId={trackId}
@@ -1217,7 +1217,7 @@ export default function Listen() {
                   window.open(`${window.location.origin}/c/${shortId}?tier=${tier}&listen=${listenCount}`, "_blank");
                 }
               }}
-            />
+            />}
             <button
               onClick={() => setDevOpen((o) => !o)}
               className="rounded-md bg-foreground/5 px-2.5 py-0.5 text-[10px] text-muted-foreground/50 hover:bg-foreground/10 hover:text-muted-foreground transition-colors"
@@ -1579,6 +1579,26 @@ export default function Listen() {
               spotifyAlbumArt={spotifyStateTrack?.albumArtUrl}
             />
           </Suspense>
+        )}
+
+        {/* MusicNerd orchestrator for immersive mode — rendered AFTER the overlay so it's on top */}
+        {showImmersive && (
+          <div className="fixed top-3 right-14 z-[70]">
+            <MusicNerdLoadingOrchestrator
+              aiLoading={aiLoading}
+              shortId={shortId}
+              trackId={trackId}
+              tier={tier}
+              listenCount={listenCount}
+              focusZone={focusZone}
+              topFocusIndex={topFocusIndex}
+              onCompanionClick={() => {
+                if (shortId) {
+                  window.open(`${window.location.origin}/c/${shortId}?tier=${tier}&listen=${listenCount}`, "_blank");
+                }
+              }}
+            />
+          </div>
         )}
       </div>
     </PageTransition>

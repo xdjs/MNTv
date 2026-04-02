@@ -212,6 +212,22 @@ export default function ImmersiveNuggetView({
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
   const [scrubbing, setScrubbing] = useState(false);
+  const [scrubProgress, setScrubProgress] = useState<number | null>(null);
+  const lastSeekRef = useRef(0);
+  const displayProgress = scrubProgress !== null ? scrubProgress : progress;
+
+  const scrubToPosition = useCallback((clientX: number, bar: HTMLElement, commit: boolean) => {
+    const rect = bar.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+    setScrubProgress(pct);
+    const now = Date.now();
+    // Throttle actual seek calls to every 150ms during drag, always seek on commit
+    if (commit || now - lastSeekRef.current > 150) {
+      lastSeekRef.current = now;
+      seek((pct / 100) * duration);
+    }
+    if (commit) setScrubProgress(null);
+  }, [duration, seek]);
   const fmt = (s: number) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
 
   return (
@@ -496,26 +512,28 @@ export default function ImmersiveNuggetView({
               e.currentTarget.setPointerCapture(e.pointerId);
               setScrubbing(true);
               const bar = e.currentTarget.querySelector("[data-bar]") as HTMLElement;
-              if (!bar) return;
-              const rect = bar.getBoundingClientRect();
-              seek(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration);
+              if (bar) scrubToPosition(e.clientX, bar, false);
             }}
             onPointerMove={(e) => {
-              if (e.buttons === 0 && e.pressure === 0) return;
+              if (!scrubbing) return;
               const bar = e.currentTarget.querySelector("[data-bar]") as HTMLElement;
-              if (!bar) return;
-              const rect = bar.getBoundingClientRect();
-              seek(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration);
+              if (bar) scrubToPosition(e.clientX, bar, false);
             }}
-            onPointerUp={() => setScrubbing(false)}
-            onPointerCancel={() => setScrubbing(false)}
+            onPointerUp={(e) => {
+              if (scrubbing) {
+                const bar = e.currentTarget.querySelector("[data-bar]") as HTMLElement;
+                if (bar) scrubToPosition(e.clientX, bar, true);
+              }
+              setScrubbing(false);
+            }}
+            onPointerCancel={() => { setScrubbing(false); setScrubProgress(null); }}
           >
             <div data-bar className="relative h-[3px] bg-white/15 rounded-full">
-              <div className="absolute inset-y-0 left-0 bg-white/60 rounded-full" style={{ width: `${progress}%` }} />
+              <div className="absolute inset-y-0 left-0 bg-white/60 rounded-full" style={{ width: `${displayProgress}%` }} />
               {/* Scrub thumb — appears on touch */}
               <div
                 className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-white transition-opacity duration-150"
-                style={{ left: `${progress}%`, opacity: scrubbing ? 1 : 0 }}
+                style={{ left: `${displayProgress}%`, opacity: scrubbing ? 1 : 0 }}
               />
             </div>
           </div>
