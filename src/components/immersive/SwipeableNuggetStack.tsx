@@ -54,7 +54,7 @@ export default function SwipeableNuggetStack({
   };
 
   return (
-    <div className="relative w-full h-full overflow-hidden">
+    <div className="relative w-full h-full overflow-visible">
       <motion.div
         className="w-full h-full"
         drag={disabled ? false : "x"}

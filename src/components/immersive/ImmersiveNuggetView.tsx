@@ -9,7 +9,6 @@ import TypewriterText from "./TypewriterText";
 import FlipCard from "./FlipCard";
 import SwipeableNuggetStack from "./SwipeableNuggetStack";
 
-const haptic = (ms = 10) => { try { navigator.vibrate?.(ms); } catch {} };
 
 interface ImmersiveNuggetViewProps {
   nuggets: Nugget[];
@@ -118,7 +117,6 @@ export default function ImmersiveNuggetView({
     const currentCount = unlockedIds.size;
     if (currentCount > prevUnlockedCountRef.current && currentCount > 0) {
       // A new nugget just unlocked — show it automatically
-      haptic(12);
       const unlockedArray = nuggets.filter((n) => unlockedIds.has(n.id));
       const latestIndex = nuggets.indexOf(unlockedArray[unlockedArray.length - 1]);
       if (latestIndex >= 0) {
@@ -154,9 +152,8 @@ export default function ImmersiveNuggetView({
   const isTypewriterDone = activeNugget ? typewriterDoneRef.current.has(activeNugget.id) : false;
   const showCard = activeNugget && !nuggetDismissed;
 
-  const handleFlip = useCallback(() => { haptic(8); setFlipped((f) => !f); }, []);
+  const handleFlip = useCallback(() => setFlipped((f) => !f), []);
   const handleSwipe = useCallback((newIndex: number) => {
-    haptic(6);
     setActiveIndex(newIndex);
     setFlipped(false);
     setDeepDiveText(null);
