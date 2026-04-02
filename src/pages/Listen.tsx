@@ -247,7 +247,7 @@ export default function Listen() {
     trackLoadTimestampRef.current = Date.now();
 
     if (isTrackSwitch) {
-      player.pause();
+      player.stop();
       if (isExternalListenMode) setExternalListenMode(false);
     }
   }, [rawTrackId]);
@@ -1581,25 +1581,6 @@ export default function Listen() {
           </Suspense>
         )}
 
-        {/* MusicNerd orchestrator for immersive mode — rendered AFTER the overlay so it's on top */}
-        {showImmersive && (
-          <div className="fixed top-3 right-14 z-[70]">
-            <MusicNerdLoadingOrchestrator
-              aiLoading={aiLoading}
-              shortId={shortId}
-              trackId={trackId}
-              tier={tier}
-              listenCount={listenCount}
-              focusZone={focusZone}
-              topFocusIndex={topFocusIndex}
-              onCompanionClick={() => {
-                if (shortId) {
-                  window.open(`${window.location.origin}/c/${shortId}?tier=${tier}&listen=${listenCount}`, "_blank");
-                }
-              }}
-            />
-          </div>
-        )}
       </div>
     </PageTransition>
   );
