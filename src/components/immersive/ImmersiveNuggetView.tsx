@@ -45,6 +45,28 @@ export default function ImmersiveNuggetView({
   const { isPlaying, currentTime, duration, toggle, seek } = usePlayer();
   const artUrl = coverArtUrl || spotifyAlbumArt || "";
 
+  // ── Media Session API — lock screen / control center metadata ──────
+  useEffect(() => {
+    if (!("mediaSession" in navigator)) return;
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: trackTitle,
+      artist: artist,
+      artwork: artUrl ? [
+        { src: artUrl, sizes: "512x512", type: "image/jpeg" },
+      ] : [],
+    });
+    navigator.mediaSession.setActionHandler("play", () => toggle());
+    navigator.mediaSession.setActionHandler("pause", () => toggle());
+    navigator.mediaSession.setActionHandler("previoustrack", () => onPrev?.());
+    navigator.mediaSession.setActionHandler("nexttrack", () => onNext?.());
+    return () => {
+      navigator.mediaSession.setActionHandler("play", null);
+      navigator.mediaSession.setActionHandler("pause", null);
+      navigator.mediaSession.setActionHandler("previoustrack", null);
+      navigator.mediaSession.setActionHandler("nexttrack", null);
+    };
+  }, [trackTitle, artist, artUrl, toggle, onPrev, onNext]);
+
   const [unlockedIds, setUnlockedIds] = useState<Set<string>>(new Set());
   const [activeIndex, setActiveIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
@@ -295,7 +317,7 @@ export default function ImmersiveNuggetView({
                               <TypewriterText
                                 text={activeNugget.headline || activeNugget.text}
                                 speed={35}
-                                paused={!isPlaying}
+                                paused={false}
                                 onComplete={handleTypewriterComplete}
                                 as="h2"
                                 className="text-2xl font-bold leading-tight text-white drop-shadow-lg"
