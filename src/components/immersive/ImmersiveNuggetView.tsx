@@ -258,13 +258,12 @@ export default function ImmersiveNuggetView({
                       {/* Scrollable card */}
                       <div className="relative w-full h-full apple-glass rounded-3xl overflow-hidden overflow-y-auto glass-scrollbar">
                         {/* Image hero — fills the visible card. Scroll down to reveal body text. */}
-                        <div className="relative w-full" style={{ minHeight: "100%" }}>
+                        <div className="relative w-full bg-black" style={{ minHeight: "100%" }}>
                           {imgUrl && (
                             <img
                               src={imgUrl}
                               alt=""
-                              className={`w-full h-full object-cover ${!isNuggetImage ? "scale-110 blur-sm" : ""}`}
-                              style={{ minHeight: "100%" }}
+                              className={`absolute inset-0 w-full h-full object-cover ${!isNuggetImage ? "scale-110 blur-sm" : ""}`}
                               onError={(e) => {
                                 if (isNuggetImage && activeNugget?.imageUrl) {
                                   failedImagesRef.current.add(activeNugget.imageUrl);

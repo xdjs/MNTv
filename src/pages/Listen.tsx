@@ -1203,7 +1203,7 @@ export default function Listen() {
               {topFocusIndex === 0 ? "Back" : "Open Companion"}
             </motion.p>
           )}
-          <div className={`flex flex-col items-center gap-1.5 ${showImmersive ? "fixed top-3 right-3 z-[70]" : ""}`}>
+          <div className={`flex flex-col items-center gap-1.5 ${showImmersive ? "hidden" : ""}`}>
             <MusicNerdLoadingOrchestrator
               aiLoading={aiLoading}
               shortId={shortId}
@@ -1581,6 +1581,25 @@ export default function Listen() {
           </Suspense>
         )}
 
+        {/* Orchestrator for immersive — rendered AFTER overlay so DOM order wins z-fight */}
+        {showImmersive && (
+          <div className="contents [&>.fixed]:!z-[60]" style={{ isolation: "isolate" }}>
+            <MusicNerdLoadingOrchestrator
+              aiLoading={aiLoading}
+              shortId={shortId}
+              trackId={trackId}
+              tier={tier}
+              listenCount={listenCount}
+              focusZone={focusZone}
+              topFocusIndex={topFocusIndex}
+              onCompanionClick={() => {
+                if (shortId) {
+                  window.open(`${window.location.origin}/c/${shortId}?tier=${tier}&listen=${listenCount}`, "_blank");
+                }
+              }}
+            />
+          </div>
+        )}
       </div>
     </PageTransition>
   );
