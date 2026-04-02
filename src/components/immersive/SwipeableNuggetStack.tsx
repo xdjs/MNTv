@@ -1,5 +1,4 @@
-import { type ReactNode, useRef, useState } from "react";
-import { motion, useMotionValue, animate, type PanInfo } from "framer-motion";
+import { type ReactNode, useRef, useCallback } from "react";
 
 interface SwipeableNuggetStackProps {
   count: number;
@@ -10,8 +9,7 @@ interface SwipeableNuggetStackProps {
   children: (index: number, isActive: boolean) => ReactNode;
 }
 
-const SWIPE_THRESHOLD = 50;
-const VELOCITY_THRESHOLD = 200;
+const SWIPE_THRESHOLD = 40;
 
 export default function SwipeableNuggetStack({
   unlockedCount,
@@ -20,54 +18,48 @@ export default function SwipeableNuggetStack({
   disabled = false,
   children,
 }: SwipeableNuggetStackProps) {
-  const x = useMotionValue(0);
-  const [isDragging, setIsDragging] = useState(false);
+  const startXRef = useRef(0);
+  const startYRef = useRef(0);
+  const lockedRef = useRef<"x" | "y" | null>(null);
 
-  const handleDragStart = () => {
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (disabled) return;
-    setIsDragging(true);
-  };
+    startXRef.current = e.touches[0].clientX;
+    startYRef.current = e.touches[0].clientY;
+    lockedRef.current = null;
+  }, [disabled]);
 
-  const handleDragEnd = (_: any, info: PanInfo) => {
-    setIsDragging(false);
-    if (disabled) {
-      animate(x, 0, { type: "spring", stiffness: 300, damping: 30 });
-      return;
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (disabled || lockedRef.current !== "x") return;
+    const dx = e.changedTouches[0].clientX - startXRef.current;
+
+    if (dx < -SWIPE_THRESHOLD && activeIndex < unlockedCount - 1) {
+      onSwipe(activeIndex + 1);
+    } else if (dx > SWIPE_THRESHOLD && activeIndex > 0) {
+      onSwipe(activeIndex - 1);
     }
+  }, [disabled, activeIndex, unlockedCount, onSwipe]);
 
-    const { offset, velocity } = info;
-    const swipedLeft = offset.x < -SWIPE_THRESHOLD || velocity.x < -VELOCITY_THRESHOLD;
-    const swipedRight = offset.x > SWIPE_THRESHOLD || velocity.x > VELOCITY_THRESHOLD;
-
-    let newIndex = activeIndex;
-    if (swipedLeft && activeIndex < unlockedCount - 1) {
-      newIndex = activeIndex + 1;
-    } else if (swipedRight && activeIndex > 0) {
-      newIndex = activeIndex - 1;
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (disabled) return;
+    if (lockedRef.current === null) {
+      const dx = Math.abs(e.touches[0].clientX - startXRef.current);
+      const dy = Math.abs(e.touches[0].clientY - startYRef.current);
+      // Lock direction once we've moved enough
+      if (dx > 8 || dy > 8) {
+        lockedRef.current = dx > dy ? "x" : "y";
+      }
     }
-
-    animate(x, 0, { type: "spring", stiffness: 300, damping: 30 });
-
-    if (newIndex !== activeIndex) {
-      onSwipe(newIndex);
-    }
-  };
+  }, [disabled]);
 
   return (
-    <div className="relative w-full h-full overflow-visible">
-      <motion.div
-        className="w-full h-full"
-        drag={disabled ? false : "x"}
-        dragConstraints={{ left: -80, right: 80 }}
-        dragElastic={0.3}
-        dragDirectionLock
-        style={{ x }}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        data-dragging={isDragging || undefined}
-      >
-        {children(activeIndex, true)}
-      </motion.div>
+    <div
+      className="relative w-full h-full overflow-visible"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchMove}
+    >
+      {children(activeIndex, true)}
     </div>
   );
 }

@@ -75,7 +75,7 @@ export default function ImmersiveNuggetView({
   const [deepDiveText, setDeepDiveText] = useState<string | null>(null);
   const [deepDiveFollowUp, setDeepDiveFollowUp] = useState<string | null>(null);
   const [deepDiveLoading, setDeepDiveLoading] = useState(false);
-  const typewriterDoneRef = useRef<Set<string>>(new Set());
+  const [typewriterDoneIds, setTypewriterDoneIds] = useState<Set<string>>(new Set());
   const failedImagesRef = useRef<Set<string>>(new Set());
   const prevUnlockedCountRef = useRef(0);
   const prevTrackKeyRef = useRef(`${trackTitle}::${artist}`);
@@ -92,7 +92,7 @@ export default function ImmersiveNuggetView({
       setDeepDiveText(null);
       setDeepDiveFollowUp(null);
       prevUnlockedCountRef.current = 0;
-      typewriterDoneRef.current.clear();
+      setTypewriterDoneIds(new Set());
     }
   }, [trackTitle, artist]);
 
@@ -149,7 +149,7 @@ export default function ImmersiveNuggetView({
   const activeNugget = nuggets[activeIndex];
   const activeSource = activeNugget ? sources.get(activeNugget.sourceId) : undefined;
   const unlockedCount = unlockedIds.size;
-  const isTypewriterDone = activeNugget ? typewriterDoneRef.current.has(activeNugget.id) : false;
+  const isTypewriterDone = activeNugget ? typewriterDoneIds.has(activeNugget.id) : false;
   const showCard = activeNugget && !nuggetDismissed;
 
   const handleFlip = useCallback(() => setFlipped((f) => !f), []);
@@ -160,7 +160,9 @@ export default function ImmersiveNuggetView({
     setDeepDiveFollowUp(null);
   }, []);
   const handleTypewriterComplete = useCallback(() => {
-    if (activeNugget) typewriterDoneRef.current.add(activeNugget.id);
+    if (activeNugget) {
+      setTypewriterDoneIds((prev) => new Set(prev).add(activeNugget.id));
+    }
   }, [activeNugget]);
 
   const handleDismissNugget = useCallback(() => {

@@ -10,9 +10,19 @@ interface FlipCardProps {
 }
 
 const springTransition = { type: "spring" as const, stiffness: 300, damping: 30 };
+const GLOW = "0 0 20px 6px hsl(var(--neon-glow) / 0.4), 0 0 50px 12px hsl(var(--neon-glow) / 0.15)";
 
-// Same glow style as desktop NuggetCard — box-shadow directly on the element
-const GLOW_SHADOW = "0 0 20px 6px hsl(var(--neon-glow) / 0.4), 0 0 50px 12px hsl(var(--neon-glow) / 0.15)";
+// iOS Safari fix: -webkit-mask-image forces proper border-radius clipping
+// when inside a preserve-3d context
+const FACE_STYLE_FRONT = {
+  backfaceVisibility: "hidden" as const,
+  WebkitMaskImage: "-webkit-radial-gradient(circle, white, black)",
+};
+const FACE_STYLE_BACK = {
+  backfaceVisibility: "hidden" as const,
+  transform: "rotateY(180deg)",
+  WebkitMaskImage: "-webkit-radial-gradient(circle, white, black)",
+};
 
 export default function FlipCard({ flipped, onFlip, front, back, className = "" }: FlipCardProps) {
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -37,32 +47,31 @@ export default function FlipCard({ flipped, onFlip, front, back, className = "" 
   return (
     <div
       className={`relative w-full h-full ${className}`}
-      style={{ perspective: 1200 }}
       onPointerDown={handlePointerDown}
       onClick={handleClick}
     >
-      <motion.div
-        className="relative w-full h-full"
-        style={{ transformStyle: "preserve-3d" }}
-        animate={{ rotateY: flipped ? 180 : 0 }}
-        transition={springTransition}
-      >
-        {/* Front face — glow directly on the card element like desktop NuggetCard */}
-        <div
-          className="absolute inset-0 apple-glass rounded-3xl overflow-hidden"
-          style={{ backfaceVisibility: "hidden", boxShadow: GLOW_SHADOW }}
-        >
-          {front}
-        </div>
+      {/* Glow — rendered OUTSIDE the preserve-3d context so border-radius works on iOS */}
+      <div
+        className="absolute inset-0 rounded-3xl pointer-events-none"
+        style={{ boxShadow: GLOW }}
+      />
 
-        {/* Back face */}
-        <div
-          className="absolute inset-0 apple-glass rounded-3xl overflow-hidden"
-          style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)", boxShadow: GLOW_SHADOW }}
+      {/* 3D flip container */}
+      <div className="relative w-full h-full" style={{ perspective: 1200 }}>
+        <motion.div
+          className="relative w-full h-full"
+          style={{ transformStyle: "preserve-3d" }}
+          animate={{ rotateY: flipped ? 180 : 0 }}
+          transition={springTransition}
         >
-          {back}
-        </div>
-      </motion.div>
+          <div className="absolute inset-0 apple-glass rounded-3xl overflow-hidden" style={FACE_STYLE_FRONT}>
+            {front}
+          </div>
+          <div className="absolute inset-0 apple-glass rounded-3xl overflow-hidden" style={FACE_STYLE_BACK}>
+            {back}
+          </div>
+        </motion.div>
+      </div>
     </div>
   );
 }
