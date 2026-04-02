@@ -249,30 +249,40 @@ export default function ImmersiveNuggetView({
                 unlockedCount={unlockedCount}
                 activeIndex={activeIndex}
                 onSwipe={handleSwipe}
+                disabled={flipped}
               >
                 {() => (
                   <div
                     data-card
-                    className="w-full h-full"
-                    style={{ filter: "drop-shadow(0 0 20px hsl(var(--neon-glow) / 0.3)) drop-shadow(0 0 60px hsl(var(--neon-glow) / 0.1))" }}
+                    className="w-full h-full rounded-3xl"
+                    style={{ boxShadow: "0 0 25px 5px hsl(var(--neon-glow) / 0.25), 0 0 80px 15px hsl(var(--neon-glow) / 0.08)" }}
                   >
                     <FlipCard
                       flipped={flipped}
                       onFlip={handleFlip}
                       front={
                         <div className="relative flex flex-col justify-end h-full px-7 pb-10 pt-16 text-left">
-                          {/* Background image if available */}
-                          {activeNugget.imageUrl && !failedImagesRef.current.has(activeNugget.imageUrl) && (
-                            <img
-                              src={activeNugget.imageUrl}
-                              alt=""
-                              className="absolute inset-0 w-full h-full object-cover rounded-3xl"
-                              onError={(e) => {
-                                failedImagesRef.current.add(activeNugget.imageUrl!);
-                                (e.target as HTMLImageElement).style.display = "none";
-                              }}
-                            />
-                          )}
+                          {/* Background image — nugget image, or album art as fallback */}
+                          {(() => {
+                            const nuggetImg = activeNugget.imageUrl && !failedImagesRef.current.has(activeNugget.imageUrl)
+                              ? activeNugget.imageUrl : null;
+                            const bgImg = nuggetImg || artUrl;
+                            return bgImg ? (
+                              <img
+                                src={bgImg}
+                                alt=""
+                                className={`absolute inset-0 w-full h-full object-cover rounded-3xl ${!nuggetImg ? "scale-110 blur-sm" : ""}`}
+                                onError={(e) => {
+                                  if (nuggetImg) {
+                                    failedImagesRef.current.add(nuggetImg);
+                                    // Swap to album art fallback
+                                    (e.target as HTMLImageElement).src = artUrl;
+                                    (e.target as HTMLImageElement).classList.add("scale-110", "blur-sm");
+                                  }
+                                }}
+                              />
+                            ) : null;
+                          })()}
                           {/* Gradient overlay for readability */}
                           <div className="absolute inset-0 rounded-3xl bg-gradient-to-t from-black/90 via-black/50 to-black/20" />
 
