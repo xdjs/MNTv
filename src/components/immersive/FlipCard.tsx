@@ -38,12 +38,11 @@ export default function FlipCard({ flipped, onFlip, front, back, className = "" 
       onPointerDown={handlePointerDown}
       onClick={handleClick}
     >
-      {/* Glow element behind the card */}
+      {/* Glow — extends well beyond card edges so it's visible around the opaque card */}
       <div
-        className="absolute -inset-2 rounded-[2rem] pointer-events-none"
+        className="absolute -inset-4 rounded-[2.5rem] pointer-events-none"
         style={{
-          background: "radial-gradient(ellipse at center, hsl(var(--neon-glow) / 0.15) 0%, transparent 70%)",
-          boxShadow: "0 0 40px 12px hsl(var(--neon-glow) / 0.2), 0 0 100px 30px hsl(var(--neon-glow) / 0.08)",
+          boxShadow: "0 0 50px 15px hsl(var(--neon-glow) / 0.25), 0 0 120px 40px hsl(var(--neon-glow) / 0.1), inset 0 0 30px 5px hsl(var(--neon-glow) / 0.05)",
         }}
       />
 

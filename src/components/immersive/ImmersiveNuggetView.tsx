@@ -233,16 +233,16 @@ export default function ImmersiveNuggetView({
 
       {/* Main content area */}
       <div className="relative z-10 flex-1 flex flex-col items-center px-4 min-h-0 mb-2">
-        <AnimatePresence mode="popLayout">
+        <AnimatePresence mode="wait">
           {showCard ? (
-            /* ── Nugget card ──────────────────────────────────── */
+            /* ── Nugget card — single persistent wrapper, content swaps instantly ── */
             <motion.div
-              key={`card-${activeNugget.id}`}
+              key="nugget-card"
               className="w-full max-w-md flex-1 min-h-0"
-              initial={{ x: 60, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: -60, opacity: 0 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
+              initial={{ y: 30, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 20, opacity: 0 }}
+              transition={{ duration: 0.25 }}
             >
               <SwipeableNuggetStack
                 count={nuggets.length}
