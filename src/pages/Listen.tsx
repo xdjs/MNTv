@@ -14,6 +14,8 @@ const ReadingOverlay = lazy(() => import("@/components/overlays/ReadingOverlay")
 const NuggetDeepDive = lazy(() => import("@/components/overlays/NuggetDeepDive"));
 import DevPanel from "@/components/DevPanel";
 import PlaybackBar from "@/components/PlaybackBar";
+import { useIsMobile } from "@/hooks/use-mobile";
+const ImmersiveNuggetView = lazy(() => import("@/components/immersive/ImmersiveNuggetView"));
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { useAINuggets } from "@/hooks/useAINuggets";
 import { getSeedCompanion, getDemoTrackById, DEMO_TRACKS } from "@/data/seedNuggets";
@@ -171,6 +173,9 @@ export default function Listen() {
   }, [hasSpotifyToken, realTrackMeta?.spotifyUri, track?.artist, track?.title]);
 
   const [shuffleOn, setShuffleOn] = useState(false); // kept for PlaybackBar UI only
+  const [immersiveMode, setImmersiveMode] = useState(false);
+  const isMobile = useIsMobile();
+  const showImmersive = isMobile || immersiveMode;
   const [regenerateKey, setRegenerateKey] = useState(0);
   const [skipLoading, setSkipLoading] = useState(false);
 
@@ -680,10 +685,9 @@ export default function Listen() {
     return () => { cancelled = true; };
   }, [aiLoading, aiNuggets, aiSources, track?.artist, track?.title, tier, listenCount]);
 
-  const rawTrackNuggets = useMemo(
-    () => aiLoading ? [] : aiNuggets,
-    [aiLoading, aiNuggets]
-  );
+  // Pass nuggets through immediately as they arrive — don't gate on aiLoading.
+  // The immersive view handles the loading state independently.
+  const rawTrackNuggets = aiNuggets;
 
   // Redistribute nugget timestamps based on actual player duration instead of
   // the hardcoded 300s default. This ensures nuggets are evenly spaced across
@@ -1199,7 +1203,7 @@ export default function Listen() {
               {topFocusIndex === 0 ? "Back" : "Open Companion"}
             </motion.p>
           )}
-          <div className="flex flex-col items-center gap-1.5">
+          <div className={`flex flex-col items-center gap-1.5 ${showImmersive ? "fixed top-2 right-2 z-[60]" : ""}`}>
             <MusicNerdLoadingOrchestrator
               aiLoading={aiLoading}
               shortId={shortId}
@@ -1558,6 +1562,24 @@ export default function Listen() {
             )}
           </AnimatePresence>
         </Suspense>
+        {/* Immersive nugget overlay (mobile auto, desktop opt-in) */}
+        {showImmersive && track && (
+          <Suspense fallback={null}>
+            <ImmersiveNuggetView
+              nuggets={trackNuggets}
+              sources={aiSources}
+              coverArtUrl={effectiveCoverArt}
+              loading={aiLoading}
+              trackTitle={track.title}
+              artist={track.artist}
+              album={track.album}
+              onClose={() => { if (isMobile) { navigate("/browse"); } else { setImmersiveMode(false); } }}
+              onPrev={handlePrev}
+              onNext={handleNext}
+              spotifyAlbumArt={spotifyStateTrack?.albumArtUrl}
+            />
+          </Suspense>
+        )}
       </div>
     </PageTransition>
   );
