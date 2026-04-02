@@ -233,16 +233,16 @@ export default function ImmersiveNuggetView({
 
       {/* Main content area */}
       <div className="relative z-10 flex-1 flex flex-col items-center px-4 min-h-0 mb-2">
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="popLayout">
           {showCard ? (
             /* ── Nugget card ──────────────────────────────────── */
             <motion.div
               key={`card-${activeNugget.id}`}
               className="w-full max-w-md flex-1 min-h-0"
-              initial={{ y: 40, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: -20, opacity: 0 }}
-              transition={{ type: "spring", stiffness: 260, damping: 25 }}
+              initial={{ x: 60, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -60, opacity: 0 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
             >
               <SwipeableNuggetStack
                 count={nuggets.length}
@@ -251,37 +251,59 @@ export default function ImmersiveNuggetView({
                 onSwipe={handleSwipe}
               >
                 {() => (
-                  <div data-card className="w-full h-full">
+                  <div
+                    data-card
+                    className="w-full h-full"
+                    style={{ filter: "drop-shadow(0 0 20px hsl(var(--neon-glow) / 0.3)) drop-shadow(0 0 60px hsl(var(--neon-glow) / 0.1))" }}
+                  >
                     <FlipCard
                       flipped={flipped}
                       onFlip={handleFlip}
                       front={
-                        <div className="flex flex-col justify-center items-center h-full px-8 py-10 text-center">
-                          <span className="text-xs uppercase tracking-[0.2em] text-foreground/40 mb-6">
-                            {KIND_LABELS[activeNugget.kind] || activeNugget.kind}
-                          </span>
-                          {isTypewriterDone ? (
-                            <h2 className="text-2xl font-bold leading-tight text-foreground/90">
-                              {activeNugget.headline || activeNugget.text}
-                            </h2>
-                          ) : (
-                            <TypewriterText
-                              text={activeNugget.headline || activeNugget.text}
-                              speed={35}
-                              paused={!isPlaying}
-                              onComplete={handleTypewriterComplete}
-                              as="h2"
-                              className="text-2xl font-bold leading-tight text-foreground/90"
+                        <div className="relative flex flex-col justify-end h-full px-7 pb-10 pt-16 text-left">
+                          {/* Background image if available */}
+                          {activeNugget.imageUrl && !failedImagesRef.current.has(activeNugget.imageUrl) && (
+                            <img
+                              src={activeNugget.imageUrl}
+                              alt=""
+                              className="absolute inset-0 w-full h-full object-cover rounded-3xl"
+                              onError={(e) => {
+                                failedImagesRef.current.add(activeNugget.imageUrl!);
+                                (e.target as HTMLImageElement).style.display = "none";
+                              }}
                             />
                           )}
-                          <motion.p
-                            className="text-xs text-foreground/30 mt-8"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: isTypewriterDone && !flipped ? 0.6 : 0 }}
-                            transition={{ delay: 0.5, duration: 0.4 }}
-                          >
-                            tap to reveal more
-                          </motion.p>
+                          {/* Gradient overlay for readability */}
+                          <div className="absolute inset-0 rounded-3xl bg-gradient-to-t from-black/90 via-black/50 to-black/20" />
+
+                          {/* Content */}
+                          <div className="relative z-10">
+                            <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 mb-3 block">
+                              {KIND_LABELS[activeNugget.kind] || activeNugget.kind}
+                            </span>
+                            {isTypewriterDone ? (
+                              <h2 className="text-2xl font-bold leading-tight text-white drop-shadow-lg">
+                                {activeNugget.headline || activeNugget.text}
+                              </h2>
+                            ) : (
+                              <TypewriterText
+                                text={activeNugget.headline || activeNugget.text}
+                                speed={35}
+                                paused={!isPlaying}
+                                onComplete={handleTypewriterComplete}
+                                as="h2"
+                                className="text-2xl font-bold leading-tight text-white drop-shadow-lg"
+                              />
+                            )}
+                            <motion.p
+                              className="text-xs text-white/40 mt-4"
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: isTypewriterDone && !flipped ? 0.6 : 0 }}
+                              transition={{ delay: 0.5, duration: 0.4 }}
+                            >
+                              tap to reveal more
+                            </motion.p>
+                          </div>
                         </div>
                       }
                       back={
