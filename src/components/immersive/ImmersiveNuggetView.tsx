@@ -313,7 +313,7 @@ export default function ImmersiveNuggetView({
                         </div>
                       }
                       back={
-                        <div className="h-full rounded-3xl overflow-y-auto overflow-x-hidden glass-scrollbar">
+                        <div className="h-full rounded-3xl overflow-y-auto overflow-x-hidden glass-scrollbar flex flex-col">
                           {/* Hero image — takes ~45% of card, sticky so it stays visible while scrolling */}
                           {activeNugget.imageUrl && !failedImagesRef.current.has(activeNugget.imageUrl) ? (
                             <div className="relative w-full" style={{ minHeight: "45%" }}>
@@ -335,8 +335,8 @@ export default function ImmersiveNuggetView({
                             </div>
                           ) : null}
 
-                          {/* Text content — scrollable below the image */}
-                          <div className="px-5 py-4 bg-black/40 backdrop-blur-sm">
+                          {/* Text content — scrollable below the image, min-h-full so no glass gap */}
+                          <div className="px-5 py-4 bg-black/40 backdrop-blur-sm flex-1">
                             <span className="text-[10px] uppercase tracking-[0.2em] text-foreground/40 mb-2 block">
                               {KIND_LABELS[activeNugget.kind] || activeNugget.kind}
                             </span>
