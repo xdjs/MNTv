@@ -2697,8 +2697,221 @@ Return ONLY valid JSON:
         }
       }
     }
-    console.time("[Timing] Wiki image resolution"); _ts("wikiImages");
+    // ── Per-nugget image resolution + final assembly function ──────────
     const isValidImageQuery = (q?: string) => q && q.length > 2 && !SENTINEL_VALUES.has(q.toLowerCase().trim());
+
+    async function resolveAndAssembleNugget(i: number) {
+      const n = rawNuggets[i];
+
+      // Wikipedia/Commons image search (if needed)
+      if (!n._resolvedImageUrl && isValidImageQuery(n.imageSearchQuery)) {
+        try {
+          const wikiResult = await resolveNuggetImage(n.imageSearchQuery!);
+          if (wikiResult && !usedImageUrls.has(wikiResult.url)) {
+            n._resolvedImageUrl = wikiResult.url;
+            n._resolvedImageTitle = wikiResult.title;
+            usedImageUrls.add(wikiResult.url);
+            console.log(`[Image] Wikipedia for nugget ${i} "${n.imageSearchQuery}" → ${wikiResult.url}`);
+          }
+        } catch { /* Wikipedia failed, fall through to Exa fallback */ }
+      }
+
+      // Exa citation fallback
+      if (!n._resolvedImageUrl && exaCitationsStrict.length) {
+        const groupStart = i * 10;
+        const groupEnd = groupStart + 10;
+        let fallbackCit = exaCitationsStrict.find((c) =>
+          c.citIndex >= groupStart && c.citIndex < groupEnd &&
+          c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
+        );
+        if (!fallbackCit) {
+          fallbackCit = exaCitationsStrict.find((c) =>
+            c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
+          );
+        }
+        if (fallbackCit?.imageUrl) {
+          n._resolvedImageUrl = fallbackCit.imageUrl;
+          n._resolvedImageTitle = fallbackCit.title;
+          usedImageUrls.add(fallbackCit.imageUrl);
+          console.log(`[Image] Exa fallback for nugget ${i}: ${fallbackCit.imageUrl}`);
+        }
+      }
+
+      // Assemble final nugget object (same logic as Step 4 below)
+      return assembleNugget(n, i);
+    }
+
+    // ── Shared helpers for both SSE and JSON paths ─────────────────────
+
+    // Helper: strip leaked citation markers like [CIT 0], [CIT 1, CIT 2] from text
+    const stripCitMarkers = (s: string) => s.replace(/\s*\[CIT\s*\d+(?:\s*,\s*CIT\s*\d+)*\]/gi, "").trim();
+    // Helper: clean malformed image URLs
+    const cleanImageUrl = (url: string) => url.replace(/\]\(https?:\/\/.*$/, "").replace(/[)\]}>'"\\]+$/, "");
+    // Filter grounding chunks once for reuse
+    const realChunks = groundingChunks.filter((chunk: any) => {
+      const uri = (chunk?.web?.uri || "").toLowerCase();
+      const chunkTitle = (chunk?.web?.title || "").toLowerCase();
+      return uri && !chunkTitle.includes("vertex ai") && !chunkTitle.includes("grounding api");
+    });
+
+    function assembleNugget(n: any, i: number) {
+      const source = n.source || {};
+      const result: any = {
+        headline: stripCitMarkers(n.headline || ""),
+        text: stripCitMarkers(n.text || ""),
+        kind: n.kind,
+        listenFor: n.listenFor,
+        source: {
+          type: source.type || "article",
+          title: source.title || `${title} by ${artist}`,
+          publisher: source.publisher || "Unknown",
+          quoteSnippet: source.quoteSnippet || "",
+          locator: source.locator,
+        },
+      };
+      // Contextual image
+      if (n._resolvedImageUrl) {
+        const cleaned = cleanImageUrl(n._resolvedImageUrl);
+        if (isActualImageUrl(cleaned) || cleaned.includes("wikipedia.org") || cleaned.includes("wikimedia.org")) {
+          result.imageUrl = cleaned;
+          result.imageCaption = (!isSentinel(n.imageCaption) ? n.imageCaption : undefined) || n._resolvedImageTitle || n.headline;
+        }
+      }
+      // Exa citation resolution
+      if (exaCitations?.length && source.citIndex != null) {
+        const cit = exaCitations.find((c) => c.citIndex === source.citIndex);
+        if (cit) { result.source.url = cit.url; if (cit.title) result.source.title = cit.title; result.source.verified = true; }
+      }
+      // Fallback: Gemini didn't use citIndex
+      if (!result.source.url && exaCitations?.length) {
+        const pubLower = (source.publisher || "").toLowerCase();
+        const titleLower = (source.title || "").toLowerCase();
+        const match = exaCitations.find((c) =>
+          (pubLower && c.title.toLowerCase().includes(pubLower)) ||
+          (pubLower && c.url.toLowerCase().includes(pubLower)) ||
+          (titleLower && c.title.toLowerCase().includes(titleLower))
+        );
+        if (match) { result.source.url = match.url; result.source.title = match.title; result.source.verified = true; }
+      }
+      // YouTube sources
+      if (source.type === "youtube" && source.videoIndex != null) {
+        const video = videos[source.videoIndex];
+        if (video) { result.source.embedId = video.videoId; result.source.url = `https://www.youtube.com/watch?v=${video.videoId}`; result.source.verified = true; }
+      }
+      // Grounding chunk resolution
+      if (!result.source.url) {
+        const geminiUrl = source.sourceUrl || "";
+        let geminiHost = "";
+        try { if (geminiUrl) geminiHost = new URL(geminiUrl).hostname; } catch {}
+        if (geminiHost) {
+          const match = realChunks.find((chunk: any) => { try { return new URL(chunk.web.uri).hostname === geminiHost; } catch { return false; } });
+          if (match) { result.source.url = match.web.uri; if (match.web.title) result.source.title = match.web.title; result.source.verified = true; }
+        }
+        if (!result.source.url && realChunks.length > 0) {
+          const artistLower = artist.toLowerCase();
+          const pubLower = (source.publisher || "").toLowerCase();
+          const relevantChunk = realChunks.find((chunk: any) => {
+            const ct = (chunk?.web?.title || "").toLowerCase(); const cu = (chunk?.web?.uri || "").toLowerCase();
+            return pubLower && (ct.includes(pubLower) || cu.includes(pubLower)) && (wordBoundaryMatch(ct, artistLower) || wordBoundaryMatch(cu, artistLower));
+          }) || realChunks.find((chunk: any) => {
+            const ct = (chunk?.web?.title || "").toLowerCase(); const cu = (chunk?.web?.uri || "").toLowerCase();
+            return wordBoundaryMatch(ct, artistLower) || wordBoundaryMatch(cu, artistLower);
+          });
+          if (relevantChunk) { result.source.url = relevantChunk.web.uri; if (relevantChunk.web.title) result.source.title = relevantChunk.web.title; result.source.verified = true; }
+        }
+        if (!result.source.url) {
+          const q = `${source.title || ""} ${source.publisher || ""} ${artist} ${title}`.trim();
+          result.source.url = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+          result.source.verified = false;
+        }
+      }
+      return result;
+    }
+
+    function buildExternalLinks() {
+      const links: { label: string; url: string }[] = [];
+      if (exaCitationsStrict.length) {
+        const seenDomains = new Set<string>();
+        for (const cit of exaCitationsStrict) {
+          try {
+            const domain = new URL(cit.url).hostname.replace(/^www\./, "");
+            if (!seenDomains.has(domain) && links.length < 5) { seenDomains.add(domain); links.push({ label: cit.title || domain, url: cit.url }); }
+          } catch {}
+        }
+      }
+      if (!links.some(l => l.url.includes("wikipedia.org"))) {
+        const wikiCit = exaCitations?.find(c => c.url.includes("wikipedia.org") && c.title.toLowerCase().includes(artist.toLowerCase()));
+        if (wikiCit) links.push({ label: `${artist} — Wikipedia`, url: wikiCit.url });
+      }
+      return links;
+    }
+
+    // ── Check if client wants SSE streaming ──────────────────────────────
+    const wantsSSE = (req.headers.get("accept") || "").includes("text/event-stream");
+
+    if (wantsSSE) {
+      console.log("[SSE] Streaming nuggets as they resolve");
+      const encoder = new TextEncoder();
+      let streamController: ReadableStreamDefaultController<Uint8Array>;
+      let completedCount = 0;
+
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          streamController = controller;
+
+          // Kick off all 3 nugget resolutions in parallel
+          const promises = rawNuggets.map((_, i) =>
+            resolveAndAssembleNugget(i).then((assembled) => {
+              // Validate
+              const sourceType = (assembled.source?.type || "").toLowerCase();
+              const publisher = (assembled.source?.publisher || "").toLowerCase();
+              if (sourceType === "internal-data" || sourceType === "internal_data" || sourceType === "database" || sourceType === "editorial") {
+                console.log(`[SSE] Skipping hallucinated source type nugget ${i}`);
+                return;
+              }
+              if (HALLUCINATED_PUBLISHERS.some(hp => publisher.includes(hp))) {
+                console.log(`[SSE] Skipping hallucinated publisher nugget ${i}`);
+                return;
+              }
+
+              // Stream the complete nugget
+              const event = `data: ${JSON.stringify({ type: "nugget", index: i, nugget: assembled })}\n\n`;
+              try { streamController.enqueue(encoder.encode(event)); } catch { /* stream closed */ }
+              console.log(`[SSE] Streamed nugget ${i}: "${assembled.headline?.slice(0, 40)}"`);
+            }).catch((e) => {
+              console.error(`[SSE] Nugget ${i} failed:`, e);
+            }).finally(() => {
+              completedCount++;
+              if (completedCount === rawNuggets.length) {
+                // All done — send done event and close
+                const doneEvent = `data: ${JSON.stringify({ type: "done", artistSummary, externalLinks: buildExternalLinks(), noTrackData })}\n\n`;
+                try {
+                  streamController.enqueue(encoder.encode(doneEvent));
+                  streamController.close();
+                } catch { /* stream closed */ }
+                console.log("[SSE] All nuggets streamed, done");
+
+                _timings.total = Date.now() - functionStartTime;
+                console.timeEnd("[Timing] TOTAL");
+                console.log(`[Timing] Breakdown:`, JSON.stringify(_timings));
+              }
+            })
+          );
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          "Connection": "keep-alive",
+        },
+      });
+    }
+
+    // ── Non-SSE path: resolve all images in parallel, return JSON (backward compat) ──
+    console.time("[Timing] Wiki image resolution"); _ts("wikiImages");
     const wikiSearchNeeded = rawNuggets.map((n) =>
       !n._resolvedImageUrl && isValidImageQuery(n.imageSearchQuery) ? resolveNuggetImage(n.imageSearchQuery!) : Promise.resolve(null)
     );
@@ -2716,20 +2929,16 @@ Return ONLY valid JSON:
       }
     }
 
-    // Third pass: fallback to any unused strict-filtered Exa citation image.
-    // First try same group, then try ANY group (cross-group sharing for indie artists
-    // where track/discovery searches return no images but artist search is rich).
+    // Third pass: Exa citation fallback
     if (exaCitationsStrict.length) {
       for (let i = 0; i < rawNuggets.length; i++) {
         if (rawNuggets[i]._resolvedImageUrl) continue;
         const groupStart = i * 10;
         const groupEnd = groupStart + 10;
-        // Try same group first
         let fallbackCit = exaCitationsStrict.find((c) =>
           c.citIndex >= groupStart && c.citIndex < groupEnd &&
           c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
         );
-        // Cross-group: try any strict citation with an image (artist photos work for any nugget)
         if (!fallbackCit) {
           fallbackCit = exaCitationsStrict.find((c) =>
             c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
@@ -2747,164 +2956,9 @@ Return ONLY valid JSON:
       }
     }
 
-    // Step 4: Assemble response with real video IDs and grounding-sourced URLs
-    // Filter grounding chunks once for reuse across all nuggets
-    const realChunks = groundingChunks.filter((chunk: any) => {
-      const uri = (chunk?.web?.uri || "").toLowerCase();
-      const chunkTitle = (chunk?.web?.title || "").toLowerCase();
-      return uri && !chunkTitle.includes("vertex ai") && !chunkTitle.includes("grounding api");
-    });
-
-    // Helper: strip leaked citation markers like [CIT 0], [CIT 1, CIT 2] from text
-    const stripCitMarkers = (s: string) => s.replace(/\s*\[CIT\s*\d+(?:\s*,\s*CIT\s*\d+)*\]/gi, "").trim();
-    // Helper: clean malformed image URLs (strip embedded markdown link syntax like `](url)`)
-    const cleanImageUrl = (url: string) => url.replace(/\]\(https?:\/\/.*$/, "").replace(/[)\]}>'"\\]+$/, "");
-
-    const nuggets = rawNuggets.map((n) => {
-      const source = n.source || {};
-      const result: any = {
-        headline: stripCitMarkers(n.headline || ""),
-        text: stripCitMarkers(n.text || ""),
-        kind: n.kind,
-        listenFor: n.listenFor,
-        source: {
-          type: source.type || "article",
-          title: source.title || `${title} by ${artist}`,
-          publisher: source.publisher || "Unknown",
-          quoteSnippet: source.quoteSnippet || "",
-          locator: source.locator,
-        },
-      };
-
-      // Contextual image resolved from Wikipedia/Commons or Exa
-      if (n._resolvedImageUrl) {
-        const cleaned = cleanImageUrl(n._resolvedImageUrl);
-        if (isActualImageUrl(cleaned) || cleaned.includes("wikipedia.org") || cleaned.includes("wikimedia.org")) {
-          result.imageUrl = cleaned;
-          result.imageCaption = (!isSentinel(n.imageCaption) ? n.imageCaption : undefined)
-            || n._resolvedImageTitle || n.headline;
-        } else {
-          console.log(`[Image] Final check rejected non-image URL for "${n.headline?.slice(0, 40)}": ${cleaned}`);
-        }
-      }
-
-      // Exa citation resolution — citIndex maps directly to verified URL
-      if (exaCitations?.length && source.citIndex != null) {
-        const cit = exaCitations.find((c) => c.citIndex === source.citIndex);
-        if (cit) {
-          result.source.url = cit.url;
-          if (cit.title) result.source.title = cit.title;
-          result.source.verified = true;
-        }
-      }
-
-      // Fallback: Gemini didn't use citIndex but Exa citations exist
-      if (!result.source.url && exaCitations?.length) {
-        const pubLower = (source.publisher || "").toLowerCase();
-        const titleLower = (source.title || "").toLowerCase();
-        const match = exaCitations.find((c) =>
-          (pubLower && c.title.toLowerCase().includes(pubLower)) ||
-          (pubLower && c.url.toLowerCase().includes(pubLower)) ||
-          (titleLower && c.title.toLowerCase().includes(titleLower))
-        );
-        if (match) {
-          result.source.url = match.url;
-          result.source.title = match.title;
-          result.source.verified = true;
-        }
-      }
-
-      // YouTube sources — use verified video IDs
-      if (source.type === "youtube" && source.videoIndex != null) {
-        const video = videos[source.videoIndex];
-        if (video) {
-          result.source.embedId = video.videoId;
-          result.source.url = `https://www.youtube.com/watch?v=${video.videoId}`;
-          result.source.verified = true;
-        }
-      }
-
-      // For non-YouTube sources, resolve URL from grounding chunks (trusted) first,
-      // then Gemini's sourceUrl only if it matches grounding. Never serve unverified Gemini URLs.
-      if (!result.source.url) {
-        const geminiUrl = source.sourceUrl || "";
-        let geminiHost = "";
-        try { if (geminiUrl) geminiHost = new URL(geminiUrl).hostname; } catch { /* invalid */ }
-
-        // Try to match Gemini's URL domain against grounding chunks
-        if (geminiHost) {
-          const match = realChunks.find((chunk: any) => {
-            try { return new URL(chunk.web.uri).hostname === geminiHost; } catch { return false; }
-          });
-          if (match) {
-            result.source.url = match.web.uri;
-            if (match.web.title) result.source.title = match.web.title;
-            result.source.verified = true;
-          }
-        }
-
-        // No domain match — use best grounding chunk that mentions the artist (from Google Search)
-        if (!result.source.url && realChunks.length > 0) {
-          const artistLower = artist.toLowerCase();
-          const pubLower = (source.publisher || "").toLowerCase();
-          // Only use chunks that mention the artist — prevents marking Brian Eno/Omar-S articles as verified Pete Rango sources
-          const relevantChunk = realChunks.find((chunk: any) => {
-            const chunkTitle = (chunk?.web?.title || "").toLowerCase();
-            const chunkUri = (chunk?.web?.uri || "").toLowerCase();
-            return pubLower && (chunkTitle.includes(pubLower) || chunkUri.includes(pubLower)) &&
-                   (wordBoundaryMatch(chunkTitle, artistLower) || wordBoundaryMatch(chunkUri, artistLower));
-          }) || realChunks.find((chunk: any) => {
-            const chunkTitle = (chunk?.web?.title || "").toLowerCase();
-            const chunkUri = (chunk?.web?.uri || "").toLowerCase();
-            return wordBoundaryMatch(chunkTitle, artistLower) || wordBoundaryMatch(chunkUri, artistLower);
-          });
-          // No blind fallback to realChunks[0] — that causes wrong-article contamination.
-
-          if (relevantChunk) {
-            result.source.url = relevantChunk.web.uri;
-            if (relevantChunk.web.title) result.source.title = relevantChunk.web.title;
-            result.source.verified = true;
-          }
-        }
-
-        // Final fallback — targeted Google Search so the user can find the real page
-        if (!result.source.url) {
-          const q = `${source.title || ""} ${source.publisher || ""} ${artist} ${title}`.trim();
-          result.source.url = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
-          result.source.verified = false;
-        }
-      }
-
-      return result;
-    });
-
-    // Build external links from strict-filtered Exa citations only
-    // (must mention artist name — prevents Diana Ross, Slackers, etc. from becoming links)
-    const externalLinks: { label: string; url: string }[] = [];
-    if (exaCitationsStrict.length) {
-      const seenDomains = new Set<string>();
-      for (const cit of exaCitationsStrict) {
-        try {
-          const domain = new URL(cit.url).hostname.replace(/^www\./, "");
-          if (!seenDomains.has(domain) && externalLinks.length < 5) {
-            seenDomains.add(domain);
-            externalLinks.push({ label: cit.title || domain, url: cit.url });
-          }
-        } catch { /* skip invalid URLs */ }
-      }
-    }
-    // Add Wikipedia fallback only if Exa found a Wikipedia citation for this artist
-    // (avoids fabricating Wikipedia links for indie/unknown artists who don't have pages)
-    if (!externalLinks.some(l => l.url.includes("wikipedia.org"))) {
-      // Check if any Exa citation came from Wikipedia AND mentions the artist
-      const wikiCit = exaCitations?.find(c =>
-        c.url.includes("wikipedia.org") &&
-        c.title.toLowerCase().includes(artist.toLowerCase())
-      );
-      if (wikiCit) {
-        externalLinks.push({ label: `${artist} — Wikipedia`, url: wikiCit.url });
-      }
-    }
+    // Step 4: Assemble response using shared helpers
+    const nuggets = rawNuggets.map((n, i) => assembleNugget(n, i));
+    const externalLinks = buildExternalLinks();
 
     // ── Fix 4: Post-generation source validation ──────────────────────
     // Filter out nuggets with hallucinated/invalid source types or publishers.

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import type { Nugget, Source } from "@/mock/types";
 import { usePlayer } from "@/contexts/PlayerContext";
@@ -312,39 +312,185 @@ export function useAINuggets(
       const spotifyUriMatch = trackId.match(/spotify:track:([a-zA-Z0-9]{22})/);
       const spotifyTrackIdValue = spotifyUriMatch?.[1];
 
-      const { data, error: fnError } = await supabase.functions.invoke("generate-nuggets", {
-        body: {
-          artist,
-          title,
-          album,
-          listenCount: currentListenCount,
-          previousNuggets,
-          tier,
-          // Pass user's Spotify taste so AI can personalize connections + calibrate assumed knowledge
-          userTopArtists: topArtists?.slice(0, 10),
-          userTopTracks: topTracks?.slice(0, 10),
-          // Pass Spotify artist image as known-good fallback for lesser-known artists
-          spotifyArtistImageUrl: artistImageUrl,
-          // Pass Spotify track ID for recommendations API (similar artists)
-          spotifyTrackId: spotifyTrackIdValue,
+      // ── SSE streaming: fetch nuggets as they individually resolve ──
+      const requestBody = {
+        artist,
+        title,
+        album,
+        listenCount: currentListenCount,
+        previousNuggets,
+        tier,
+        userTopArtists: topArtists?.slice(0, 10),
+        userTopTracks: topTracks?.slice(0, 10),
+        spotifyArtistImageUrl: artistImageUrl,
+        spotifyTrackId: spotifyTrackIdValue,
+      };
+
+      // Get auth token for the request
+      const { data: { session: authSession } } = await supabase.auth.getSession();
+      const authToken = authSession?.access_token || SUPABASE_ANON_KEY;
+
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-nuggets`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": SUPABASE_ANON_KEY,
+          "Authorization": `Bearer ${authToken}`,
+          "Accept": "text/event-stream",
         },
+        body: JSON.stringify(requestBody),
       });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => "");
+        throw new Error(errText || `Edge Function returned ${response.status}`);
+      }
 
       if (cancelledRef.current) return;
 
-      if (fnError) {
-        throw new Error(fnError.message || "Failed to generate nuggets");
-      }
+      let aiNuggets: AINuggetData[] = [];
+      let aiArtistSummary = "";
+      let aiExternalLinks: { label: string; url: string }[] = [];
+      let aiNoTrackData = false;
 
-      if (data?.error) {
-        throw new Error(data.error);
-      }
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("text/event-stream") && response.body) {
+        // ── SSE path: parse streaming events ──
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
 
-      const aiNuggets: AINuggetData[] = data?.nuggets || [];
-      // Companion metadata from generate-nuggets (Exa-sourced)
-      const aiArtistSummary: string = data?.artistSummary || "";
-      const aiExternalLinks: { label: string; url: string }[] = data?.externalLinks || [];
-      const aiNoTrackData: boolean = !!data?.noTrackData;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (cancelledRef.current) { reader.cancel(); return; }
+
+          buffer += decoder.decode(value, { stream: true });
+
+          // Parse SSE events from buffer
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || ""; // keep incomplete last line
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            try {
+              const payload = JSON.parse(line.slice(6));
+              if (payload.type === "nugget") {
+                aiNuggets = [...aiNuggets, payload.nugget];
+                // ── Process and display this nugget immediately ──
+                const n = payload.nugget;
+                const sourceId = `ai-src-${trackId}-L${currentListenCount}-${payload.index}`;
+                const nuggetId = `ai-nug-${trackId}-L${currentListenCount}-${payload.index}`;
+
+                const source: Source = {
+                  id: sourceId,
+                  type: n.source.type,
+                  title: n.source.title,
+                  publisher: n.source.publisher,
+                  url: n.source.url,
+                  embedId: n.source.embedId,
+                  quoteSnippet: n.source.quoteSnippet,
+                  locator: n.source.locator,
+                };
+
+                const earlyStart = 20;
+                const endBuffer = 15;
+                const usableDuration = Math.max(durationSec - earlyStart - endBuffer, 30);
+                // Use total expected nuggets (3) for spacing, not current count
+                const spacing = usableDuration / (3 + 1);
+                const timestampSec = Math.floor(earlyStart + spacing * (payload.index + 1));
+
+                const nugget: Nugget = {
+                  id: nuggetId,
+                  trackId,
+                  timestampSec: Math.min(timestampSec, durationSec - 10),
+                  durationMs: 7000,
+                  headline: n.headline,
+                  text: n.text,
+                  kind: n.kind,
+                  listenFor: n.listenFor || false,
+                  sourceId,
+                  imageUrl: n.imageUrl,
+                  imageCaption: n.imageCaption,
+                };
+
+                // Progressively update state
+                setSources((prev) => new Map(prev).set(sourceId, source));
+                setNuggets((prev) => [...prev, nugget]);
+                console.log(`[SSE] Received nugget ${payload.index}: "${n.headline?.slice(0, 40)}"`);
+
+              } else if (payload.type === "done") {
+                aiArtistSummary = payload.artistSummary || "";
+                aiExternalLinks = payload.externalLinks || [];
+                aiNoTrackData = !!payload.noTrackData;
+                setArtistSummary(aiArtistSummary);
+                console.log("[SSE] All nuggets received");
+              }
+            } catch { /* skip malformed events */ }
+          }
+        }
+
+        // SSE complete — skip the old nugget processing below
+        // Write to cache + history, then return
+        if (cancelledRef.current) return;
+
+        // Write to in-memory cache
+        const allNuggets = aiNuggets.map((n, i) => {
+          const sourceId = `ai-src-${trackId}-L${currentListenCount}-${i}`;
+          const nuggetId = `ai-nug-${trackId}-L${currentListenCount}-${i}`;
+          const earlyStart = 20;
+          const endBuffer = 15;
+          const usableDuration = Math.max(durationSec - earlyStart - endBuffer, 30);
+          const spacing = usableDuration / (3 + 1);
+          const timestampSec = Math.floor(earlyStart + spacing * (i + 1));
+          return {
+            id: nuggetId, trackId, timestampSec: Math.min(timestampSec, durationSec - 10),
+            durationMs: 7000, headline: n.headline, text: n.text, kind: n.kind,
+            listenFor: n.listenFor || false, sourceId, imageUrl: n.imageUrl, imageCaption: n.imageCaption,
+          } as Nugget;
+        });
+        const allSources = new Map<string, Source>();
+        aiNuggets.forEach((n, i) => {
+          const sourceId = `ai-src-${trackId}-L${currentListenCount}-${i}`;
+          allSources.set(sourceId, { id: sourceId, type: n.source.type, title: n.source.title, publisher: n.source.publisher, url: n.source.url, embedId: n.source.embedId, quoteSnippet: n.source.quoteSnippet, locator: n.source.locator });
+        });
+        setNuggetCache(cacheKey, { nuggets: allNuggets, sources: allSources, listenCount: currentListenCount });
+
+        // Write to DB cache for future listeners
+        if (currentListenCount <= 1) {
+          const cacheSourcesObj: Record<string, any> = {};
+          allSources.forEach((src, key) => { cacheSourcesObj[key] = src; });
+          cacheSourcesObj.artistSummary = aiArtistSummary;
+          cacheSourcesObj.externalLinks = aiExternalLinks;
+          await supabase.from("nugget_cache").upsert(
+            { track_id: dbCacheKey, nuggets: allNuggets as unknown as Json, sources: cacheSourcesObj as unknown as Json, status: "ready" },
+            { onConflict: "track_id" }
+          );
+          sentinelClaimed = false;
+          console.log("[NuggetCache] Cached SSE nuggets for", dbCacheKey);
+        }
+
+        // Update nugget history
+        const newHeadlines = allNuggets.map((n) => n.headline || n.text).filter(Boolean);
+        const updatedPreviousNuggets = [...previousNuggets, ...newHeadlines];
+        if (historyRow) {
+          await supabase.from("nugget_history").update({ previous_nuggets: updatedPreviousNuggets as Json, updated_at: new Date().toISOString() }).eq("track_key", trackKey).eq("user_id", userId);
+        } else {
+          await supabase.from("nugget_history").insert({ track_key: trackKey, user_id: userId, listen_count: 1, previous_nuggets: updatedPreviousNuggets as Json });
+        }
+
+        setLoading(false);
+        return; // SSE path complete
+
+      } else {
+        // ── JSON fallback path ──
+        const data = await response.json();
+        if (data?.error) throw new Error(data.error);
+        aiNuggets = data?.nuggets || [];
+        aiArtistSummary = data?.artistSummary || "";
+        aiExternalLinks = data?.externalLinks || [];
+        aiNoTrackData = !!data?.noTrackData;
+      }
       if (aiNoTrackData) {
         console.log("[NuggetGen] Sparse artist — no track data, nugget 2 is 'context' kind");
       }
