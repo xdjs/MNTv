@@ -174,17 +174,27 @@ export default function MusicNerdLoadingOrchestrator({
   function startMorphFly() {
     const pillEl = pillRef.current;
     const anchorEl = anchorRef.current;
-    if (pillEl && anchorEl) {
+    // Check if anchor is visible (has non-zero dimensions)
+    const anchorRect = anchorEl?.getBoundingClientRect();
+    const anchorVisible = anchorRect && anchorRect.width > 0 && anchorRect.height > 0;
+
+    if (pillEl && anchorEl && anchorVisible) {
       const pillRect = pillEl.getBoundingClientRect();
-      const anchorRect = anchorEl.getBoundingClientRect();
       setFlyCoords({
         startX: pillRect.left + pillRect.width / 2,
         startY: pillRect.top + pillRect.height / 2,
         x: anchorRect.left + anchorRect.width / 2,
         y: anchorRect.top + anchorRect.height / 2,
       });
+      setPhaseAndRef("morphFly");
+    } else {
+      // Anchor not visible (e.g. hidden on mobile) — skip morph, go straight to pulsating/ready
+      if (aiLoadingRef.current) {
+        setPhaseAndRef("pulsating");
+      } else {
+        setPhaseAndRef("ready");
+      }
     }
-    setPhaseAndRef("morphFly");
   }
 
   function onMorphComplete() {

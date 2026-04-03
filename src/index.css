@@ -171,3 +171,12 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Marquee scroll for long text */
+@keyframes marquee {
+  0%, 20% { transform: translateX(0); }
+  80%, 100% { transform: translateX(calc(-100% + 200px)); }
+}
+.animate-marquee {
+  animation: marquee linear infinite;
+}
