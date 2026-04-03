@@ -248,17 +248,11 @@ export default function Listen() {
     trackLoadTimestampRef.current = Date.now();
 
     if (isTrackSwitch) {
-      player.pause();
       if (isExternalListenMode) setExternalListenMode(false);
-      // Immediately clear nugget/overlay state so old content doesn't flash
-      setActiveNugget(null);
-      setNuggetQueue([]);
-      setShownNuggetIds(new Set());
-      setDismissedNuggets(new Map());
+      // Clear overlays immediately (nugget state resets via trackNuggets effect)
       setDeepDiveNugget(null);
       setMediaOverlay(null);
       setReadingOverlay(null);
-      setReopenedNuggetId(null);
     }
   }, [rawTrackId]);
 
@@ -965,8 +959,13 @@ export default function Listen() {
   // Auto-resume only after the correct track has been loaded into the SDK.
   // Without the spotifyUri guard, this fires on mount and resumes the PREVIOUS
   // track (still in the SDK) before loadTrack has a chance to swap it out.
+  // Skip during the brief window after a track load — let PlayerContext's
+  // autoplay effect handle it via the Spotify API to avoid resuming the old track.
   useEffect(() => {
-    if (!isExternalListenMode && spotifyUri && player.currentSpotifyUri === spotifyUri) play();
+    if (!isExternalListenMode && spotifyUri && player.currentSpotifyUri === spotifyUri) {
+      if (Date.now() - trackLoadTimestampRef.current < 2000) return;
+      play();
+    }
   }, [play, isExternalListenMode, spotifyUri, player.currentSpotifyUri]);
 
   useEffect(() => {
