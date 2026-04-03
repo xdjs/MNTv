@@ -44,10 +44,10 @@ export default function MiniPlayer({
   }, [duration, onSeek]);
 
   return (
-    <div className="relative">
-      {/* Scrub bar with draggable thumb */}
+    <div className="relative bg-white/5 backdrop-blur-xl border-t border-white/5">
+      {/* Scrub line — thin bar at the very top edge of the mini player */}
       <div
-        className="relative h-6 flex items-center cursor-pointer touch-none"
+        className="absolute top-0 inset-x-0 h-5 -translate-y-1/2 cursor-pointer touch-none z-10"
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId);
           setScrubbing(true);
@@ -68,22 +68,22 @@ export default function MiniPlayer({
         }}
         onPointerCancel={() => { setScrubbing(false); setScrubProgress(null); }}
       >
-        <div data-bar className="w-full h-[3px] bg-white/15 rounded-full relative">
+        <div data-bar className="absolute top-1/2 inset-x-0 h-[2px] bg-white/15">
           <div className="absolute inset-y-0 left-0 bg-white/50 rounded-full" style={{ width: `${displayProgress}%` }} />
-          {/* Draggable thumb */}
           <div
             className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full bg-white transition-all duration-100"
             style={{
               left: `${displayProgress}%`,
-              width: scrubbing ? 12 : 8,
-              height: scrubbing ? 12 : 8,
+              width: scrubbing ? 10 : 6,
+              height: scrubbing ? 10 : 6,
+              opacity: scrubbing ? 1 : 0.7,
             }}
           />
         </div>
       </div>
 
       {/* Player content */}
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 backdrop-blur-xl border-t border-white/5">
+      <div className="flex items-center gap-2 px-3 py-2">
         {artUrl && (
           <img src={artUrl} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
         )}
