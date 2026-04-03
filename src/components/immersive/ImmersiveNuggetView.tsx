@@ -29,8 +29,6 @@ const KIND_LABELS: Record<string, string> = {
   discovery: "Discover",
 };
 
-// Glow style matching desktop NuggetCard
-const GLOW = "0 0 20px 6px hsl(var(--neon-glow) / 0.4), 0 0 50px 12px hsl(var(--neon-glow) / 0.15)";
 
 export default function ImmersiveNuggetView({
   nuggets,
@@ -220,17 +218,24 @@ export default function ImmersiveNuggetView({
         </button>
       </div>
 
-      {/* Main content area */}
-      <div className="relative z-10 flex-1 flex flex-col items-center px-4 min-h-0 mb-1">
+      {/* Screen-edge glow — tier-colored border effect */}
+      <div className="fixed inset-0 z-[51] pointer-events-none"
+        style={{
+          boxShadow: "inset 0 0 30px 4px hsl(var(--neon-glow) / 0.3), inset 0 0 80px 10px hsl(var(--neon-glow) / 0.1)",
+        }}
+      />
+
+      {/* Main content area — full bleed, no card */}
+      <div className="relative z-10 flex-1 overflow-hidden min-h-0">
         <AnimatePresence mode="wait">
           {showCard ? (
             <motion.div
               key="nugget-card"
-              className="w-full max-w-md flex-1 min-h-0"
-              initial={{ y: 30, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 20, opacity: 0 }}
-              transition={{ duration: 0.25 }}
+              className="w-full h-full"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
             >
               <SwipeableNuggetStack
                 count={nuggets.length}
@@ -241,102 +246,93 @@ export default function ImmersiveNuggetView({
                 {() => {
                   const { url: imgUrl, isNuggetImage } = getNuggetImage();
                   return (
-                    <div data-card className="w-full h-full">
-                      {/* Glow */}
-                      <div className="absolute inset-0 rounded-3xl pointer-events-none"
-                        style={{ boxShadow: GLOW, background: "rgba(0,0,0,0.01)" }} />
-
-                      {/* Scrollable card */}
-                      <div className="relative w-full h-full apple-glass rounded-3xl overflow-hidden overflow-y-auto glass-scrollbar">
-                        {/* Image hero — fills the visible card. Scroll down to reveal body text. */}
-                        <div className="relative w-full bg-black" style={{ minHeight: "100%" }}>
-                          {imgUrl && (
-                            <img
-                              src={imgUrl}
-                              alt=""
-                              className={`absolute inset-0 w-full h-full object-cover ${!isNuggetImage ? "scale-110 blur-sm" : ""}`}
-                              onError={(e) => {
-                                if (isNuggetImage && activeNugget?.imageUrl) {
-                                  failedImagesRef.current.add(activeNugget.imageUrl);
-                                  (e.target as HTMLImageElement).src = artUrl;
-                                  (e.target as HTMLImageElement).classList.add("scale-110", "blur-sm");
-                                }
-                              }}
-                            />
+                    <div className="w-full h-full overflow-y-auto glass-scrollbar">
+                      {/* Full-screen image hero */}
+                      <div className="relative w-full bg-black" style={{ minHeight: "100%" }}>
+                        {imgUrl && (
+                          <img
+                            src={imgUrl}
+                            alt=""
+                            className={`absolute inset-0 w-full h-full object-cover ${!isNuggetImage ? "scale-110 blur-sm" : ""}`}
+                            onError={(e) => {
+                              if (isNuggetImage && activeNugget?.imageUrl) {
+                                failedImagesRef.current.add(activeNugget.imageUrl);
+                                (e.target as HTMLImageElement).src = artUrl;
+                                (e.target as HTMLImageElement).classList.add("scale-110", "blur-sm");
+                              }
+                            }}
+                          />
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+                        <div className="absolute bottom-0 inset-x-0 px-5 pb-4">
+                          <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 mb-2 block">
+                            {activeNugget ? (KIND_LABELS[activeNugget.kind] || activeNugget.kind) : ""}
+                          </span>
+                          {activeNugget && (
+                            isTypewriterDone ? (
+                              <h2 className="text-xl font-bold leading-tight text-white drop-shadow-lg">
+                                {activeNugget.headline || activeNugget.text}
+                              </h2>
+                            ) : (
+                              <TypewriterText
+                                text={activeNugget.headline || activeNugget.text}
+                                speed={35}
+                                paused={false}
+                                onComplete={handleTypewriterComplete}
+                                as="h2"
+                                className="text-xl font-bold leading-tight text-white drop-shadow-lg"
+                              />
+                            )
                           )}
-                          {/* Gradient overlay + headline pinned to bottom of image */}
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
-                          <div className="absolute bottom-0 inset-x-0 px-6 pb-5">
-                            <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 mb-2 block">
-                              {activeNugget ? (KIND_LABELS[activeNugget.kind] || activeNugget.kind) : ""}
-                            </span>
-                            {activeNugget && (
-                              isTypewriterDone ? (
-                                <h2 className="text-xl font-bold leading-tight text-white drop-shadow-lg">
-                                  {activeNugget.headline || activeNugget.text}
-                                </h2>
-                              ) : (
-                                <TypewriterText
-                                  text={activeNugget.headline || activeNugget.text}
-                                  speed={35}
-                                  paused={false}
-                                  onComplete={handleTypewriterComplete}
-                                  as="h2"
-                                  className="text-xl font-bold leading-tight text-white drop-shadow-lg"
-                                />
-                              )
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Body text + actions — revealed by scrolling up */}
-                        <div className="px-6 py-5 bg-black/40 backdrop-blur-sm flex-1">
-                          <p className="text-sm leading-relaxed text-foreground/55 mb-4">
-                            {activeNugget?.text}
-                          </p>
-
-                          {deepDiveText && (
-                            <div className="mb-4 pl-3 border-l-2 border-primary/30">
-                              <p className="text-sm leading-relaxed text-foreground/65">{deepDiveText}</p>
-                              {deepDiveFollowUp && (
-                                <p className="text-xs text-primary/60 mt-1.5 italic">{deepDiveFollowUp}</p>
-                              )}
-                            </div>
-                          )}
-
-                          <div className="flex gap-2 flex-wrap mb-3">
-                            {activeSource?.url && (
-                              <a href={activeSource.url} target="_blank" rel="noopener noreferrer"
-                                className="text-xs px-3 py-1.5 rounded-full bg-white/10 text-foreground/60 active:scale-95 transition-transform">
-                                View Source
-                              </a>
-                            )}
-                            <button
-                              className="text-xs px-3 py-1.5 rounded-full bg-primary/20 text-primary active:scale-95 transition-transform flex items-center gap-1.5"
-                              onClick={(e) => { e.stopPropagation(); handleTellMeMore(); }}
-                              disabled={deepDiveLoading}
-                            >
-                              {deepDiveLoading ? <><Loader2 className="w-3 h-3 animate-spin" /> Thinking...</>
-                                : deepDiveText ? "Go deeper" : "Tell me more"}
-                            </button>
-                          </div>
-
-                          {activeSource && (
-                            <p className="text-[10px] text-foreground/25">{activeSource.publisher}</p>
+                          {/* Nugget counter */}
+                          {unlockedCount > 1 && (
+                            <p className="text-[10px] text-white/25 tabular-nums mt-2">
+                              {activeIndex + 1} / {unlockedCount}
+                            </p>
                           )}
                         </div>
+                      </div>
+
+                      {/* Body — revealed by scrolling */}
+                      <div className="px-5 py-5 bg-black/60 backdrop-blur-md">
+                        <p className="text-sm leading-relaxed text-white/60 mb-4">
+                          {activeNugget?.text}
+                        </p>
+
+                        {deepDiveText && (
+                          <div className="mb-4 pl-3 border-l-2 border-primary/30">
+                            <p className="text-sm leading-relaxed text-white/70">{deepDiveText}</p>
+                            {deepDiveFollowUp && (
+                              <p className="text-xs text-primary/60 mt-1.5 italic">{deepDiveFollowUp}</p>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="flex gap-2 flex-wrap mb-3">
+                          {activeSource?.url && (
+                            <a href={activeSource.url} target="_blank" rel="noopener noreferrer"
+                              className="text-xs px-3 py-1.5 rounded-full bg-white/10 text-white/60 active:scale-95 transition-transform">
+                              View Source
+                            </a>
+                          )}
+                          <button
+                            className="text-xs px-3 py-1.5 rounded-full bg-primary/20 text-primary active:scale-95 transition-transform flex items-center gap-1.5"
+                            onClick={(e) => { e.stopPropagation(); handleTellMeMore(); }}
+                            disabled={deepDiveLoading}
+                          >
+                            {deepDiveLoading ? <><Loader2 className="w-3 h-3 animate-spin" /> Thinking...</>
+                              : deepDiveText ? "Go deeper" : "Tell me more"}
+                          </button>
+                        </div>
+
+                        {activeSource && (
+                          <p className="text-[10px] text-white/20">{activeSource.publisher}</p>
+                        )}
                       </div>
                     </div>
                   );
                 }}
               </SwipeableNuggetStack>
-
-              {/* Counter */}
-              {unlockedCount > 1 && (
-                <div className="text-center text-xs text-white/20 tabular-nums mt-1">
-                  {activeIndex + 1} / {unlockedCount}
-                </div>
-              )}
             </motion.div>
           ) : (
             /* ── Now-playing screen ─────────────────────────── */
