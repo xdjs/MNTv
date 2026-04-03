@@ -295,8 +295,10 @@ export default function ImmersiveNuggetView({
                         </div>
                       </div>
 
-                      {/* Body — overlaps image area for seamless gradient blend */}
-                      <div className="px-5 py-5 -mt-16 relative z-10 bg-gradient-to-b from-transparent via-black/80 to-black/90 pt-20">
+                      {/* Body — large overlap so gradient fully covers the image edge */}
+                      <div className="px-5 pb-5 -mt-32 relative z-10 pt-36" style={{
+                        background: "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.6) 20%, rgba(0,0,0,0.85) 40%, rgba(0,0,0,0.95) 60%, rgb(0,0,0) 100%)",
+                      }}>
                         <p className="text-sm leading-relaxed text-white/60 mb-4">
                           {activeNugget?.text}
                         </p>
