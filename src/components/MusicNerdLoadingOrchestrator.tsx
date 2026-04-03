@@ -26,11 +26,11 @@ function AnimatedDots() {
 }
 
 /** Settle delay before pill appears (ms) */
-const SETTLE_MS = 200;
+const SETTLE_MS = 350;
 /** How long the pill is visible before morphing (ms) */
-const PILL_DISPLAY_MS = 1500;
+const PILL_DISPLAY_MS = 2200;
 /** Duration of the morph-fly animation (s) */
-const MORPH_FLY_S = 0.4;
+const MORPH_FLY_S = 0.5;
 
 /**
  * Module-level cache so that when the user navigates away (Browse) and comes
