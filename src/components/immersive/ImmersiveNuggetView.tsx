@@ -266,7 +266,7 @@ export default function ImmersiveNuggetView({
                         <div className="absolute inset-0" style={{
                           background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.6) 25%, rgba(0,0,0,0.15) 55%, transparent 80%)",
                         }} />
-                        <div className="absolute bottom-0 inset-x-0 px-5 pb-4">
+                        <div className="absolute bottom-0 inset-x-0 px-5 pb-4 z-20">
                           <span className="text-[10px] uppercase tracking-[0.2em] text-white/60 mb-2 block" style={{ textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>
                             {activeNugget ? (KIND_LABELS[activeNugget.kind] || activeNugget.kind) : ""}
                           </span>
