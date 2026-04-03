@@ -14,11 +14,8 @@ export default function MusicNerdLogo({ size = 64, className = "", glow = false,
       alt="MusicNerd TV"
       width={size}
       height={size}
-      className={`inline-block ${glow && !glowColor ? "neon-glow" : ""} ${className}`}
-      style={{
-        imageRendering: "auto",
-        ...(glowColor ? { filter: `drop-shadow(0 0 8px ${glowColor}) drop-shadow(0 0 20px ${glowColor}40)` } : {}),
-      }}
+      className={`inline-block rounded-full ${glow ? "neon-glow" : ""} ${className}`}
+      style={{ imageRendering: "auto" }}
     />
   );
 }

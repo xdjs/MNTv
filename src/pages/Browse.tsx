@@ -105,11 +105,6 @@ export default function Browse() {
     };
   }, [isPlaying, listenUrl, navigate]);
 
-  const tierLogoGlow: Record<string, string> = {
-    casual: "#22c55e",
-    curious: "#3b82f6",
-    nerd: "#ec4899",
-  };
 
 
   const handleSignOut = () => {
@@ -248,7 +243,7 @@ export default function Browse() {
             title={`Switch tier (currently ${tier || "casual"})`}
             className={`rounded-full transition-all ${rowIndex === -1 && colIndex === 0 ? focusGlow + " scale-110" : ""}`}
           >
-            <MusicNerdLogo size={36} glow className="opacity-80" glowColor={tierLogoGlow[tier || "casual"]} />
+            <MusicNerdLogo size={36} glow className="opacity-80" />
           </button>
           <div className="flex items-center gap-3">
             <button
