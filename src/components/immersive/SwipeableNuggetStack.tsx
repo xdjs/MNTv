@@ -1,4 +1,4 @@
-import { type ReactNode, useRef, useState, useCallback } from "react";
+import { type ReactNode, useRef, useState, useCallback, useEffect } from "react";
 
 interface SwipeableNuggetStackProps {
   count: number;
@@ -10,6 +10,7 @@ interface SwipeableNuggetStackProps {
 }
 
 const SWIPE_THRESHOLD = 40;
+const CARD_WIDTH = 400; // exit distance
 
 export default function SwipeableNuggetStack({
   unlockedCount,
@@ -19,13 +20,26 @@ export default function SwipeableNuggetStack({
   children,
 }: SwipeableNuggetStackProps) {
   const [dragX, setDragX] = useState(0);
+  const [exitDir, setExitDir] = useState<-1 | 0 | 1>(0); // -1 = exiting left, 1 = exiting right
   const isDraggingRef = useRef(false);
   const startXRef = useRef(0);
   const startYRef = useRef(0);
   const lockedRef = useRef<"x" | "y" | null>(null);
+  const prevIndexRef = useRef(activeIndex);
 
   const canGoLeft = activeIndex > 0;
   const canGoRight = activeIndex < unlockedCount - 1;
+
+  // When activeIndex changes externally (auto-unlock), animate entry
+  useEffect(() => {
+    if (activeIndex !== prevIndexRef.current) {
+      const dir = activeIndex > prevIndexRef.current ? 1 : -1;
+      setExitDir(0);
+      setDragX(dir * 60); // start offset
+      requestAnimationFrame(() => setDragX(0)); // animate to center
+      prevIndexRef.current = activeIndex;
+    }
+  }, [activeIndex]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (disabled) return;
@@ -33,6 +47,7 @@ export default function SwipeableNuggetStack({
     startYRef.current = e.touches[0].clientY;
     lockedRef.current = null;
     isDraggingRef.current = true;
+    setExitDir(0);
   }, [disabled]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
@@ -61,22 +76,32 @@ export default function SwipeableNuggetStack({
     }
 
     const dx = e.changedTouches[0].clientX - startXRef.current;
-    const swiped = (dx < -SWIPE_THRESHOLD && canGoRight) || (dx > SWIPE_THRESHOLD && canGoLeft);
+    const goingLeft = dx < -SWIPE_THRESHOLD && canGoRight;
+    const goingRight = dx > SWIPE_THRESHOLD && canGoLeft;
 
-    if (swiped) {
-      // Batch: update content first, then reset position so there's no flash of old content
-      if (dx < -SWIPE_THRESHOLD && canGoRight) onSwipe(activeIndex + 1);
-      else if (dx > SWIPE_THRESHOLD && canGoLeft) onSwipe(activeIndex - 1);
-      // Reset drag on next frame after React processes the swipe
-      requestAnimationFrame(() => setDragX(0));
+    if (goingLeft || goingRight) {
+      // Animate card out in swipe direction
+      const dir = goingLeft ? -1 : 1;
+      setExitDir(dir as -1 | 1);
+      setDragX(dir * CARD_WIDTH);
+
+      // After exit animation, swap content and reset
+      setTimeout(() => {
+        if (goingLeft) onSwipe(activeIndex + 1);
+        else onSwipe(activeIndex - 1);
+        setExitDir(0);
+        setDragX(0);
+      }, 180);
     } else {
       setDragX(0);
     }
   }, [disabled, activeIndex, canGoLeft, canGoRight, onSwipe]);
 
+  const isExiting = exitDir !== 0;
+
   return (
     <div
-      className="relative w-full h-full overflow-visible"
+      className="relative w-full h-full overflow-hidden"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -84,16 +109,17 @@ export default function SwipeableNuggetStack({
       <div
         className="w-full h-full"
         style={{
-          transform: dragX !== 0 ? `translateX(${dragX}px) rotate(${dragX * 0.02}deg)` : undefined,
-          transition: dragX !== 0 ? "none" : "transform 0.2s ease-out",
+          transform: dragX !== 0 ? `translateX(${dragX}px)` : undefined,
+          transition: isDraggingRef.current ? "none" : "transform 0.18s ease-out",
+          opacity: isExiting ? 0.5 : 1,
           willChange: dragX !== 0 ? "transform" : undefined,
         }}
       >
         {children(activeIndex, true)}
       </div>
 
-      {/* Swipe hints — subtle edge indicators when more cards available */}
-      {!isDraggingRef.current && unlockedCount > 1 && (
+      {/* Swipe hints */}
+      {!isDraggingRef.current && !isExiting && unlockedCount > 1 && (
         <>
           {canGoLeft && (
             <div className="absolute left-1 top-1/2 -translate-y-1/2 z-20 pointer-events-none opacity-30">

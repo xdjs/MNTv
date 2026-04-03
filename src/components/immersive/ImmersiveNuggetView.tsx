@@ -378,7 +378,7 @@ export default function ImmersiveNuggetView({
       </div>
 
       {/* Mini player */}
-      <div className="relative z-20" style={{ paddingBottom: "max(env(safe-area-inset-bottom, 4px), 4px)" }}>
+      <div className="relative z-20 bg-black" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
         <MiniPlayer
           artUrl={artUrl}
           trackTitle={trackTitle}
