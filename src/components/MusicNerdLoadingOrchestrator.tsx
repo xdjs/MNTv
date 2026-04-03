@@ -275,7 +275,7 @@ export default function MusicNerdLoadingOrchestrator({
         {phase === "pill" && (
           <motion.div
             ref={pillRef}
-            className="fixed left-1/2 z-50 apple-glass rounded-full px-4 py-2.5 flex items-center gap-2.5 pointer-events-none"
+            className="fixed left-1/2 z-50 apple-glass rounded-full px-4 py-2.5 flex items-center gap-2.5 pointer-events-none will-change-transform"
             style={{
               top: "calc(50% + 216px)",
               translateX: "-50%",
@@ -298,25 +298,26 @@ export default function MusicNerdLoadingOrchestrator({
       <AnimatePresence>
         {phase === "morphFly" && flyCoords && (
           <motion.div
-            className="fixed z-50 pointer-events-none flex items-center justify-center apple-glass"
+            className="fixed z-50 pointer-events-none flex items-center justify-center apple-glass will-change-transform"
             style={{
               left: flyCoords.startX,
               top: flyCoords.startY,
+              width: 48,
+              height: 48,
+              borderRadius: 24,
               translateX: "-50%",
               translateY: "-50%",
             }}
             initial={{
-              width: 260,
-              height: 44,
-              borderRadius: 22,
+              scaleX: 260 / 48,
+              scaleY: 44 / 48,
               x: 0,
               y: 0,
               opacity: 1,
             }}
             animate={{
-              width: 48,
-              height: 48,
-              borderRadius: 24,
+              scaleX: 1,
+              scaleY: 1,
               x: flyCoords.x - flyCoords.startX,
               y: flyCoords.y - flyCoords.startY,
               opacity: 1,
