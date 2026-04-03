@@ -222,7 +222,7 @@ export default function Connect() {
                             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${t.badge}`}>{t.id}</span>
                           </div>
                           <p className="text-sm text-muted-foreground">{t.desc}</p>
-                          <p className="text-[11px] text-foreground/40 mt-1">{t.hint}</p>
+                          <p className="text-xs text-foreground/40 mt-1">{t.hint}</p>
                         </div>
                       </button>
                     ))}

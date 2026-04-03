@@ -88,14 +88,14 @@ export default function SearchOverlay({ open, onClose }: Props) {
           className="fixed inset-0 z-50 flex flex-col bg-background/95 backdrop-blur-xl"
         >
           {/* Search bar */}
-          <div className="flex items-center gap-4 px-10 pt-8">
+          <div className="flex items-center gap-3 md:gap-4 px-4 md:px-10 pt-6 md:pt-8">
             <Search size={24} className="text-muted-foreground shrink-0" />
             <input
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search artists, albums, tracks…"
-              className="flex-1 bg-transparent text-3xl font-bold text-foreground placeholder:text-muted-foreground/50 outline-none"
+              className="flex-1 bg-transparent text-xl md:text-3xl font-bold text-foreground placeholder:text-muted-foreground/50 outline-none"
               style={{ fontFamily: "'Nunito Sans', sans-serif" }}
             />
             <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
@@ -104,7 +104,7 @@ export default function SearchOverlay({ open, onClose }: Props) {
           </div>
 
           {/* Results */}
-          <div className="flex-1 overflow-y-auto px-10 pt-8 pb-20">
+          <div className="flex-1 overflow-y-auto px-4 md:px-10 pt-6 md:pt-8 pb-20">
             {noResults && (
               <p className="text-muted-foreground text-lg">No results for "{query}"</p>
             )}
