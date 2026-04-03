@@ -10,7 +10,6 @@ interface SwipeableNuggetStackProps {
 }
 
 const SWIPE_THRESHOLD = 40;
-const CARD_WIDTH = 400; // exit distance
 
 export default function SwipeableNuggetStack({
   unlockedCount,
@@ -20,7 +19,8 @@ export default function SwipeableNuggetStack({
   children,
 }: SwipeableNuggetStackProps) {
   const [dragX, setDragX] = useState(0);
-  const [exitDir, setExitDir] = useState<-1 | 0 | 1>(0); // -1 = exiting left, 1 = exiting right
+  // phase: "idle" | "exit" (old card fading out) | "enter" (new card fading in)
+  const [phase, setPhase] = useState<"idle" | "exit" | "enter">("idle");
   const isDraggingRef = useRef(false);
   const startXRef = useRef(0);
   const startYRef = useRef(0);
@@ -33,22 +33,21 @@ export default function SwipeableNuggetStack({
   // When activeIndex changes externally (auto-unlock), animate entry
   useEffect(() => {
     if (activeIndex !== prevIndexRef.current) {
-      const dir = activeIndex > prevIndexRef.current ? 1 : -1;
-      setExitDir(0);
-      setDragX(dir * 60); // start offset
-      requestAnimationFrame(() => setDragX(0)); // animate to center
       prevIndexRef.current = activeIndex;
+      setPhase("enter");
+      setDragX(0);
+      const t = setTimeout(() => setPhase("idle"), 350);
+      return () => clearTimeout(t);
     }
   }, [activeIndex]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (disabled) return;
+    if (disabled || phase !== "idle") return;
     startXRef.current = e.touches[0].clientX;
     startYRef.current = e.touches[0].clientY;
     lockedRef.current = null;
     isDraggingRef.current = true;
-    setExitDir(0);
-  }, [disabled]);
+  }, [disabled, phase]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (disabled || !isDraggingRef.current) return;
@@ -80,24 +79,30 @@ export default function SwipeableNuggetStack({
     const goingRight = dx > SWIPE_THRESHOLD && canGoLeft;
 
     if (goingLeft || goingRight) {
-      // Animate card out in swipe direction
-      const dir = goingLeft ? -1 : 1;
-      setExitDir(dir as -1 | 1);
-      setDragX(dir * CARD_WIDTH);
+      // Phase 1: fade out current card
+      setPhase("exit");
+      setDragX(0);
 
-      // After exit animation, swap content and reset
+      // After fade-out, swap content and start fade-in
       setTimeout(() => {
         if (goingLeft) onSwipe(activeIndex + 1);
         else onSwipe(activeIndex - 1);
-        setExitDir(0);
-        setDragX(0);
-      }, 180);
+        // "enter" phase is triggered by the useEffect on activeIndex change
+      }, 200);
     } else {
       setDragX(0);
     }
   }, [disabled, activeIndex, canGoLeft, canGoRight, onSwipe]);
 
-  const isExiting = exitDir !== 0;
+  // Compute opacity based on phase + drag distance
+  let opacity = 1;
+  if (phase === "exit") opacity = 0;
+  else if (phase === "enter") opacity = 1;
+  else if (dragX !== 0) {
+    // Fade slightly as user drags further
+    const maxDrag = 200;
+    opacity = Math.max(0.4, 1 - Math.abs(dragX) / maxDrag * 0.6);
+  }
 
   return (
     <div
@@ -110,16 +115,36 @@ export default function SwipeableNuggetStack({
         className="w-full h-full"
         style={{
           transform: dragX !== 0 ? `translateX(${dragX}px)` : undefined,
-          transition: isDraggingRef.current ? "none" : "transform 0.18s ease-out",
-          opacity: isExiting ? 0.5 : 1,
-          willChange: dragX !== 0 ? "transform" : undefined,
+          opacity,
+          transition: isDraggingRef.current
+            ? "opacity 0.15s ease-out"
+            : phase === "exit"
+              ? "opacity 0.2s ease-out"
+              : phase === "enter"
+                ? "opacity 0.3s ease-in"
+                : "transform 0.18s ease-out, opacity 0.15s ease-out",
+          willChange: dragX !== 0 || phase !== "idle" ? "transform, opacity" : undefined,
         }}
       >
         {children(activeIndex, true)}
       </div>
 
+      {/* Dot indicators */}
+      {unlockedCount > 1 && phase === "idle" && !isDraggingRef.current && (
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 flex gap-1.5 pointer-events-none">
+          {Array.from({ length: unlockedCount }, (_, i) => (
+            <div
+              key={i}
+              className={`w-1.5 h-1.5 rounded-full transition-colors duration-200 ${
+                i === activeIndex ? "bg-white/70" : "bg-white/20"
+              }`}
+            />
+          ))}
+        </div>
+      )}
+
       {/* Swipe hints */}
-      {!isDraggingRef.current && !isExiting && unlockedCount > 1 && (
+      {phase === "idle" && !isDraggingRef.current && unlockedCount > 1 && (
         <>
           {canGoLeft && (
             <div className="absolute left-1 top-1/2 -translate-y-1/2 z-20 pointer-events-none opacity-30">
