@@ -250,6 +250,15 @@ export default function Listen() {
     if (isTrackSwitch) {
       player.pause();
       if (isExternalListenMode) setExternalListenMode(false);
+      // Immediately clear nugget/overlay state so old content doesn't flash
+      setActiveNugget(null);
+      setNuggetQueue([]);
+      setShownNuggetIds(new Set());
+      setDismissedNuggets(new Map());
+      setDeepDiveNugget(null);
+      setMediaOverlay(null);
+      setReadingOverlay(null);
+      setReopenedNuggetId(null);
     }
   }, [rawTrackId]);
 

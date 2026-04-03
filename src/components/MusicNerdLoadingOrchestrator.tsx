@@ -26,11 +26,11 @@ function AnimatedDots() {
 }
 
 /** Settle delay before pill appears (ms) */
-const SETTLE_MS = 500;
+const SETTLE_MS = 200;
 /** How long the pill is visible before morphing (ms) */
-const PILL_DISPLAY_MS = 3000;
+const PILL_DISPLAY_MS = 1500;
 /** Duration of the morph-fly animation (s) */
-const MORPH_FLY_S = 0.7;
+const MORPH_FLY_S = 0.4;
 
 /**
  * Module-level cache so that when the user navigates away (Browse) and comes
@@ -243,21 +243,14 @@ export default function MusicNerdLoadingOrchestrator({
             <motion.div
               animate={
                 phase === "pulsating"
-                  ? { scale: [1, 1.08, 1], opacity: [0.6, 0.8, 0.6] }
-                  : { scale: 1, opacity: 1 }
+                  ? { opacity: [0.5, 0.85, 0.5] }
+                  : { opacity: 1 }
               }
               transition={
                 phase === "pulsating"
-                  ? { duration: 1.8, repeat: Infinity, ease: "easeInOut" }
-                  : { duration: 0.3 }
+                  ? { duration: 1.6, repeat: Infinity, ease: "easeInOut" }
+                  : { duration: 0.25 }
               }
-              style={{
-                filter:
-                  phase === "pulsating"
-                    ? "grayscale(0.4)"
-                    : "drop-shadow(0 0 8px hsl(var(--neon-glow) / 0.7)) drop-shadow(0 0 24px hsl(var(--neon-glow) / 0.35))",
-                transition: "filter 0.4s ease",
-              }}
             >
               {phase === "ready" && !skipEntrance ? (
                 <motion.div
@@ -290,10 +283,10 @@ export default function MusicNerdLoadingOrchestrator({
               top: "calc(50% + 216px)",
               translateX: "-50%",
             }}
-            initial={{ opacity: 0, scale: 0.8, y: 20 }}
+            initial={{ opacity: 0, scale: 0.9, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.85, transition: { duration: 0.15 } }}
-            transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+            exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.12 } }}
+            transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
           >
             <MusicNerdLogo size={18} glow={false} />
             <span className="text-sm font-medium text-foreground/70 whitespace-nowrap select-none">
