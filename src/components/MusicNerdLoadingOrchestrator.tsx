@@ -244,7 +244,7 @@ export default function MusicNerdLoadingOrchestrator({
               style={{
                 filter:
                   phase === "pulsating"
-                    ? "grayscale(0.4) opacity(0.7)"
+                    ? "grayscale(0.4)"
                     : "drop-shadow(0 0 8px hsl(var(--neon-glow) / 0.7)) drop-shadow(0 0 24px hsl(var(--neon-glow) / 0.35))",
                 transition: "filter 0.4s ease",
               }}
@@ -275,7 +275,7 @@ export default function MusicNerdLoadingOrchestrator({
         {phase === "pill" && (
           <motion.div
             ref={pillRef}
-            className="fixed left-1/2 z-50 apple-glass rounded-full px-4 py-2.5 flex items-center gap-2.5 pointer-events-none will-change-transform"
+            className="fixed left-1/2 z-50 rounded-full px-4 py-2.5 flex items-center gap-2.5 pointer-events-none will-change-transform bg-black/60 border border-white/10"
             style={{
               top: "calc(50% + 216px)",
               translateX: "-50%",
@@ -298,7 +298,7 @@ export default function MusicNerdLoadingOrchestrator({
       <AnimatePresence>
         {phase === "morphFly" && flyCoords && (
           <motion.div
-            className="fixed z-50 pointer-events-none flex items-center justify-center apple-glass will-change-transform"
+            className="fixed z-50 pointer-events-none flex items-center justify-center rounded-full bg-black/40 will-change-transform"
             style={{
               left: flyCoords.startX,
               top: flyCoords.startY,
@@ -309,22 +309,20 @@ export default function MusicNerdLoadingOrchestrator({
               translateY: "-50%",
             }}
             initial={{
-              scaleX: 260 / 48,
-              scaleY: 44 / 48,
+              scale: 1,
               x: 0,
               y: 0,
               opacity: 1,
             }}
             animate={{
-              scaleX: 1,
-              scaleY: 1,
+              scale: 1,
               x: flyCoords.x - flyCoords.startX,
               y: flyCoords.y - flyCoords.startY,
               opacity: 1,
             }}
             transition={{
               duration: MORPH_FLY_S,
-              ease: [0.4, 0, 0.2, 1],
+              ease: [0.25, 1, 0.5, 1],
             }}
             onAnimationComplete={onMorphComplete}
           >
