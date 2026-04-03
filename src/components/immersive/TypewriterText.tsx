@@ -5,6 +5,7 @@ interface TypewriterTextProps {
   speed?: number;
   delay?: number;
   className?: string;
+  style?: React.CSSProperties;
   onComplete?: () => void;
   paused?: boolean;
   as?: "p" | "h1" | "h2" | "h3" | "span";
@@ -15,6 +16,7 @@ export default function TypewriterText({
   speed = 30,
   delay = 0,
   className = "",
+  style,
   onComplete,
   paused = false,
   as: Tag = "p",
@@ -64,7 +66,7 @@ export default function TypewriterText({
   const visible = text.slice(0, charIndex);
 
   return (
-    <Tag className={className}>
+    <Tag className={className} style={style}>
       {visible}
     </Tag>
   );

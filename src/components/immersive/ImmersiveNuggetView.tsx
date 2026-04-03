@@ -262,17 +262,17 @@ export default function ImmersiveNuggetView({
                             }}
                           />
                         )}
-                        {/* Long gradient fade — image blends smoothly into dark body area */}
+                        {/* Gradient overlay for text readability */}
                         <div className="absolute inset-0" style={{
-                          background: "linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 20%, rgba(0,0,0,0.2) 50%, transparent 80%)",
+                          background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.6) 25%, rgba(0,0,0,0.15) 55%, transparent 80%)",
                         }} />
                         <div className="absolute bottom-0 inset-x-0 px-5 pb-4">
-                          <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 mb-2 block">
+                          <span className="text-[10px] uppercase tracking-[0.2em] text-white/60 mb-2 block" style={{ textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>
                             {activeNugget ? (KIND_LABELS[activeNugget.kind] || activeNugget.kind) : ""}
                           </span>
                           {activeNugget && (
                             isTypewriterDone ? (
-                              <h2 className="text-xl font-bold leading-tight text-white drop-shadow-lg">
+                              <h2 className="text-xl font-bold leading-tight text-white" style={{ textShadow: "0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.5)" }}>
                                 {activeNugget.headline || activeNugget.text}
                               </h2>
                             ) : (
@@ -282,7 +282,8 @@ export default function ImmersiveNuggetView({
                                 paused={false}
                                 onComplete={handleTypewriterComplete}
                                 as="h2"
-                                className="text-xl font-bold leading-tight text-white drop-shadow-lg"
+                                className="text-xl font-bold leading-tight text-white"
+                                style={{ textShadow: "0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.5)" }}
                               />
                             )
                           )}
