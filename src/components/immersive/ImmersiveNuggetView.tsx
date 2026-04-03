@@ -118,15 +118,8 @@ export default function ImmersiveNuggetView({
     }
   }, [nuggets]);
 
-  // ── Track end detection ────────────────────────────────────────────
-  const trackEndFiredRef = useRef(false);
-  useEffect(() => { trackEndFiredRef.current = false; }, [trackTitle, artist]);
-  useEffect(() => {
-    if (duration > 0 && currentTime > 0 && duration - currentTime < 1.5 && !trackEndFiredRef.current) {
-      trackEndFiredRef.current = true;
-      onNext?.();
-    }
-  }, [currentTime, duration, onNext]);
+  // Track-end is handled by Listen.tsx's handleTrackEnd via PlayerContext onEnded.
+  // No duplicate detection needed here.
 
   // ── Media Session ──────────────────────────────────────────────────
   useEffect(() => {
