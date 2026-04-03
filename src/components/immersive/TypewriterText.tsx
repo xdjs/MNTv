@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 
 interface TypewriterTextProps {
   text: string;
@@ -29,25 +29,22 @@ export default function TypewriterText({
   pausedRef.current = paused;
   textLenRef.current = text.length;
 
-  // Reset on text change
   useEffect(() => {
     setCharIndex(0);
     setStarted(delay === 0);
     completeFiredRef.current = false;
   }, [text, delay]);
 
-  // Start delay
   useEffect(() => {
     if (delay <= 0 || started) return;
     const timer = setTimeout(() => setStarted(true), delay);
     return () => clearTimeout(timer);
   }, [delay, started]);
 
-  // Single stable interval — reads paused/length from refs to avoid recreation
   useEffect(() => {
     if (!started || paused) return;
     const timer = setInterval(() => {
-      if (pausedRef.current) return; // skip tick while paused
+      if (pausedRef.current) return;
       setCharIndex((prev) => {
         if (prev >= textLenRef.current) {
           clearInterval(timer);
@@ -63,25 +60,12 @@ export default function TypewriterText({
     return () => clearInterval(timer);
   }, [started, paused, speed]);
 
-  // Render with fade wave
-  const FADE_WIDTH = 8;
-  const solidEnd = Math.max(0, charIndex - FADE_WIDTH);
-  const revealed = text.slice(0, solidEnd);
-  const fading = text.slice(solidEnd, charIndex);
-  const hidden = text.slice(charIndex);
-
-  const isComplete = charIndex >= text.length;
+  // Simple reveal: only show characters up to charIndex. Nothing else.
+  const visible = text.slice(0, charIndex);
 
   return (
     <Tag className={className}>
-      {isComplete ? (
-        text
-      ) : (
-        <>
-          <span>{revealed}</span>
-          <span style={{ opacity: 0.7, transition: "opacity 0.15s ease-out" }}>{fading}</span>
-        </>
-      )}
+      {visible}
     </Tag>
   );
 }
