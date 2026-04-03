@@ -206,17 +206,16 @@ export default function ImmersiveNuggetView({
         <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60" />
       </div>
 
-      {/* Collapse chevron — top-left like Spotify */}
-      <div className="relative z-30 flex items-center px-4 pt-2" style={{ paddingTop: "max(env(safe-area-inset-top, 8px), 8px)" }}>
-        <button
-          className="h-9 w-9 rounded-full bg-white/10 flex items-center justify-center active:scale-90 transition-transform"
-          onClick={() => { userDismissedRef.current = true; onClose(); }}
-        >
-          <svg className="w-5 h-5 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-      </div>
+      {/* Collapse chevron — floats over content */}
+      <button
+        className="absolute z-30 left-4 h-9 w-9 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
+        style={{ top: "max(env(safe-area-inset-top, 12px), 12px)" }}
+        onClick={() => { userDismissedRef.current = true; onClose(); }}
+      >
+        <svg className="w-5 h-5 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
 
       {/* Screen-edge glow — tier-colored border effect */}
       <div className="fixed inset-0 z-[51] pointer-events-none"
@@ -263,7 +262,10 @@ export default function ImmersiveNuggetView({
                             }}
                           />
                         )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+                        {/* Long gradient fade — image blends smoothly into dark body area */}
+                        <div className="absolute inset-0" style={{
+                          background: "linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 20%, rgba(0,0,0,0.2) 50%, transparent 80%)",
+                        }} />
                         <div className="absolute bottom-0 inset-x-0 px-5 pb-4">
                           <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 mb-2 block">
                             {activeNugget ? (KIND_LABELS[activeNugget.kind] || activeNugget.kind) : ""}
@@ -335,43 +337,34 @@ export default function ImmersiveNuggetView({
               </SwipeableNuggetStack>
             </motion.div>
           ) : (
-            /* ── Now-playing screen ─────────────────────────── */
+            /* ── Now-playing — full-bleed cover art ─────────── */
             <motion.div
               key="now-playing"
-              className="flex-1 flex flex-col items-center justify-center gap-5"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.4 }}
+              className="w-full h-full relative"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
               onClick={() => { if (unlockedCount > 0) setNuggetDismissed(false); }}
             >
               {artUrl && (
-                <motion.img
-                  src={artUrl} alt={`${trackTitle} cover`}
-                  className="w-56 h-56 rounded-2xl shadow-2xl object-cover"
-                  animate={{ scale: isPlaying ? [1, 1.02, 1] : 1 }}
-                  transition={{ repeat: isPlaying ? Infinity : 0, duration: 4, ease: "easeInOut" }}
-                />
+                <img src={artUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
               )}
-              <div className="text-center px-8">
-                <p className="text-lg font-semibold text-white/90">{trackTitle}</p>
-                <p className="text-sm text-white/40 mt-1">{artist}</p>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30" />
+              <div className="absolute bottom-0 inset-x-0 px-6 pb-6">
+                <p className="text-xl font-bold text-white drop-shadow-lg">{trackTitle}</p>
+                <p className="text-sm text-white/50 mt-1">{artist}</p>
+                {unlockedCount > 0 && (
+                  <motion.div
+                    className="flex items-center gap-2 mt-4"
+                    animate={{ opacity: [0.5, 1, 0.5] }}
+                    transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+                  >
+                    <MusicNerdLogo size={16} />
+                    <span className="text-xs text-white/40">Tap to view nuggets</span>
+                  </motion.div>
+                )}
               </div>
-
-
-              {unlockedCount > 0 && (
-                <motion.button
-                  className="flex items-center gap-2.5 px-5 py-3 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 active:scale-95 transition-transform"
-                  animate={{ scale: [1, 1.03, 1] }}
-                  transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
-                  onClick={() => setNuggetDismissed(false)}
-                >
-                  <MusicNerdLogo size={20} />
-                  <svg className="w-3 h-3 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                </motion.button>
-              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -385,7 +378,9 @@ export default function ImmersiveNuggetView({
           artist={artist}
           isPlaying={isPlaying}
           progress={progress}
+          duration={duration}
           onToggle={toggle}
+          onSeek={seek}
           onPrev={onPrev}
           onNext={onNext}
         />
