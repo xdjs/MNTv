@@ -1203,7 +1203,7 @@ export default function Listen() {
               {topFocusIndex === 0 ? "Back" : "Open Companion"}
             </motion.p>
           )}
-          <div className="flex flex-col items-center gap-1.5">
+          <div className={`flex flex-col items-center gap-1.5 ${showImmersive ? "hidden" : ""}`}>
             <MusicNerdLoadingOrchestrator
               aiLoading={aiLoading}
               shortId={shortId}
@@ -1581,6 +1581,25 @@ export default function Listen() {
         )}
 
       </div>
+
+      {/* Orchestrator for immersive mode — rendered outside the main layout div,
+          last in DOM so its fixed z-50 elements paint above everything else */}
+      {showImmersive && (
+        <MusicNerdLoadingOrchestrator
+          aiLoading={aiLoading}
+          shortId={shortId}
+          trackId={trackId}
+          tier={tier}
+          listenCount={listenCount}
+          focusZone={focusZone}
+          topFocusIndex={topFocusIndex}
+          onCompanionClick={() => {
+            if (shortId) {
+              window.open(`${window.location.origin}/c/${shortId}?tier=${tier}&listen=${listenCount}`, "_blank");
+            }
+          }}
+        />
+      )}
     </PageTransition>
   );
 }
