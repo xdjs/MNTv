@@ -23,6 +23,7 @@ import { useSpotifyToken } from "@/hooks/useSpotifyToken";
 import { initiateSpotifyAuth } from "@/hooks/useSpotifyAuth";
 import { usePlayer } from "@/contexts/PlayerContext";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
+import { useTierAccent } from "@/hooks/useTierAccent";
 import PageTransition from "@/components/PageTransition";
 import type { Nugget, Source, AnimationStyle } from "@/mock/types";
 
@@ -532,6 +533,7 @@ export default function Listen() {
 
   // AI-generated nuggets with real sources
   const tier = (profile?.calculatedTier as "casual" | "curious" | "nerd") || "casual";
+  useTierAccent(tier);
   const artistImageUrl = (track?.artist && profile?.spotifyArtistImages?.[track.artist]) || track?.coverArtUrl || "";
   const { nuggets: aiNuggets, sources: aiSources, loading: aiLoading, error: aiError, listenCount, artistSummary, fromCache: aiFromCache } = useAINuggets(
     trackId,
