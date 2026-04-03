@@ -44,8 +44,11 @@ export default function TileRow({ label, items, tileSize = "md", focusedIndex = 
     }
   }, [focusedIndex]);
 
+  // Only apply hover glow on desktop (pointer: fine) — avoids stuck glow on mobile tap
   const handleTileEnter = useCallback((el: HTMLElement) => {
-    el.style.boxShadow = `0 0 20px 6px hsl(var(--neon-glow) / 0.5), 0 0 50px 12px hsl(var(--neon-glow) / 0.2)`;
+    if (window.matchMedia("(pointer: fine)").matches) {
+      el.style.boxShadow = `0 0 20px 6px hsl(var(--neon-glow) / 0.5), 0 0 50px 12px hsl(var(--neon-glow) / 0.2)`;
+    }
   }, []);
 
   const handleTileLeave = useCallback((el: HTMLElement, isFocused: boolean) => {
