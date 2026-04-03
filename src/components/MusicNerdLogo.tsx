@@ -4,18 +4,23 @@ interface LogoProps {
   size?: number;
   className?: string;
   glow?: boolean;
-  glowColor?: string;
 }
 
-export default function MusicNerdLogo({ size = 64, className = "", glow = false, glowColor }: LogoProps) {
+export default function MusicNerdLogo({ size = 64, className = "", glow = false }: LogoProps) {
   return (
     <img
       src={musicNerdLogo}
       alt="MusicNerd TV"
       width={size}
       height={size}
-      className={`inline-block rounded-full ${glow ? "neon-glow" : ""} ${className}`}
-      style={{ imageRendering: "auto" }}
+      className={`inline-block rounded-full ${className}`}
+      style={{
+        imageRendering: "auto",
+        ...(glow ? {
+          boxShadow: "0 0 8px hsl(var(--neon-glow) / 0.6), 0 0 20px hsl(var(--neon-glow) / 0.3)",
+          transition: "box-shadow 0.4s ease",
+        } : {}),
+      }}
     />
   );
 }
