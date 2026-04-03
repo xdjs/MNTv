@@ -70,11 +70,18 @@ export default function TypewriterText({
   const fading = text.slice(solidEnd, charIndex);
   const hidden = text.slice(charIndex);
 
+  const isComplete = charIndex >= text.length;
+
   return (
     <Tag className={className}>
-      <span>{revealed}</span>
-      <span style={{ opacity: 0.6, transition: "opacity 0.2s ease-out" }}>{fading}</span>
-      <span style={{ opacity: 0 }}>{hidden}</span>
+      {isComplete ? (
+        text
+      ) : (
+        <>
+          <span>{revealed}</span>
+          <span style={{ opacity: 0.7, transition: "opacity 0.15s ease-out" }}>{fading}</span>
+        </>
+      )}
     </Tag>
   );
 }

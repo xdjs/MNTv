@@ -17,7 +17,6 @@ interface ImmersiveNuggetViewProps {
   trackTitle: string;
   artist: string;
   album?: string;
-  loading?: boolean;
   onClose: () => void;
   onPrev?: () => void;
   onNext?: () => void;
@@ -39,7 +38,6 @@ export default function ImmersiveNuggetView({
   coverArtUrl,
   trackTitle,
   artist,
-  loading = false,
   onClose,
   onPrev,
   onNext,
@@ -371,12 +369,6 @@ export default function ImmersiveNuggetView({
                 <p className="text-sm text-white/40 mt-1">{artist}</p>
               </div>
 
-              {loading && unlockedCount === 0 && (
-                <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5">
-                  <Loader2 className="w-3.5 h-3.5 text-primary/60 animate-spin" />
-                  <span className="text-xs text-white/40">Researching...</span>
-                </div>
-              )}
 
               {unlockedCount > 0 && (
                 <motion.button
