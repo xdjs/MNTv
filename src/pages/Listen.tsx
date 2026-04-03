@@ -1582,23 +1582,25 @@ export default function Listen() {
 
       </div>
 
-      {/* Orchestrator for immersive mode — rendered outside the main layout div,
-          last in DOM so its fixed z-50 elements paint above everything else */}
+      {/* Orchestrator for immersive mode — fixed top-right so its anchor
+          is visible and the morph-fly animation lands correctly */}
       {showImmersive && (
-        <MusicNerdLoadingOrchestrator
-          aiLoading={aiLoading}
-          shortId={shortId}
-          trackId={trackId}
-          tier={tier}
-          listenCount={listenCount}
-          focusZone={focusZone}
-          topFocusIndex={topFocusIndex}
-          onCompanionClick={() => {
-            if (shortId) {
-              window.open(`${window.location.origin}/c/${shortId}?tier=${tier}&listen=${listenCount}`, "_blank");
-            }
-          }}
-        />
+        <div className="fixed top-3 right-3 z-[60]" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+          <MusicNerdLoadingOrchestrator
+            aiLoading={aiLoading}
+            shortId={shortId}
+            trackId={trackId}
+            tier={tier}
+            listenCount={listenCount}
+            focusZone={focusZone}
+            topFocusIndex={topFocusIndex}
+            onCompanionClick={() => {
+              if (shortId) {
+                window.open(`${window.location.origin}/c/${shortId}?tier=${tier}&listen=${listenCount}`, "_blank");
+              }
+            }}
+          />
+        </div>
       )}
     </PageTransition>
   );
