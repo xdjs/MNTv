@@ -52,7 +52,7 @@ export default function ImmersiveNuggetView({
   const [deepDiveFollowUp, setDeepDiveFollowUp] = useState<string | null>(null);
   const [deepDiveLoading, setDeepDiveLoading] = useState(false);
   const [typewriterDoneIds, setTypewriterDoneIds] = useState<Set<string>>(new Set());
-  const failedImagesRef = useRef<Set<string>>(new Set());
+  const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
   const prevUnlockedCountRef = useRef(0);
   const prevTrackKeyRef = useRef(`${trackTitle}::${artist}`);
 
@@ -183,11 +183,11 @@ export default function ImmersiveNuggetView({
 
   // ── Get the image URL for the current nugget (with fallbacks) ──────
   const getNuggetImage = useCallback(() => {
-    if (activeNugget?.imageUrl && !failedImagesRef.current.has(activeNugget.imageUrl)) {
+    if (activeNugget?.imageUrl && !failedImages.has(activeNugget.imageUrl)) {
       return { url: activeNugget.imageUrl, isNuggetImage: true };
     }
     return { url: artUrl, isNuggetImage: false };
-  }, [activeNugget, artUrl]);
+  }, [activeNugget, artUrl, failedImages]);
 
   return (
     <motion.div
@@ -253,11 +253,9 @@ export default function ImmersiveNuggetView({
                             src={imgUrl}
                             alt=""
                             className={`absolute inset-0 w-full h-full object-cover ${!isNuggetImage ? "scale-110 blur-sm" : ""}`}
-                            onError={(e) => {
+                            onError={() => {
                               if (isNuggetImage && activeNugget?.imageUrl) {
-                                failedImagesRef.current.add(activeNugget.imageUrl);
-                                (e.target as HTMLImageElement).src = artUrl;
-                                (e.target as HTMLImageElement).classList.add("scale-110", "blur-sm");
+                                setFailedImages((prev) => new Set(prev).add(activeNugget.imageUrl!));
                               }
                             }}
                           />

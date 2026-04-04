@@ -35,9 +35,19 @@ const MORPH_FLY_S = 0.5;
 /**
  * Module-level cache so that when the user navigates away (Browse) and comes
  * back to the same track, we restore the phase instead of restarting the
- * animation from scratch.
+ * animation from scratch. Capped to 5 entries to prevent unbounded growth.
  */
+const MAX_PHASE_CACHE = 5;
 const phaseCache = new Map<string, AnimPhase>();
+
+function setPhaseCached(key: string, value: AnimPhase) {
+  phaseCache.set(key, value);
+  if (phaseCache.size > MAX_PHASE_CACHE) {
+    // Delete oldest entry (first inserted)
+    const oldest = phaseCache.keys().next().value;
+    if (oldest !== undefined) phaseCache.delete(oldest);
+  }
+}
 
 export default function MusicNerdLoadingOrchestrator({
   aiLoading,
@@ -93,7 +103,7 @@ export default function MusicNerdLoadingOrchestrator({
 
   // Persist phase to module cache on every change
   useEffect(() => {
-    phaseCache.set(trackId, phase);
+    setPhaseCached(trackId, phase);
     phaseRef.current = phase;
   }, [phase, trackId]);
 

@@ -630,21 +630,27 @@ export default function Listen() {
         }
 
         // Route through edge function (has service_role for DB writes)
-        const { error } = await supabase.functions.invoke("generate-companion", {
-          body: {
-            artist: track.artist,
-            title: track.title,
-            album: track.album,
-            listenCount,
-            tier,
-            prebuiltNuggets,
-            coverArtUrl: effectiveCoverArt || undefined,
-            artistImage: artistImageUrl || effectiveCoverArt || undefined,
-            artistSummary,
-          },
-        });
+        // Retry once on failure after a short delay.
+        const companionBody = {
+          artist: track.artist,
+          title: track.title,
+          album: track.album,
+          listenCount,
+          tier,
+          prebuiltNuggets,
+          coverArtUrl: effectiveCoverArt || undefined,
+          artistImage: artistImageUrl || effectiveCoverArt || undefined,
+          artistSummary,
+        };
+        let { error } = await supabase.functions.invoke("generate-companion", { body: companionBody });
+        if (error && !cancelled) {
+          console.warn("[Listen] Companion pre-gen failed, retrying in 3s:", error);
+          await new Promise((r) => setTimeout(r, 3000));
+          if (cancelled) return;
+          ({ error } = await supabase.functions.invoke("generate-companion", { body: companionBody }));
+        }
         if (cancelled) return;
-        if (error) console.warn("[Listen] Companion pre-gen error:", error);
+        if (error) console.warn("[Listen] Companion pre-gen retry also failed:", error);
 
         // Create or reuse a short URL for the QR code (even if pre-gen failed,
         // the companion page will generate on demand)

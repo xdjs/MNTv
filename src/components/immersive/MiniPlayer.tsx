@@ -29,6 +29,7 @@ export default function MiniPlayer({
   const [scrubbing, setScrubbing] = useState(false);
   const [scrubProgress, setScrubProgress] = useState<number | null>(null);
   const lastSeekRef = useRef(0);
+  const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const displayProgress = scrubProgress !== null ? scrubProgress : progress;
 
   const scrubToPosition = useCallback((clientX: number, bar: HTMLElement, commit: boolean) => {
@@ -40,7 +41,12 @@ export default function MiniPlayer({
       lastSeekRef.current = now;
       onSeek((pct / 100) * duration);
     }
-    if (commit) setScrubProgress(null);
+    if (commit) {
+      // Hold the visual position briefly so the progress prop can catch up
+      // from the Spotify SDK (~250ms), preventing a visible snap-back.
+      if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+      commitTimerRef.current = setTimeout(() => setScrubProgress(null), 350);
+    }
   }, [duration, onSeek]);
 
   return (
