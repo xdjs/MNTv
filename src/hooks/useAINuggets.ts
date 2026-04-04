@@ -291,6 +291,12 @@ export function useAINuggets(
           await supabase.from("nugget_cache").delete().eq("track_id", dbCacheKey);
         }
 
+        // Debounce before committing to generation — if the user skips
+        // within this window, cancelledRef aborts before we hit the edge
+        // function, saving API calls and Supabase function invocations.
+        await new Promise((r) => setTimeout(r, 3000));
+        if (cancelledRef.current) return;
+
         // No cache entry (or stale sentinel removed) — claim the work.
         // The unique index on track_id means only one concurrent INSERT wins.
         // A duplicate INSERT returns PG error 23505; we ignore it and generate anyway
