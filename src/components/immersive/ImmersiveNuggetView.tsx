@@ -285,12 +285,7 @@ export default function ImmersiveNuggetView({
                               />
                             )
                           )}
-                          {/* Nugget counter */}
-                          {unlockedCount > 1 && (
-                            <p className="text-[10px] text-white/25 tabular-nums mt-2">
-                              {activeIndex + 1} / {unlockedCount}
-                            </p>
-                          )}
+                          {/* Dot indicators are rendered by SwipeableNuggetStack */}
                         </div>
                       </div>
 

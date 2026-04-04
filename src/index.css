@@ -114,11 +114,6 @@
     inset 0 -0.5px 0 hsl(0 0% 0% / 0.04);
 }
 
-/* Neon glow for logo */
-.neon-glow {
-  filter: drop-shadow(0 0 8px hsl(var(--neon-glow) / 0.6)) drop-shadow(0 0 20px hsl(var(--neon-glow) / 0.3));
-}
-
 /* TV focus state — soft glow */
 .tv-focus-glow {
   box-shadow: 0 0 16px 4px hsl(var(--neon-glow) / 0.45), 0 0 40px 8px hsl(var(--neon-glow) / 0.2);
