@@ -23,6 +23,36 @@ interface AINuggetData {
   };
 }
 
+// ── Helpers for consistent ID/object creation across SSE, cache, and JSON paths ──
+
+function makeIds(trackId: string, listenCount: number, index: number) {
+  return {
+    sourceId: `ai-src-${trackId}-L${listenCount}-${index}`,
+    nuggetId: `ai-nug-${trackId}-L${listenCount}-${index}`,
+  };
+}
+
+function makeSource(id: string, s: AINuggetData["source"]): Source {
+  return { id, type: s.type, title: s.title, publisher: s.publisher, url: s.url, embedId: s.embedId, quoteSnippet: s.quoteSnippet, locator: s.locator };
+}
+
+function makeTimestamp(index: number, totalNuggets: number, durationSec: number) {
+  const earlyStart = 20;
+  const endBuffer = 15;
+  const usable = Math.max(durationSec - earlyStart - endBuffer, 30);
+  const spacing = usable / (totalNuggets + 1);
+  return Math.min(Math.floor(earlyStart + spacing * (index + 1)), durationSec - 10);
+}
+
+function makeNugget(n: AINuggetData, nuggetId: string, sourceId: string, trackId: string, timestampSec: number): Nugget {
+  return {
+    id: nuggetId, trackId, timestampSec, durationMs: 7000,
+    headline: n.headline, text: n.text, kind: n.kind,
+    listenFor: n.listenFor || false, sourceId,
+    imageUrl: n.imageUrl, imageCaption: n.imageCaption,
+  };
+}
+
 interface UseAINuggetsResult {
   nuggets: Nugget[];
   sources: Map<string, Source>;
@@ -388,44 +418,12 @@ export function useAINuggets(
               const payload = JSON.parse(line.slice(6));
               if (payload.type === "nugget") {
                 aiNuggets = [...aiNuggets, payload.nugget];
-                // ── Process and display this nugget immediately ──
-                const n = payload.nugget;
-                const sourceId = `ai-src-${trackId}-L${currentListenCount}-${payload.index}`;
-                const nuggetId = `ai-nug-${trackId}-L${currentListenCount}-${payload.index}`;
+                const n = payload.nugget as AINuggetData;
+                const { sourceId, nuggetId } = makeIds(trackId, currentListenCount, payload.index);
+                const source = makeSource(sourceId, n.source);
+                const ts = makeTimestamp(payload.index, 3, durationSec);
+                const nugget = makeNugget(n, nuggetId, sourceId, trackId, ts);
 
-                const source: Source = {
-                  id: sourceId,
-                  type: n.source.type,
-                  title: n.source.title,
-                  publisher: n.source.publisher,
-                  url: n.source.url,
-                  embedId: n.source.embedId,
-                  quoteSnippet: n.source.quoteSnippet,
-                  locator: n.source.locator,
-                };
-
-                const earlyStart = 20;
-                const endBuffer = 15;
-                const usableDuration = Math.max(durationSec - earlyStart - endBuffer, 30);
-                // Use total expected nuggets (3) for spacing, not current count
-                const spacing = usableDuration / (3 + 1);
-                const timestampSec = Math.floor(earlyStart + spacing * (payload.index + 1));
-
-                const nugget: Nugget = {
-                  id: nuggetId,
-                  trackId,
-                  timestampSec: Math.min(timestampSec, durationSec - 10),
-                  durationMs: 7000,
-                  headline: n.headline,
-                  text: n.text,
-                  kind: n.kind,
-                  listenFor: n.listenFor || false,
-                  sourceId,
-                  imageUrl: n.imageUrl,
-                  imageCaption: n.imageCaption,
-                };
-
-                // Progressively update state
                 setSources((prev) => new Map(prev).set(sourceId, source));
                 setNuggets((prev) => [...prev, nugget]);
                 console.log(`[SSE] Received nugget ${payload.index}: "${n.headline?.slice(0, 40)}"`);
@@ -446,24 +444,14 @@ export function useAINuggets(
         if (cancelledRef.current) return;
 
         // Write to in-memory cache
-        const allNuggets = aiNuggets.map((n, i) => {
-          const sourceId = `ai-src-${trackId}-L${currentListenCount}-${i}`;
-          const nuggetId = `ai-nug-${trackId}-L${currentListenCount}-${i}`;
-          const earlyStart = 20;
-          const endBuffer = 15;
-          const usableDuration = Math.max(durationSec - earlyStart - endBuffer, 30);
-          const spacing = usableDuration / (3 + 1);
-          const timestampSec = Math.floor(earlyStart + spacing * (i + 1));
-          return {
-            id: nuggetId, trackId, timestampSec: Math.min(timestampSec, durationSec - 10),
-            durationMs: 7000, headline: n.headline, text: n.text, kind: n.kind,
-            listenFor: n.listenFor || false, sourceId, imageUrl: n.imageUrl, imageCaption: n.imageCaption,
-          } as Nugget;
+        const allNuggets = aiNuggets.map((n: AINuggetData, i: number) => {
+          const { sourceId, nuggetId } = makeIds(trackId, currentListenCount, i);
+          return makeNugget(n, nuggetId, sourceId, trackId, makeTimestamp(i, 3, durationSec));
         });
         const allSources = new Map<string, Source>();
-        aiNuggets.forEach((n, i) => {
-          const sourceId = `ai-src-${trackId}-L${currentListenCount}-${i}`;
-          allSources.set(sourceId, { id: sourceId, type: n.source.type, title: n.source.title, publisher: n.source.publisher, url: n.source.url, embedId: n.source.embedId, quoteSnippet: n.source.quoteSnippet, locator: n.source.locator });
+        aiNuggets.forEach((n: AINuggetData, i: number) => {
+          const { sourceId } = makeIds(trackId, currentListenCount, i);
+          allSources.set(sourceId, makeSource(sourceId, n.source));
         });
         setNuggetCache(cacheKey, { nuggets: allNuggets, sources: allSources, listenCount: currentListenCount });
 
@@ -508,42 +496,9 @@ export function useAINuggets(
 
       const newSources = new Map<string, Source>();
       const newNuggets: Nugget[] = aiNuggets.map((n, i) => {
-        const sourceId = `ai-src-${trackId}-L${currentListenCount}-${i}`;
-        const nuggetId = `ai-nug-${trackId}-L${currentListenCount}-${i}`;
-
-        const source: Source = {
-          id: sourceId,
-          type: n.source.type,
-          title: n.source.title,
-          publisher: n.source.publisher,
-          url: n.source.url,
-          embedId: n.source.embedId,
-          quoteSnippet: n.source.quoteSnippet,
-          locator: n.source.locator,
-        };
-        newSources.set(sourceId, source);
-
-        // Distribute nuggets across track duration.
-        // Start at 20s to give AI generation time to complete before the
-        // first nugget triggers, and end 15s before the track ends.
-        const earlyStart = 20;
-        const endBuffer = 15;
-        const usableDuration = Math.max(durationSec - earlyStart - endBuffer, 30);
-        // Space nuggets evenly: for 3 nuggets we want slots at ~1/4, 2/4, 3/4
-        const spacing = usableDuration / (aiNuggets.length + 1);
-        const timestampSec = Math.floor(earlyStart + spacing * (i + 1));
-
-        return {
-          id: nuggetId,
-          trackId,
-          timestampSec: Math.min(timestampSec, durationSec - 10),
-          durationMs: 7000,
-          headline: n.headline,
-          text: n.text,
-          kind: n.kind,
-          listenFor: n.listenFor || false,
-          sourceId,
-        } as Nugget;
+        const { sourceId, nuggetId } = makeIds(trackId, currentListenCount, i);
+        newSources.set(sourceId, makeSource(sourceId, n.source));
+        return makeNugget(n, nuggetId, sourceId, trackId, makeTimestamp(i, aiNuggets.length, durationSec));
       });
 
       // ── Assign images: prefer server-resolved contextual images, fall back to Spotify ──

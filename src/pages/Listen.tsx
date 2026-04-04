@@ -880,85 +880,101 @@ export default function Listen() {
     return zones;
   }, [activeNugget, dismissedNuggets.size]);
 
+  // Stable refs for keydown handler — avoids re-registering the listener
+  // on every state change (15+ deps previously caused constant re-attach).
+  const keyStateRef = useRef({
+    focusZone, barFocusIndex, topFocusIndex, activeNugget,
+    deepDiveNugget, mediaOverlay, readingOverlay, isExternalListenMode,
+  });
+  keyStateRef.current = {
+    focusZone, barFocusIndex, topFocusIndex, activeNugget,
+    deepDiveNugget, mediaOverlay, readingOverlay, isExternalListenMode,
+  };
+  const keyHandlersRef = useRef({
+    showBar, toggle, clearDwell, getZonesInOrder,
+    handleNuggetClick, handleNuggetNav, handleBarAction, handleTopAction, enterNuggetZone,
+  });
+  keyHandlersRef.current = {
+    showBar, toggle, clearDwell, getZonesInOrder,
+    handleNuggetClick, handleNuggetNav, handleBarAction, handleTopAction, enterNuggetZone,
+  };
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      const s = keyStateRef.current;
+      const h = keyHandlersRef.current;
       // Let overlay handle its own keys when open
-      if (deepDiveNugget || mediaOverlay || readingOverlay) return;
+      if (s.deepDiveNugget || s.mediaOverlay || s.readingOverlay) return;
       if (e.key === "ArrowUp") {
         e.preventDefault();
-        clearDwell();
-        const zones = getZonesInOrder();
-        const idx = zones.indexOf(focusZone);
+        h.clearDwell();
+        const zones = h.getZonesInOrder();
+        const idx = zones.indexOf(s.focusZone);
         if (idx > 0) {
           const newZone = zones[idx - 1];
           setFocusZone(newZone);
           setNuggetFocused(newZone === 'nugget');
-          if (newZone === 'nugget') {
-            enterNuggetZone();
-          }
-          if (newZone !== 'nugget') showBar();
+          if (newZone === 'nugget') h.enterNuggetZone();
+          if (newZone !== 'nugget') h.showBar();
         } else {
-          showBar();
+          h.showBar();
         }
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
-        clearDwell();
-        const zones = getZonesInOrder();
-        const idx = zones.indexOf(focusZone);
+        h.clearDwell();
+        const zones = h.getZonesInOrder();
+        const idx = zones.indexOf(s.focusZone);
         if (idx < zones.length - 1) {
           const newZone = zones[idx + 1];
           setFocusZone(newZone);
           setNuggetFocused(newZone === 'nugget');
-          if (newZone === 'nugget') {
-            enterNuggetZone();
-          }
-          if (newZone === 'bar') showBar();
+          if (newZone === 'nugget') h.enterNuggetZone();
+          if (newZone === 'bar') h.showBar();
         } else {
-          showBar();
+          h.showBar();
         }
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
-        clearDwell();
-        if (focusZone === 'nugget') {
-          handleNuggetNav('left');
-        } else if (focusZone === 'bar') setBarFocusIndex((i) => Math.max(0, i - 1));
-        else if (focusZone === 'top') setTopFocusIndex((i) => Math.max(0, i - 1));
-        showBar();
+        h.clearDwell();
+        if (s.focusZone === 'nugget') {
+          h.handleNuggetNav('left');
+        } else if (s.focusZone === 'bar') setBarFocusIndex((i) => Math.max(0, i - 1));
+        else if (s.focusZone === 'top') setTopFocusIndex((i) => Math.max(0, i - 1));
+        h.showBar();
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
-        clearDwell();
-        if (focusZone === 'nugget') {
-          handleNuggetNav('right');
-        } else if (focusZone === 'bar') setBarFocusIndex((i) => Math.min(BAR_BUTTON_COUNT - 1, i + 1));
-        else if (focusZone === 'top') setTopFocusIndex((i) => Math.min(TOP_BUTTON_COUNT - 1, i + 1));
-        showBar();
+        h.clearDwell();
+        if (s.focusZone === 'nugget') {
+          h.handleNuggetNav('right');
+        } else if (s.focusZone === 'bar') setBarFocusIndex((i) => Math.min(BAR_BUTTON_COUNT - 1, i + 1));
+        else if (s.focusZone === 'top') setTopFocusIndex((i) => Math.min(TOP_BUTTON_COUNT - 1, i + 1));
+        h.showBar();
       } else if (e.key === "Enter") {
         e.preventDefault();
-        clearDwell();
-        if (focusZone === 'nugget' && activeNugget) {
-          handleNuggetClick(activeNugget);
-          // Don't show bar when entering deep dive
-        } else if (focusZone === 'bar') {
-          handleBarAction(barFocusIndex);
-          showBar();
-        } else if (focusZone === 'top') {
-          handleTopAction(topFocusIndex);
-          showBar();
+        h.clearDwell();
+        if (s.focusZone === 'nugget' && s.activeNugget) {
+          h.handleNuggetClick(s.activeNugget);
+        } else if (s.focusZone === 'bar') {
+          h.handleBarAction(s.barFocusIndex);
+          h.showBar();
+        } else if (s.focusZone === 'top') {
+          h.handleTopAction(s.topFocusIndex);
+          h.showBar();
         }
       } else if (e.key === " ") {
         e.preventDefault();
-        showBar();
-        if (isExternalListenMode) {
+        h.showBar();
+        if (s.isExternalListenMode) {
           setExternalListenMode(false);
           lastLoadedTrackRef.current = null;
         } else {
-          toggle();
+          h.toggle();
         }
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showBar, toggle, focusZone, barFocusIndex, topFocusIndex, activeNugget, handleNuggetClick, handleNuggetNav, handleBarAction, handleTopAction, getZonesInOrder, deepDiveNugget, mediaOverlay, readingOverlay, clearDwell, enterNuggetZone]);
+  }, []); // stable — reads from refs
 
   // Clean up dwell timer on unmount or nugget change
   useEffect(() => {
