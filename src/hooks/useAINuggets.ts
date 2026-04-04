@@ -86,6 +86,7 @@ export function useAINuggets(
 
   const { getNuggetCache, setNuggetCache, getTrackListenCount, setTrackListenCount } = usePlayer();
   const cancelledRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   const generate = useCallback(async () => {
     if (!artist || !title) return;
@@ -336,6 +337,9 @@ export function useAINuggets(
       const { data: { session: authSession } } = await supabase.auth.getSession();
       const authToken = authSession?.access_token || SUPABASE_ANON_KEY;
 
+      abortRef.current?.abort();
+      abortRef.current = new AbortController();
+
       const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-nuggets`, {
         method: "POST",
         headers: {
@@ -345,6 +349,7 @@ export function useAINuggets(
           "Accept": "text/event-stream",
         },
         body: JSON.stringify(requestBody),
+        signal: abortRef.current.signal,
       });
 
       if (!response.ok) {
@@ -669,7 +674,10 @@ export function useAINuggets(
   useEffect(() => {
     cancelledRef.current = false;
     generate();
-    return () => { cancelledRef.current = true; };
+    return () => {
+      cancelledRef.current = true;
+      abortRef.current?.abort();
+    };
   }, [generate, regenerateKey]);
 
   return { nuggets, sources, loading, error, listenCount, artistSummary, fromCache };

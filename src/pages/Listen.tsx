@@ -395,6 +395,10 @@ export default function Listen() {
     if (!track || !isPlaying || currentTime < 5 || listenThresholdMetRef.current) return;
     listenThresholdMetRef.current = true;
 
+    // Capture trackId at threshold time so we can verify the track
+    // hasn't changed by the time async DB writes complete.
+    const thresholdTrackId = trackId;
+
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id ?? localStorage.getItem("musicnerd_anon_id") ?? (() => {
@@ -402,6 +406,8 @@ export default function Listen() {
         localStorage.setItem("musicnerd_anon_id", id);
         return id;
       })();
+      // Bail if user already skipped to a different track
+      if (thresholdTrackId !== trackId) return;
       const trackKey = `${track.artist}::${track.title}`;
       const { data: historyRow } = await supabase
         .from("nugget_history")
@@ -409,8 +415,8 @@ export default function Listen() {
         .eq("track_key", trackKey)
         .eq("user_id", userId)
         .maybeSingle();
+      if (thresholdTrackId !== trackId) return;
       if (historyRow) {
-        // Row exists — bump listen_count, preserve previous_nuggets
         await supabase
           .from("nugget_history")
           .update({
@@ -420,9 +426,6 @@ export default function Listen() {
           .eq("track_key", trackKey)
           .eq("user_id", userId);
       } else {
-        // No row yet — useAINuggets may have already created one with
-        // previous_nuggets populated. Try insert; if it already exists
-        // (race with useAINuggets), update listen_count instead.
         const { error: insertErr } = await supabase
           .from("nugget_history")
           .insert({
@@ -432,7 +435,6 @@ export default function Listen() {
             previous_nuggets: [],
           });
         if (insertErr?.code === "23505") {
-          // Row was created by useAINuggets — just bump listen_count
           await supabase
             .from("nugget_history")
             .update({
@@ -737,6 +739,7 @@ export default function Listen() {
   // Brief auto-show on mount for discoverability (desktop/TV first-time visitors)
   useEffect(() => {
     showBar();
+    return () => { if (hideTimerRef.current) clearTimeout(hideTimerRef.current); };
   }, [showBar]);
 
   useEffect(() => {
