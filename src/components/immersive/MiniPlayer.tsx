@@ -96,6 +96,8 @@ export default function MiniPlayer({
           <img src={artUrl} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
         )}
         <div className="flex-1 min-w-0 overflow-hidden">
+          {/* ~25 chars fits the mini player at 375px width with controls.
+              Approximation — a ref-based overflow check would be more robust. */}
           <div className="overflow-hidden">
             <p className={`text-sm font-medium text-white/90 whitespace-nowrap ${trackTitle.length > 25 ? "animate-marquee" : ""}`}
               style={trackTitle.length > 25 ? { animationDuration: "8s" } : undefined}>
@@ -105,16 +107,16 @@ export default function MiniPlayer({
           <p className="text-xs text-white/40 truncate">{artist}</p>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
-          <button className="h-8 w-8 flex items-center justify-center active:scale-90 transition-transform" onClick={onPrev}>
+          <button aria-label="Previous track" className="h-8 w-8 flex items-center justify-center active:scale-90 transition-transform" onClick={onPrev}>
             <SkipBack className="w-3.5 h-3.5 text-white/50" fill="white" fillOpacity={0.5} />
           </button>
-          <button className="h-9 w-9 rounded-full bg-white/10 flex items-center justify-center active:scale-90 transition-transform" onClick={onToggle}>
+          <button aria-label={isPlaying ? "Pause" : "Play"} className="h-9 w-9 rounded-full bg-white/10 flex items-center justify-center active:scale-90 transition-transform" onClick={onToggle}>
             {isPlaying
               ? <Pause className="w-3.5 h-3.5 text-white" fill="white" />
               : <Play className="w-3.5 h-3.5 text-white ml-0.5" fill="white" />
             }
           </button>
-          <button className="h-8 w-8 flex items-center justify-center active:scale-90 transition-transform" onClick={onNext}>
+          <button aria-label="Next track" className="h-8 w-8 flex items-center justify-center active:scale-90 transition-transform" onClick={onNext}>
             <SkipForward className="w-3.5 h-3.5 text-white/50" fill="white" fillOpacity={0.5} />
           </button>
         </div>

@@ -49,6 +49,7 @@ export default function ImmersiveNuggetView({
   const [deepDiveText, setDeepDiveText] = useState<string | null>(null);
   const [deepDiveFollowUp, setDeepDiveFollowUp] = useState<string | null>(null);
   const [deepDiveLoading, setDeepDiveLoading] = useState(false);
+  // Ref guards against double-tap (stale closure safe); state drives the UI spinner.
   const deepDiveLoadingRef = useRef(false);
   const [typewriterDoneIds, setTypewriterDoneIds] = useState<Set<string>>(new Set());
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
@@ -68,6 +69,7 @@ export default function ImmersiveNuggetView({
       prevUnlockedCountRef.current = 0;
       setTypewriterDoneIds(new Set());
       userDismissedRef.current = false;
+      initialUnlockDoneRef.current = false;
     }
   }, [trackTitle, artist]);
 
@@ -106,18 +108,23 @@ export default function ImmersiveNuggetView({
   }, [unlockedIds, nuggets]);
 
   // ── Initial unlock ─────────────────────────────────────────────────
-  // Runs when nuggets arrive (or change identity). Reads currentTime so
-  // that mounting mid-track correctly unlocks all past nuggets.
+  // Runs once when nuggets first arrive. Uses currentTime ref to avoid
+  // re-running on every playback tick.
+  const currentTimeRef = useRef(currentTime);
+  currentTimeRef.current = currentTime;
+  const initialUnlockDoneRef = useRef(false);
+
   useEffect(() => {
-    if (nuggets.length > 0 && unlockedIds.size === 0) {
-      const initial = new Set<string>();
-      for (const n of nuggets) {
-        if (currentTime >= n.timestampSec) initial.add(n.id);
-      }
-      if (initial.size === 0) initial.add(nuggets[0].id);
-      setUnlockedIds(initial);
+    if (initialUnlockDoneRef.current || nuggets.length === 0) return;
+    initialUnlockDoneRef.current = true;
+    const t = currentTimeRef.current;
+    const initial = new Set<string>();
+    for (const n of nuggets) {
+      if (t >= n.timestampSec) initial.add(n.id);
     }
-  }, [nuggets, currentTime]);
+    if (initial.size === 0) initial.add(nuggets[0].id);
+    setUnlockedIds(initial);
+  }, [nuggets]);
 
   // Track-end is handled by Listen.tsx's handleTrackEnd via PlayerContext onEnded.
   // No duplicate detection needed here.
@@ -214,6 +221,7 @@ export default function ImmersiveNuggetView({
 
       {/* Collapse chevron — floats over content */}
       <button
+        aria-label="Close"
         className="absolute z-30 left-4 h-9 w-9 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
         style={{ top: "max(env(safe-area-inset-top, 12px), 12px)" }}
         onClick={() => { userDismissedRef.current = true; onClose(); }}

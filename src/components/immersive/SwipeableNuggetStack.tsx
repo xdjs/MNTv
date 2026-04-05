@@ -5,7 +5,7 @@ interface SwipeableNuggetStackProps {
   activeIndex: number;
   onSwipe: (newIndex: number) => void;
   disabled?: boolean;
-  children: (index: number, isActive: boolean) => ReactNode;
+  children: () => ReactNode;
 }
 
 const SWIPE_THRESHOLD = 40;
@@ -133,7 +133,7 @@ export default function SwipeableNuggetStack({
           willChange: dragX !== 0 || phase !== "idle" ? "transform, opacity" : undefined,
         }}
       >
-        {children(activeIndex, true)}
+        {children()}
       </div>
 
       {/* Dot indicators */}

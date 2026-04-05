@@ -93,6 +93,10 @@ async function pollForReadyNuggets(
   return null;
 }
 
+// Track when the last generation attempt started — used to only debounce
+// on rapid skips (< 5s between tracks), not on first page load.
+let lastGenerateTimestamp = 0;
+
 export function useAINuggets(
   trackId: string,
   artist: string,
@@ -322,11 +326,15 @@ export function useAINuggets(
           await supabase.from("nugget_cache").delete().eq("track_id", dbCacheKey);
         }
 
-        // Debounce before committing to generation — if the user skips
-        // within this window, cancelledRef aborts before we hit the edge
-        // function, saving API calls and Supabase function invocations.
-        await new Promise((r) => setTimeout(r, 3000));
-        if (cancelledRef.current) return;
+        // Debounce before committing to generation — only if there was a
+        // recent generation attempt (rapid skipping). First page loads skip
+        // the delay so the user doesn't wait unnecessarily.
+        const timeSinceLastGen = Date.now() - lastGenerateTimestamp;
+        lastGenerateTimestamp = Date.now();
+        if (timeSinceLastGen < 5000) {
+          await new Promise((r) => setTimeout(r, 3000));
+          if (cancelledRef.current) return;
+        }
 
         // No cache entry (or stale sentinel removed) — claim the work.
         // The unique index on track_id means only one concurrent INSERT wins.
