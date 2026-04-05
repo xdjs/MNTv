@@ -167,11 +167,14 @@
   scrollbar-width: none;
 }
 
-/* Marquee scroll for long text */
+/* Marquee scroll for long text — scrolls the full overflow then pauses.
+   padding-right creates a gap before the text loops back to start. */
 @keyframes marquee {
   0%, 20% { transform: translateX(0); }
-  80%, 100% { transform: translateX(calc(-100% + 200px)); }
+  80%, 100% { transform: translateX(-100%); }
 }
 .animate-marquee {
+  display: inline-block;
+  padding-right: 3rem;
   animation: marquee linear infinite;
 }

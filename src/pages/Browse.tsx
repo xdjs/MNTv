@@ -105,8 +105,6 @@ export default function Browse() {
     };
   }, [isPlaying, listenUrl, navigate]);
 
-
-
   const handleSignOut = () => {
     clearProfile();
     localStorage.removeItem("spotify_playback_token");

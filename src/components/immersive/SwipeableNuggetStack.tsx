@@ -1,7 +1,6 @@
 import { type ReactNode, useRef, useState, useCallback, useEffect } from "react";
 
 interface SwipeableNuggetStackProps {
-  count: number;
   unlockedCount: number;
   activeIndex: number;
   onSwipe: (newIndex: number) => void;

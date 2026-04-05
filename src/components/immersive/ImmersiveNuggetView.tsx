@@ -16,7 +16,6 @@ interface ImmersiveNuggetViewProps {
   spotifyAlbumArt?: string;
   trackTitle: string;
   artist: string;
-  album?: string;
   onClose: () => void;
   onPrev?: () => void;
   onNext?: () => void;
@@ -51,6 +50,7 @@ export default function ImmersiveNuggetView({
   const [deepDiveText, setDeepDiveText] = useState<string | null>(null);
   const [deepDiveFollowUp, setDeepDiveFollowUp] = useState<string | null>(null);
   const [deepDiveLoading, setDeepDiveLoading] = useState(false);
+  const deepDiveLoadingRef = useRef(false);
   const [typewriterDoneIds, setTypewriterDoneIds] = useState<Set<string>>(new Set());
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
   const prevUnlockedCountRef = useRef(0);
@@ -105,6 +105,8 @@ export default function ImmersiveNuggetView({
   }, [unlockedIds, nuggets]);
 
   // ── Initial unlock ─────────────────────────────────────────────────
+  // Runs when nuggets arrive (or change identity). Reads currentTime so
+  // that mounting mid-track correctly unlocks all past nuggets.
   useEffect(() => {
     if (nuggets.length > 0 && unlockedIds.size === 0) {
       const initial = new Set<string>();
@@ -114,7 +116,7 @@ export default function ImmersiveNuggetView({
       if (initial.size === 0) initial.add(nuggets[0].id);
       setUnlockedIds(initial);
     }
-  }, [nuggets]);
+  }, [nuggets, currentTime]);
 
   // Track-end is handled by Listen.tsx's handleTrackEnd via PlayerContext onEnded.
   // No duplicate detection needed here.
@@ -159,9 +161,12 @@ export default function ImmersiveNuggetView({
   }, [activeNugget]);
 
   const handleTellMeMore = useCallback(async () => {
-    if (!activeNugget || deepDiveLoading) return;
+    if (!activeNugget || deepDiveLoadingRef.current) return;
+    deepDiveLoadingRef.current = true;
     setDeepDiveLoading(true);
     try {
+      // generate-nuggets handles deepDive mode (line ~2186 in edge function) —
+      // returns a single {deepDive: {text, followUp}} response via Gemini.
       const { data } = await supabase.functions.invoke("generate-nuggets", {
         body: {
           artist, title: trackTitle, deepDive: true,
@@ -176,9 +181,9 @@ export default function ImmersiveNuggetView({
     } catch (e) {
       console.error("[ImmersiveView] Deep dive failed:", e);
     } finally {
+      deepDiveLoadingRef.current = false;
       setDeepDiveLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeNugget, activeSource, artist, trackTitle]);
 
   // ── Get the image URL for the current nugget (with fallbacks) ──────
@@ -237,7 +242,6 @@ export default function ImmersiveNuggetView({
               transition={{ duration: 0.2 }}
             >
               <SwipeableNuggetStack
-                count={nuggets.length}
                 unlockedCount={unlockedCount}
                 activeIndex={activeIndex}
                 onSwipe={handleSwipe}

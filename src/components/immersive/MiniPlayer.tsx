@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import { Play, Pause, SkipBack, SkipForward } from "lucide-react";
 
 interface MiniPlayerProps {
@@ -48,6 +48,8 @@ export default function MiniPlayer({
       commitTimerRef.current = setTimeout(() => setScrubProgress(null), 350);
     }
   }, [duration, onSeek]);
+
+  useEffect(() => () => { if (commitTimerRef.current) clearTimeout(commitTimerRef.current); }, []);
 
   return (
     <div className="relative bg-white/5 backdrop-blur-xl border-t border-white/5">

@@ -421,7 +421,8 @@ export function useAINuggets(
                 const n = payload.nugget as AINuggetData;
                 const { sourceId, nuggetId } = makeIds(trackId, currentListenCount, payload.index);
                 const source = makeSource(sourceId, n.source);
-                const ts = makeTimestamp(payload.index, 3, durationSec);
+                // Use provisional timestamp during streaming; recalculated after done
+                const ts = makeTimestamp(payload.index, payload.totalExpected || aiNuggets.length, durationSec);
                 const nugget = makeNugget(n, nuggetId, sourceId, trackId, ts);
 
                 setSources((prev) => new Map(prev).set(sourceId, source));
@@ -433,7 +434,14 @@ export function useAINuggets(
                 aiExternalLinks = payload.externalLinks || [];
                 aiNoTrackData = !!payload.noTrackData;
                 setArtistSummary(aiArtistSummary);
-                console.log("[SSE] All nuggets received");
+
+                // Recalculate all timestamps now that we know the true total count
+                const totalCount = aiNuggets.length;
+                setNuggets((prev) => prev.map((nugget, i) => ({
+                  ...nugget,
+                  timestampSec: makeTimestamp(i, totalCount, durationSec),
+                })));
+                console.log(`[SSE] All ${totalCount} nuggets received — timestamps recalculated`);
               }
             } catch { /* skip malformed events */ }
           }

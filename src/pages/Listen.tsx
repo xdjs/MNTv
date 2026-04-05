@@ -235,9 +235,10 @@ export default function Listen() {
   const trackLoadTimestampRef = useRef(0);
 
   // Reset navigation lock + load guard when the route changes (new track mounted).
-  // Also pause the current track immediately so the old track doesn't keep playing
-  // while the new URI resolves, and clear external listen mode so the load effect
-  // isn't blocked on subsequent track switches.
+  // Note: player.pause() was intentionally removed here — loadTrack() already
+  // pauses internally, and an extra pause() from this effect was racing with
+  // the PlayerContext autoplay, causing the old track to briefly resume via
+  // the Listen.tsx play() effect before the API call loaded the new one.
   useEffect(() => {
     const isTrackSwitch = prevRawTrackIdRef.current !== undefined &&
       prevRawTrackIdRef.current !== rawTrackId;
@@ -698,8 +699,9 @@ export default function Listen() {
     return () => { cancelled = true; };
   }, [aiLoading, aiNuggets, aiSources, track?.artist, track?.title, tier, listenCount]);
 
-  // Pass nuggets through immediately as they arrive — don't gate on aiLoading.
-  // The immersive view handles the loading state independently.
+  // Pass nuggets through immediately as they arrive (SSE streaming).
+  // Both desktop and immersive views only display nuggets whose
+  // timestampSec <= currentTime, so partial arrays are safe.
   const rawTrackNuggets = aiNuggets;
 
   // Redistribute nugget timestamps based on actual player duration instead of
@@ -1606,7 +1608,6 @@ export default function Listen() {
               coverArtUrl={effectiveCoverArt}
               trackTitle={track?.title || ""}
               artist={track?.artist || ""}
-              album={track?.album}
               onClose={() => { if (isMobile) { navigate("/browse"); } else { setImmersiveMode(false); } }}
               onPrev={handlePrev}
               onNext={handleNext}
