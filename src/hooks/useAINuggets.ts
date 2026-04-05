@@ -454,7 +454,7 @@ export function useAINuggets(
         // Write to in-memory cache
         const allNuggets = aiNuggets.map((n: AINuggetData, i: number) => {
           const { sourceId, nuggetId } = makeIds(trackId, currentListenCount, i);
-          return makeNugget(n, nuggetId, sourceId, trackId, makeTimestamp(i, 3, durationSec));
+          return makeNugget(n, nuggetId, sourceId, trackId, makeTimestamp(i, aiNuggets.length, durationSec));
         });
         const allSources = new Map<string, Source>();
         aiNuggets.forEach((n: AINuggetData, i: number) => {

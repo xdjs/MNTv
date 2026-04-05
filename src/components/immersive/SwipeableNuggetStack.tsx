@@ -18,16 +18,22 @@ export default function SwipeableNuggetStack({
   children,
 }: SwipeableNuggetStackProps) {
   const [dragX, setDragX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
   // phase: "idle" | "exit" (old card fading out) | "enter" (new card fading in)
   const [phase, setPhase] = useState<"idle" | "exit" | "enter">("idle");
-  const isDraggingRef = useRef(false);
   const startXRef = useRef(0);
   const startYRef = useRef(0);
   const lockedRef = useRef<"x" | "y" | null>(null);
   const prevIndexRef = useRef(activeIndex);
+  const swipeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const canGoLeft = activeIndex > 0;
   const canGoRight = activeIndex < unlockedCount - 1;
+
+  // Clean up swipe timer on unmount
+  useEffect(() => () => {
+    if (swipeTimerRef.current) clearTimeout(swipeTimerRef.current);
+  }, []);
 
   // When activeIndex changes externally (auto-unlock), animate entry
   useEffect(() => {
@@ -45,11 +51,11 @@ export default function SwipeableNuggetStack({
     startXRef.current = e.touches[0].clientX;
     startYRef.current = e.touches[0].clientY;
     lockedRef.current = null;
-    isDraggingRef.current = true;
+    setIsDragging(true);
   }, [disabled, phase]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (disabled || !isDraggingRef.current) return;
+    if (disabled || lockedRef.current === "y") return;
     const dx = e.touches[0].clientX - startXRef.current;
     const dy = e.touches[0].clientY - startYRef.current;
 
@@ -66,7 +72,7 @@ export default function SwipeableNuggetStack({
   }, [disabled, canGoLeft, canGoRight]);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    isDraggingRef.current = false;
+    setIsDragging(false);
 
     if (disabled || lockedRef.current !== "x") {
       setDragX(0);
@@ -83,7 +89,9 @@ export default function SwipeableNuggetStack({
       setDragX(0);
 
       // After fade-out, swap content and start fade-in
-      setTimeout(() => {
+      if (swipeTimerRef.current) clearTimeout(swipeTimerRef.current);
+      swipeTimerRef.current = setTimeout(() => {
+        swipeTimerRef.current = null;
         if (goingLeft) onSwipe(activeIndex + 1);
         else onSwipe(activeIndex - 1);
         // "enter" phase is triggered by the useEffect on activeIndex change
@@ -115,7 +123,7 @@ export default function SwipeableNuggetStack({
         style={{
           transform: dragX !== 0 ? `translateX(${dragX}px)` : undefined,
           opacity,
-          transition: isDraggingRef.current
+          transition: isDragging
             ? "opacity 0.15s ease-out"
             : phase === "exit"
               ? "opacity 0.2s ease-out"
@@ -129,7 +137,7 @@ export default function SwipeableNuggetStack({
       </div>
 
       {/* Dot indicators */}
-      {unlockedCount > 1 && phase === "idle" && !isDraggingRef.current && (
+      {unlockedCount > 1 && phase === "idle" && !isDragging && (
         <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 flex gap-1.5 pointer-events-none">
           {Array.from({ length: unlockedCount }, (_, i) => (
             <div
@@ -143,7 +151,7 @@ export default function SwipeableNuggetStack({
       )}
 
       {/* Swipe hints */}
-      {phase === "idle" && !isDraggingRef.current && unlockedCount > 1 && (
+      {phase === "idle" && !isDragging && unlockedCount > 1 && (
         <>
           {canGoLeft && (
             <div className="absolute left-1 top-1/2 -translate-y-1/2 z-20 pointer-events-none opacity-30">

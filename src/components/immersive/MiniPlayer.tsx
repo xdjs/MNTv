@@ -97,8 +97,8 @@ export default function MiniPlayer({
         )}
         <div className="flex-1 min-w-0 overflow-hidden">
           <div className="overflow-hidden">
-            <p className="text-sm font-medium text-white/90 whitespace-nowrap animate-marquee"
-              style={{ animationDuration: trackTitle.length > 25 ? "8s" : "0s" }}>
+            <p className={`text-sm font-medium text-white/90 whitespace-nowrap ${trackTitle.length > 25 ? "animate-marquee" : ""}`}
+              style={trackTitle.length > 25 ? { animationDuration: "8s" } : undefined}>
               {trackTitle}
             </p>
           </div>

@@ -28,7 +28,6 @@ const KIND_LABELS: Record<string, string> = {
   discovery: "Discover",
 };
 
-
 export default function ImmersiveNuggetView({
   nuggets,
   sources,
@@ -75,15 +74,17 @@ export default function ImmersiveNuggetView({
   // ── Unlock nuggets ─────────────────────────────────────────────────
   useEffect(() => {
     if (nuggets.length === 0) return;
-    const newUnlocked = new Set(unlockedIds);
-    let changed = false;
-    for (const n of nuggets) {
-      if (currentTime >= n.timestampSec && !newUnlocked.has(n.id)) {
-        newUnlocked.add(n.id);
-        changed = true;
+    setUnlockedIds((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const n of nuggets) {
+        if (currentTime >= n.timestampSec && !next.has(n.id)) {
+          next.add(n.id);
+          changed = true;
+        }
       }
-    }
-    if (changed) setUnlockedIds(newUnlocked);
+      return changed ? next : prev;
+    });
   }, [currentTime, nuggets]);
 
   // ── Auto-show new nuggets ──────────────────────────────────────────
