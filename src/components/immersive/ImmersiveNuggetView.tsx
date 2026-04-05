@@ -183,7 +183,7 @@ export default function ImmersiveNuggetView({
           sourceTitle: activeSource?.title, sourcePublisher: activeSource?.publisher,
         },
       });
-      if (data?.deepDive) {
+      if (data?.deepDive?.text) {
         setDeepDiveText(data.deepDive.text);
         setDeepDiveFollowUp(data.deepDive.followUp || null);
       }

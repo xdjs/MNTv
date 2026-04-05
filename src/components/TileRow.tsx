@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect } from "react";
+import { useRef, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -44,12 +44,14 @@ export default function TileRow({ label, items, tileSize = "md", focusedIndex = 
     }
   }, [focusedIndex]);
 
-  // Only apply hover glow on desktop (pointer: fine) — avoids stuck glow on mobile tap
+  // Cache pointer check — avoids allocating a new MediaQueryList on every hover
+  const isPointerFine = useMemo(() => window.matchMedia("(pointer: fine)").matches, []);
+
   const handleTileEnter = useCallback((el: HTMLElement) => {
-    if (window.matchMedia("(pointer: fine)").matches) {
+    if (isPointerFine) {
       el.style.boxShadow = `0 0 20px 6px hsl(var(--neon-glow) / 0.5), 0 0 50px 12px hsl(var(--neon-glow) / 0.2)`;
     }
-  }, []);
+  }, [isPointerFine]);
 
   const handleTileLeave = useCallback((el: HTMLElement, isFocused: boolean) => {
     if (!isFocused) el.style.boxShadow = "";

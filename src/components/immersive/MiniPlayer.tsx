@@ -99,10 +99,16 @@ export default function MiniPlayer({
           {/* ~25 chars fits the mini player at 375px width with controls.
               Approximation — a ref-based overflow check would be more robust. */}
           <div key={trackTitle} className="overflow-hidden">
-            <p className={`text-sm font-medium text-white/90 whitespace-nowrap ${trackTitle.length > 25 ? "animate-marquee" : ""}`}
-              style={trackTitle.length > 25 ? { animationDuration: "8s" } : undefined}>
-              {trackTitle}
-            </p>
+            {trackTitle.length > 25 ? (
+              <p className="text-sm font-medium text-white/90 whitespace-nowrap animate-marquee"
+                style={{ animationDuration: "8s" }}>
+                {trackTitle}<span className="px-8">{trackTitle}</span>
+              </p>
+            ) : (
+              <p className="text-sm font-medium text-white/90 whitespace-nowrap truncate">
+                {trackTitle}
+              </p>
+            )}
           </div>
           <p className="text-xs text-white/40 truncate">{artist}</p>
         </div>

@@ -167,14 +167,14 @@
   scrollbar-width: none;
 }
 
-/* Marquee scroll for long text — scrolls the full overflow then pauses.
-   padding-right creates a gap before the text loops back to start. */
+/* Seamless marquee — text is duplicated via ::after so the scroll
+   loops without a visible jump at the boundary. */
 @keyframes marquee {
-  0%, 20% { transform: translateX(0); }
-  80%, 100% { transform: translateX(-100%); }
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
 }
 .animate-marquee {
   display: inline-block;
-  padding-right: 3rem;
+  white-space: nowrap;
   animation: marquee linear infinite;
 }

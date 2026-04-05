@@ -2780,7 +2780,11 @@ Return ONLY valid JSON:
       // Exa citation resolution
       if (exaCitations?.length && source.citIndex != null) {
         const cit = exaCitations.find((c) => c.citIndex === source.citIndex);
-        if (cit) { result.source.url = cit.url; if (cit.title) result.source.title = cit.title; result.source.verified = true; }
+        if (cit) {
+          result.source.url = cit.url;
+          if (cit.title) result.source.title = cit.title;
+          result.source.verified = true;
+        }
       }
       // Fallback: Gemini didn't use citIndex
       if (!result.source.url && exaCitations?.length) {
@@ -2791,12 +2795,20 @@ Return ONLY valid JSON:
           (pubLower && c.url.toLowerCase().includes(pubLower)) ||
           (titleLower && c.title.toLowerCase().includes(titleLower))
         );
-        if (match) { result.source.url = match.url; result.source.title = match.title; result.source.verified = true; }
+        if (match) {
+          result.source.url = match.url;
+          result.source.title = match.title;
+          result.source.verified = true;
+        }
       }
       // YouTube sources
       if (source.type === "youtube" && source.videoIndex != null) {
         const video = videos[source.videoIndex];
-        if (video) { result.source.embedId = video.videoId; result.source.url = `https://www.youtube.com/watch?v=${video.videoId}`; result.source.verified = true; }
+        if (video) {
+          result.source.embedId = video.videoId;
+          result.source.url = `https://www.youtube.com/watch?v=${video.videoId}`;
+          result.source.verified = true;
+        }
       }
       // Grounding chunk resolution
       if (!result.source.url) {
@@ -2863,9 +2875,13 @@ Return ONLY valid JSON:
           // so awaits actually execute (Deno silently discards async start).
           (async () => {
             try {
-              // Resolve images sequentially to prevent duplicate URLs
+              // Pipeline: resolve image → assemble → stream for each nugget.
+              // Sequential to prevent duplicate usedImageUrls, and each nugget
+              // is streamed as soon as it's ready (true progressive SSE).
               for (let i = 0; i < rawNuggets.length; i++) {
                 const n = rawNuggets[i];
+
+                // ── Image resolution ──
                 if (!n._resolvedImageUrl && isValidImageQuery(n.imageSearchQuery)) {
                   try {
                     const wikiResult = await resolveNuggetImage(n.imageSearchQuery!);
@@ -2894,14 +2910,15 @@ Return ONLY valid JSON:
                     usedImageUrls.add(fallbackCit.imageUrl);
                   }
                 }
-              }
 
-              // Assemble + validate + stream each nugget
-              for (let i = 0; i < rawNuggets.length; i++) {
-                const assembled = assembleNugget(rawNuggets[i], i);
+                // ── Assemble + validate ──
+                const assembled = assembleNugget(n, i);
                 const sourceType = (assembled.source?.type || "").toLowerCase();
                 const publisher = (assembled.source?.publisher || "").toLowerCase();
-                if (sourceType === "internal-data" || sourceType === "internal_data" || sourceType === "database" || sourceType === "editorial") {
+                if (
+                  sourceType === "internal-data" || sourceType === "internal_data" ||
+                  sourceType === "database" || sourceType === "editorial"
+                ) {
                   console.log(`[SSE] Skipping hallucinated source type nugget ${i}`);
                   completedCount++;
                   continue;
@@ -2912,7 +2929,13 @@ Return ONLY valid JSON:
                   continue;
                 }
 
-                const event = `data: ${JSON.stringify({ type: "nugget", index: i, nugget: assembled })}\n\n`;
+                // ── Stream immediately ──
+                const event = `data: ${JSON.stringify({
+                  type: "nugget",
+                  index: i,
+                  nugget: assembled,
+                  totalExpected: rawNuggets.length,
+                })}\n\n`;
                 try { streamController.enqueue(encoder.encode(event)); } catch { /* stream closed */ }
                 console.log(`[SSE] Streamed nugget ${i}: "${assembled.headline?.slice(0, 40)}"`);
                 completedCount++;
