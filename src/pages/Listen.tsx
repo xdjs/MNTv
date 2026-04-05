@@ -174,9 +174,8 @@ export default function Listen() {
   }, [hasSpotifyToken, realTrackMeta?.spotifyUri, track?.artist, track?.title]);
 
   const [shuffleOn, setShuffleOn] = useState(false); // kept for PlaybackBar UI only
-  const [immersiveMode, setImmersiveMode] = useState(false);
   const isMobile = useIsMobile();
-  const showImmersive = isMobile || immersiveMode;
+  const showImmersive = isMobile;
   const [regenerateKey, setRegenerateKey] = useState(0);
   const [skipLoading, setSkipLoading] = useState(false);
 
@@ -1611,7 +1610,7 @@ export default function Listen() {
               coverArtUrl={effectiveCoverArt}
               trackTitle={track?.title || ""}
               artist={track?.artist || ""}
-              onClose={() => { if (isMobile) { navigate("/browse"); } else { setImmersiveMode(false); } }}
+              onClose={() => navigate("/browse")}
               onPrev={handlePrev}
               onNext={handleNext}
               spotifyAlbumArt={spotifyStateTrack?.albumArtUrl}

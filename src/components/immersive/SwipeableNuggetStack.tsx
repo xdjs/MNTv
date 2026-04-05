@@ -1,4 +1,4 @@
-import { type ReactNode, useRef, useState, useCallback, useEffect } from "react";
+import { type ReactNode, useRef, useState, useCallback, useEffect, useMemo } from "react";
 
 interface SwipeableNuggetStackProps {
   unlockedCount: number;
@@ -147,7 +147,9 @@ export default function SwipeableNuggetStack({
           willChange: dragX !== 0 || phase !== "idle" ? "transform, opacity" : undefined,
         }}
       >
-        {children()}
+        {/* Memoize children output so drag renders don't re-evaluate
+            the render prop (image loading, typewriter, etc.) */}
+        {useMemo(() => children(), [children])}
       </div>
 
       {/* Dot indicators */}

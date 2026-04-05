@@ -415,14 +415,16 @@ export function useAINuggets(
 
           buffer += decoder.decode(value, { stream: true });
 
-          // Parse SSE events from buffer
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || ""; // keep incomplete last line
+          // Parse SSE events from buffer — split on double-newline (SSE
+          // standard event separator) to correctly handle multi-line events.
+          const events = buffer.split("\n\n");
+          buffer = events.pop() || ""; // keep incomplete last event
 
-          for (const line of lines) {
-            if (!line.startsWith("data: ")) continue;
+          for (const event of events) {
+            const dataLine = event.split("\n").find((l) => l.startsWith("data: "));
+            if (!dataLine) continue;
             try {
-              const payload = JSON.parse(line.slice(6));
+              const payload = JSON.parse(dataLine.slice(6));
               if (payload.type === "nugget") {
                 aiNuggets = [...aiNuggets, payload.nugget];
                 const n = payload.nugget as AINuggetData;
@@ -450,7 +452,7 @@ export function useAINuggets(
                 })));
                 console.log(`[SSE] All ${totalCount} nuggets received — timestamps recalculated`);
               }
-            } catch { /* skip malformed events */ }
+            } catch (e) { console.warn("[SSE] Malformed event:", dataLine, e); }
           }
         }
 

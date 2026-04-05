@@ -45,7 +45,7 @@ export default function MiniPlayer({
       // Hold the visual position briefly so the progress prop can catch up
       // from the Spotify SDK (~250ms), preventing a visible snap-back.
       if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
-      commitTimerRef.current = setTimeout(() => setScrubProgress(null), 350);
+      commitTimerRef.current = setTimeout(() => setScrubProgress(null), 500);
     }
   }, [duration, onSeek]);
 
