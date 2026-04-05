@@ -1240,7 +1240,7 @@ export default function Listen() {
               {topFocusIndex === 0 ? "Back" : "Open Companion"}
             </motion.p>
           )}
-          <div className={`flex flex-col items-center gap-1.5 ${showImmersive ? "hidden" : ""}`}>
+          {!showImmersive && <div className="flex flex-col items-center gap-1.5">
             <MusicNerdLoadingOrchestrator
               aiLoading={aiLoading}
               shortId={shortId}
@@ -1261,7 +1261,7 @@ export default function Listen() {
             >
               DEV
             </button>
-          </div>
+          </div>}
         </div>
 
         {/* Track info — fixed bottom-left, visible when playback bar is hidden */}

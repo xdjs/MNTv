@@ -2859,9 +2859,46 @@ Return ONLY valid JSON:
         start(controller) {
           streamController = controller;
 
-          // Kick off all 3 nugget resolutions in parallel
-          const promises = rawNuggets.map((_, i) =>
-            resolveAndAssembleNugget(i).then((assembled) => {
+          // Resolve images sequentially to prevent duplicate URLs
+          // (usedImageUrls race when resolved in parallel), then assemble
+          // and stream each nugget as soon as its image is resolved.
+          for (let i = 0; i < rawNuggets.length; i++) {
+            const n = rawNuggets[i];
+            if (!n._resolvedImageUrl && isValidImageQuery(n.imageSearchQuery)) {
+              try {
+                const wikiResult = await resolveNuggetImage(n.imageSearchQuery!);
+                if (wikiResult && !usedImageUrls.has(wikiResult.url)) {
+                  n._resolvedImageUrl = wikiResult.url;
+                  n._resolvedImageTitle = wikiResult.title;
+                  usedImageUrls.add(wikiResult.url);
+                }
+              } catch { /* fall through to Exa fallback */ }
+            }
+            if (!n._resolvedImageUrl) {
+              const groupStart = i * 10;
+              const groupEnd = groupStart + 10;
+              let fallbackCit = exaCitationsStrict.find((c) =>
+                c.citIndex >= groupStart && c.citIndex < groupEnd &&
+                c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
+              );
+              if (!fallbackCit) {
+                fallbackCit = exaCitationsStrict.find((c) =>
+                  c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
+                );
+              }
+              if (fallbackCit?.imageUrl) {
+                n._resolvedImageUrl = fallbackCit.imageUrl;
+                n._resolvedImageTitle = fallbackCit.title;
+                usedImageUrls.add(fallbackCit.imageUrl);
+              }
+            }
+          }
+
+          // Assemble + stream all nuggets (images already resolved above)
+          const promises = rawNuggets.map((_, i) => {
+            const assembled = assembleNugget(rawNuggets[i], i);
+            return Promise.resolve(assembled);
+          }).map((p, i) => p.then((assembled) => {
               // Validate
               const sourceType = (assembled.source?.type || "").toLowerCase();
               const publisher = (assembled.source?.publisher || "").toLowerCase();

@@ -21,6 +21,7 @@ export default function SwipeableNuggetStack({
   const [isDragging, setIsDragging] = useState(false);
   // phase: "idle" | "exit" (old card fading out) | "enter" (new card fading in)
   const [phase, setPhase] = useState<"idle" | "exit" | "enter">("idle");
+  const containerRef = useRef<HTMLDivElement>(null);
   const startXRef = useRef(0);
   const startYRef = useRef(0);
   const lockedRef = useRef<"x" | "y" | null>(null);
@@ -54,7 +55,10 @@ export default function SwipeableNuggetStack({
     setIsDragging(true);
   }, [disabled, phase]);
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+  // handleTouchMove is attached via useEffect with { passive: false }
+  // so we can call preventDefault() to stop page scroll during horizontal swipes.
+  const handleTouchMoveRef = useRef<(e: TouchEvent) => void>(() => {});
+  handleTouchMoveRef.current = (e: TouchEvent) => {
     if (disabled || lockedRef.current === "y") return;
     const dx = e.touches[0].clientX - startXRef.current;
     const dy = e.touches[0].clientY - startYRef.current;
@@ -64,12 +68,22 @@ export default function SwipeableNuggetStack({
     }
 
     if (lockedRef.current === "x") {
+      e.preventDefault(); // prevent page scroll during horizontal swipe
       let clamped = dx;
       if (!canGoRight && dx < 0) clamped = dx * 0.2;
       if (!canGoLeft && dx > 0) clamped = dx * 0.2;
       setDragX(clamped);
     }
-  }, [disabled, canGoLeft, canGoRight]);
+  };
+
+  // Attach non-passive touchmove listener for preventDefault support
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const handler = (e: TouchEvent) => handleTouchMoveRef.current(e);
+    el.addEventListener("touchmove", handler, { passive: false });
+    return () => el.removeEventListener("touchmove", handler);
+  }, []);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     setIsDragging(false);
@@ -113,9 +127,9 @@ export default function SwipeableNuggetStack({
 
   return (
     <div
+      ref={containerRef}
       className="relative w-full h-full overflow-hidden"
       onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
       <div

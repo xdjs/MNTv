@@ -55,6 +55,9 @@ export default function ImmersiveNuggetView({
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
   const prevUnlockedCountRef = useRef(0);
   const prevTrackKeyRef = useRef(`${trackTitle}::${artist}`);
+  const currentTimeRef = useRef(currentTime);
+  currentTimeRef.current = currentTime;
+  const initialUnlockDoneRef = useRef(false);
 
   // ── Reset on track change ──────────────────────────────────────────
   useEffect(() => {
@@ -66,6 +69,8 @@ export default function ImmersiveNuggetView({
       setNuggetDismissed(false);
       setDeepDiveText(null);
       setDeepDiveFollowUp(null);
+      setDeepDiveLoading(false);
+      deepDiveLoadingRef.current = false;
       prevUnlockedCountRef.current = 0;
       setTypewriterDoneIds(new Set());
       userDismissedRef.current = false;
@@ -108,12 +113,8 @@ export default function ImmersiveNuggetView({
   }, [unlockedIds, nuggets]);
 
   // ── Initial unlock ─────────────────────────────────────────────────
-  // Runs once when nuggets first arrive. Uses currentTime ref to avoid
+  // Runs once when nuggets first arrive. Uses currentTimeRef to avoid
   // re-running on every playback tick.
-  const currentTimeRef = useRef(currentTime);
-  currentTimeRef.current = currentTime;
-  const initialUnlockDoneRef = useRef(false);
-
   useEffect(() => {
     if (initialUnlockDoneRef.current || nuggets.length === 0) return;
     initialUnlockDoneRef.current = true;
@@ -134,7 +135,7 @@ export default function ImmersiveNuggetView({
     if (!("mediaSession" in navigator)) return;
     navigator.mediaSession.metadata = new MediaMetadata({
       title: trackTitle, artist,
-      artwork: artUrl ? [{ src: artUrl, sizes: "512x512", type: "image/jpeg" }] : [],
+      artwork: artUrl ? [{ src: artUrl, sizes: "512x512" }] : [],
     });
     navigator.mediaSession.setActionHandler("play", () => toggle());
     navigator.mediaSession.setActionHandler("pause", () => toggle());
@@ -221,7 +222,7 @@ export default function ImmersiveNuggetView({
 
       {/* Collapse chevron — floats over content */}
       <button
-        aria-label="Close"
+        aria-label="Back to browse"
         className="absolute z-30 left-4 h-9 w-9 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
         style={{ top: "max(env(safe-area-inset-top, 12px), 12px)" }}
         onClick={() => { userDismissedRef.current = true; onClose(); }}

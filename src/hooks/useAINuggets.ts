@@ -93,10 +93,6 @@ async function pollForReadyNuggets(
   return null;
 }
 
-// Track when the last generation attempt started — used to only debounce
-// on rapid skips (< 5s between tracks), not on first page load.
-let lastGenerateTimestamp = 0;
-
 export function useAINuggets(
   trackId: string,
   artist: string,
@@ -121,6 +117,9 @@ export function useAINuggets(
   const { getNuggetCache, setNuggetCache, getTrackListenCount, setTrackListenCount } = usePlayer();
   const cancelledRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
+  // Track when the last generation attempt started — used to only debounce
+  // on rapid skips (< 5s between tracks), not on first page load.
+  const lastGenTimestampRef = useRef(0);
 
   const generate = useCallback(async () => {
     if (!artist || !title) return;
@@ -329,8 +328,8 @@ export function useAINuggets(
         // Debounce before committing to generation — only if there was a
         // recent generation attempt (rapid skipping). First page loads skip
         // the delay so the user doesn't wait unnecessarily.
-        const timeSinceLastGen = Date.now() - lastGenerateTimestamp;
-        lastGenerateTimestamp = Date.now();
+        const timeSinceLastGen = Date.now() - lastGenTimestampRef.current;
+        lastGenTimestampRef.current = Date.now();
         if (timeSinceLastGen < 5000) {
           await new Promise((r) => setTimeout(r, 3000));
           if (cancelledRef.current) return;
