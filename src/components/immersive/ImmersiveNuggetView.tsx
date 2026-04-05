@@ -174,7 +174,6 @@ export default function ImmersiveNuggetView({
   const handleTellMeMore = useCallback(async () => {
     if (!activeNugget || deepDiveLoadingRef.current) return;
     if (deepDiveCountRef.current >= 10) return; // session rate limit
-    deepDiveCountRef.current++;
     deepDiveLoadingRef.current = true;
     setDeepDiveLoading(true);
     // Snapshot track key so we can discard stale responses if the
@@ -193,6 +192,7 @@ export default function ImmersiveNuggetView({
       // Discard if track changed during the request
       if (prevTrackKeyRef.current !== requestTrackKey) return;
       if (data?.deepDive?.text) {
+        deepDiveCountRef.current++; // only count successful responses
         setDeepDiveText(data.deepDive.text);
         setDeepDiveFollowUp(data.deepDive.followUp || null);
       }

@@ -26,10 +26,8 @@ export default function TypewriterText({
   const completeFiredRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
   const pausedRef = useRef(paused);
-  const textLenRef = useRef(text.length);
   onCompleteRef.current = onComplete;
   pausedRef.current = paused;
-  textLenRef.current = text.length;
 
   useEffect(() => {
     setCharIndex(0);
@@ -43,26 +41,26 @@ export default function TypewriterText({
     return () => clearTimeout(timer);
   }, [delay, started]);
 
+  // Advance character index on interval — no side-effects inside the
+  // setState updater (concurrent-mode safe).
   useEffect(() => {
     if (!started || paused) return;
     const timer = setInterval(() => {
       if (pausedRef.current) return;
-      setCharIndex((prev) => {
-        if (prev >= textLenRef.current) {
-          clearInterval(timer);
-          if (!completeFiredRef.current) {
-            completeFiredRef.current = true;
-            onCompleteRef.current?.();
-          }
-          return prev;
-        }
-        return prev + 1;
-      });
+      setCharIndex((prev) => (prev >= text.length ? prev : prev + 1));
     }, speed);
     return () => clearInterval(timer);
-  }, [started, paused, speed]);
+  }, [started, paused, speed, text.length]);
 
-  // Simple reveal: only show characters up to charIndex. Nothing else.
+  // Fire onComplete when charIndex reaches text length — separate effect
+  // keeps side-effects out of the interval's setState updater.
+  useEffect(() => {
+    if (charIndex >= text.length && text.length > 0 && !completeFiredRef.current) {
+      completeFiredRef.current = true;
+      onCompleteRef.current?.();
+    }
+  }, [charIndex, text.length]);
+
   const visible = text.slice(0, charIndex);
 
   return (

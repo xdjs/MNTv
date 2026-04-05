@@ -26,13 +26,21 @@ export default function MiniPlayer({
   onPrev,
   onNext,
 }: MiniPlayerProps) {
-  const [scrubbing, setScrubbing] = useState(false);
   const [scrubProgress, setScrubProgress] = useState<number | null>(null);
+  // Ref for scrubbing state — avoids stale-state reads in onPointerMove
+  // (setScrubbing is async, so the first few move events after pointerdown
+  // would see false and bail if we used useState).
+  const scrubbingRef = useRef(false);
+  const barRef = useRef<HTMLDivElement>(null);
   const lastSeekRef = useRef(0);
   const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Force re-render for scrub thumb size — only toggled on down/up, not every move.
+  const [scrubActive, setScrubActive] = useState(false);
   const displayProgress = scrubProgress !== null ? scrubProgress : progress;
 
-  const scrubToPosition = useCallback((clientX: number, bar: HTMLElement, commit: boolean) => {
+  const scrubToPosition = useCallback((clientX: number, commit: boolean) => {
+    const bar = barRef.current;
+    if (!bar) return;
     const rect = bar.getBoundingClientRect();
     const pct = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
     setScrubProgress(pct);
@@ -43,7 +51,7 @@ export default function MiniPlayer({
     }
     if (commit) {
       // Hold the visual position briefly so the progress prop can catch up
-      // from the Spotify SDK (~250ms), preventing a visible snap-back.
+      // from the Spotify SDK, preventing a visible snap-back.
       if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
       commitTimerRef.current = setTimeout(() => setScrubProgress(null), 500);
     }
@@ -58,33 +66,32 @@ export default function MiniPlayer({
         className="absolute top-0 inset-x-0 h-5 -translate-y-1/2 cursor-pointer touch-none z-10"
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId);
-          setScrubbing(true);
-          const bar = e.currentTarget.querySelector("[data-bar]") as HTMLElement;
-          if (bar) scrubToPosition(e.clientX, bar, false);
+          scrubbingRef.current = true;
+          setScrubActive(true);
+          scrubToPosition(e.clientX, false);
         }}
         onPointerMove={(e) => {
-          if (!scrubbing) return;
-          const bar = e.currentTarget.querySelector("[data-bar]") as HTMLElement;
-          if (bar) scrubToPosition(e.clientX, bar, false);
+          if (!scrubbingRef.current) return;
+          scrubToPosition(e.clientX, false);
         }}
         onPointerUp={(e) => {
-          if (scrubbing) {
-            const bar = e.currentTarget.querySelector("[data-bar]") as HTMLElement;
-            if (bar) scrubToPosition(e.clientX, bar, true);
+          if (scrubbingRef.current) {
+            scrubToPosition(e.clientX, true);
           }
-          setScrubbing(false);
+          scrubbingRef.current = false;
+          setScrubActive(false);
         }}
-        onPointerCancel={() => { setScrubbing(false); setScrubProgress(null); }}
+        onPointerCancel={() => { scrubbingRef.current = false; setScrubActive(false); setScrubProgress(null); }}
       >
-        <div data-bar className="absolute top-1/2 inset-x-0 h-[2px] bg-white/15">
+        <div ref={barRef} className="absolute top-1/2 inset-x-0 h-[2px] bg-white/15">
           <div className="absolute inset-y-0 left-0 bg-white/50 rounded-full" style={{ width: `${displayProgress}%` }} />
           <div
             className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full bg-white transition-all duration-100"
             style={{
               left: `${displayProgress}%`,
-              width: scrubbing ? 10 : 6,
-              height: scrubbing ? 10 : 6,
-              opacity: scrubbing ? 1 : 0.7,
+              width: scrubActive ? 10 : 6,
+              height: scrubActive ? 10 : 6,
+              opacity: scrubActive ? 1 : 0.7,
             }}
           />
         </div>

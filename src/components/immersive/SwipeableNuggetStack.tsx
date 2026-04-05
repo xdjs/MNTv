@@ -1,5 +1,10 @@
 import { type ReactNode, useRef, useState, useCallback, useEffect, useMemo } from "react";
 
+// children is a render-prop function (not ReactNode) so this component
+// can wrap it with useMemo — drag-state changes (dragX, isDragging) cause
+// re-renders but the memoized children() output is only re-evaluated when
+// the parent's useCallback reference changes (i.e. when nugget content or
+// active nugget changes, not on every finger movement).
 interface SwipeableNuggetStackProps {
   unlockedCount: number;
   activeIndex: number;

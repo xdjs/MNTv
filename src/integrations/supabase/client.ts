@@ -3,6 +3,9 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
 export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+// Supabase's "publishable key" is the same as the "anon key" — safe to
+// expose client-side. Exported as SUPABASE_ANON_KEY to match Supabase
+// docs convention; the env var uses Lovable's naming (PUBLISHABLE_KEY).
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
 // Import the supabase client like this:

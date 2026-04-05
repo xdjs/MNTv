@@ -1,3 +1,7 @@
+// NOTE: Despite the "mock" directory name, these are the canonical shared
+// type definitions used across the entire codebase (15+ files). Moving to
+// @/types would be a larger rename — tracked for a future cleanup pass.
+
 export type Artist = {
   id: string;
   name: string;
