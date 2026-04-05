@@ -173,8 +173,11 @@ export default function ImmersiveNuggetView({
     if (!activeNugget || deepDiveLoadingRef.current) return;
     deepDiveLoadingRef.current = true;
     setDeepDiveLoading(true);
+    // Snapshot track key so we can discard stale responses if the
+    // user switched tracks while the request was in flight.
+    const requestTrackKey = `${trackTitle}::${artist}`;
     try {
-      // generate-nuggets handles deepDive mode (line ~2186 in edge function) —
+      // generate-nuggets edge function handles deepDive mode —
       // returns a single {deepDive: {text, followUp}} response via Gemini.
       const { data } = await supabase.functions.invoke("generate-nuggets", {
         body: {
@@ -183,6 +186,8 @@ export default function ImmersiveNuggetView({
           sourceTitle: activeSource?.title, sourcePublisher: activeSource?.publisher,
         },
       });
+      // Discard if track changed during the request
+      if (prevTrackKeyRef.current !== requestTrackKey) return;
       if (data?.deepDive?.text) {
         setDeepDiveText(data.deepDive.text);
         setDeepDiveFollowUp(data.deepDive.followUp || null);

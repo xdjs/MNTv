@@ -1,6 +1,9 @@
-import { useRef, useCallback, useEffect, useMemo } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+
+// Evaluated once at module load — avoids allocating a MediaQueryList on every hover.
+const IS_POINTER_FINE = typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches;
 
 interface TileItem {
   id: string;
@@ -44,14 +47,11 @@ export default function TileRow({ label, items, tileSize = "md", focusedIndex = 
     }
   }, [focusedIndex]);
 
-  // Cache pointer check — avoids allocating a new MediaQueryList on every hover
-  const isPointerFine = useMemo(() => window.matchMedia("(pointer: fine)").matches, []);
-
   const handleTileEnter = useCallback((el: HTMLElement) => {
-    if (isPointerFine) {
+    if (IS_POINTER_FINE) {
       el.style.boxShadow = `0 0 20px 6px hsl(var(--neon-glow) / 0.5), 0 0 50px 12px hsl(var(--neon-glow) / 0.2)`;
     }
-  }, [isPointerFine]);
+  }, []);
 
   const handleTileLeave = useCallback((el: HTMLElement, isFocused: boolean) => {
     if (!isFocused) el.style.boxShadow = "";

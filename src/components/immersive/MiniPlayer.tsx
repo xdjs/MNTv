@@ -102,7 +102,12 @@ export default function MiniPlayer({
             {trackTitle.length > 25 ? (
               <p className="text-sm font-medium text-white/90 whitespace-nowrap animate-marquee"
                 style={{ animationDuration: "8s" }}>
-                {trackTitle}<span className="px-8">{trackTitle}</span>
+                {/* Two identical copies separated by a fixed gap.
+                    translateX(-50%) lands exactly at the start of copy 2. */}
+                <span>{trackTitle}</span>
+                <span className="inline-block" style={{ width: "3rem" }} />
+                <span>{trackTitle}</span>
+                <span className="inline-block" style={{ width: "3rem" }} />
               </p>
             ) : (
               <p className="text-sm font-medium text-white/90 whitespace-nowrap truncate">

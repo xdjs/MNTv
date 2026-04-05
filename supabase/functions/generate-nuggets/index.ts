@@ -2697,49 +2697,7 @@ Return ONLY valid JSON:
         }
       }
     }
-    // ── Per-nugget image resolution + final assembly function ──────────
     const isValidImageQuery = (q?: string) => q && q.length > 2 && !SENTINEL_VALUES.has(q.toLowerCase().trim());
-
-    async function resolveAndAssembleNugget(i: number) {
-      const n = rawNuggets[i];
-
-      // Wikipedia/Commons image search (if needed)
-      if (!n._resolvedImageUrl && isValidImageQuery(n.imageSearchQuery)) {
-        try {
-          const wikiResult = await resolveNuggetImage(n.imageSearchQuery!);
-          if (wikiResult && !usedImageUrls.has(wikiResult.url)) {
-            n._resolvedImageUrl = wikiResult.url;
-            n._resolvedImageTitle = wikiResult.title;
-            usedImageUrls.add(wikiResult.url);
-            console.log(`[Image] Wikipedia for nugget ${i} "${n.imageSearchQuery}" → ${wikiResult.url}`);
-          }
-        } catch { /* Wikipedia failed, fall through to Exa fallback */ }
-      }
-
-      // Exa citation fallback
-      if (!n._resolvedImageUrl && exaCitationsStrict.length) {
-        const groupStart = i * 10;
-        const groupEnd = groupStart + 10;
-        let fallbackCit = exaCitationsStrict.find((c) =>
-          c.citIndex >= groupStart && c.citIndex < groupEnd &&
-          c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
-        );
-        if (!fallbackCit) {
-          fallbackCit = exaCitationsStrict.find((c) =>
-            c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
-          );
-        }
-        if (fallbackCit?.imageUrl) {
-          n._resolvedImageUrl = fallbackCit.imageUrl;
-          n._resolvedImageTitle = fallbackCit.title;
-          usedImageUrls.add(fallbackCit.imageUrl);
-          console.log(`[Image] Exa fallback for nugget ${i}: ${fallbackCit.imageUrl}`);
-        }
-      }
-
-      // Assemble final nugget object (same logic as Step 4 below)
-      return assembleNugget(n, i);
-    }
 
     // ── Shared helpers for both SSE and JSON paths ─────────────────────
 
