@@ -397,7 +397,9 @@ export default function Listen() {
     listenThresholdMetRef.current = true;
 
     // Capture trackId at threshold time so we can verify the track
-    // hasn't changed by the time async DB writes complete.
+    // hasn't changed by the time async DB writes complete. trackId is
+    // derived from the route param (stable within a single track load),
+    // so comparing against it between awaits reliably detects skips.
     const thresholdTrackId = trackId;
 
     (async () => {
@@ -699,7 +701,8 @@ export default function Listen() {
     return () => { cancelled = true; };
   }, [aiLoading, aiNuggets, aiSources, track?.artist, track?.title, tier, listenCount]);
 
-  // Pass nuggets through immediately as they arrive (SSE streaming).
+  // Intentionally NOT gated on aiLoading — SSE streaming appends nuggets
+  // one at a time, and each append triggers a downstream re-render.
   // Both desktop and immersive views only display nuggets whose
   // timestampSec <= currentTime, so partial arrays are safe.
   const rawTrackNuggets = aiNuggets;

@@ -2859,81 +2859,81 @@ Return ONLY valid JSON:
         start(controller) {
           streamController = controller;
 
-          // Resolve images sequentially to prevent duplicate URLs
-          // (usedImageUrls race when resolved in parallel), then assemble
-          // and stream each nugget as soon as its image is resolved.
-          for (let i = 0; i < rawNuggets.length; i++) {
-            const n = rawNuggets[i];
-            if (!n._resolvedImageUrl && isValidImageQuery(n.imageSearchQuery)) {
-              try {
-                const wikiResult = await resolveNuggetImage(n.imageSearchQuery!);
-                if (wikiResult && !usedImageUrls.has(wikiResult.url)) {
-                  n._resolvedImageUrl = wikiResult.url;
-                  n._resolvedImageTitle = wikiResult.title;
-                  usedImageUrls.add(wikiResult.url);
+          // start() is synchronous per spec — wrap async work in an IIFE
+          // so awaits actually execute (Deno silently discards async start).
+          (async () => {
+            try {
+              // Resolve images sequentially to prevent duplicate URLs
+              for (let i = 0; i < rawNuggets.length; i++) {
+                const n = rawNuggets[i];
+                if (!n._resolvedImageUrl && isValidImageQuery(n.imageSearchQuery)) {
+                  try {
+                    const wikiResult = await resolveNuggetImage(n.imageSearchQuery!);
+                    if (wikiResult && !usedImageUrls.has(wikiResult.url)) {
+                      n._resolvedImageUrl = wikiResult.url;
+                      n._resolvedImageTitle = wikiResult.title;
+                      usedImageUrls.add(wikiResult.url);
+                    }
+                  } catch { /* fall through to Exa fallback */ }
                 }
-              } catch { /* fall through to Exa fallback */ }
+                if (!n._resolvedImageUrl) {
+                  const groupStart = i * 10;
+                  const groupEnd = groupStart + 10;
+                  let fallbackCit = exaCitationsStrict.find((c) =>
+                    c.citIndex >= groupStart && c.citIndex < groupEnd &&
+                    c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
+                  );
+                  if (!fallbackCit) {
+                    fallbackCit = exaCitationsStrict.find((c) =>
+                      c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
+                    );
+                  }
+                  if (fallbackCit?.imageUrl) {
+                    n._resolvedImageUrl = fallbackCit.imageUrl;
+                    n._resolvedImageTitle = fallbackCit.title;
+                    usedImageUrls.add(fallbackCit.imageUrl);
+                  }
+                }
+              }
+
+              // Assemble + validate + stream each nugget
+              for (let i = 0; i < rawNuggets.length; i++) {
+                const assembled = assembleNugget(rawNuggets[i], i);
+                const sourceType = (assembled.source?.type || "").toLowerCase();
+                const publisher = (assembled.source?.publisher || "").toLowerCase();
+                if (sourceType === "internal-data" || sourceType === "internal_data" || sourceType === "database" || sourceType === "editorial") {
+                  console.log(`[SSE] Skipping hallucinated source type nugget ${i}`);
+                  completedCount++;
+                  continue;
+                }
+                if (HALLUCINATED_PUBLISHERS.some(hp => publisher.includes(hp))) {
+                  console.log(`[SSE] Skipping hallucinated publisher nugget ${i}`);
+                  completedCount++;
+                  continue;
+                }
+
+                const event = `data: ${JSON.stringify({ type: "nugget", index: i, nugget: assembled })}\n\n`;
+                try { streamController.enqueue(encoder.encode(event)); } catch { /* stream closed */ }
+                console.log(`[SSE] Streamed nugget ${i}: "${assembled.headline?.slice(0, 40)}"`);
+                completedCount++;
+              }
+
+              // All done — send done event and close
+              const doneEvent = `data: ${JSON.stringify({ type: "done", artistSummary, externalLinks: buildExternalLinks(), noTrackData })}\n\n`;
+              try {
+                streamController.enqueue(encoder.encode(doneEvent));
+                streamController.close();
+              } catch { /* stream closed */ }
+              console.log("[SSE] All nuggets streamed, done");
+
+              _timings.total = Date.now() - functionStartTime;
+              console.timeEnd("[Timing] TOTAL");
+              console.log(`[Timing] Breakdown:`, JSON.stringify(_timings));
+            } catch (err) {
+              console.error("[SSE] Stream error:", err);
+              try { controller.error(err); } catch { /* already closed */ }
             }
-            if (!n._resolvedImageUrl) {
-              const groupStart = i * 10;
-              const groupEnd = groupStart + 10;
-              let fallbackCit = exaCitationsStrict.find((c) =>
-                c.citIndex >= groupStart && c.citIndex < groupEnd &&
-                c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
-              );
-              if (!fallbackCit) {
-                fallbackCit = exaCitationsStrict.find((c) =>
-                  c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
-                );
-              }
-              if (fallbackCit?.imageUrl) {
-                n._resolvedImageUrl = fallbackCit.imageUrl;
-                n._resolvedImageTitle = fallbackCit.title;
-                usedImageUrls.add(fallbackCit.imageUrl);
-              }
-            }
-          }
-
-          // Assemble + stream all nuggets (images already resolved above)
-          const promises = rawNuggets.map((_, i) => {
-            const assembled = assembleNugget(rawNuggets[i], i);
-            return Promise.resolve(assembled);
-          }).map((p, i) => p.then((assembled) => {
-              // Validate
-              const sourceType = (assembled.source?.type || "").toLowerCase();
-              const publisher = (assembled.source?.publisher || "").toLowerCase();
-              if (sourceType === "internal-data" || sourceType === "internal_data" || sourceType === "database" || sourceType === "editorial") {
-                console.log(`[SSE] Skipping hallucinated source type nugget ${i}`);
-                return;
-              }
-              if (HALLUCINATED_PUBLISHERS.some(hp => publisher.includes(hp))) {
-                console.log(`[SSE] Skipping hallucinated publisher nugget ${i}`);
-                return;
-              }
-
-              // Stream the complete nugget
-              const event = `data: ${JSON.stringify({ type: "nugget", index: i, nugget: assembled })}\n\n`;
-              try { streamController.enqueue(encoder.encode(event)); } catch { /* stream closed */ }
-              console.log(`[SSE] Streamed nugget ${i}: "${assembled.headline?.slice(0, 40)}"`);
-            }).catch((e) => {
-              console.error(`[SSE] Nugget ${i} failed:`, e);
-            }).finally(() => {
-              completedCount++;
-              if (completedCount === rawNuggets.length) {
-                // All done — send done event and close
-                const doneEvent = `data: ${JSON.stringify({ type: "done", artistSummary, externalLinks: buildExternalLinks(), noTrackData })}\n\n`;
-                try {
-                  streamController.enqueue(encoder.encode(doneEvent));
-                  streamController.close();
-                } catch { /* stream closed */ }
-                console.log("[SSE] All nuggets streamed, done");
-
-                _timings.total = Date.now() - functionStartTime;
-                console.timeEnd("[Timing] TOTAL");
-                console.log(`[Timing] Breakdown:`, JSON.stringify(_timings));
-              }
-            })
-          );
+          })();
         },
       });
 

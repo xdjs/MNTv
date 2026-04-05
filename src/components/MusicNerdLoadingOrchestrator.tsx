@@ -43,7 +43,8 @@ const phaseCache = new Map<string, AnimPhase>();
 function setPhaseCached(key: string, value: AnimPhase) {
   phaseCache.set(key, value);
   if (phaseCache.size > MAX_PHASE_CACHE) {
-    // Delete oldest entry (first inserted)
+    // Delete oldest entry — Map preserves insertion order, so
+    // keys().next().value is always the first (oldest) key.
     const oldest = phaseCache.keys().next().value;
     if (oldest !== undefined) phaseCache.delete(oldest);
   }
