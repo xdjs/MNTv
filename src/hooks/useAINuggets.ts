@@ -132,7 +132,7 @@ export function useAINuggets(
 
     const cached = getNuggetCache(cacheKey);
     if (cached) {
-      console.log("[NuggetMemCache] Serving from in-memory cache:", cacheKey);
+      if (import.meta.env.DEV) console.log("[NuggetMemCache] Serving from in-memory cache:", cacheKey);
       setFromCache(true);
       setNuggets(cached.nuggets);
       setSources(cached.sources);
@@ -193,7 +193,7 @@ export function useAINuggets(
       // ── Seed data shortcut for demo tracks ──────────────────────
       const seedData = await getSeedListenNuggets(artist, title, tier, currentListenCount);
       if (seedData) {
-        console.log("[SeedNuggets] Serving seed data for", trackKey, "listen", currentListenCount, "tier", tier);
+        if (import.meta.env.DEV) console.log("[SeedNuggets] Serving seed data for", trackKey, "listen", currentListenCount, "tier", tier);
 
         const newSources = new Map<string, Source>();
         const newNuggets: Nugget[] = seedData.map((n, i) => {
@@ -286,7 +286,7 @@ export function useAINuggets(
           .maybeSingle();
 
         if (cached?.status === "ready" && (cached.nuggets as Nugget[] | null)?.length) {
-          console.log("[NuggetCache] Serving cached nuggets for", dbCacheKey);
+          if (import.meta.env.DEV) console.log("[NuggetCache] Serving cached nuggets for", dbCacheKey);
           const cachedNuggets = cached.nuggets as Nugget[];
           const cachedSources = new Map<string, Source>();
           const rawSources = cached.sources as Record<string, Source>;
@@ -309,11 +309,11 @@ export function useAINuggets(
 
         if (cached?.status === "generating") {
           // Another client is already generating — poll every 3 s for up to 30 s.
-          console.log("[NuggetCache] Generation in progress, polling…", dbCacheKey);
+          if (import.meta.env.DEV) console.log("[NuggetCache] Generation in progress, polling…", dbCacheKey);
           const polled = await pollForReadyNuggets(dbCacheKey);
           if (cancelledRef.current) return;
           if (polled) {
-            console.log("[NuggetCache] Poll succeeded — serving result for", dbCacheKey);
+            if (import.meta.env.DEV) console.log("[NuggetCache] Poll succeeded — serving result for", dbCacheKey);
             setNuggets(polled.nuggets);
             setSources(polled.sources);
             setNuggetCache(cacheKey, { nuggets: polled.nuggets, sources: polled.sources, listenCount: currentListenCount });
@@ -344,7 +344,7 @@ export function useAINuggets(
           .insert({ track_id: dbCacheKey, status: "generating", nuggets: [], sources: {} });
         if (!claimError) {
           sentinelClaimed = true;
-          console.log("[NuggetCache] Claimed generation sentinel for", dbCacheKey);
+          if (import.meta.env.DEV) console.log("[NuggetCache] Claimed generation sentinel for", dbCacheKey);
         } else if (claimError.code !== "23505") {
           // Unexpected error (not a unique violation) — log but proceed.
           console.warn("[NuggetCache] Sentinel insert error:", claimError.message);
@@ -426,7 +426,7 @@ export function useAINuggets(
             try {
               const payload = JSON.parse(dataLine.slice(6));
               if (payload.type === "nugget") {
-                aiNuggets = [...aiNuggets, payload.nugget];
+                aiNuggets.push(payload.nugget);
                 const n = payload.nugget as AINuggetData;
                 const { sourceId, nuggetId } = makeIds(trackId, currentListenCount, payload.index);
                 const source = makeSource(sourceId, n.source);
@@ -436,7 +436,7 @@ export function useAINuggets(
 
                 setSources((prev) => new Map(prev).set(sourceId, source));
                 setNuggets((prev) => [...prev, nugget]);
-                console.log(`[SSE] Received nugget ${payload.index}: "${n.headline?.slice(0, 40)}"`);
+                if (import.meta.env.DEV) console.log(`[SSE] Received nugget ${payload.index}: "${n.headline?.slice(0, 40)}"`);
 
               } else if (payload.type === "done") {
                 aiArtistSummary = payload.artistSummary || "";
@@ -450,7 +450,7 @@ export function useAINuggets(
                   ...nugget,
                   timestampSec: makeTimestamp(i, totalCount, durationSec),
                 })));
-                console.log(`[SSE] All ${totalCount} nuggets received — timestamps recalculated`);
+                if (import.meta.env.DEV) console.log(`[SSE] All ${totalCount} nuggets received — timestamps recalculated`);
               }
             } catch (e) { console.warn("[SSE] Malformed event:", dataLine, e); }
           }
@@ -483,7 +483,7 @@ export function useAINuggets(
             { onConflict: "track_id" }
           );
           sentinelClaimed = false;
-          console.log("[NuggetCache] Cached SSE nuggets for", dbCacheKey);
+          if (import.meta.env.DEV) console.log("[NuggetCache] Cached SSE nuggets for", dbCacheKey);
         }
 
         // Update nugget history
@@ -508,7 +508,7 @@ export function useAINuggets(
         aiNoTrackData = !!data?.noTrackData;
       }
       if (aiNoTrackData) {
-        console.log("[NuggetGen] Sparse artist — no track data, nugget 2 is 'context' kind");
+        if (import.meta.env.DEV) console.log("[NuggetGen] Sparse artist — no track data, nugget 2 is 'context' kind");
       }
 
       const newSources = new Map<string, Source>();
@@ -593,7 +593,7 @@ export function useAINuggets(
           { onConflict: "track_id" }
         );
         sentinelClaimed = false; // sentinel resolved — no cleanup needed if error occurs later
-        console.log("[NuggetCache] Cached fresh nuggets for", dbCacheKey);
+        if (import.meta.env.DEV) console.log("[NuggetCache] Cached fresh nuggets for", dbCacheKey);
       }
 
       // ── Update previous_nuggets for deduplication ─────────────────
@@ -625,6 +625,8 @@ export function useAINuggets(
           });
       }
     } catch (e) {
+      // AbortError is intentional (user skipped track) — don't surface it
+      if (e instanceof DOMException && e.name === "AbortError") return;
       console.error("AI nugget generation failed:", e);
       if (!cancelledRef.current) {
         setError(e instanceof Error ? e.message : "Unknown error");

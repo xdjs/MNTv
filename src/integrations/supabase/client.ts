@@ -8,6 +8,10 @@ export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 // docs convention; the env var uses Lovable's naming (PUBLISHABLE_KEY).
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  throw new Error("Missing required Supabase env vars (VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY)");
+}
+
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 

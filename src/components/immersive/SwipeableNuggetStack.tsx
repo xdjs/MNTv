@@ -1,4 +1,8 @@
-import { type ReactNode, useRef, useState, useCallback, useEffect, useMemo } from "react";
+import { type ReactNode, useRef, useState, useCallback, useEffect, memo } from "react";
+
+// Memoized wrapper — only re-renders when the render prop reference changes
+// (i.e. when nugget content changes), not on drag-state re-renders.
+const MemoizedContent = memo(({ render }: { render: () => ReactNode }) => <>{render()}</>);
 
 // children is a render-prop function (not ReactNode) so this component
 // can wrap it with useMemo — drag-state changes (dragX, isDragging) cause
@@ -152,9 +156,7 @@ export default function SwipeableNuggetStack({
           willChange: dragX !== 0 || phase !== "idle" ? "transform, opacity" : undefined,
         }}
       >
-        {/* Memoize children output so drag renders don't re-evaluate
-            the render prop (image loading, typewriter, etc.) */}
-        {useMemo(() => children(), [children])}
+        <MemoizedContent render={children} />
       </div>
 
       {/* Dot indicators */}
