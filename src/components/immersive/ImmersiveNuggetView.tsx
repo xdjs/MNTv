@@ -59,6 +59,9 @@ export default function ImmersiveNuggetView({
   const deepDiveLoadingRef = useRef(false);
   const [typewriterDoneIds, setTypewriterDoneIds] = useState<Set<string>>(new Set());
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
+  // Next nugget timestamp to unlock — avoids running the unlock effect on
+  // every ~4 Hz playback tick (only runs when currentTime crosses this threshold).
+  const nextUnlockTimeRef = useRef(0);
   const prevUnlockedCountRef = useRef(0);
   const prevTrackKeyRef = useRef(`${trackTitle}::${artist}`);
   const currentTimeRef = useRef(currentTime);
@@ -81,12 +84,17 @@ export default function ImmersiveNuggetView({
       setTypewriterDoneIds(new Set());
       userDismissedRef.current = false;
       initialUnlockDoneRef.current = false;
+      nextUnlockTimeRef.current = 0;
     }
   }, [trackTitle, artist]);
 
   // ── Unlock nuggets ─────────────────────────────────────────────────
+  // Only runs when currentTime crosses the next nugget's timestamp,
+  // not on every ~4 Hz playback tick (~720 skipped invocations per track).
   useEffect(() => {
     if (nuggets.length === 0) return;
+    if (currentTime < nextUnlockTimeRef.current) return;
+
     setUnlockedIds((prev) => {
       const next = new Set(prev);
       let changed = false;
@@ -98,6 +106,12 @@ export default function ImmersiveNuggetView({
       }
       return changed ? next : prev;
     });
+
+    // Find the next timestamp that hasn't been unlocked yet
+    const upcoming = nuggets
+      .filter((n) => n.timestampSec > currentTime)
+      .sort((a, b) => a.timestampSec - b.timestampSec);
+    nextUnlockTimeRef.current = upcoming.length > 0 ? upcoming[0].timestampSec : Infinity;
   }, [currentTime, nuggets]);
 
   // ── Auto-show new nuggets ──────────────────────────────────────────
@@ -217,7 +231,10 @@ export default function ImmersiveNuggetView({
   }, [activeNugget, artUrl, failedImages]);
 
   // Memoized render function for SwipeableNuggetStack — prevents
-  // re-evaluating during drag renders (image loading, typewriter, etc.)
+  // re-evaluating during drag renders (image loading, typewriter, etc.).
+  // Note: deps include deepDiveLoading so the spinner/label updates, which
+  // means the card re-renders when a deep-dive starts/finishes. This is
+  // infrequent and acceptable — the main perf win is skipping during drag.
   const renderNuggetCard = useCallback(() => {
     const { url: imgUrl, isNuggetImage } = getNuggetImage();
     return (
@@ -279,7 +296,7 @@ export default function ImmersiveNuggetView({
           )}
 
           <div className="flex gap-2 flex-wrap mb-3">
-            {activeSource?.url && (
+            {activeSource?.url?.startsWith("http") && (
               <a href={activeSource.url} target="_blank" rel="noopener noreferrer"
                 className="text-xs px-3 py-1.5 rounded-full bg-white/10 text-white/60 active:scale-95 transition-transform">
                 View Source

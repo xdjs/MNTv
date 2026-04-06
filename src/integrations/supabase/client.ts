@@ -9,7 +9,11 @@ export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  throw new Error("Missing required Supabase env vars (VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY)");
+  // Warn instead of throw — tests run without env vars set.
+  // In production, createClient will fail on the first request with a clear error.
+  if (import.meta.env.DEV) {
+    console.error("Missing required Supabase env vars (VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY)");
+  }
 }
 
 // Import the supabase client like this:

@@ -477,7 +477,7 @@ export function useAINuggets(
 
         // Write to DB cache for future listeners
         if (currentListenCount <= 1) {
-          const cacheSourcesObj: Record<string, any> = {};
+          const cacheSourcesObj: Record<string, Source | string | { label: string; url: string }[]> = {};
           allSources.forEach((src, key) => { cacheSourcesObj[key] = src; });
           cacheSourcesObj.artistSummary = aiArtistSummary;
           cacheSourcesObj.externalLinks = aiExternalLinks;
@@ -485,6 +485,9 @@ export function useAINuggets(
             { track_id: dbCacheKey, nuggets: allNuggets as unknown as Json, sources: cacheSourcesObj as unknown as Json, status: "ready" },
             { onConflict: "track_id" }
           );
+          // Note: if cancelledRef becomes true between the upsert completing
+          // and this line, the sentinel stays in "ready" state (correct data,
+          // just attributed to a nominally cancelled run). This is harmless.
           sentinelClaimed = false;
           if (import.meta.env.DEV) console.log("[NuggetCache] Cached SSE nuggets for", dbCacheKey);
         }
@@ -499,6 +502,7 @@ export function useAINuggets(
         }
 
         setLoading(false);
+        abortRef.current = null; // clear completed controller
         return; // SSE path complete
 
       } else {
@@ -581,7 +585,7 @@ export function useAINuggets(
       // every subsequent first-listen to the same track hits the cache instead of
       // firing a new Gemini API call.
       if (currentListenCount <= 1) {
-        const cacheSourcesObj: Record<string, any> = {};
+        const cacheSourcesObj: Record<string, Source | string | { label: string; url: string }[]> = {};
         newSources.forEach((src, key) => { cacheSourcesObj[key] = src; });
         // Store companion metadata alongside sources for the companion page to read
         cacheSourcesObj.artistSummary = aiArtistSummary;
