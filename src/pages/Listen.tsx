@@ -999,6 +999,8 @@ export default function Listen() {
       // handle playback via the Spotify API. Calling resume() too early
       // would briefly play the OLD track. On very slow SDK loads (>2s)
       // this guard expires and resume() acts as a safety net.
+      // TODO: clear trackLoadTimestampRef on Spotify SDK "ready" event
+      // for a more robust handoff instead of a fixed timeout.
       if (Date.now() - trackLoadTimestampRef.current < 2000) return;
       play();
     }
@@ -1612,7 +1614,7 @@ export default function Listen() {
             (fixed inset-0 z-50). There is no non-immersive mobile Listen view;
             onClose navigates to /browse. Desktop nuggets use inline NuggetCard
             positioned above the playback bar instead. */}
-        {isMobile && (
+        {isMobile && track && (
           <Suspense fallback={null}>
             <ImmersiveNuggetView
               nuggets={trackNuggets}
@@ -1632,7 +1634,7 @@ export default function Listen() {
 
       {/* Orchestrator for immersive mode — fixed top-right so its anchor
           is visible and the morph-fly animation lands correctly */}
-      {isMobile && (
+      {isMobile && track && (
         <div className="fixed top-3 right-3 z-[60]" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
           <MusicNerdLoadingOrchestrator
             aiLoading={aiLoading}

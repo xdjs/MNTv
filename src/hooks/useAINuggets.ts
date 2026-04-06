@@ -379,6 +379,10 @@ export function useAINuggets(
 
       abortRef.current?.abort();
       abortRef.current = new AbortController();
+      // 60s timeout: if the edge function stalls mid-stream (never sends
+      // done, never closes), the fetch aborts cleanly. User track-skips
+      // also abort via abortRef.current.abort() in the effect cleanup.
+      const timeoutId = setTimeout(() => abortRef.current?.abort(), 60_000);
 
       const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-nuggets`, {
         method: "POST",
@@ -516,10 +520,12 @@ export function useAINuggets(
           await supabase.from("nugget_history").insert({ track_key: trackKey, user_id: userId, listen_count: 1, previous_nuggets: updatedPreviousNuggets as Json });
         }
 
+        clearTimeout(timeoutId);
         abortRef.current = null; // clear completed controller
         return; // SSE path complete — finally block handles setLoading(false)
 
       } else {
+        clearTimeout(timeoutId);
         // ── JSON fallback path ──
         const data = await response.json();
         if (data?.error) throw new Error(data.error);
