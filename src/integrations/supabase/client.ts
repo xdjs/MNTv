@@ -2,13 +2,24 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+// Supabase's "publishable key" is the same as the "anon key" — safe to
+// expose client-side. Exported as SUPABASE_ANON_KEY to match Supabase
+// docs convention; the env var uses Lovable's naming (PUBLISHABLE_KEY).
+export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  // Warn instead of throw — tests run without env vars set.
+  // In production, createClient will fail on the first request with a clear error.
+  if (import.meta.env.DEV) {
+    console.error("Missing required Supabase env vars (VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY)");
+  }
+}
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     storage: localStorage,
     persistSession: true,

@@ -351,7 +351,7 @@ function RealArtistProfileInner({ artist, trackTiles, albumTiles, relatedTiles }
   return (
     <div className="min-h-screen bg-background">
       {/* Hero */}
-      <div className="relative h-80 overflow-hidden">
+      <div className="relative h-60 md:h-80 overflow-hidden">
         <img
           src={heroImage}
           alt={artist.name}
@@ -361,19 +361,19 @@ function RealArtistProfileInner({ artist, trackTiles, albumTiles, relatedTiles }
 
         <button
           onClick={() => navigate("/browse")}
-          className={`absolute top-8 left-10 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground backdrop-blur-sm transition-all hover:bg-foreground/20 ${
+          className={`absolute top-6 left-4 md:top-8 md:left-10 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground backdrop-blur-sm transition-all hover:bg-foreground/20 ${
             zone === 'header' ? "tv-focus-glow scale-110" : ""
           }`}
         >
           <ArrowLeft size={20} />
         </button>
 
-        <div className="absolute bottom-8 left-10 right-10 z-10">
+        <div className="absolute bottom-6 left-4 right-4 md:bottom-8 md:left-10 md:right-10 z-10">
           <p className="text-xs font-bold uppercase tracking-wider text-primary mb-2" style={{ fontFamily: "'Nunito Sans', sans-serif" }}>
             {artist.genres.join(" · ") || "Artist"}
           </p>
           <h1
-            className="text-5xl font-black text-foreground leading-none md:text-6xl lg:text-7xl"
+            className="text-3xl md:text-5xl lg:text-6xl xl:text-7xl font-black text-foreground leading-none"
             style={{ fontFamily: "'Nunito Sans', sans-serif" }}
           >
             {artist.name}
@@ -388,14 +388,14 @@ function RealArtistProfileInner({ artist, trackTiles, albumTiles, relatedTiles }
 
       {/* Bio */}
       {artist.bio && (
-        <div className="px-10 py-8">
+        <div className="px-4 md:px-10 py-6 md:py-8">
           <p className="max-w-2xl text-base leading-relaxed text-foreground/70">{artist.bio}</p>
         </div>
       )}
 
       {/* Popular tracks */}
       {trackTiles.length > 0 && (
-        <section className="px-10 pb-8 mb-4">
+        <section className="px-4 md:px-10 pb-6 md:pb-8 mb-4">
           <h2 className="text-lg font-bold text-foreground/90 mb-4" style={{ fontFamily: "'Nunito Sans', sans-serif" }}>
             Popular
           </h2>
@@ -551,7 +551,7 @@ function MockArtistProfileInner({ artist, tracksData, albumTiles, relatedTiles }
   return (
     <div className="min-h-screen bg-background">
       {/* Hero */}
-      <div className="relative h-80 overflow-hidden">
+      <div className="relative h-60 md:h-80 overflow-hidden">
         <img
           src={heroImage}
           alt={artist.name}
@@ -561,19 +561,19 @@ function MockArtistProfileInner({ artist, tracksData, albumTiles, relatedTiles }
 
         <button
           onClick={() => navigate("/browse")}
-          className={`absolute top-8 left-10 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground backdrop-blur-sm transition-all hover:bg-foreground/20 ${
+          className={`absolute top-6 left-4 md:top-8 md:left-10 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground backdrop-blur-sm transition-all hover:bg-foreground/20 ${
             zone === 'header' ? "tv-focus-glow scale-110" : ""
           }`}
         >
           <ArrowLeft size={20} />
         </button>
 
-        <div className="absolute bottom-8 left-10 right-10 z-10">
+        <div className="absolute bottom-6 left-4 right-4 md:bottom-8 md:left-10 md:right-10 z-10">
           <p className="text-xs font-bold uppercase tracking-wider text-primary mb-2" style={{ fontFamily: "'Nunito Sans', sans-serif" }}>
             {artist.genres.join(" · ")}
           </p>
           <h1
-            className="text-5xl font-black text-foreground leading-none md:text-6xl lg:text-7xl"
+            className="text-3xl md:text-5xl lg:text-6xl xl:text-7xl font-black text-foreground leading-none"
             style={{ fontFamily: "'Nunito Sans', sans-serif" }}
           >
             {artist.name}
@@ -582,12 +582,12 @@ function MockArtistProfileInner({ artist, tracksData, albumTiles, relatedTiles }
       </div>
 
       {/* Bio */}
-      <div className="px-10 py-8">
-        <p className="max-w-2xl text-base leading-relaxed text-foreground/70">{artist.bio}</p>
+      <div className="px-4 md:px-10 py-6 md:py-8">
+        <p className="max-w-2xl text-sm md:text-base leading-relaxed text-foreground/70">{artist.bio}</p>
       </div>
 
       {/* Popular tracks */}
-      <section className="px-10 mb-8">
+      <section className="px-4 md:px-10 mb-6 md:mb-8">
         <h2 className="text-lg font-bold text-foreground/90 mb-4" style={{ fontFamily: "'Nunito Sans', sans-serif" }}>
           Popular
         </h2>

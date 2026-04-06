@@ -23,7 +23,7 @@ export default function Onboarding() {
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.2 }}
           >
-            <MusicNerdLogo size={120} glow />
+            <MusicNerdLogo size={80} glow />
           </motion.div>
 
           <motion.div
@@ -32,7 +32,7 @@ export default function Onboarding() {
             transition={{ duration: 0.6, delay: 0.5 }}
             className="flex flex-col items-center gap-4"
           >
-            <h1 className="text-5xl font-bold tracking-tight text-foreground md:text-7xl">
+            <h1 className="text-4xl font-bold tracking-tight text-foreground md:text-5xl lg:text-7xl">
               MusicNerd <span className="text-primary">TV</span>
             </h1>
             <p className="max-w-md text-center text-lg text-muted-foreground md:text-xl">

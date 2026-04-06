@@ -14,6 +14,8 @@ const ReadingOverlay = lazy(() => import("@/components/overlays/ReadingOverlay")
 const NuggetDeepDive = lazy(() => import("@/components/overlays/NuggetDeepDive"));
 import DevPanel from "@/components/DevPanel";
 import PlaybackBar from "@/components/PlaybackBar";
+import { useIsMobile } from "@/hooks/use-mobile";
+const ImmersiveNuggetView = lazy(() => import("@/components/immersive/ImmersiveNuggetView"));
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { useAINuggets } from "@/hooks/useAINuggets";
 import { getSeedCompanion, getDemoTrackById, DEMO_TRACKS } from "@/data/seedNuggets";
@@ -21,6 +23,7 @@ import { useSpotifyToken } from "@/hooks/useSpotifyToken";
 import { initiateSpotifyAuth } from "@/hooks/useSpotifyAuth";
 import { usePlayer } from "@/contexts/PlayerContext";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
+import { useTierAccent } from "@/hooks/useTierAccent";
 import PageTransition from "@/components/PageTransition";
 import type { Nugget, Source, AnimationStyle } from "@/mock/types";
 
@@ -171,6 +174,7 @@ export default function Listen() {
   }, [hasSpotifyToken, realTrackMeta?.spotifyUri, track?.artist, track?.title]);
 
   const [shuffleOn, setShuffleOn] = useState(false); // kept for PlaybackBar UI only
+  const isMobile = useIsMobile();
   const [regenerateKey, setRegenerateKey] = useState(0);
   const [skipLoading, setSkipLoading] = useState(false);
 
@@ -229,9 +233,10 @@ export default function Listen() {
   const trackLoadTimestampRef = useRef(0);
 
   // Reset navigation lock + load guard when the route changes (new track mounted).
-  // Also pause the current track immediately so the old track doesn't keep playing
-  // while the new URI resolves, and clear external listen mode so the load effect
-  // isn't blocked on subsequent track switches.
+  // Note: player.pause() was intentionally removed here — loadTrack() already
+  // pauses internally, and an extra pause() from this effect was racing with
+  // the PlayerContext autoplay, causing the old track to briefly resume via
+  // the Listen.tsx play() effect before the API call loaded the new one.
   useEffect(() => {
     const isTrackSwitch = prevRawTrackIdRef.current !== undefined &&
       prevRawTrackIdRef.current !== rawTrackId;
@@ -241,8 +246,13 @@ export default function Listen() {
     lastLoadedTrackRef.current = null;
     trackLoadTimestampRef.current = Date.now();
 
+    // Always clear overlays on navigation — even same-track re-navigation
+    // (back/forward) should dismiss any open deep-dive or media overlay.
+    setDeepDiveNugget(null);
+    setMediaOverlay(null);
+    setReadingOverlay(null);
+
     if (isTrackSwitch) {
-      player.pause();
       if (isExternalListenMode) setExternalListenMode(false);
     }
   }, [rawTrackId]);
@@ -386,6 +396,14 @@ export default function Listen() {
     if (!track || !isPlaying || currentTime < 5 || listenThresholdMetRef.current) return;
     listenThresholdMetRef.current = true;
 
+    // Capture trackId at threshold time so we can verify the track
+    // hasn't changed by the time async DB writes complete. trackId is
+    // derived from the route param (stable within a single track load).
+    // Because Listen stays mounted across track changes (stable route key
+    // in App.tsx), trackId updates via re-render — the closure comparison
+    // reliably detects skips between awaits.
+    const thresholdTrackId = trackId;
+
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id ?? localStorage.getItem("musicnerd_anon_id") ?? (() => {
@@ -393,6 +411,8 @@ export default function Listen() {
         localStorage.setItem("musicnerd_anon_id", id);
         return id;
       })();
+      // Bail if user already skipped to a different track
+      if (thresholdTrackId !== trackId) return;
       const trackKey = `${track.artist}::${track.title}`;
       const { data: historyRow } = await supabase
         .from("nugget_history")
@@ -400,8 +420,8 @@ export default function Listen() {
         .eq("track_key", trackKey)
         .eq("user_id", userId)
         .maybeSingle();
+      if (thresholdTrackId !== trackId) return;
       if (historyRow) {
-        // Row exists — bump listen_count, preserve previous_nuggets
         await supabase
           .from("nugget_history")
           .update({
@@ -411,9 +431,6 @@ export default function Listen() {
           .eq("track_key", trackKey)
           .eq("user_id", userId);
       } else {
-        // No row yet — useAINuggets may have already created one with
-        // previous_nuggets populated. Try insert; if it already exists
-        // (race with useAINuggets), update listen_count instead.
         const { error: insertErr } = await supabase
           .from("nugget_history")
           .insert({
@@ -423,7 +440,6 @@ export default function Listen() {
             previous_nuggets: [],
           });
         if (insertErr?.code === "23505") {
-          // Row was created by useAINuggets — just bump listen_count
           await supabase
             .from("nugget_history")
             .update({
@@ -527,6 +543,7 @@ export default function Listen() {
 
   // AI-generated nuggets with real sources
   const tier = (profile?.calculatedTier as "casual" | "curious" | "nerd") || "casual";
+  useTierAccent(tier);
   const artistImageUrl = (track?.artist && profile?.spotifyArtistImages?.[track.artist]) || track?.coverArtUrl || "";
   const { nuggets: aiNuggets, sources: aiSources, loading: aiLoading, error: aiError, listenCount, artistSummary, fromCache: aiFromCache } = useAINuggets(
     trackId,
@@ -618,21 +635,27 @@ export default function Listen() {
         }
 
         // Route through edge function (has service_role for DB writes)
-        const { error } = await supabase.functions.invoke("generate-companion", {
-          body: {
-            artist: track.artist,
-            title: track.title,
-            album: track.album,
-            listenCount,
-            tier,
-            prebuiltNuggets,
-            coverArtUrl: effectiveCoverArt || undefined,
-            artistImage: artistImageUrl || effectiveCoverArt || undefined,
-            artistSummary,
-          },
-        });
+        // Retry once on failure after a short delay.
+        const companionBody = {
+          artist: track.artist,
+          title: track.title,
+          album: track.album,
+          listenCount,
+          tier,
+          prebuiltNuggets,
+          coverArtUrl: effectiveCoverArt || undefined,
+          artistImage: artistImageUrl || effectiveCoverArt || undefined,
+          artistSummary,
+        };
+        let { error } = await supabase.functions.invoke("generate-companion", { body: companionBody });
+        if (error && !cancelled) {
+          console.warn("[Listen] Companion pre-gen failed, retrying in 3s:", error);
+          await new Promise((r) => setTimeout(r, 3000));
+          if (cancelled) return;
+          ({ error } = await supabase.functions.invoke("generate-companion", { body: companionBody }));
+        }
         if (cancelled) return;
-        if (error) console.warn("[Listen] Companion pre-gen error:", error);
+        if (error) console.warn("[Listen] Companion pre-gen retry also failed:", error);
 
         // Create or reuse a short URL for the QR code (even if pre-gen failed,
         // the companion page will generate on demand)
@@ -680,10 +703,11 @@ export default function Listen() {
     return () => { cancelled = true; };
   }, [aiLoading, aiNuggets, aiSources, track?.artist, track?.title, tier, listenCount]);
 
-  const rawTrackNuggets = useMemo(
-    () => aiLoading ? [] : aiNuggets,
-    [aiLoading, aiNuggets]
-  );
+  // Intentionally NOT gated on aiLoading — SSE streaming appends nuggets
+  // one at a time, and each append triggers a downstream re-render.
+  // Both desktop and immersive views only display nuggets whose
+  // timestampSec <= currentTime, so partial arrays are safe.
+  const rawTrackNuggets = aiNuggets;
 
   // Redistribute nugget timestamps based on actual player duration instead of
   // the hardcoded 300s default. This ensures nuggets are evenly spaced across
@@ -728,6 +752,7 @@ export default function Listen() {
   // Brief auto-show on mount for discoverability (desktop/TV first-time visitors)
   useEffect(() => {
     showBar();
+    return () => { if (hideTimerRef.current) clearTimeout(hideTimerRef.current); };
   }, [showBar]);
 
   useEffect(() => {
@@ -862,85 +887,101 @@ export default function Listen() {
     return zones;
   }, [activeNugget, dismissedNuggets.size]);
 
+  // Stable refs for keydown handler — avoids re-registering the listener
+  // on every state change (15+ deps previously caused constant re-attach).
+  const keyStateRef = useRef({
+    focusZone, barFocusIndex, topFocusIndex, activeNugget,
+    deepDiveNugget, mediaOverlay, readingOverlay, isExternalListenMode,
+  });
+  keyStateRef.current = {
+    focusZone, barFocusIndex, topFocusIndex, activeNugget,
+    deepDiveNugget, mediaOverlay, readingOverlay, isExternalListenMode,
+  };
+  const keyHandlersRef = useRef({
+    showBar, toggle, clearDwell, getZonesInOrder,
+    handleNuggetClick, handleNuggetNav, handleBarAction, handleTopAction, enterNuggetZone,
+  });
+  keyHandlersRef.current = {
+    showBar, toggle, clearDwell, getZonesInOrder,
+    handleNuggetClick, handleNuggetNav, handleBarAction, handleTopAction, enterNuggetZone,
+  };
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      const s = keyStateRef.current;
+      const h = keyHandlersRef.current;
       // Let overlay handle its own keys when open
-      if (deepDiveNugget || mediaOverlay || readingOverlay) return;
+      if (s.deepDiveNugget || s.mediaOverlay || s.readingOverlay) return;
       if (e.key === "ArrowUp") {
         e.preventDefault();
-        clearDwell();
-        const zones = getZonesInOrder();
-        const idx = zones.indexOf(focusZone);
+        h.clearDwell();
+        const zones = h.getZonesInOrder();
+        const idx = zones.indexOf(s.focusZone);
         if (idx > 0) {
           const newZone = zones[idx - 1];
           setFocusZone(newZone);
           setNuggetFocused(newZone === 'nugget');
-          if (newZone === 'nugget') {
-            enterNuggetZone();
-          }
-          if (newZone !== 'nugget') showBar();
+          if (newZone === 'nugget') h.enterNuggetZone();
+          if (newZone !== 'nugget') h.showBar();
         } else {
-          showBar();
+          h.showBar();
         }
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
-        clearDwell();
-        const zones = getZonesInOrder();
-        const idx = zones.indexOf(focusZone);
+        h.clearDwell();
+        const zones = h.getZonesInOrder();
+        const idx = zones.indexOf(s.focusZone);
         if (idx < zones.length - 1) {
           const newZone = zones[idx + 1];
           setFocusZone(newZone);
           setNuggetFocused(newZone === 'nugget');
-          if (newZone === 'nugget') {
-            enterNuggetZone();
-          }
-          if (newZone === 'bar') showBar();
+          if (newZone === 'nugget') h.enterNuggetZone();
+          if (newZone === 'bar') h.showBar();
         } else {
-          showBar();
+          h.showBar();
         }
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
-        clearDwell();
-        if (focusZone === 'nugget') {
-          handleNuggetNav('left');
-        } else if (focusZone === 'bar') setBarFocusIndex((i) => Math.max(0, i - 1));
-        else if (focusZone === 'top') setTopFocusIndex((i) => Math.max(0, i - 1));
-        showBar();
+        h.clearDwell();
+        if (s.focusZone === 'nugget') {
+          h.handleNuggetNav('left');
+        } else if (s.focusZone === 'bar') setBarFocusIndex((i) => Math.max(0, i - 1));
+        else if (s.focusZone === 'top') setTopFocusIndex((i) => Math.max(0, i - 1));
+        h.showBar();
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
-        clearDwell();
-        if (focusZone === 'nugget') {
-          handleNuggetNav('right');
-        } else if (focusZone === 'bar') setBarFocusIndex((i) => Math.min(BAR_BUTTON_COUNT - 1, i + 1));
-        else if (focusZone === 'top') setTopFocusIndex((i) => Math.min(TOP_BUTTON_COUNT - 1, i + 1));
-        showBar();
+        h.clearDwell();
+        if (s.focusZone === 'nugget') {
+          h.handleNuggetNav('right');
+        } else if (s.focusZone === 'bar') setBarFocusIndex((i) => Math.min(BAR_BUTTON_COUNT - 1, i + 1));
+        else if (s.focusZone === 'top') setTopFocusIndex((i) => Math.min(TOP_BUTTON_COUNT - 1, i + 1));
+        h.showBar();
       } else if (e.key === "Enter") {
         e.preventDefault();
-        clearDwell();
-        if (focusZone === 'nugget' && activeNugget) {
-          handleNuggetClick(activeNugget);
-          // Don't show bar when entering deep dive
-        } else if (focusZone === 'bar') {
-          handleBarAction(barFocusIndex);
-          showBar();
-        } else if (focusZone === 'top') {
-          handleTopAction(topFocusIndex);
-          showBar();
+        h.clearDwell();
+        if (s.focusZone === 'nugget' && s.activeNugget) {
+          h.handleNuggetClick(s.activeNugget);
+        } else if (s.focusZone === 'bar') {
+          h.handleBarAction(s.barFocusIndex);
+          h.showBar();
+        } else if (s.focusZone === 'top') {
+          h.handleTopAction(s.topFocusIndex);
+          h.showBar();
         }
       } else if (e.key === " ") {
         e.preventDefault();
-        showBar();
-        if (isExternalListenMode) {
+        h.showBar();
+        if (s.isExternalListenMode) {
           setExternalListenMode(false);
           lastLoadedTrackRef.current = null;
         } else {
-          toggle();
+          h.toggle();
         }
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showBar, toggle, focusZone, barFocusIndex, topFocusIndex, activeNugget, handleNuggetClick, handleNuggetNav, handleBarAction, handleTopAction, getZonesInOrder, deepDiveNugget, mediaOverlay, readingOverlay, clearDwell, enterNuggetZone]);
+  }, []); // stable — reads from refs
 
   // Clean up dwell timer on unmount or nugget change
   useEffect(() => {
@@ -950,8 +991,19 @@ export default function Listen() {
   // Auto-resume only after the correct track has been loaded into the SDK.
   // Without the spotifyUri guard, this fires on mount and resumes the PREVIOUS
   // track (still in the SDK) before loadTrack has a chance to swap it out.
+  // Skip during the brief window after a track load — let PlayerContext's
+  // autoplay effect handle it via the Spotify API to avoid resuming the old track.
   useEffect(() => {
-    if (!isExternalListenMode && spotifyUri && player.currentSpotifyUri === spotifyUri) play();
+    if (!isExternalListenMode && spotifyUri && player.currentSpotifyUri === spotifyUri) {
+      // 2s guard: after a fresh track load, let PlayerContext's autoplay
+      // handle playback via the Spotify API. Calling resume() too early
+      // would briefly play the OLD track. On very slow SDK loads (>2s)
+      // this guard expires and resume() acts as a safety net.
+      // TODO: clear trackLoadTimestampRef on Spotify SDK "ready" event
+      // for a more robust handoff instead of a fixed timeout.
+      if (Date.now() - trackLoadTimestampRef.current < 2000) return;
+      play();
+    }
   }, [play, isExternalListenMode, spotifyUri, player.currentSpotifyUri]);
 
   useEffect(() => {
@@ -1199,7 +1251,7 @@ export default function Listen() {
               {topFocusIndex === 0 ? "Back" : "Open Companion"}
             </motion.p>
           )}
-          <div className="flex flex-col items-center gap-1.5">
+          {!isMobile && <div className="flex flex-col items-center gap-1.5">
             <MusicNerdLoadingOrchestrator
               aiLoading={aiLoading}
               shortId={shortId}
@@ -1220,7 +1272,7 @@ export default function Listen() {
             >
               DEV
             </button>
-          </div>
+          </div>}
         </div>
 
         {/* Track info — fixed bottom-left, visible when playback bar is hidden */}
@@ -1558,7 +1610,48 @@ export default function Listen() {
             )}
           </AnimatePresence>
         </Suspense>
+        {/* Immersive nugget overlay — always covers the full screen on mobile
+            (fixed inset-0 z-50). There is no non-immersive mobile Listen view;
+            onClose navigates to /browse. Desktop nuggets use inline NuggetCard
+            positioned above the playback bar instead. */}
+        {isMobile && track && (
+          <Suspense fallback={null}>
+            <ImmersiveNuggetView
+              nuggets={trackNuggets}
+              sources={aiSources}
+              coverArtUrl={effectiveCoverArt}
+              trackTitle={track?.title || ""}
+              artist={track?.artist || ""}
+              onClose={() => navigate("/browse")}
+              onPrev={handlePrev}
+              onNext={handleNext}
+              spotifyAlbumArt={spotifyStateTrack?.albumArtUrl}
+            />
+          </Suspense>
+        )}
+
       </div>
+
+      {/* Orchestrator for immersive mode — fixed top-right so its anchor
+          is visible and the morph-fly animation lands correctly */}
+      {isMobile && track && (
+        <div className="fixed top-3 right-3 z-[60]" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+          <MusicNerdLoadingOrchestrator
+            aiLoading={aiLoading}
+            shortId={shortId}
+            trackId={trackId}
+            tier={tier}
+            listenCount={listenCount}
+            focusZone={focusZone}
+            topFocusIndex={topFocusIndex}
+            onCompanionClick={() => {
+              if (shortId) {
+                window.open(`${window.location.origin}/c/${shortId}?tier=${tier}&listen=${listenCount}`, "_blank");
+              }
+            }}
+          />
+        </div>
+      )}
     </PageTransition>
   );
 }

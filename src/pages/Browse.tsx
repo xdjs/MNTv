@@ -105,13 +105,6 @@ export default function Browse() {
     };
   }, [isPlaying, listenUrl, navigate]);
 
-  const tierLogoGlow: Record<string, string> = {
-    casual: "#22c55e",
-    curious: "#3b82f6",
-    nerd: "#ec4899",
-  };
-
-
   const handleSignOut = () => {
     clearProfile();
     localStorage.removeItem("spotify_playback_token");
@@ -242,13 +235,13 @@ export default function Browse() {
     <PageTransition>
       <div className="min-h-screen bg-background">
         {/* Header */}
-        <header className="flex items-center justify-between px-10 pt-8 pb-6">
+        <header className="flex items-center justify-between px-4 md:px-10 pt-6 md:pt-8 pb-4 md:pb-6">
           <button
             onClick={cycleTier}
             title={`Switch tier (currently ${tier || "casual"})`}
             className={`rounded-full transition-all ${rowIndex === -1 && colIndex === 0 ? focusGlow + " scale-110" : ""}`}
           >
-            <MusicNerdLogo size={36} glow className="opacity-80" glowColor={tierLogoGlow[tier || "casual"]} />
+            <MusicNerdLogo size={36} glow className="opacity-80" />
           </button>
           <div className="flex items-center gap-3">
             <button
@@ -258,7 +251,7 @@ export default function Browse() {
               }`}
             >
               <Search size={16} />
-              <span style={{ fontFamily: "'Nunito Sans', sans-serif" }}>Search</span>
+              <span className="hidden md:inline" style={{ fontFamily: "'Nunito Sans', sans-serif" }}>Search</span>
             </button>
             <button
               onClick={handleSignOut}
@@ -273,10 +266,10 @@ export default function Browse() {
         </header>
 
         {/* Hero greeting */}
-        <div className={`mx-10 mb-8 px-5 py-4 rounded-2xl ${glowClass}`}>
-          <div className="flex items-center gap-3">
+        <div className={`mx-4 md:mx-10 mb-6 md:mb-8 px-4 md:px-5 py-3 md:py-4 rounded-2xl ${glowClass}`}>
+          <div className="flex items-center gap-2 md:gap-3 flex-wrap">
             <h1
-              className="text-4xl font-black text-foreground tracking-tight md:text-5xl"
+              className="text-2xl md:text-4xl lg:text-5xl font-black text-foreground tracking-tight"
               style={{ fontFamily: "'Nunito Sans', sans-serif" }}
             >
               {tierGreeting(tier, userName)}
