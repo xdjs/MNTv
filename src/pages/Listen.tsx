@@ -398,8 +398,10 @@ export default function Listen() {
 
     // Capture trackId at threshold time so we can verify the track
     // hasn't changed by the time async DB writes complete. trackId is
-    // derived from the route param (stable within a single track load),
-    // so comparing against it between awaits reliably detects skips.
+    // derived from the route param (stable within a single track load).
+    // Because Listen stays mounted across track changes (stable route key
+    // in App.tsx), trackId updates via re-render — the closure comparison
+    // reliably detects skips between awaits.
     const thresholdTrackId = trackId;
 
     (async () => {

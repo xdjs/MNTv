@@ -87,7 +87,9 @@ export default function SwipeableNuggetStack({
     }
   };
 
-  // Attach non-passive touchmove listener for preventDefault support
+  // Attach non-passive touchmove listener for preventDefault support.
+  // handleTouchMoveRef always holds the latest closure (see declaration
+  // above) — this avoids re-registering the listener on state changes.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
