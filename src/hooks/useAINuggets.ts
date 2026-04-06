@@ -501,9 +501,8 @@ export function useAINuggets(
           await supabase.from("nugget_history").insert({ track_key: trackKey, user_id: userId, listen_count: 1, previous_nuggets: updatedPreviousNuggets as Json });
         }
 
-        setLoading(false);
         abortRef.current = null; // clear completed controller
-        return; // SSE path complete
+        return; // SSE path complete — finally block handles setLoading(false)
 
       } else {
         // ── JSON fallback path ──

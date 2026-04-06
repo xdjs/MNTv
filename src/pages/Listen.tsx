@@ -1602,7 +1602,10 @@ export default function Listen() {
             )}
           </AnimatePresence>
         </Suspense>
-        {/* Immersive nugget overlay (mobile auto, desktop opt-in) */}
+        {/* Immersive nugget overlay — always covers the full screen on mobile
+            (fixed inset-0 z-50). There is no non-immersive mobile Listen view;
+            onClose navigates to /browse. Desktop nuggets use inline NuggetCard
+            positioned above the playback bar instead. */}
         {isMobile && (
           <Suspense fallback={null}>
             <ImmersiveNuggetView
