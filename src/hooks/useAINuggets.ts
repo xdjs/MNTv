@@ -463,6 +463,21 @@ export function useAINuggets(
         // Write to cache + history, then return
         if (cancelledRef.current) return;
 
+        // Enrich SSE nuggets with Spotify fallback images (server resolves
+        // Wikipedia/Exa but may miss lesser-known artists — same logic as
+        // the JSON path's image-assignment block).
+        const isRealImg = (url?: string) => url && !url.includes("dicebear.com");
+        for (const n of aiNuggets) {
+          if (n.imageUrl) continue; // server already resolved
+          if (n.kind === "artist" && isRealImg(artistImageUrl)) {
+            n.imageUrl = artistImageUrl;
+            n.imageCaption = artist;
+          } else if (isRealImg(coverArtUrl)) {
+            n.imageUrl = coverArtUrl;
+            n.imageCaption = title;
+          }
+        }
+
         // Write to in-memory cache
         const allNuggets = aiNuggets.map((n: AINuggetData, i: number) => {
           const { sourceId, nuggetId } = makeIds(trackId, currentListenCount, i);

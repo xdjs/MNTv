@@ -995,6 +995,10 @@ export default function Listen() {
   // autoplay effect handle it via the Spotify API to avoid resuming the old track.
   useEffect(() => {
     if (!isExternalListenMode && spotifyUri && player.currentSpotifyUri === spotifyUri) {
+      // 2s guard: after a fresh track load, let PlayerContext's autoplay
+      // handle playback via the Spotify API. Calling resume() too early
+      // would briefly play the OLD track. On very slow SDK loads (>2s)
+      // this guard expires and resume() acts as a safety net.
       if (Date.now() - trackLoadTimestampRef.current < 2000) return;
       play();
     }
