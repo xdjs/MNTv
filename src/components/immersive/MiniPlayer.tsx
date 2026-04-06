@@ -125,7 +125,7 @@ export default function MiniPlayer({
           <p className="text-xs text-white/40 truncate">{artist}</p>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
-          <button aria-label="Previous track" className="h-8 w-8 flex items-center justify-center active:scale-90 transition-transform" onClick={onPrev}>
+          <button aria-label="Previous track" disabled={!onPrev} className={`h-8 w-8 flex items-center justify-center transition-transform ${onPrev ? "active:scale-90" : "opacity-30 cursor-not-allowed"}`} onClick={onPrev}>
             <SkipBack className="w-3.5 h-3.5 text-white/50" fill="white" fillOpacity={0.5} />
           </button>
           <button aria-label={isPlaying ? "Pause" : "Play"} className="h-9 w-9 rounded-full bg-white/10 flex items-center justify-center active:scale-90 transition-transform" onClick={onToggle}>
@@ -134,7 +134,7 @@ export default function MiniPlayer({
               : <Play className="w-3.5 h-3.5 text-white ml-0.5" fill="white" />
             }
           </button>
-          <button aria-label="Next track" className="h-8 w-8 flex items-center justify-center active:scale-90 transition-transform" onClick={onNext}>
+          <button aria-label="Next track" disabled={!onNext} className={`h-8 w-8 flex items-center justify-center transition-transform ${onNext ? "active:scale-90" : "opacity-30 cursor-not-allowed"}`} onClick={onNext}>
             <SkipForward className="w-3.5 h-3.5 text-white/50" fill="white" fillOpacity={0.5} />
           </button>
         </div>

@@ -46,6 +46,8 @@ export default function ImmersiveNuggetView({
   spotifyAlbumArt,
 }: ImmersiveNuggetViewProps) {
   const { isPlaying, currentTime, duration, toggle, seek } = usePlayer();
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
   const artUrl = coverArtUrl || spotifyAlbumArt || "";
 
   const [unlockedIds, setUnlockedIds] = useState<Set<string>>(new Set());
@@ -189,17 +191,18 @@ export default function ImmersiveNuggetView({
     if (activeNugget) setTypewriterDoneIds((prev) => new Set(prev).add(activeNugget.id));
   }, [activeNugget]);
 
+  const [deepDiveRateLimited, setDeepDiveRateLimited] = useState(false);
+
   const handleTellMeMore = useCallback(async () => {
     if (!activeNugget || deepDiveLoadingRef.current) return;
-    if (deepDiveSessionCount >= MAX_DEEP_DIVES_PER_SESSION) return;
+    if (deepDiveSessionCount >= MAX_DEEP_DIVES_PER_SESSION) {
+      setDeepDiveRateLimited(true);
+      return;
+    }
     deepDiveLoadingRef.current = true;
     setDeepDiveLoading(true);
-    // Snapshot track key so we can discard stale responses if the
-    // user switched tracks while the request was in flight.
     const requestTrackKey = `${trackTitle}::${artist}`;
     try {
-      // generate-nuggets edge function handles deepDive mode —
-      // returns a single {deepDive: {text, followUp}} response via Gemini.
       const { data } = await supabase.functions.invoke("generate-nuggets", {
         body: {
           artist, title: trackTitle, deepDive: true,
@@ -207,7 +210,8 @@ export default function ImmersiveNuggetView({
           sourceTitle: activeSource?.title, sourcePublisher: activeSource?.publisher,
         },
       });
-      // Discard if track changed during the request
+      // Discard if unmounted or track changed during the request
+      if (!mountedRef.current) return;
       if (prevTrackKeyRef.current !== requestTrackKey) return;
       if (data?.deepDive?.text) {
         deepDiveSessionCount++;
@@ -217,6 +221,7 @@ export default function ImmersiveNuggetView({
     } catch (e) {
       console.error("[ImmersiveView] Deep dive failed:", e);
     } finally {
+      if (!mountedRef.current) return;
       deepDiveLoadingRef.current = false;
       setDeepDiveLoading(false);
     }
@@ -305,9 +310,10 @@ export default function ImmersiveNuggetView({
             <button
               className="text-xs px-3 py-1.5 rounded-full bg-primary/20 text-primary active:scale-95 transition-transform flex items-center gap-1.5"
               onClick={(e) => { e.stopPropagation(); handleTellMeMore(); }}
-              disabled={deepDiveLoading}
+              disabled={deepDiveLoading || deepDiveRateLimited}
             >
               {deepDiveLoading ? <><Loader2 className="w-3 h-3 animate-spin" /> Thinking...</>
+                : deepDiveRateLimited ? "Limit reached"
                 : deepDiveText ? "Go deeper" : "Tell me more"}
             </button>
           </div>

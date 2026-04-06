@@ -2823,7 +2823,6 @@ Return ONLY valid JSON:
       console.log("[SSE] Streaming nuggets as they resolve");
       const encoder = new TextEncoder();
       let streamController: ReadableStreamDefaultController<Uint8Array>;
-      let completedCount = 0;
 
       const stream = new ReadableStream<Uint8Array>({
         start(controller) {
@@ -2878,12 +2877,12 @@ Return ONLY valid JSON:
                   sourceType === "database" || sourceType === "editorial"
                 ) {
                   console.log(`[SSE] Skipping hallucinated source type nugget ${i}`);
-                  completedCount++;
+
                   continue;
                 }
                 if (HALLUCINATED_PUBLISHERS.some(hp => publisher.includes(hp))) {
                   console.log(`[SSE] Skipping hallucinated publisher nugget ${i}`);
-                  completedCount++;
+
                   continue;
                 }
 
@@ -2896,7 +2895,6 @@ Return ONLY valid JSON:
                 })}\n\n`;
                 try { streamController.enqueue(encoder.encode(event)); } catch { /* stream closed */ }
                 console.log(`[SSE] Streamed nugget ${i}: "${assembled.headline?.slice(0, 40)}"`);
-                completedCount++;
               }
 
               // All done — send done event and close
