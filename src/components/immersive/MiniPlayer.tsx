@@ -108,7 +108,7 @@ export default function MiniPlayer({
           <div key={trackTitle} className="overflow-hidden">
             {trackTitle.length > 25 ? (
               <p className="text-sm font-medium text-white/90 whitespace-nowrap animate-marquee"
-                style={{ animationDuration: "8s" }}>
+                style={{ animationDuration: `${Math.max(5, Math.round(trackTitle.length * 0.25))}s` }}>
                 {/* Two identical copies separated by a fixed gap.
                     translateX(-50%) lands exactly at the start of copy 2. */}
                 <span>{trackTitle}</span>

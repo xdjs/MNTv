@@ -2768,27 +2768,51 @@ Return ONLY valid JSON:
           result.source.verified = true;
         }
       }
-      // Grounding chunk resolution
+      // Grounding chunk resolution — try to find a real URL from Gemini's
+      // grounding metadata, falling back to a Google search link.
       if (!result.source.url) {
+        // Step 1: Match by hostname from Gemini's sourceUrl hint
         const geminiUrl = source.sourceUrl || "";
         let geminiHost = "";
         try { if (geminiUrl) geminiHost = new URL(geminiUrl).hostname; } catch {}
+
         if (geminiHost) {
-          const match = realChunks.find((chunk: any) => { try { return new URL(chunk.web.uri).hostname === geminiHost; } catch { return false; } });
-          if (match) { result.source.url = match.web.uri; if (match.web.title) result.source.title = match.web.title; result.source.verified = true; }
+          const match = realChunks.find((chunk: any) => {
+            try { return new URL(chunk.web.uri).hostname === geminiHost; }
+            catch { return false; }
+          });
+          if (match) {
+            result.source.url = match.web.uri;
+            if (match.web.title) result.source.title = match.web.title;
+            result.source.verified = true;
+          }
         }
+
+        // Step 2: Match grounding chunks by publisher + artist relevance
         if (!result.source.url && realChunks.length > 0) {
           const artistLower = artist.toLowerCase();
           const pubLower = (source.publisher || "").toLowerCase();
+
           const relevantChunk = realChunks.find((chunk: any) => {
-            const ct = (chunk?.web?.title || "").toLowerCase(); const cu = (chunk?.web?.uri || "").toLowerCase();
-            return pubLower && (ct.includes(pubLower) || cu.includes(pubLower)) && (wordBoundaryMatch(ct, artistLower) || wordBoundaryMatch(cu, artistLower));
+            const ct = (chunk?.web?.title || "").toLowerCase();
+            const cu = (chunk?.web?.uri || "").toLowerCase();
+            return pubLower
+              && (ct.includes(pubLower) || cu.includes(pubLower))
+              && (wordBoundaryMatch(ct, artistLower) || wordBoundaryMatch(cu, artistLower));
           }) || realChunks.find((chunk: any) => {
-            const ct = (chunk?.web?.title || "").toLowerCase(); const cu = (chunk?.web?.uri || "").toLowerCase();
+            const ct = (chunk?.web?.title || "").toLowerCase();
+            const cu = (chunk?.web?.uri || "").toLowerCase();
             return wordBoundaryMatch(ct, artistLower) || wordBoundaryMatch(cu, artistLower);
           });
-          if (relevantChunk) { result.source.url = relevantChunk.web.uri; if (relevantChunk.web.title) result.source.title = relevantChunk.web.title; result.source.verified = true; }
+
+          if (relevantChunk) {
+            result.source.url = relevantChunk.web.uri;
+            if (relevantChunk.web.title) result.source.title = relevantChunk.web.title;
+            result.source.verified = true;
+          }
         }
+
+        // Step 3: Fallback to Google search
         if (!result.source.url) {
           const q = `${source.title || ""} ${source.publisher || ""} ${artist} ${title}`.trim();
           result.source.url = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
@@ -2832,9 +2856,13 @@ Return ONLY valid JSON:
           // so awaits actually execute (Deno silently discards async start).
           (async () => {
             try {
-              // Pipeline: resolve image → assemble → stream for each nugget.
-              // Sequential to prevent duplicate usedImageUrls, and each nugget
-              // is streamed as soon as it's ready (true progressive SSE).
+              // Pipeline: resolve image → assemble → validate → stream.
+              // Sequential to prevent duplicate usedImageUrls. Skipped nuggets
+              // (hallucinated sources) don't get streamed, so we track a separate
+              // streamedIndex for contiguous client-side indices.
+              let streamedIndex = 0;
+              const streamedNuggets: any[] = []; // for cache write consistency
+
               for (let i = 0; i < rawNuggets.length; i++) {
                 const n = rawNuggets[i];
 
@@ -2877,24 +2905,24 @@ Return ONLY valid JSON:
                   sourceType === "database" || sourceType === "editorial"
                 ) {
                   console.log(`[SSE] Skipping hallucinated source type nugget ${i}`);
-
                   continue;
                 }
                 if (HALLUCINATED_PUBLISHERS.some(hp => publisher.includes(hp))) {
                   console.log(`[SSE] Skipping hallucinated publisher nugget ${i}`);
-
                   continue;
                 }
 
-                // ── Stream immediately ──
+                // ── Stream with contiguous index ──
+                streamedNuggets.push(assembled);
                 const event = `data: ${JSON.stringify({
                   type: "nugget",
-                  index: i,
+                  index: streamedIndex,
                   nugget: assembled,
                   totalExpected: rawNuggets.length,
                 })}\n\n`;
                 try { streamController.enqueue(encoder.encode(event)); } catch { /* stream closed */ }
-                console.log(`[SSE] Streamed nugget ${i}: "${assembled.headline?.slice(0, 40)}"`);
+                console.log(`[SSE] Streamed nugget ${streamedIndex}: "${assembled.headline?.slice(0, 40)}"`);
+                streamedIndex++;
               }
 
               // All done — send done event and close

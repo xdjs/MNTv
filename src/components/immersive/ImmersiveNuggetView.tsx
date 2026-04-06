@@ -61,6 +61,7 @@ export default function ImmersiveNuggetView({
   const deepDiveLoadingRef = useRef(false);
   const [typewriterDoneIds, setTypewriterDoneIds] = useState<Set<string>>(new Set());
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
+  const [deepDiveRateLimited, setDeepDiveRateLimited] = useState(false);
   // Next nugget timestamp to unlock — avoids running the unlock effect on
   // every ~4 Hz playback tick (only runs when currentTime crosses this threshold).
   const nextUnlockTimeRef = useRef(0);
@@ -191,8 +192,6 @@ export default function ImmersiveNuggetView({
     if (activeNugget) setTypewriterDoneIds((prev) => new Set(prev).add(activeNugget.id));
   }, [activeNugget]);
 
-  const [deepDiveRateLimited, setDeepDiveRateLimited] = useState(false);
-
   const handleTellMeMore = useCallback(async () => {
     if (!activeNugget || deepDiveLoadingRef.current) return;
     if (deepDiveSessionCount >= MAX_DEEP_DIVES_PER_SESSION) {
@@ -301,7 +300,7 @@ export default function ImmersiveNuggetView({
           )}
 
           <div className="flex gap-2 flex-wrap mb-3">
-            {activeSource?.url?.startsWith("http") && (
+            {(activeSource?.url?.startsWith("https://") || activeSource?.url?.startsWith("http://")) && (
               <a href={activeSource.url} target="_blank" rel="noopener noreferrer"
                 className="text-xs px-3 py-1.5 rounded-full bg-white/10 text-white/60 active:scale-95 transition-transform">
                 View Source
