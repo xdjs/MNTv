@@ -63,4 +63,33 @@ describe("SwipeableNuggetStack", () => {
     expect(onSwipe).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
+
+  it("calls onSwipe(activeIndex + 1) on a left swipe past threshold", () => {
+    vi.useFakeTimers();
+    const { container, onSwipe } = renderStack({ activeIndex: 1, unlockedCount: 3 });
+    const el = container.firstChild as HTMLElement;
+
+    // Need touchmove to lock axis to "x" before touchend checks lockedRef
+    fireEvent.touchStart(el, { touches: [{ clientX: 200, clientY: 200 }] });
+    fireEvent.touchMove(el, { touches: [{ clientX: 150, clientY: 200 }] });
+    fireEvent.touchEnd(el, { changedTouches: [{ clientX: 100, clientY: 200 }] });
+
+    vi.advanceTimersByTime(300);
+    expect(onSwipe).toHaveBeenCalledWith(2);
+    vi.useRealTimers();
+  });
+
+  it("calls onSwipe(activeIndex - 1) on a right swipe past threshold", () => {
+    vi.useFakeTimers();
+    const { container, onSwipe } = renderStack({ activeIndex: 1, unlockedCount: 3 });
+    const el = container.firstChild as HTMLElement;
+
+    fireEvent.touchStart(el, { touches: [{ clientX: 100, clientY: 200 }] });
+    fireEvent.touchMove(el, { touches: [{ clientX: 150, clientY: 200 }] });
+    fireEvent.touchEnd(el, { changedTouches: [{ clientX: 200, clientY: 200 }] });
+
+    vi.advanceTimersByTime(300);
+    expect(onSwipe).toHaveBeenCalledWith(0);
+    vi.useRealTimers();
+  });
 });

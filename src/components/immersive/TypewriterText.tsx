@@ -24,6 +24,7 @@ export default function TypewriterText({
   const [charIndex, setCharIndex] = useState(0);
   const [started, setStarted] = useState(delay === 0);
   const completeFiredRef = useRef(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const onCompleteRef = useRef(onComplete);
   const pausedRef = useRef(paused);
   onCompleteRef.current = onComplete;
@@ -45,18 +46,24 @@ export default function TypewriterText({
   // setState updater (concurrent-mode safe).
   useEffect(() => {
     if (!started || paused) return;
-    const timer = setInterval(() => {
+    intervalRef.current = setInterval(() => {
       if (pausedRef.current) return;
       setCharIndex((prev) => (prev >= text.length ? prev : prev + 1));
     }, speed);
-    return () => clearInterval(timer);
-  }, [started, paused, speed, text.length]);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    };
+  }, [started, paused, speed, text]);
 
-  // Fire onComplete when charIndex reaches text length — separate effect
-  // keeps side-effects out of the interval's setState updater.
+  // Fire onComplete and stop the interval when the full string is typed.
   useEffect(() => {
     if (charIndex >= text.length && text.length > 0 && !completeFiredRef.current) {
       completeFiredRef.current = true;
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
       onCompleteRef.current?.();
     }
   }, [charIndex, text.length]);

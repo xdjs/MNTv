@@ -68,7 +68,7 @@ export default function ImmersiveNuggetView({
   const prevUnlockedCountRef = useRef(0);
   const prevTrackKeyRef = useRef(`${trackTitle}::${artist}`);
   const currentTimeRef = useRef(currentTime);
-  useEffect(() => { currentTimeRef.current = currentTime; });
+  useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
   const initialUnlockDoneRef = useRef(false);
 
   // ── Reset on track change ──────────────────────────────────────────
@@ -323,7 +323,7 @@ export default function ImmersiveNuggetView({
         </div>
       </div>
     );
-  }, [getNuggetImage, activeNugget, activeSource, isTypewriterDone, handleTypewriterComplete, deepDiveText, deepDiveFollowUp, deepDiveLoading, handleTellMeMore]);
+  }, [getNuggetImage, activeNugget, activeSource, isTypewriterDone, handleTypewriterComplete, deepDiveText, deepDiveFollowUp, deepDiveLoading, deepDiveRateLimited, handleTellMeMore]);
 
   return (
     <motion.div

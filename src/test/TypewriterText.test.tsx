@@ -37,10 +37,17 @@ describe("TypewriterText", () => {
     act(() => { vi.advanceTimersByTime(50); });
     expect(onComplete).toHaveBeenCalledTimes(1);
 
-    // Change text — should reset and eventually fire again
+    // Change text — should reset charIndex and eventually fire again.
+    // The reset effect runs synchronously on rerender, then the interval
+    // effect re-creates the timer on the next microtask.
     onComplete.mockClear();
-    rerender(<TypewriterText text="CD" speed={10} onComplete={onComplete} />);
-    act(() => { vi.advanceTimersByTime(50); });
+    // Rerender triggers: reset effect (charIndex=0, completeFiredRef=false),
+    // then interval effect cleanup + new interval. Need act() around rerender
+    // to flush all synchronous effects before advancing timers.
+    act(() => {
+      rerender(<TypewriterText text="CD" speed={10} onComplete={onComplete} />);
+    });
+    act(() => { vi.advanceTimersByTime(200); });
     expect(onComplete).toHaveBeenCalledTimes(1);
 
     vi.useRealTimers();
