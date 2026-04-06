@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { usePlayer } from "@/contexts/PlayerContext";
@@ -20,6 +20,12 @@ interface ImmersiveNuggetViewProps {
   onPrev?: () => void;
   onNext?: () => void;
 }
+
+// Module-level so it persists across unmount/remount cycles (e.g. navigating
+// away and back). Prevents bypassing the limit by toggling the immersive view.
+// A server-side guard in the edge function would be the robust long-term fix.
+let deepDiveSessionCount = 0;
+const MAX_DEEP_DIVES_PER_SESSION = 10;
 
 const KIND_LABELS: Record<string, string> = {
   artist: "The Artist",
@@ -53,12 +59,10 @@ export default function ImmersiveNuggetView({
   const deepDiveLoadingRef = useRef(false);
   const [typewriterDoneIds, setTypewriterDoneIds] = useState<Set<string>>(new Set());
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
-  // Rate limit deep-dive calls: max 10 per session to prevent runaway costs.
-  const deepDiveCountRef = useRef(0);
   const prevUnlockedCountRef = useRef(0);
   const prevTrackKeyRef = useRef(`${trackTitle}::${artist}`);
   const currentTimeRef = useRef(currentTime);
-  useLayoutEffect(() => { currentTimeRef.current = currentTime; });
+  useEffect(() => { currentTimeRef.current = currentTime; });
   const initialUnlockDoneRef = useRef(false);
 
   // ── Reset on track change ──────────────────────────────────────────
@@ -173,7 +177,7 @@ export default function ImmersiveNuggetView({
 
   const handleTellMeMore = useCallback(async () => {
     if (!activeNugget || deepDiveLoadingRef.current) return;
-    if (deepDiveCountRef.current >= 10) return; // session rate limit
+    if (deepDiveSessionCount >= MAX_DEEP_DIVES_PER_SESSION) return;
     deepDiveLoadingRef.current = true;
     setDeepDiveLoading(true);
     // Snapshot track key so we can discard stale responses if the
@@ -192,7 +196,7 @@ export default function ImmersiveNuggetView({
       // Discard if track changed during the request
       if (prevTrackKeyRef.current !== requestTrackKey) return;
       if (data?.deepDive?.text) {
-        deepDiveCountRef.current++; // only count successful responses
+        deepDiveSessionCount++;
         setDeepDiveText(data.deepDive.text);
         setDeepDiveFollowUp(data.deepDive.followUp || null);
       }

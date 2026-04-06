@@ -30,6 +30,8 @@ export default function SwipeableNuggetStack({
   const [isDragging, setIsDragging] = useState(false);
   // phase: "idle" | "exit" (old card fading out) | "enter" (new card fading in)
   const [phase, setPhase] = useState<"idle" | "exit" | "enter">("idle");
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
   const containerRef = useRef<HTMLDivElement>(null);
   const startXRef = useRef(0);
   const startYRef = useRef(0);
@@ -115,6 +117,10 @@ export default function SwipeableNuggetStack({
       if (swipeTimerRef.current) clearTimeout(swipeTimerRef.current);
       swipeTimerRef.current = setTimeout(() => {
         swipeTimerRef.current = null;
+        // Guard: if an auto-unlock changed activeIndex during the exit
+        // animation, phase would already be "enter" — bail to avoid a
+        // double phase transition.
+        if (phaseRef.current !== "exit") return;
         if (goingLeft) onSwipe(activeIndex + 1);
         else onSwipe(activeIndex - 1);
         // "enter" phase is triggered by the useEffect on activeIndex change

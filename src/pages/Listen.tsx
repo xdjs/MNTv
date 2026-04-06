@@ -175,7 +175,6 @@ export default function Listen() {
 
   const [shuffleOn, setShuffleOn] = useState(false); // kept for PlaybackBar UI only
   const isMobile = useIsMobile();
-  const showImmersive = isMobile;
   const [regenerateKey, setRegenerateKey] = useState(0);
   const [skipLoading, setSkipLoading] = useState(false);
 
@@ -247,12 +246,14 @@ export default function Listen() {
     lastLoadedTrackRef.current = null;
     trackLoadTimestampRef.current = Date.now();
 
+    // Always clear overlays on navigation — even same-track re-navigation
+    // (back/forward) should dismiss any open deep-dive or media overlay.
+    setDeepDiveNugget(null);
+    setMediaOverlay(null);
+    setReadingOverlay(null);
+
     if (isTrackSwitch) {
       if (isExternalListenMode) setExternalListenMode(false);
-      // Clear overlays immediately (nugget state resets via trackNuggets effect)
-      setDeepDiveNugget(null);
-      setMediaOverlay(null);
-      setReadingOverlay(null);
     }
   }, [rawTrackId]);
 
@@ -1242,7 +1243,7 @@ export default function Listen() {
               {topFocusIndex === 0 ? "Back" : "Open Companion"}
             </motion.p>
           )}
-          {!showImmersive && <div className="flex flex-col items-center gap-1.5">
+          {!isMobile && <div className="flex flex-col items-center gap-1.5">
             <MusicNerdLoadingOrchestrator
               aiLoading={aiLoading}
               shortId={shortId}
@@ -1602,7 +1603,7 @@ export default function Listen() {
           </AnimatePresence>
         </Suspense>
         {/* Immersive nugget overlay (mobile auto, desktop opt-in) */}
-        {showImmersive && (
+        {isMobile && (
           <Suspense fallback={null}>
             <ImmersiveNuggetView
               nuggets={trackNuggets}
@@ -1622,7 +1623,7 @@ export default function Listen() {
 
       {/* Orchestrator for immersive mode — fixed top-right so its anchor
           is visible and the morph-fly animation lands correctly */}
-      {showImmersive && (
+      {isMobile && (
         <div className="fixed top-3 right-3 z-[60]" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
           <MusicNerdLoadingOrchestrator
             aiLoading={aiLoading}

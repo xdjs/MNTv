@@ -36,7 +36,7 @@ function makeSource(id: string, s: AINuggetData["source"]): Source {
   return { id, type: s.type, title: s.title, publisher: s.publisher, url: s.url, embedId: s.embedId, quoteSnippet: s.quoteSnippet, locator: s.locator };
 }
 
-function makeTimestamp(index: number, totalNuggets: number, durationSec: number) {
+export function makeTimestamp(index: number, totalNuggets: number, durationSec: number) {
   const earlyStart = 20;
   const endBuffer = 15;
   const usable = Math.max(durationSec - earlyStart - endBuffer, 30);
@@ -328,6 +328,9 @@ export function useAINuggets(
         // Debounce before committing to generation — only if there was a
         // recent generation attempt (rapid skipping). First page loads skip
         // the delay so the user doesn't wait unnecessarily.
+        // Timestamp is updated BEFORE the check intentionally: if the user
+        // skips again during the 3s sleep (cancelling this run), the next
+        // invocation will also see < 5s and sleep again (cascade-debouncing).
         const timeSinceLastGen = Date.now() - lastGenTimestampRef.current;
         lastGenTimestampRef.current = Date.now();
         if (timeSinceLastGen < 5000) {
