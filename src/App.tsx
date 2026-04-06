@@ -28,6 +28,8 @@ const queryClient = new QueryClient();
 function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => {
+    // Don't scroll to top for track-to-track navigation within Listen
+    if (pathname.startsWith("/listen/")) return;
     window.scrollTo(0, 0);
   }, [pathname]);
   return null;
@@ -54,12 +56,15 @@ function LazyFallback() {
 
 function AnimatedRoutes() {
   const location = useLocation();
+  // Use a stable key for /listen/* routes so track-to-track navigation
+  // is a smooth state update, not a full unmount/remount of the component tree.
+  const routeKey = location.pathname.startsWith("/listen/") ? "/listen" : location.pathname;
   return (
     <>
       <ScrollToTop />
       <Suspense fallback={<LazyFallback />}>
         <AnimatePresence mode="wait">
-          <Routes location={location} key={location.pathname}>
+          <Routes location={location} key={routeKey}>
             {/* Public */}
             <Route path="/" element={<RootRoute />} />
             <Route path="/connect" element={<Connect />} />

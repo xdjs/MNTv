@@ -282,18 +282,18 @@ function SpotifyAlbumInner({
           <ArrowLeft size={20} />
         </button>
 
-        <div className="relative z-10 flex items-end gap-8 px-10 pb-10">
+        <div className="relative z-10 flex flex-col md:flex-row items-center md:items-end gap-4 md:gap-8 px-4 md:px-10 pb-6 md:pb-10">
           <img
             src={album.imageUrl}
             alt={album.name}
-            className="h-48 w-48 rounded-2xl shadow-2xl object-cover"
+            className="h-36 w-36 md:h-48 md:w-48 rounded-2xl shadow-2xl object-cover"
           />
-          <div className="pb-2">
+          <div className="pb-2 text-center md:text-left">
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">
               {album.albumType} {album.releaseDate ? `\u00b7 ${album.releaseDate.slice(0, 4)}` : ""}
             </p>
             <h1
-              className="text-4xl font-black text-foreground leading-tight md:text-5xl"
+              className="text-2xl md:text-4xl lg:text-5xl font-black text-foreground leading-tight"
               style={{ fontFamily: "'Nunito Sans', sans-serif" }}
             >
               {album.name}
@@ -317,7 +317,7 @@ function SpotifyAlbumInner({
       </div>
 
       {/* Track list */}
-      <div className="px-10 py-8">
+      <div className="px-4 md:px-10 py-6 md:py-8">
         <div className="space-y-1">
           {tracks.map((t, i) => (
             <button
@@ -458,18 +458,18 @@ function MockAlbumInner({
           <ArrowLeft size={20} />
         </button>
 
-        <div className="relative z-10 flex items-end gap-8 px-10 pb-10">
+        <div className="relative z-10 flex flex-col md:flex-row items-center md:items-end gap-4 md:gap-8 px-4 md:px-10 pb-6 md:pb-10">
           <img
             src={album.coverArtUrl}
             alt={album.title}
-            className="h-48 w-48 rounded-2xl shadow-2xl object-cover"
+            className="h-36 w-36 md:h-48 md:w-48 rounded-2xl shadow-2xl object-cover"
           />
-          <div className="pb-2">
+          <div className="pb-2 text-center md:text-left">
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">
               Album {"\u00b7"} {album.year}
             </p>
             <h1
-              className="text-4xl font-black text-foreground leading-tight md:text-5xl"
+              className="text-2xl md:text-4xl lg:text-5xl font-black text-foreground leading-tight"
               style={{ fontFamily: "'Nunito Sans', sans-serif" }}
             >
               {album.title}
@@ -492,7 +492,7 @@ function MockAlbumInner({
         </div>
       </div>
 
-      <div className="px-10 py-8">
+      <div className="px-4 md:px-10 py-6 md:py-8">
         <div className="space-y-1">
           {albumTracks.map((t, i) => (
             <button

@@ -26,18 +26,29 @@ function AnimatedDots() {
 }
 
 /** Settle delay before pill appears (ms) */
-const SETTLE_MS = 500;
+const SETTLE_MS = 350;
 /** How long the pill is visible before morphing (ms) */
-const PILL_DISPLAY_MS = 3000;
+const PILL_DISPLAY_MS = 2200;
 /** Duration of the morph-fly animation (s) */
-const MORPH_FLY_S = 0.7;
+const MORPH_FLY_S = 0.5;
 
 /**
  * Module-level cache so that when the user navigates away (Browse) and comes
  * back to the same track, we restore the phase instead of restarting the
- * animation from scratch.
+ * animation from scratch. Capped to 5 entries to prevent unbounded growth.
  */
+const MAX_PHASE_CACHE = 5;
 const phaseCache = new Map<string, AnimPhase>();
+
+function setPhaseCached(key: string, value: AnimPhase) {
+  phaseCache.set(key, value);
+  if (phaseCache.size > MAX_PHASE_CACHE) {
+    // Delete oldest entry — Map preserves insertion order, so
+    // keys().next().value is always the first (oldest) key.
+    const oldest = phaseCache.keys().next().value;
+    if (oldest !== undefined) phaseCache.delete(oldest);
+  }
+}
 
 export default function MusicNerdLoadingOrchestrator({
   aiLoading,
@@ -93,7 +104,7 @@ export default function MusicNerdLoadingOrchestrator({
 
   // Persist phase to module cache on every change
   useEffect(() => {
-    phaseCache.set(trackId, phase);
+    setPhaseCached(trackId, phase);
     phaseRef.current = phase;
   }, [phase, trackId]);
 
@@ -174,17 +185,27 @@ export default function MusicNerdLoadingOrchestrator({
   function startMorphFly() {
     const pillEl = pillRef.current;
     const anchorEl = anchorRef.current;
-    if (pillEl && anchorEl) {
+    // Check if anchor is visible (has non-zero dimensions)
+    const anchorRect = anchorEl?.getBoundingClientRect();
+    const anchorVisible = anchorRect && anchorRect.width > 0 && anchorRect.height > 0;
+
+    if (pillEl && anchorEl && anchorVisible) {
       const pillRect = pillEl.getBoundingClientRect();
-      const anchorRect = anchorEl.getBoundingClientRect();
       setFlyCoords({
         startX: pillRect.left + pillRect.width / 2,
         startY: pillRect.top + pillRect.height / 2,
         x: anchorRect.left + anchorRect.width / 2,
         y: anchorRect.top + anchorRect.height / 2,
       });
+      setPhaseAndRef("morphFly");
+    } else {
+      // Anchor not visible (e.g. hidden on mobile) — skip morph, go straight to pulsating/ready
+      if (aiLoadingRef.current) {
+        setPhaseAndRef("pulsating");
+      } else {
+        setPhaseAndRef("ready");
+      }
     }
-    setPhaseAndRef("morphFly");
   }
 
   function onMorphComplete() {
@@ -233,21 +254,14 @@ export default function MusicNerdLoadingOrchestrator({
             <motion.div
               animate={
                 phase === "pulsating"
-                  ? { scale: [1, 1.08, 1], opacity: [0.6, 0.8, 0.6] }
-                  : { scale: 1, opacity: 1 }
+                  ? { opacity: [0.5, 0.85, 0.5] }
+                  : { opacity: 1 }
               }
               transition={
                 phase === "pulsating"
-                  ? { duration: 1.8, repeat: Infinity, ease: "easeInOut" }
-                  : { duration: 0.3 }
+                  ? { duration: 1.6, repeat: Infinity, ease: "easeInOut" }
+                  : { duration: 0.25 }
               }
-              style={{
-                filter:
-                  phase === "pulsating"
-                    ? "grayscale(0.4) opacity(0.7)"
-                    : "drop-shadow(0 0 8px hsl(var(--neon-glow) / 0.7)) drop-shadow(0 0 24px hsl(var(--neon-glow) / 0.35))",
-                transition: "filter 0.4s ease",
-              }}
             >
               {phase === "ready" && !skipEntrance ? (
                 <motion.div
@@ -275,15 +289,15 @@ export default function MusicNerdLoadingOrchestrator({
         {phase === "pill" && (
           <motion.div
             ref={pillRef}
-            className="fixed left-1/2 z-50 apple-glass rounded-full px-4 py-2.5 flex items-center gap-2.5 pointer-events-none"
+            className="fixed left-1/2 z-50 rounded-full px-4 py-2.5 flex items-center gap-2.5 pointer-events-none will-change-transform bg-black/60 border border-white/10"
             style={{
               top: "calc(50% + 216px)",
               translateX: "-50%",
             }}
-            initial={{ opacity: 0, scale: 0.8, y: 20 }}
+            initial={{ opacity: 0, scale: 0.9, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.85, transition: { duration: 0.15 } }}
-            transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+            exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.12 } }}
+            transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
           >
             <MusicNerdLogo size={18} glow={false} />
             <span className="text-sm font-medium text-foreground/70 whitespace-nowrap select-none">
@@ -298,32 +312,31 @@ export default function MusicNerdLoadingOrchestrator({
       <AnimatePresence>
         {phase === "morphFly" && flyCoords && (
           <motion.div
-            className="fixed z-50 pointer-events-none flex items-center justify-center apple-glass"
+            className="fixed z-50 pointer-events-none flex items-center justify-center rounded-full bg-black/40 will-change-transform"
             style={{
               left: flyCoords.startX,
               top: flyCoords.startY,
+              width: 48,
+              height: 48,
+              borderRadius: 24,
               translateX: "-50%",
               translateY: "-50%",
             }}
             initial={{
-              width: 260,
-              height: 44,
-              borderRadius: 22,
+              scale: 1,
               x: 0,
               y: 0,
               opacity: 1,
             }}
             animate={{
-              width: 48,
-              height: 48,
-              borderRadius: 24,
+              scale: 1,
               x: flyCoords.x - flyCoords.startX,
               y: flyCoords.y - flyCoords.startY,
               opacity: 1,
             }}
             transition={{
               duration: MORPH_FLY_S,
-              ease: [0.4, 0, 0.2, 1],
+              ease: [0.25, 1, 0.5, 1],
             }}
             onAnimationComplete={onMorphComplete}
           >

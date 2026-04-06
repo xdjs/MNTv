@@ -106,9 +106,9 @@ export default function Connect() {
       <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden noise-overlay px-6">
         <div className="absolute inset-0 bg-gradient-to-b from-background via-background to-secondary/20" />
 
-        <div className="relative z-10 w-full max-w-md flex flex-col items-center gap-8">
+        <div className="relative z-10 w-full max-w-md flex flex-col items-center gap-5 md:gap-8">
           <motion.div initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}>
-            <MusicNerdLogo size={64} glow />
+            <MusicNerdLogo size={48} glow />
           </motion.div>
 
           {/* Step dots */}
@@ -123,9 +123,9 @@ export default function Connect() {
 
               {/* ── Step 0: Connect Spotify ── */}
               {step === 0 && (
-                <motion.div key="step-0" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }} className="flex flex-col items-center gap-6">
+                <motion.div key="step-0" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }} className="flex flex-col items-center gap-4 md:gap-6">
                   <div className="text-center">
-                    <h1 className="text-3xl font-black text-foreground tracking-tight">Connect your music</h1>
+                    <h1 className="text-2xl md:text-3xl font-black text-foreground tracking-tight">Connect your music</h1>
                     <p className="mt-2 text-muted-foreground">Link Spotify for personalized insights.</p>
                   </div>
                   <div className="flex flex-col gap-3 w-full">
@@ -207,22 +207,22 @@ export default function Connect() {
 
               {/* ── Step 1: Tier ── */}
               {step === 1 && (
-                <motion.div key="step-1" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }} className="flex flex-col items-center gap-6">
+                <motion.div key="step-1" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }} className="flex flex-col items-center gap-4 md:gap-6">
                   <div className="text-center">
-                    <h1 className="text-3xl font-black text-foreground tracking-tight">Choose your vibe</h1>
+                    <h1 className="text-2xl md:text-3xl font-black text-foreground tracking-tight">Choose your vibe</h1>
                     <p className="mt-2 text-muted-foreground">This shapes how deep your music insights go.</p>
                   </div>
                   <div className="flex flex-col gap-3 w-full">
                     {tiers.map((t) => (
-                      <button key={t.id} onClick={() => handleTierSelect(t.id)} className={`flex items-start gap-4 w-full rounded-2xl border bg-foreground/5 px-5 py-4 text-left transition-all duration-200 ${t.color}`}>
-                        <span className="text-2xl mt-0.5">{t.emoji}</span>
+                      <button key={t.id} onClick={() => handleTierSelect(t.id)} className={`flex items-start gap-3 md:gap-4 w-full rounded-2xl border bg-foreground/5 px-4 md:px-5 py-3 md:py-4 text-left transition-all duration-200 ${t.color}`}>
+                        <span className="text-xl md:text-2xl mt-0.5">{t.emoji}</span>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-0.5">
                             <span className="font-bold text-foreground">{t.label}</span>
                             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${t.badge}`}>{t.id}</span>
                           </div>
                           <p className="text-sm text-muted-foreground">{t.desc}</p>
-                          <p className="text-[11px] text-foreground/40 mt-1">{t.hint}</p>
+                          <p className="text-xs text-foreground/40 mt-1">{t.hint}</p>
                         </div>
                       </button>
                     ))}
