@@ -1085,15 +1085,23 @@ export default function Listen() {
     });
   }, [seek, trackNuggets]);
 
-  // Nugget trigger logic — fires on playback tick
+  // Nugget trigger logic — fires on playback tick or when new nuggets arrive.
+  // For fresh SSE generation (!aiFromCache), nuggets show immediately as they
+  // stream in. For cached tracks, they show at their timestamp markers.
   useEffect(() => {
-    if (!isPlaying || !nerdActive) return;
+    if (!nerdActive) return;
+    // Cached tracks: require playback to reach the timestamp
+    // Fresh generation: show as soon as the nugget arrives from SSE
+    const shouldTrigger = (n: typeof trackNuggets[0]) =>
+      !aiFromCache || currentTime >= n.timestampSec;
+
+    if (!isPlaying && aiFromCache) return; // cached: wait for playback
+
     for (const n of trackNuggets) {
       if (shownNuggetIds.has(n.id)) continue;
-      if (currentTime >= n.timestampSec) {
+      if (shouldTrigger(n)) {
         if (activeNugget) {
           if (reopenedNuggetId) {
-            // Immediately swap: dismiss reopened nugget, show new one
             setDismissedNuggets((prev) => new Map(prev).set(activeNugget.id, activeNugget));
             setActiveNugget(n);
             setReopenedNuggetId(null);
@@ -1108,7 +1116,7 @@ export default function Listen() {
         }
       }
     }
-  }, [currentTime, isPlaying, nerdActive, trackNuggets, activeNugget, shownNuggetIds, reopenedNuggetId]);
+  }, [currentTime, isPlaying, nerdActive, trackNuggets, activeNugget, shownNuggetIds, reopenedNuggetId, aiFromCache]);
 
   // Auto-dismiss nugget: quick swap if queued, otherwise fade after 8s
   useEffect(() => {
@@ -1254,6 +1262,7 @@ export default function Listen() {
           {!isMobile && <div className="flex flex-col items-center gap-1.5">
             <MusicNerdLoadingOrchestrator
               aiLoading={aiLoading}
+              hasNuggets={trackNuggets.length > 0}
               shortId={shortId}
               trackId={trackId}
               tier={tier}
@@ -1638,6 +1647,7 @@ export default function Listen() {
         <div className="fixed top-3 right-3 z-[60]" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
           <MusicNerdLoadingOrchestrator
             aiLoading={aiLoading}
+            hasNuggets={trackNuggets.length > 0}
             shortId={shortId}
             trackId={trackId}
             tier={tier}
