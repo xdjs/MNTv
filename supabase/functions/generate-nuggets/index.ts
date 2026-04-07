@@ -1308,6 +1308,19 @@ function validateNuggetQuality(nuggets: GeminiNugget[], artist?: string): { vali
   let hallucinatedSourceCount = 0;
   for (let i = 0; i < nuggets.length; i++) {
     const n = nuggets[i];
+    // Empty headline — generate one from the first sentence of text
+    if (!n.headline?.trim() && n.text?.trim()) {
+      const firstSentence = n.text.split(/[.!?]/)[0]?.trim();
+      if (firstSentence && firstSentence.length > 10) {
+        n.headline = firstSentence.length > 80
+          ? firstSentence.slice(0, 77) + "..."
+          : firstSentence;
+        console.log(`[Validator] Generated headline for nugget ${i} from text: "${n.headline}"`);
+      }
+    }
+    if (!n.headline?.trim()) {
+      issues.push(`Nugget ${i} (${n.kind}): empty headline`);
+    }
     const allText = `${n.headline} ${n.text}`.toLowerCase();
     for (const banned of BANNED_PHRASES) {
       if (allText.includes(banned.toLowerCase())) {
@@ -2714,9 +2727,18 @@ Return ONLY valid JSON:
 
     function assembleNugget(n: any, i: number) {
       const source = n.source || {};
+      let headline = stripCitMarkers(n.headline || "");
+      const text = stripCitMarkers(n.text || "");
+      // Last-resort headline: first sentence of the body text
+      if (!headline && text) {
+        const first = text.split(/[.!?]/)[0]?.trim();
+        headline = first && first.length > 10
+          ? (first.length > 80 ? first.slice(0, 77) + "..." : first)
+          : text.slice(0, 80);
+      }
       const result: any = {
-        headline: stripCitMarkers(n.headline || ""),
-        text: stripCitMarkers(n.text || ""),
+        headline,
+        text,
         kind: n.kind,
         listenFor: n.listenFor,
         source: {

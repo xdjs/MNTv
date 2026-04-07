@@ -265,15 +265,14 @@ export default function ImmersiveNuggetView({
             <span className="text-[10px] uppercase tracking-[0.2em] text-white/60 mb-2 block" style={{ textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>
               {activeNugget ? (KIND_LABELS[activeNugget.kind] || activeNugget.kind) : ""}
             </span>
-            {activeNugget && (() => {
-              const headlineText = activeNugget.headline || activeNugget.text || "Did you know?";
-              return isTypewriterDone ? (
+            {activeNugget && (
+              isTypewriterDone ? (
                 <h2 className="text-xl font-bold leading-tight text-white" style={{ textShadow: "0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.5)" }}>
-                  {headlineText}
+                  {activeNugget.headline || activeNugget.text}
                 </h2>
               ) : (
                 <TypewriterText
-                  text={headlineText}
+                  text={activeNugget.headline || activeNugget.text}
                   speed={35}
                   paused={false}
                   onComplete={handleTypewriterComplete}
@@ -281,8 +280,8 @@ export default function ImmersiveNuggetView({
                   className="text-xl font-bold leading-tight text-white"
                   style={{ textShadow: "0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.5)" }}
                 />
-              );
-            })()}
+              )
+            )}
           </div>
         </div>
 
