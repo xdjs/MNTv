@@ -1,12 +1,14 @@
-// Route URL parsing utilities for spotify:: and real:: prefixed routes.
+// Route URL parsing utilities for spotify::, apple::, and real:: prefixed routes.
 // CONSTRAINT: "::" is the delimiter — names containing "::" would break parsing.
-// Safe for Spotify data (IDs/names don't contain "::"), but not arbitrary user input.
+// Safe for Spotify/Apple Music data (IDs/names don't contain "::"), but not arbitrary user input.
 //
 // Segment formats:
 //   Artist: spotify::{spotifyId}::{artistName}
+//           apple::{appleId}::{artistName}
 //   Album:  spotify::{albumId}::{artistName}::{artistSpotifyId}
+//           apple::{albumId}::{artistName}::{artistAppleId}
 //   Real:   real::{artistName}
-//   Listen: real::{artist}::{title}::{album}::{spotifyUri}
+//   Listen: real::{artist}::{title}::{album}::{trackUri}
 
 /** Detect if a raw route param has a spotify:: prefix (URL-encoded or raw) */
 export function isSpotifyPrefix(raw: string | undefined): boolean {
@@ -52,5 +54,37 @@ export function parseSpotifyAlbum(raw: string): { spotifyAlbumId: string; artist
     spotifyAlbumId,
     artistName: parts[2] || "",
     artistSpotifyId: parts[3] || "",
+  };
+}
+
+// ── Apple Music route parsing ────────────────────────────────────────
+
+/** Detect if a raw route param has an apple:: prefix (URL-encoded or raw) */
+export function isApplePrefix(raw: string | undefined): boolean {
+  if (!raw) return false;
+  return raw.startsWith("apple%3A%3A") || raw.startsWith("apple::");
+}
+
+/** Parse apple::{id}::{name} from an artist route param */
+export function parseAppleArtist(raw: string): { appleId: string; artistName: string } | null {
+  if (!isApplePrefix(raw)) return null;
+  const decoded = decodeURIComponent(raw);
+  const parts = decoded.split("::");
+  const appleId = parts[1] || "";
+  if (!appleId) return null;
+  return { appleId, artistName: parts[2] || "" };
+}
+
+/** Parse apple::{albumId}::{artistName}::{artistAppleId} from an album route param */
+export function parseAppleAlbum(raw: string): { appleAlbumId: string; artistName: string; artistAppleId: string } | null {
+  if (!isApplePrefix(raw)) return null;
+  const decoded = decodeURIComponent(raw);
+  const parts = decoded.split("::");
+  const appleAlbumId = parts[1] || "";
+  if (!appleAlbumId) return null;
+  return {
+    appleAlbumId,
+    artistName: parts[2] || "",
+    artistAppleId: parts[3] || "",
   };
 }

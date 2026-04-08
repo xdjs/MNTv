@@ -1,39 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getSpotifyAppToken } from "../_shared/spotify-token.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
-
-// In-memory token cache. Concurrent cold-start requests may both fetch a token;
-// the second write clobbers the first harmlessly (both tokens are valid).
-let cachedToken: string | null = null;
-let tokenExpiresAt = 0;
-
-async function getAppToken(): Promise<string> {
-  if (cachedToken && Date.now() < tokenExpiresAt) return cachedToken;
-
-  const clientId = Deno.env.get("SPOTIFY_CLIENT_ID");
-  const clientSecret = Deno.env.get("SPOTIFY_CLIENT_SECRET");
-  if (!clientId || !clientSecret) throw new Error("Missing Spotify credentials");
-
-  const res = await fetch("https://accounts.spotify.com/api/token", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
-    },
-    body: "grant_type=client_credentials",
-  });
-
-  if (!res.ok) throw new Error(`Spotify token request failed: ${res.status}`);
-
-  const data = await res.json();
-  cachedToken = data.access_token;
-  tokenExpiresAt = Date.now() + (data.expires_in - 300) * 1000;
-  return cachedToken!;
-}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -59,7 +31,7 @@ serve(async (req) => {
     }
     const safeMarket = (typeof market === "string" && /^[A-Z]{2}$/.test(market)) ? market : "US";
 
-    const token = await getAppToken();
+    const token = await getSpotifyAppToken();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
     const res = await fetch(`https://api.spotify.com/v1/albums/${albumId}?market=${safeMarket}`, {

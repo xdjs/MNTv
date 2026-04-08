@@ -12,14 +12,14 @@ interface Props {
   onResetHistory?: () => void;
   onResetAllHistory?: () => void;
   onIncrementListen?: () => void;
-  activePlayer?: "spotify" | "none" | null;
-  spotifyUri?: string | null;
+  activePlayer?: "spotify" | "apple-music" | "none" | null;
+  trackUri?: string | null;
   currentTier?: "casual" | "curious" | "nerd";
   onTierChange?: (tier: "casual" | "curious" | "nerd") => void;
   onClose?: () => void;
 }
 
-export default function DevPanel({ animStyle, setAnimStyle, onJumpToNugget, nuggetCount, listenCount, trackKey, onResetHistory, onResetAllHistory, onIncrementListen, activePlayer, spotifyUri, currentTier, onTierChange, onClose }: Props) {
+export default function DevPanel({ animStyle, setAnimStyle, onJumpToNugget, nuggetCount, listenCount, trackKey, onResetHistory, onResetAllHistory, onIncrementListen, activePlayer, trackUri, currentTier, onTierChange, onClose }: Props) {
   return (
     <motion.div
       initial={{ opacity: 0, y: -20 }}
@@ -140,8 +140,8 @@ export default function DevPanel({ animStyle, setAnimStyle, onJumpToNugget, nugg
       {/* Playback source info */}
       <div>
         <p className="text-xs text-muted-foreground mb-1">Player: <span className="font-semibold text-foreground">{activePlayer || "None"}</span></p>
-        {spotifyUri && (
-          <p className="text-[10px] text-muted-foreground truncate" title={spotifyUri}>SP: {spotifyUri}</p>
+        {trackUri && (
+          <p className="text-[10px] text-muted-foreground truncate" title={trackUri}>URI: {trackUri}</p>
         )}
       </div>
     </motion.div>
