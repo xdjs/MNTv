@@ -382,7 +382,9 @@ export function useAINuggets(
       // 60s timeout: if the edge function stalls mid-stream (never sends
       // done, never closes), the fetch aborts cleanly. User track-skips
       // also abort via abortRef.current.abort() in the effect cleanup.
-      const timeoutId = setTimeout(() => abortRef.current?.abort(), 60_000);
+      // 120s timeout — matches Supabase edge function limit (150s) with
+      // margin. Lesser-known artists need longer for Exa research + Gemini.
+      const timeoutId = setTimeout(() => abortRef.current?.abort(), 120_000);
 
       const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-nuggets`, {
         method: "POST",

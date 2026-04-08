@@ -6,6 +6,7 @@ type AnimPhase = "hidden" | "pill" | "morphFly" | "pulsating" | "ready";
 
 interface Props {
   aiLoading: boolean;
+  hasNuggets?: boolean;
   shortId: string | null;
   trackId: string;
   tier: string;
@@ -52,6 +53,7 @@ function setPhaseCached(key: string, value: AnimPhase) {
 
 export default function MusicNerdLoadingOrchestrator({
   aiLoading,
+  hasNuggets = false,
   shortId,
   trackId,
   tier,
@@ -152,25 +154,16 @@ export default function MusicNerdLoadingOrchestrator({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aiLoading, trackId, phase]);
 
-  // ── Pill timer → morph (only if still loading) ──
+  // ── Pill stays visible until nuggets arrive OR loading finishes ──
+  // No timed morph — the pill persists as long as the user has nothing to see.
   useEffect(() => {
     if (phase !== "pill") return;
-    addTimer(() => {
-      if (trackRef.current !== trackId) return;
-      if (phaseRef.current !== "pill") return;
-      startMorphFly();
-    }, PILL_DISPLAY_MS);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, trackId]);
-
-  // ── aiLoading goes false during pill → skip ahead ──
-  useEffect(() => {
-    if (!aiLoading && phase === "pill") {
+    if (hasNuggets || !aiLoading) {
       clearTimers();
       startMorphFly();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiLoading, phase]);
+  }, [phase, hasNuggets, aiLoading]);
 
   // ── aiLoading goes false during pulsating → ready ──
   useEffect(() => {
