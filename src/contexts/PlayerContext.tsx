@@ -1,7 +1,12 @@
 import { createContext, useContext, useRef, useState, useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { useSpotifyToken } from "@/hooks/useSpotifyToken";
 import { useCurrentlyPlaying, type ExternalTrack } from "@/hooks/useCurrentlyPlaying";
+import { SpotifyPlaybackEngine, type SpotifyStateTrack } from "@/lib/engines/SpotifyPlaybackEngine";
+import type { ServiceType } from "@/lib/engines/types";
 import type { Nugget, Source } from "@/mock/types";
+
+// Re-export for consumers that import from PlayerContext
+export type { SpotifyStateTrack } from "@/lib/engines/SpotifyPlaybackEngine";
 
 // ── In-memory nugget cache (survives navigation, not page refresh) ──
 export interface CachedNuggets {
@@ -24,32 +29,9 @@ export interface CompanionNugget {
   imageCaption?: string;
 }
 
-// ── Spotify SDK singleton loader ──────────────────────────────────────
-
-let sdkLoading = false;
-let sdkReady = false;
-const sdkReadyCallbacks: (() => void)[] = [];
-
-function loadSpotifySDK(): Promise<void> {
-  if (sdkReady) return Promise.resolve();
-  return new Promise((resolve) => {
-    sdkReadyCallbacks.push(resolve);
-    if (sdkLoading) return;
-    sdkLoading = true;
-    window.onSpotifyWebPlaybackSDKReady = () => {
-      sdkReady = true;
-      sdkReadyCallbacks.forEach((cb) => cb());
-      sdkReadyCallbacks.length = 0;
-    };
-    const script = document.createElement("script");
-    script.src = "https://sdk.scdn.co/spotify-player.js";
-    document.head.appendChild(script);
-  });
-}
-
 // ── Types ─────────────────────────────────────────────────────────────
 
-export type ActivePlayer = "spotify" | "none";
+export type ActivePlayer = ServiceType;
 
 export interface TrackMeta {
   trackId: string;
@@ -57,17 +39,7 @@ export interface TrackMeta {
   artist: string;
   coverArtUrl: string;
   album?: string;
-  spotifyUri?: string;
-}
-
-/** Track info reported by the Spotify Web Playback SDK (from player_state_changed). */
-export interface SpotifyStateTrack {
-  title: string;
-  artist: string;
-  album: string;
-  albumArtUrl: string;
-  spotifyUri: string;
-  spotifyAlbumUri: string;
+  trackUri?: string;
 }
 
 interface PlayerState {
@@ -76,7 +48,7 @@ interface PlayerState {
   duration: number;
   activePlayer: ActivePlayer;
   spotifyReady: boolean;
-  currentSpotifyUri: string | null;
+  currentTrackUri: string | null;
   currentTrack: TrackMeta | null;
   /** Previous track route (for "go back" button). Null if no history. */
   prevTrackRoute: string | null;
@@ -93,9 +65,9 @@ interface PlayerState {
 }
 
 interface PlayerActions {
-  loadTrack: (opts: { spotifyUri?: string }) => void;
+  loadTrack: (opts: { trackUri?: string }) => void;
   /** Sync state to match an externally-changed track (no pause/restart). */
-  syncExternalTrack: (spotifyUri: string) => void;
+  syncExternalTrack: (trackUri: string) => void;
   setCurrentTrack: (meta: TrackMeta | null) => void;
   setOnEnded: (cb: (() => void) | null) => void;
   /** Push current route to history so prev button works across navigations. */
@@ -150,28 +122,26 @@ export function usePlayer(): PlayerContextType {
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const { hasSpotifyToken, getValidToken } = useSpotifyToken();
 
-  // Spotify state
-  const spPlayerRef = useRef<Spotify.Player | null>(null);
+  // Playback engine ref
+  const engineRef = useRef<SpotifyPlaybackEngine | null>(null);
+
+  // Playback state (driven by engine callbacks)
   const [spReady, setSpReady] = useState(false);
   const [spPlaying, setSpPlaying] = useState(false);
   const [spTime, setSpTime] = useState(0);
   const [spDuration, setSpDuration] = useState(0);
   const [spDeviceId, setSpDeviceId] = useState<string | null>(null);
-  const spPollRef = useRef<number | null>(null);
-  const lastSpUriRef = useRef<string | null>(null);
-  const spHasPlayedRef = useRef(false); // true once track has been unpaused at least once
-  const maxPositionRef = useRef(0); // highest position (ms) reached — prevents false onEnded
-  const deviceLostRef = useRef(false); // true when another Spotify device takes over playback
-  const spTimeRef = useRef(0); // last known position in ms — used to resume after device loss
-  const spDeviceIdRef = useRef<string | null>(null); // stable ref for device ID (avoids deps churn)
-  const reTransferringRef = useRef(false); // prevents duplicate re-transfer API calls
 
   // Active player tracking
   const [activePlayer, setActivePlayer] = useState<ActivePlayer>("none");
-  const [currentSpotifyUri, setCurrentSpotifyUri] = useState<string | null>(null);
+  const [currentTrackUri, setCurrentTrackUri] = useState<string | null>(null);
   const [currentTrack, setCurrentTrack] = useState<TrackMeta | null>(null);
   const [spotifyStateTrack, setSpotifyStateTrack] = useState<SpotifyStateTrack | null>(null);
   const onEndedRef = useRef<(() => void) | null>(null);
+
+  // Stable ref for track URI (avoids stale closures)
+  const currentTrackUriRef = useRef<string | null>(null);
+  currentTrackUriRef.current = currentTrackUri;
 
   // External playback detection
   const [isExternalListenMode, setIsExternalListenMode] = useState(false);
@@ -250,214 +220,118 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     return prev;
   }, []);
 
-  // ── Spotify init (once, on mount if token available) ───────────────
+  // ── Engine init (once, on mount if token available) ────────────────
 
   useEffect(() => {
     if (!hasSpotifyToken) return;
-    let cancelled = false;
 
-    async function init() {
-      await loadSpotifySDK();
-      if (cancelled) return;
+    const engine = new SpotifyPlaybackEngine({
+      getOAuthToken: getValidToken,
+      onSpotifyStateTrack: (track) => setSpotifyStateTrack(track),
+      onDeviceLost: () => setSpPlaying(false),
+    });
 
-      const player = new Spotify.Player({
-        name: "MusicNerd TV",
-        getOAuthToken: async (cb) => { const t = await getValidToken(); if (t) cb(t); },
-        volume: 0.8,
-      });
-
-      player.addListener("ready", ({ device_id }) => {
-        if (cancelled) return;
-        spDeviceIdRef.current = device_id;
-        setSpDeviceId(device_id);
+    // Poll for ready state until engine reports ready
+    const readyPoll = window.setInterval(() => {
+      if (engine.ready) {
         setSpReady(true);
-      });
-      player.addListener("not_ready", () => { if (!cancelled) setSpReady(false); });
-      player.addListener("player_state_changed", (state) => {
-        if (cancelled) return;
-        if (!state) {
-          // Another Spotify device took over playback — our device is no longer active.
-          // Update UI to reflect stopped state and flag for re-transfer on next play().
-          deviceLostRef.current = true;
-          setSpPlaying(false);
-          if (spPollRef.current) {
-            clearInterval(spPollRef.current);
-            spPollRef.current = null;
-          }
-          console.log("[Player] Device lost — playback transferred to another device");
-          return;
-        }
-        deviceLostRef.current = false;
-        setSpPlaying(!state.paused);
-        setSpTime(state.position / 1000);
-        spTimeRef.current = state.position;
-        setSpDuration(state.duration / 1000);
-        if (!state.paused) {
-          spHasPlayedRef.current = true;
-          maxPositionRef.current = Math.max(maxPositionRef.current, state.position);
-          if (!spPollRef.current) {
-            spPollRef.current = window.setInterval(async () => {
-              const s = await spPlayerRef.current?.getCurrentState();
-              if (!s) return;
-              setSpTime(s.position / 1000);
-              spTimeRef.current = s.position;
-              setSpDuration(s.duration / 1000);
-              setSpPlaying(!s.paused);
-            }, 250);
-          }
-        } else if (spPollRef.current) {
-          clearInterval(spPollRef.current);
-          spPollRef.current = null;
-        }
-        const ct = state.track_window.current_track;
-        if (ct?.uri) {
-          setSpotifyStateTrack({
-            title: ct.name || "",
-            artist: ct.artists?.map((a: { name: string }) => a.name).join(", ") || "",
-            album: ct.album?.name || "",
-            albumArtUrl: ct.album?.images?.[0]?.url || "",
-            spotifyUri: ct.uri,
-            spotifyAlbumUri: ct.album?.uri || "",
-          });
-        }
-        if (state.paused && state.position === 0 && ct.uri === lastSpUriRef.current && spHasPlayedRef.current && maxPositionRef.current > 5000) {
-          lastSpUriRef.current = null;
-          spHasPlayedRef.current = false;
-          onEndedRef.current?.();
-        }
-      });
-      player.addListener("initialization_error", ({ message }) => console.error("[Spotify] Init error:", message));
-      player.addListener("authentication_error", ({ message }) => console.error("[Spotify] Auth error:", message));
-      player.addListener("account_error", ({ message }) => console.error("[Spotify] Account error:", message));
+        setSpDeviceId(engine.deviceId);
+        clearInterval(readyPoll);
+      }
+    }, 100);
 
-      await player.connect();
-      spPlayerRef.current = player;
-    }
+    const unsubState = engine.onStateChange((state) => {
+      setSpPlaying(state.isPlaying);
+      setSpTime(state.currentTime);
+      if (state.duration >= 0) setSpDuration(state.duration);
+    });
 
-    init();
+    const unsubEnd = engine.onTrackEnd(() => {
+      onEndedRef.current?.();
+    });
+
+    engine.init();
+    engineRef.current = engine;
+
     return () => {
-      cancelled = true;
-      if (spPollRef.current) clearInterval(spPollRef.current);
-      if (spPlayerRef.current) { spPlayerRef.current.disconnect(); spPlayerRef.current = null; }
+      clearInterval(readyPoll);
+      unsubState();
+      unsubEnd();
+      engine.cleanup();
+      engineRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasSpotifyToken]);
 
   // ── loadTrack ─────────────────────────────────────────────────────
 
-  const loadTrack = useCallback(({ spotifyUri }: { spotifyUri?: string }) => {
-    // Don't reload if already playing this exact URI
-    if (spotifyUri && lastSpUriRef.current === spotifyUri) return;
+  const hasAutoPlayedRef = useRef(false);
 
-    // Reset playback state
-    lastSpUriRef.current = null;
-    spHasPlayedRef.current = false;
+  const loadTrack = useCallback(({ trackUri }: { trackUri?: string }) => {
+    if (trackUri && currentTrackUriRef.current === trackUri) return;
+
     hasAutoPlayedRef.current = false;
-    maxPositionRef.current = 0;
-    spPlayerRef.current?.pause();
-    if (spPollRef.current) { clearInterval(spPollRef.current); spPollRef.current = null; }
+
+    // Reset UI state
     setSpTime(0);
     setSpDuration(0);
     setSpPlaying(false);
 
-    setCurrentSpotifyUri(spotifyUri || null);
-    setActivePlayer(spReady && spotifyUri ? "spotify" : "none");
+    setCurrentTrackUri(trackUri || null);
+    setActivePlayer(spReady && trackUri ? "spotify" : "none");
   }, [spReady]);
 
-  /** Sync tracking state to match an externally-changed Spotify track.
+  /** Sync tracking state to match an externally-changed track.
    *  Unlike loadTrack, this does NOT pause or restart playback — the SDK
    *  is already playing the right track. */
-  const syncExternalTrack = useCallback((spotifyUri: string) => {
-    setCurrentSpotifyUri(spotifyUri);
-    lastSpUriRef.current = spotifyUri;
-    spHasPlayedRef.current = true;
+  const syncExternalTrack = useCallback((trackUri: string) => {
+    setCurrentTrackUri(trackUri);
+    currentTrackUriRef.current = trackUri;
     hasAutoPlayedRef.current = true;
     setActivePlayer("spotify");
   }, []);
 
   // ── Upgrade to Spotify when SDK becomes ready after loadTrack ─────
   useEffect(() => {
-    if (spReady && currentSpotifyUri && activePlayer !== "spotify") {
+    if (spReady && currentTrackUri && activePlayer !== "spotify") {
       console.log("[Player] Spotify SDK ready — switching to Spotify");
       setActivePlayer("spotify");
       hasAutoPlayedRef.current = false;
     }
-  }, [spReady, currentSpotifyUri, activePlayer]);
+  }, [spReady, currentTrackUri, activePlayer]);
 
   // ── Auto-play when Spotify is active and ready ────────────────────
 
-  const hasAutoPlayedRef = useRef(false);
-
   useEffect(() => {
-    if (activePlayer === "spotify" && spReady && currentSpotifyUri && !hasAutoPlayedRef.current) {
+    if (activePlayer === "spotify" && spReady && currentTrackUri && !hasAutoPlayedRef.current) {
       hasAutoPlayedRef.current = true;
-      const uriToPlay = currentSpotifyUri; // capture before async gap
-      (async () => {
-        const token = await getValidToken();
-        if (!token || !spDeviceId) return;
-        lastSpUriRef.current = uriToPlay;
-        const res = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${spDeviceId}`, {
-          method: "PUT",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ uris: [uriToPlay] }),
-        });
-        if (!res.ok) {
-          console.error(`[Player] Spotify play failed (${res.status}):`, await res.text().catch(() => ""), "URI:", uriToPlay);
-        }
-      })();
+      engineRef.current?.loadTrack(currentTrackUri);
     }
-  }, [activePlayer, spReady, currentSpotifyUri, spDeviceId, getValidToken]);
+  }, [activePlayer, spReady, currentTrackUri]);
 
   // ── Controls ──────────────────────────────────────────────────────
 
   const play = useCallback(async () => {
-    // If another Spotify device stole playback, re-transfer it back to our SDK device
-    if (deviceLostRef.current && spDeviceIdRef.current && lastSpUriRef.current) {
-      if (reTransferringRef.current) return; // already in progress
-      reTransferringRef.current = true;
-      try {
-        const token = await getValidToken();
-        if (token) {
-          console.log("[Player] Re-transferring playback back to MusicNerd TV device");
-          const res = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${spDeviceIdRef.current}`, {
-            method: "PUT",
-            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              uris: [lastSpUriRef.current],
-              position_ms: Math.max(0, spTimeRef.current),
-            }),
-          });
-          if (res.ok) {
-            deviceLostRef.current = false;
-          } else {
-            console.error(`[Player] Re-transfer playback failed (${res.status}):`, await res.text().catch(() => ""));
-          }
-        }
-      } finally {
-        reTransferringRef.current = false;
-      }
-      return;
-    }
-    spPlayerRef.current?.resume();
-  }, [getValidToken]);
+    await engineRef.current?.play();
+  }, []);
 
   const pause = useCallback(() => {
-    spPlayerRef.current?.pause();
+    engineRef.current?.pause();
   }, []);
 
   const toggle = useCallback(() => {
     if (activePlayer === "none") {
-      if (currentSpotifyUri && spReady) {
+      if (currentTrackUri && spReady) {
         setActivePlayer("spotify");
         hasAutoPlayedRef.current = false;
       }
       return;
     }
     if (spPlaying) pause(); else play();
-  }, [activePlayer, spPlaying, pause, play, currentSpotifyUri, spReady]);
+  }, [activePlayer, spPlaying, pause, play, currentTrackUri, spReady]);
 
   const seek = useCallback((seconds: number) => {
-    spPlayerRef.current?.seek(seconds * 1000);
+    engineRef.current?.seek(seconds);
     setSpTime(seconds);
   }, []);
 
@@ -466,10 +340,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const stop = useCallback(() => {
-    spPlayerRef.current?.pause();
-    if (spPollRef.current) { clearInterval(spPollRef.current); spPollRef.current = null; }
+    engineRef.current?.stop();
     setActivePlayer("none");
-    setCurrentSpotifyUri(null);
+    setCurrentTrackUri(null);
   }, []);
 
   // ── Unified state ─────────────────────────────────────────────────
@@ -480,7 +353,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     duration: spDuration || 0,
     activePlayer,
     spotifyReady: spReady,
-    currentSpotifyUri,
+    currentTrackUri,
     currentTrack,
     prevTrackRoute,
     externalPlayback: externalTrack,
@@ -518,7 +391,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setNowPlayingFocused,
     setNowPlayingFocusIndex,
   }), [
-    spPlaying, spTime, spDuration, activePlayer, spReady, currentSpotifyUri,
+    spPlaying, spTime, spDuration, activePlayer, spReady, currentTrackUri,
     currentTrack, prevTrackRoute, externalTrack, isExternalListenMode, spotifyStateTrack, nowPlayingFocused, nowPlayingFocusIndex,
     setCurrentTrack, setOnEnded, pushTrackHistory, popTrackHistory, loadTrack,
     syncExternalTrack, play, pause, toggle, seek, stop, setExternalListenMode,

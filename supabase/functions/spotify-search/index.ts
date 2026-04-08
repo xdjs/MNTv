@@ -1,43 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getSpotifyAppToken } from "../_shared/spotify-token.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
-
-// In-memory cache for the Client Credentials app token
-let cachedToken: string | null = null;
-let tokenExpiresAt = 0;
-
-async function getAppToken(): Promise<string> {
-  if (cachedToken && Date.now() < tokenExpiresAt) return cachedToken;
-
-  const clientId = Deno.env.get("SPOTIFY_CLIENT_ID");
-  const clientSecret = Deno.env.get("SPOTIFY_CLIENT_SECRET");
-  if (!clientId || !clientSecret) {
-    throw new Error("Missing Spotify credentials");
-  }
-
-  const res = await fetch("https://accounts.spotify.com/api/token", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
-    },
-    body: "grant_type=client_credentials",
-  });
-
-  if (!res.ok) {
-    throw new Error(`Spotify token request failed: ${res.status}`);
-  }
-
-  const data = await res.json();
-  cachedToken = data.access_token;
-  // Expire 5 minutes early to avoid edge cases
-  tokenExpiresAt = Date.now() + (data.expires_in - 300) * 1000;
-  return cachedToken!;
-}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -47,7 +15,7 @@ serve(async (req) => {
   try {
     const { query, artist, title, recommend } = await req.json();
 
-    const token = await getAppToken();
+    const token = await getSpotifyAppToken();
 
     // ── Recommendations mode: seed by track ID ──────────────────────
     if (recommend) {
@@ -61,7 +29,7 @@ serve(async (req) => {
         if (res.status === 401) {
           cachedToken = null;
           tokenExpiresAt = 0;
-          const retryToken = await getAppToken();
+          const retryToken = await getSpotifyAppToken();
           const retryRes = await fetch(url, { headers: { Authorization: `Bearer ${retryToken}` } });
           if (!retryRes.ok) throw new Error(`Spotify recommendations failed: ${retryRes.status}`);
           const retryData = await retryRes.json();
@@ -102,7 +70,7 @@ serve(async (req) => {
       if (res.status === 401) {
         cachedToken = null;
         tokenExpiresAt = 0;
-        const retryToken = await getAppToken();
+        const retryToken = await getSpotifyAppToken();
         const retryRes = await fetch(url, {
           headers: { Authorization: `Bearer ${retryToken}` },
         });

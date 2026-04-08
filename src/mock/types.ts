@@ -92,6 +92,8 @@ export interface DeepDiveResponse {
 export interface UserProfile {
   streamingService: "Spotify" | "YouTube Music" | "Apple Music" | "";
   lastFmUsername?: string;
+  /** Service-agnostic display name (populated from Spotify or user input for Apple Music) */
+  displayName?: string;
   spotifyDisplayName?: string;    // e.g. "Peter Rango" — from Spotify OAuth
   // Spotify taste profile — populated after OAuth, stored as serialised top artists/tracks
   spotifyTopArtists?: string[];   // e.g. ["Radiohead", "Björk", "Portishead"]

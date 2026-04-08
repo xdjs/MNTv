@@ -49,7 +49,7 @@ export default function Listen() {
   const realTrackMeta = useMemo(() => {
     // Demo track lookup (e.g. "demo-weird-fishes")
     const demo = rawTrackId ? getDemoTrackById(rawTrackId) : null;
-    if (demo) return { artist: demo.artist, title: demo.title, album: demo.album, spotifyUri: demo.spotifyUri };
+    if (demo) return { artist: demo.artist, title: demo.title, album: demo.album, trackUri: demo.trackUri };
 
     if (!rawTrackId?.startsWith("real%3A%3A") && !rawTrackId?.startsWith("real::")) return null;
     const decoded = decodeURIComponent(rawTrackId);
@@ -58,7 +58,7 @@ export default function Listen() {
       artist: decodeURIComponent(parts[1] || ""),
       title: decodeURIComponent(parts[2] || ""),
       album: decodeURIComponent(parts[3] || "") || undefined,
-      spotifyUri: decodeURIComponent(parts[4] || "") || undefined,
+      trackUri: decodeURIComponent(parts[4] || "") || undefined,
     };
   }, [rawTrackId]);
 
@@ -103,15 +103,15 @@ export default function Listen() {
 
   // ── Playback source resolution ───────────────────────────────────────
   const { hasSpotifyToken } = useSpotifyToken();
-  const [spotifyUri, setSpotifyUri] = useState<string | null>(null);
+  const [trackUri, setTrackUri] = useState<string | null>(null);
 
   // Resolve Spotify URI — from route (real tracks) or by searching Spotify
   useEffect(() => {
-    setSpotifyUri(null);
+    setTrackUri(null);
 
     // Real track with URI baked into the route
-    if (realTrackMeta?.spotifyUri) {
-      setSpotifyUri(realTrackMeta.spotifyUri);
+    if (realTrackMeta?.trackUri) {
+      setTrackUri(realTrackMeta.trackUri);
       return;
     }
 
@@ -161,7 +161,7 @@ export default function Listen() {
 
         if (match?.uri) {
           console.log(`[Listen] Spotify match: "${match.artist} - ${match.title}" for "${track!.artist} - ${track!.title}"`);
-          setSpotifyUri(match.uri);
+          setTrackUri(match.uri);
         } else {
           console.warn(`[Listen] No Spotify match for "${track!.artist} - ${track!.title}"`);
         }
@@ -171,7 +171,7 @@ export default function Listen() {
     }
     findSpotifyUri();
     return () => { cancelled = true; };
-  }, [hasSpotifyToken, realTrackMeta?.spotifyUri, track?.artist, track?.title]);
+  }, [hasSpotifyToken, realTrackMeta?.trackUri, track?.artist, track?.title]);
 
   const [shuffleOn, setShuffleOn] = useState(false); // kept for PlaybackBar UI only
   const isMobile = useIsMobile();
@@ -286,7 +286,7 @@ export default function Listen() {
           });
           if (albumData?.tracks?.length) {
             const currentIdx = albumData.tracks.findIndex(
-              (t: any) => t.uri === spotifyUri
+              (t: any) => t.uri === trackUri
             );
             if (currentIdx >= 0 && currentIdx < albumData.tracks.length - 1) {
               const next = albumData.tracks[currentIdx + 1];
@@ -300,9 +300,9 @@ export default function Listen() {
       }
 
       // P2: Spotify Recommendations (taste-weighted — prefer user's top artists)
-      if (spotifyUri) {
+      if (trackUri) {
         const { data: recData } = await supabase.functions.invoke("spotify-search", {
-          body: { recommend: spotifyUri },
+          body: { recommend: trackUri },
         });
         const recs = ((recData?.tracks || []) as SpotifyTrackResult[]).filter(
           (t) => t.title.toLowerCase() !== titleLower && notPlayed(t.artist, t.title)
@@ -346,7 +346,7 @@ export default function Listen() {
       const demos = DEMO_TRACKS.filter((d) => notPlayed(d.artist, d.title));
       if (demos.length > 0) {
         const pick = demos[Math.floor(Math.random() * demos.length)];
-        navigateTo({ artist: pick.artist, title: pick.title, album: pick.album, uri: pick.spotifyUri });
+        navigateTo({ artist: pick.artist, title: pick.title, album: pick.album, uri: pick.trackUri });
         return;
       }
 
@@ -358,7 +358,7 @@ export default function Listen() {
       isNavigatingRef.current = false;
       setSkipLoading(false);
     }
-  }, [track, spotifyUri, navigate, player, profile]);
+  }, [track, trackUri, navigate, player, profile]);
 
   const handlePrev = useCallback(() => {
     isNavigatingRef.current = true;
@@ -473,7 +473,7 @@ export default function Listen() {
   }, [setExternalListenMode]);
 
   // Navigate when Spotify plays a different track (e.g. user changed song on phone).
-  // IMPORTANT: Only depend on spotifyStateTrack changes, NOT player.currentSpotifyUri.
+  // IMPORTANT: Only depend on spotifyStateTrack changes, NOT player.currentTrackUri.
   // Otherwise loadTrack (which sets currentSpotifyUri) causes the effect to fire while
   // the SDK still reports the OLD track, creating a false "external skip" → bounce loop.
   // Also require isPlaying — when loadTrack pauses the old track, the SDK fires a state
@@ -483,13 +483,13 @@ export default function Listen() {
     if (!spotifyStateTrack) return;
     if (isNavigatingRef.current) return;
     if (!isPlaying) return;
-    if (!player.currentSpotifyUri) return;
+    if (!player.currentTrackUri) return;
     // Suppress during the brief window after a track load where the SDK still
     // reports the OLD track — prevents false redirect back to the previous track.
     if (Date.now() - trackLoadTimestampRef.current < 2000) return;
-    if (spotifyStateTrack.spotifyUri === player.currentSpotifyUri) return;
+    if (spotifyStateTrack.spotifyUri === player.currentTrackUri) return;
     // Also skip if the SDK is reporting what we're about to load (route resolved but loadTrack pending)
-    if (spotifyUri && spotifyStateTrack.spotifyUri === spotifyUri) return;
+    if (trackUri && spotifyStateTrack.spotifyUri === trackUri) return;
     console.log(`[Listen] Spotify track changed externally: "${spotifyStateTrack.artist} - ${spotifyStateTrack.title}"`);
     isNavigatingRef.current = true;
     const newRoute = `/listen/real::${encodeURIComponent(spotifyStateTrack.artist)}::${encodeURIComponent(spotifyStateTrack.title)}::${encodeURIComponent(spotifyStateTrack.album)}::${encodeURIComponent(spotifyStateTrack.spotifyUri)}`;
@@ -508,28 +508,28 @@ export default function Listen() {
       artist: track.artist,
       coverArtUrl: effectiveCoverArt,
       album: track.album,
-      spotifyUri: spotifyUri || undefined,
+      trackUri: trackUri || undefined,
     });
-  }, [track?.title, track?.artist, trackId, spotifyUri, effectiveCoverArt]);
+  }, [track?.title, track?.artist, trackId, trackUri, effectiveCoverArt]);
 
   // Load track into global player when sources resolve
   // Skip if the same track is already playing (e.g. returning from Browse via mini-player)
   useEffect(() => {
     if (isExternalListenMode) return;
-    if (!spotifyUri) return;
-    if (player.currentSpotifyUri === spotifyUri) return;
-    if (lastLoadedTrackRef.current === spotifyUri) return;
-    lastLoadedTrackRef.current = spotifyUri;
+    if (!trackUri) return;
+    if (player.currentTrackUri === trackUri) return;
+    if (lastLoadedTrackRef.current === trackUri) return;
+    lastLoadedTrackRef.current = trackUri;
 
     // If the SDK is already playing this track (external skip on Spotify),
     // just sync state — don't pause and restart playback.
-    if (spotifyStateTrack?.spotifyUri === spotifyUri) {
-      player.syncExternalTrack(spotifyUri);
+    if (spotifyStateTrack?.spotifyUri === trackUri) {
+      player.syncExternalTrack(trackUri);
       return;
     }
 
-    player.loadTrack({ spotifyUri });
-  }, [spotifyUri, isExternalListenMode]);
+    player.loadTrack({ trackUri });
+  }, [trackUri, isExternalListenMode]);
 
   const play = player.play;
   const seek = player.seek;
@@ -989,12 +989,12 @@ export default function Listen() {
   }, [activeNugget, clearDwell]);
 
   // Auto-resume only after the correct track has been loaded into the SDK.
-  // Without the spotifyUri guard, this fires on mount and resumes the PREVIOUS
+  // Without the trackUri guard, this fires on mount and resumes the PREVIOUS
   // track (still in the SDK) before loadTrack has a chance to swap it out.
   // Skip during the brief window after a track load — let PlayerContext's
   // autoplay effect handle it via the Spotify API to avoid resuming the old track.
   useEffect(() => {
-    if (!isExternalListenMode && spotifyUri && player.currentSpotifyUri === spotifyUri) {
+    if (!isExternalListenMode && trackUri && player.currentTrackUri === trackUri) {
       // 2s guard: after a fresh track load, let PlayerContext's autoplay
       // handle playback via the Spotify API. Calling resume() too early
       // would briefly play the OLD track. On very slow SDK loads (>2s)
@@ -1004,7 +1004,7 @@ export default function Listen() {
       if (Date.now() - trackLoadTimestampRef.current < 2000) return;
       play();
     }
-  }, [play, isExternalListenMode, spotifyUri, player.currentSpotifyUri]);
+  }, [play, isExternalListenMode, trackUri, player.currentTrackUri]);
 
   useEffect(() => {
     if (trackNuggets.length === 0) return;
@@ -1304,7 +1304,7 @@ export default function Listen() {
         </motion.div>
 
         {/* Spotify URI resolving indicator */}
-        {hasSpotifyToken && !spotifyUri && !isExternalListenMode && (
+        {hasSpotifyToken && !trackUri && !isExternalListenMode && (
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1315,7 +1315,7 @@ export default function Listen() {
         )}
 
         {/* Spotify session expired — reconnect prompt */}
-        {!hasSpotifyToken && spotifyUri && (
+        {!hasSpotifyToken && trackUri && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1557,7 +1557,7 @@ export default function Listen() {
                 setRegenerateKey(0);
               }}
               activePlayer={activePlayer}
-              spotifyUri={spotifyUri}
+              trackUri={trackUri}
               onIncrementListen={async () => {
                 if (!track) return;
                 const trackKey = `${track.artist}::${track.title}`;

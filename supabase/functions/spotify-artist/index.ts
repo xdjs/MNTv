@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { CACHE_TTL_MS } from "../_shared/config.ts";
+import { getSpotifyAppToken } from "../_shared/spotify-token.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,34 +13,6 @@ function getSupabaseAdmin() {
   const url = Deno.env.get("SUPABASE_URL")!;
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   return createClient(url, key);
-}
-
-// Reuse the same Client Credentials flow as spotify-search
-let cachedToken: string | null = null;
-let tokenExpiresAt = 0;
-
-async function getAppToken(): Promise<string> {
-  if (cachedToken && Date.now() < tokenExpiresAt) return cachedToken;
-
-  const clientId = Deno.env.get("SPOTIFY_CLIENT_ID");
-  const clientSecret = Deno.env.get("SPOTIFY_CLIENT_SECRET");
-  if (!clientId || !clientSecret) throw new Error("Missing Spotify credentials");
-
-  const res = await fetch("https://accounts.spotify.com/api/token", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
-    },
-    body: "grant_type=client_credentials",
-  });
-
-  if (!res.ok) throw new Error(`Spotify token request failed: ${res.status}`);
-
-  const data = await res.json();
-  cachedToken = data.access_token;
-  tokenExpiresAt = Date.now() + (data.expires_in - 300) * 1000;
-  return cachedToken!;
 }
 
 async function generateArtistBio(
@@ -158,7 +131,7 @@ serve(async (req) => {
       }
     }
 
-    const token = await getAppToken();
+    const token = await getSpotifyAppToken();
 
     let artist: any;
     let artistId: string;
