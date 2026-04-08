@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { getSpotifyAppToken } from "../_shared/spotify-token.ts";
+import { getSpotifyAppToken, clearSpotifyAppToken } from "../_shared/spotify-token.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -27,8 +27,7 @@ serve(async (req) => {
       });
       if (!res.ok) {
         if (res.status === 401) {
-          cachedToken = null;
-          tokenExpiresAt = 0;
+          clearSpotifyAppToken();
           const retryToken = await getSpotifyAppToken();
           const retryRes = await fetch(url, { headers: { Authorization: `Bearer ${retryToken}` } });
           if (!retryRes.ok) throw new Error(`Spotify recommendations failed: ${retryRes.status}`);
@@ -68,8 +67,7 @@ serve(async (req) => {
 
     if (!res.ok) {
       if (res.status === 401) {
-        cachedToken = null;
-        tokenExpiresAt = 0;
+        clearSpotifyAppToken();
         const retryToken = await getSpotifyAppToken();
         const retryRes = await fetch(url, {
           headers: { Authorization: `Bearer ${retryToken}` },

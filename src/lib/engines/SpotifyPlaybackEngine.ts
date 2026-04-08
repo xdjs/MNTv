@@ -196,8 +196,8 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
 
   async seek(seconds: number): Promise<void> {
     this.player?.seek(seconds * 1000);
-    // Optimistically update time
-    this.emitState({ isPlaying: true, currentTime: seconds, duration: -1 });
+    // Optimistically update time (preserve current playing state)
+    this.emitState({ isPlaying: this.hasPlayed && !this.deviceLost, currentTime: seconds, duration: -1 });
   }
 
   stop(): void {
@@ -294,7 +294,7 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
     }
 
     // End-of-track detection
-    if (state.paused && state.position === 0 && ct.uri === this.lastUri
+    if (state.paused && state.position === 0 && ct?.uri === this.lastUri
         && this.hasPlayed && this.maxPosition > 5000) {
       this.lastUri = null;
       this.hasPlayed = false;

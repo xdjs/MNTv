@@ -474,7 +474,7 @@ export default function Listen() {
 
   // Navigate when Spotify plays a different track (e.g. user changed song on phone).
   // IMPORTANT: Only depend on spotifyStateTrack changes, NOT player.currentTrackUri.
-  // Otherwise loadTrack (which sets currentSpotifyUri) causes the effect to fire while
+  // Otherwise loadTrack (which sets currentTrackUri) causes the effect to fire while
   // the SDK still reports the OLD track, creating a false "external skip" → bounce loop.
   // Also require isPlaying — when loadTrack pauses the old track, the SDK fires a state
   // change for the OLD track (paused). Without the isPlaying guard, this is misinterpreted

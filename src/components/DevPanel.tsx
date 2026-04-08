@@ -12,7 +12,7 @@ interface Props {
   onResetHistory?: () => void;
   onResetAllHistory?: () => void;
   onIncrementListen?: () => void;
-  activePlayer?: string | null;
+  activePlayer?: "spotify" | "apple-music" | "none" | null;
   trackUri?: string | null;
   currentTier?: "casual" | "curious" | "nerd";
   onTierChange?: (tier: "casual" | "curious" | "nerd") => void;
