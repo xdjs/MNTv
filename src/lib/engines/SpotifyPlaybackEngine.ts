@@ -111,6 +111,10 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
       this._deviceId = device_id;
       this._ready = true;
       this.onReadyCb?.(device_id);
+      // Auto-play pending URI that was stored before the SDK was ready
+      if (this.lastUri && !this.hasAutoPlayed) {
+        this.autoPlay(this.lastUri);
+      }
     });
 
     player.addListener("not_ready", () => {
@@ -143,7 +147,7 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
 
   async loadTrack(trackUri: string): Promise<void> {
     // Don't reload if already playing this exact URI
-    if (trackUri && this.lastUri === trackUri) return;
+    if (this.lastUri === trackUri) return;
 
     // Reset state
     this.lastUri = null;
@@ -158,11 +162,11 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
 
     if (!trackUri) return;
 
-    // If ready, auto-play immediately; otherwise it will play when ready
+    // If ready, auto-play immediately; otherwise store the URI and
+    // auto-play when onReady fires (see the "ready" listener in init()).
     if (this._ready && this._deviceId) {
       await this.autoPlay(trackUri);
     } else {
-      // Store URI — will auto-play when init completes
       this.lastUri = trackUri;
     }
   }
@@ -207,8 +211,8 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
 
   async seek(seconds: number): Promise<void> {
     this.player?.seek(seconds * 1000);
-    // Optimistically update time — use actual playing state, not "has ever played"
-    this.emitState({ isPlaying: this._isPlaying, currentTime: seconds, duration: -1 });
+    // Optimistically update time — omit duration so subscribers keep current value
+    this.emitState({ isPlaying: this._isPlaying, currentTime: seconds });
   }
 
   stop(): void {
@@ -231,12 +235,12 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
 
   // ── Internals ───────────────────────────────────────────────────────
 
-  private emitState(partial: Partial<PlaybackState> & { isPlaying: boolean }) {
-    // duration of -1 means "keep current" — caller only knows time changed
+  private emitState(partial: { isPlaying: boolean; currentTime: number; duration?: number }) {
+    // When duration is omitted, subscribers should keep their current value.
     const state: PlaybackState = {
       isPlaying: partial.isPlaying,
-      currentTime: partial.currentTime ?? 0,
-      duration: partial.duration === -1 ? -1 : (partial.duration ?? 0),
+      currentTime: partial.currentTime,
+      duration: partial.duration,
     };
     for (const cb of this.stateListeners) cb(state);
   }
