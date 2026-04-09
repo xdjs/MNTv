@@ -13,7 +13,8 @@ export interface PlaybackState {
 export interface PlaybackEngine {
   readonly service: ServiceType;
   readonly ready: boolean;
-  readonly deviceId: string | null;
+  /** Spotify-only: the Web Playback SDK device ID. Other engines return null. */
+  readonly deviceId?: string | null;
 
   init(): Promise<void>;
   cleanup(): void;
