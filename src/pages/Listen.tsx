@@ -1262,6 +1262,7 @@ export default function Listen() {
           {!isMobile && <div className="flex flex-col items-center gap-1.5">
             <MusicNerdLoadingOrchestrator
               aiLoading={aiLoading}
+              aiError={aiError}
               hasNuggets={trackNuggets.length > 0}
               shortId={shortId}
               trackId={trackId}
@@ -1647,6 +1648,7 @@ export default function Listen() {
         <div className="fixed top-3 right-3 z-[60]" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
           <MusicNerdLoadingOrchestrator
             aiLoading={aiLoading}
+            aiError={aiError}
             hasNuggets={trackNuggets.length > 0}
             shortId={shortId}
             trackId={trackId}
