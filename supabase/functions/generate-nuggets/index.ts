@@ -1283,6 +1283,16 @@ Return ONLY valid JSON:
 }
 
 // ── Nugget Quality Validator ───────────────────────────────────────────
+// ── Shared headline generator — used by both validator and assembler ──
+function generateHeadlineFromText(text: string): string {
+  if (!text) return "";
+  const first = text.split(/[.!?]/)[0]?.trim();
+  if (first && first.length > 10) {
+    return first.length > 80 ? first.slice(0, 77) + "..." : first;
+  }
+  return text.slice(0, 80);
+}
+
 // Agent 3: Code-level check for banned words, vague headlines, structure.
 const BANNED_PHRASES = [
   "likely", "suggests", "implies", "might conjure", "could be", "possibly", "perhaps",
@@ -1310,13 +1320,8 @@ function validateNuggetQuality(nuggets: GeminiNugget[], artist?: string): { vali
     const n = nuggets[i];
     // Empty headline — generate one from the first sentence of text
     if (!n.headline?.trim() && n.text?.trim()) {
-      const firstSentence = n.text.split(/[.!?]/)[0]?.trim();
-      if (firstSentence && firstSentence.length > 10) {
-        n.headline = firstSentence.length > 80
-          ? firstSentence.slice(0, 77) + "..."
-          : firstSentence;
-        console.log(`[Validator] Generated headline for nugget ${i} from text: "${n.headline}"`);
-      }
+      n.headline = generateHeadlineFromText(n.text);
+      if (n.headline) console.log(`[Validator] Generated headline for nugget ${i} from text: "${n.headline}"`);
     }
     if (!n.headline?.trim()) {
       issues.push(`Nugget ${i} (${n.kind}): empty headline`);
@@ -2729,12 +2734,9 @@ Return ONLY valid JSON:
       const source = n.source || {};
       let headline = stripCitMarkers(n.headline || "");
       const text = stripCitMarkers(n.text || "");
-      // Last-resort headline: first sentence of the body text
+      // Last-resort headline from body text (same logic as validator)
       if (!headline && text) {
-        const first = text.split(/[.!?]/)[0]?.trim();
-        headline = first && first.length > 10
-          ? (first.length > 80 ? first.slice(0, 77) + "..." : first)
-          : text.slice(0, 80);
+        headline = generateHeadlineFromText(text);
       }
       const result: any = {
         headline,

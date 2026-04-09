@@ -227,18 +227,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
     const engine = new SpotifyPlaybackEngine({
       getOAuthToken: getValidToken,
+      onReady: (deviceId) => {
+        setSpReady(true);
+        setSpDeviceId(deviceId);
+      },
       onSpotifyStateTrack: (track) => setSpotifyStateTrack(track),
       onDeviceLost: () => setSpPlaying(false),
     });
-
-    // Poll for ready state until engine reports ready
-    const readyPoll = window.setInterval(() => {
-      if (engine.ready) {
-        setSpReady(true);
-        setSpDeviceId(engine.deviceId);
-        clearInterval(readyPoll);
-      }
-    }, 100);
 
     const unsubState = engine.onStateChange((state) => {
       setSpPlaying(state.isPlaying);
@@ -254,7 +249,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     engineRef.current = engine;
 
     return () => {
-      clearInterval(readyPoll);
       unsubState();
       unsubEnd();
       engine.cleanup();

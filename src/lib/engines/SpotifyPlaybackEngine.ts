@@ -28,6 +28,10 @@ function loadSpotifySDK(): Promise<void> {
 
 // ── Track info reported by the Spotify SDK ───────────────────────────
 
+// Intentionally uses spotifyUri (not trackUri) — this is the SDK's native
+// Spotify URI format (spotify:track:xxxxx). It equals the service-agnostic
+// trackUri for Spotify tracks but is named distinctly because this type is
+// only populated from the Spotify SDK's player_state_changed event.
 export interface SpotifyStateTrack {
   title: string;
   artist: string;
@@ -41,6 +45,8 @@ export interface SpotifyStateTrack {
 
 export interface SpotifyPlaybackEngineOptions {
   getOAuthToken: () => Promise<string | null>;
+  /** Called when the SDK is ready with the device ID. */
+  onReady?: (deviceId: string) => void;
   /** Called when the SDK reports a new current track (player_state_changed). */
   onSpotifyStateTrack?: (track: SpotifyStateTrack) => void;
   /** Called when another Spotify device takes over playback. */
@@ -60,6 +66,7 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
   private lastUri: string | null = null;
   private hasPlayed = false;
   private hasAutoPlayed = false;
+  private _isPlaying = false;  // current playing state (not "has ever played")
   private maxPosition = 0;        // ms — highest position reached
   private lastPosition = 0;       // ms — for resume after device loss
   private deviceLost = false;
@@ -71,10 +78,12 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
 
   private getOAuthToken: () => Promise<string | null>;
   private onSpotifyStateTrackCb?: (track: SpotifyStateTrack) => void;
+  private onReadyCb?: (deviceId: string) => void;
   private onDeviceLostCb?: () => void;
 
   constructor(opts: SpotifyPlaybackEngineOptions) {
     this.getOAuthToken = opts.getOAuthToken;
+    this.onReadyCb = opts.onReady;
     this.onSpotifyStateTrackCb = opts.onSpotifyStateTrack;
     this.onDeviceLostCb = opts.onDeviceLost;
   }
@@ -101,6 +110,7 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
       if (this.cancelled) return;
       this._deviceId = device_id;
       this._ready = true;
+      this.onReadyCb?.(device_id);
     });
 
     player.addListener("not_ready", () => {
@@ -139,6 +149,7 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
     this.lastUri = null;
     this.hasPlayed = false;
     this.hasAutoPlayed = false;
+    this._isPlaying = false;
     this.maxPosition = 0;
     this.player?.pause();
     this.stopPolling();
@@ -196,8 +207,8 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
 
   async seek(seconds: number): Promise<void> {
     this.player?.seek(seconds * 1000);
-    // Optimistically update time (preserve current playing state)
-    this.emitState({ isPlaying: this.hasPlayed && !this.deviceLost, currentTime: seconds, duration: -1 });
+    // Optimistically update time — use actual playing state, not "has ever played"
+    this.emitState({ isPlaying: this._isPlaying, currentTime: seconds, duration: -1 });
   }
 
   stop(): void {
@@ -268,6 +279,7 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
     const currentTime = state.position / 1000;
     const duration = state.duration / 1000;
     const isPlaying = !state.paused;
+    this._isPlaying = isPlaying;
     this.lastPosition = state.position;
 
     this.emitState({ isPlaying, currentTime, duration });
