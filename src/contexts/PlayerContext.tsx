@@ -238,7 +238,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const unsubState = engine.onStateChange((state) => {
       setSpPlaying(state.isPlaying);
       setSpTime(state.currentTime);
-      if (state.duration >= 0) setSpDuration(state.duration);
+      if (state.duration != null) setSpDuration(state.duration);
     });
 
     const unsubEnd = engine.onTrackEnd(() => {

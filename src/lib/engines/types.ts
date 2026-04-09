@@ -7,7 +7,7 @@ export type ServiceType = "spotify" | "apple-music" | "none";
 export interface PlaybackState {
   isPlaying: boolean;
   currentTime: number;   // seconds
-  duration: number;       // seconds
+  duration?: number;      // seconds — omitted means "keep current value"
 }
 
 export interface PlaybackEngine {
