@@ -2,10 +2,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 
-type AnimPhase = "hidden" | "pill" | "morphFly" | "pulsating" | "ready";
+type AnimPhase = "hidden" | "pill" | "morphFly" | "pulsating" | "ready" | "failed";
 
 interface Props {
   aiLoading: boolean;
+  aiError?: string | null;
   hasNuggets?: boolean;
   shortId: string | null;
   trackId: string;
@@ -53,6 +54,7 @@ function setPhaseCached(key: string, value: AnimPhase) {
 
 export default function MusicNerdLoadingOrchestrator({
   aiLoading,
+  aiError,
   hasNuggets = false,
   shortId,
   trackId,
@@ -171,6 +173,20 @@ export default function MusicNerdLoadingOrchestrator({
       setPhaseAndRef("ready");
     }
   }, [aiLoading, phase, setPhaseAndRef]);
+
+  // ── Research failed → show error state, auto-dismiss after 4s ──
+  useEffect(() => {
+    if (aiError && (phase === "pill" || phase === "pulsating" || phase === "hidden")) {
+      clearTimers();
+      setPhaseAndRef("failed");
+    }
+  }, [aiError, phase, clearTimers, setPhaseAndRef]);
+
+  useEffect(() => {
+    if (phase !== "failed") return;
+    const t = setTimeout(() => setPhaseAndRef("hidden"), 4000);
+    return () => clearTimeout(t);
+  }, [phase, setPhaseAndRef]);
 
   // ── Cleanup on unmount ──
   useEffect(() => () => clearTimers(), [clearTimers]);
@@ -296,6 +312,28 @@ export default function MusicNerdLoadingOrchestrator({
             <span className="text-sm font-medium text-foreground/70 whitespace-nowrap select-none">
               MusicNerd is researching
               <AnimatedDots />
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Failed pill ── */}
+      <AnimatePresence>
+        {phase === "failed" && (
+          <motion.div
+            className="fixed left-1/2 z-50 rounded-full px-4 py-2.5 flex items-center gap-2.5 pointer-events-none will-change-transform bg-black/60 border border-red-500/30"
+            style={{
+              top: "calc(50% + 216px)",
+              translateX: "-50%",
+            }}
+            initial={{ opacity: 0, scale: 0.9, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.3 } }}
+            transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+          >
+            <MusicNerdLogo size={18} glow={false} />
+            <span className="text-sm font-medium text-red-400/80 whitespace-nowrap select-none">
+              Research unavailable
             </span>
           </motion.div>
         )}
