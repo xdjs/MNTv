@@ -9,6 +9,15 @@ let sdkLoading = false;
 let sdkReady = false;
 const sdkReadyCallbacks: (() => void)[] = [];
 
+/** Reset module-level SDK state — only for tests. Without this, sdkReady
+ *  stays true after the first test and subsequent init() calls skip the
+ *  SDK load entirely. */
+export function _resetSdkStateForTests(): void {
+  sdkLoading = false;
+  sdkReady = false;
+  sdkReadyCallbacks.length = 0;
+}
+
 function loadSpotifySDK(): Promise<void> {
   if (sdkReady) return Promise.resolve();
   return new Promise((resolve) => {
@@ -216,7 +225,9 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
     this.hasPlayed = true;
     this.hasAutoPlayed = true;
     this._isPlaying = true;
-    this.maxPosition = 0;
+    // Inherit the last known position so end-of-track detection
+    // (maxPosition > 5000) isn't blind for the first few seconds.
+    this.maxPosition = this.lastPosition;
   }
 
   async seek(seconds: number): Promise<void> {
