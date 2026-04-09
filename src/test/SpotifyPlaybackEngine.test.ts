@@ -37,7 +37,7 @@ vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
   return el;
 });
 
-import { SpotifyPlaybackEngine } from "@/lib/engines/SpotifyPlaybackEngine";
+import { SpotifyPlaybackEngine, _resetSdkStateForTests } from "@/lib/engines/SpotifyPlaybackEngine";
 
 describe("SpotifyPlaybackEngine", () => {
   let engine: SpotifyPlaybackEngine;
@@ -46,6 +46,7 @@ describe("SpotifyPlaybackEngine", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listeners.clear();
+    _resetSdkStateForTests();
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
 
     engine = new SpotifyPlaybackEngine({

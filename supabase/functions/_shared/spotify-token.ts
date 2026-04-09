@@ -1,5 +1,11 @@
 // Shared Spotify Client Credentials token management.
 // Import as: import { getSpotifyAppToken } from "../_shared/spotify-token.ts";
+//
+// The token is cached at module level. Each Supabase edge function runs in its
+// own Deno V8 isolate, so the cache only persists for warm requests within the
+// same isolate — it won't be shared across cold starts or parallel instances.
+// Concurrent cold-start requests may both fetch a token; the second write
+// clobbers the first harmlessly.
 
 let cachedToken: string | null = null;
 let tokenExpiresAt = 0;
