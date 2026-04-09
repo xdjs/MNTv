@@ -238,7 +238,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const unsubState = engine.onStateChange((state) => {
       setSpPlaying(state.isPlaying);
       setSpTime(state.currentTime);
-      if (state.duration !== undefined) setSpDuration(state.duration);
+      // duration is optional on PlaybackState (omitted = "keep current").
+      // Use != null to safely handle both undefined and null.
+      if (state.duration != null) setSpDuration(state.duration);
     });
 
     const unsubEnd = engine.onTrackEnd(() => {
@@ -283,6 +285,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     currentTrackUriRef.current = trackUri;
     hasAutoPlayedRef.current = true;
     setActivePlayer("spotify");
+    // Update engine's lastUri so end-of-track detection works for
+    // externally-synced tracks (e.g. user skipped on Spotify app).
+    engineRef.current?.syncUri(trackUri);
   }, []);
 
   // ── Upgrade to Spotify when SDK becomes ready after loadTrack ─────

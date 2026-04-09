@@ -209,6 +209,16 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
     this.player?.pause();
   }
 
+  /** Sync internal tracking to match an externally-changed track.
+   *  Unlike loadTrack, this does NOT pause or restart playback. */
+  syncUri(trackUri: string): void {
+    this.lastUri = trackUri;
+    this.hasPlayed = true;
+    this.hasAutoPlayed = true;
+    this._isPlaying = true;
+    this.maxPosition = 0;
+  }
+
   async seek(seconds: number): Promise<void> {
     this.player?.seek(seconds * 1000);
     // Optimistically update time — omit duration so subscribers keep current value
@@ -251,7 +261,7 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
     this.lastUri = uri;
 
     const token = await this.getOAuthToken();
-    if (!token || !this._deviceId) return;
+    if (this.cancelled || !token || !this._deviceId) return;
 
     const res = await fetch(
       `https://api.spotify.com/v1/me/player/play?device_id=${this._deviceId}`,

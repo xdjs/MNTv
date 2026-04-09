@@ -176,7 +176,7 @@ export default function MusicNerdLoadingOrchestrator({
 
   // ── Research failed → show error state, auto-dismiss after 4s ──
   useEffect(() => {
-    if (aiError && (phase === "pill" || phase === "pulsating" || phase === "hidden")) {
+    if (aiError && phase !== "ready" && phase !== "failed") {
       clearTimers();
       setPhaseAndRef("failed");
     }
@@ -293,7 +293,9 @@ export default function MusicNerdLoadingOrchestrator({
         )}
       </div>
 
-      {/* ── Glass pill (centered below album art) ── */}
+      {/* ── Glass pill (centered below album art) ──
+          TODO: 216px offset is relative to the centered album art layout.
+          May need adjustment for smaller phones or when keyboard is open. */}
       <AnimatePresence>
         {phase === "pill" && (
           <motion.div
