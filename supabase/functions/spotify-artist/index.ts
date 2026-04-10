@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { CACHE_TTL_MS } from "../_shared/config.ts";
-import { getSpotifyAppToken } from "../_shared/spotify-token.ts";
+import { getSpotifyAppToken, clearSpotifyAppToken } from "../_shared/spotify-token.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -87,9 +87,17 @@ Be factual and vivid. No hedging ("is known for", "is considered"). No markdown.
 }
 
 async function spotifyGet(path: string, token: string) {
-  const res = await fetch(`https://api.spotify.com/v1${path}`, {
+  let res = await fetch(`https://api.spotify.com/v1${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
+  // Retry once on 401 (stale token in shared cache)
+  if (res.status === 401) {
+    clearSpotifyAppToken();
+    const freshToken = await getSpotifyAppToken();
+    res = await fetch(`https://api.spotify.com/v1${path}`, {
+      headers: { Authorization: `Bearer ${freshToken}` },
+    });
+  }
   if (!res.ok) return null;
   return res.json();
 }

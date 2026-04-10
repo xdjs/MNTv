@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { getSpotifyAppToken } from "../_shared/spotify-token.ts";
+import { getSpotifyAppToken, clearSpotifyAppToken } from "../_shared/spotify-token.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -31,14 +31,23 @@ serve(async (req) => {
     }
     const safeMarket = (typeof market === "string" && /^[A-Z]{2}$/.test(market)) ? market : "US";
 
-    const token = await getSpotifyAppToken();
+    let token = await getSpotifyAppToken();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(`https://api.spotify.com/v1/albums/${albumId}?market=${safeMarket}`, {
+    let res = await fetch(`https://api.spotify.com/v1/albums/${albumId}?market=${safeMarket}`, {
       headers: { Authorization: `Bearer ${token}` },
       signal: controller.signal,
     });
     clearTimeout(timeout);
+
+    // Retry once on 401 (stale token in shared cache)
+    if (res.status === 401) {
+      clearSpotifyAppToken();
+      token = await getSpotifyAppToken();
+      res = await fetch(`https://api.spotify.com/v1/albums/${albumId}?market=${safeMarket}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    }
 
     if (!res.ok) {
       console.error(`[spotify-album] Spotify API error: ${res.status} for albumId=${albumId}`);
