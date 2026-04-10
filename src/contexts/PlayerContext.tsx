@@ -266,6 +266,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const loadTrack = useCallback(({ trackUri }: { trackUri?: string }) => {
     if (trackUri && currentTrackUriRef.current === trackUri) return;
 
+    // Stop the engine immediately so the old track doesn't keep polling
+    // or emitting state while the new track's load effect fires later.
+    engineRef.current?.stop();
     hasAutoPlayedRef.current = false;
 
     // Reset UI state
