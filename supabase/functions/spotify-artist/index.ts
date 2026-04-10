@@ -126,6 +126,7 @@ serve(async (req) => {
         .from("artist_cache")
         .select("data, created_at")
         .eq("artist_id", providedId)
+        .eq("service", "spotify")
         .single();
 
       if (cached && Date.now() - new Date(cached.created_at).getTime() < CACHE_TTL_MS) {
@@ -176,6 +177,7 @@ serve(async (req) => {
         .from("artist_cache")
         .select("data, created_at")
         .eq("artist_id", artistId)
+        .eq("service", "spotify")
         .single();
 
       if (cached && Date.now() - new Date(cached.created_at).getTime() < CACHE_TTL_MS) {
@@ -271,8 +273,15 @@ serve(async (req) => {
     // Write to cache (fire-and-forget — don't block response)
     // Note: concurrent cold-cache requests for the same artist will both generate a bio,
     // but upsert is idempotent so the second write just overwrites with equivalent data.
+    const artistName = result.artist?.name || "";
     db.from("artist_cache")
-      .upsert({ artist_id: artistId, data: result, created_at: new Date().toISOString() })
+      .upsert({
+        artist_id: artistId,
+        service: "spotify",
+        canonical_name: artistName.toLowerCase().trim() || null,
+        data: result,
+        created_at: new Date().toISOString(),
+      })
       .then(({ error }) => { if (error) console.error("[spotify-artist] cache write failed:", error.message); })
       .catch((err) => console.error("[spotify-artist] cache write exception:", err));
 
