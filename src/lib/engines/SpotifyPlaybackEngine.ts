@@ -164,6 +164,7 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
     this.hasAutoPlayed = false;
     this._isPlaying = false;
     this.maxPosition = 0;
+    this.lastPosition = 0;
     this.player?.pause();
     this.stopPolling();
 
