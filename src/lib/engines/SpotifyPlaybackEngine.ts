@@ -216,6 +216,8 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
   }
 
   async pause(): Promise<void> {
+    // Fire-and-forget: actual state update comes via player_state_changed.
+    // Awaiting the SDK promise adds latency without meaningful benefit.
     this.player?.pause();
   }
 
