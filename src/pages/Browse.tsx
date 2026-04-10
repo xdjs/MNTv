@@ -28,7 +28,7 @@ export default function Browse() {
   useTierAccent(tier);
 
   const { rows: allRows } = usePersonalizedCatalog(profile);
-  const userName = profile?.spotifyDisplayName || "";
+  const userName = profile?.displayName || profile?.spotifyDisplayName || "";
 
   const demoItems = [
     {
@@ -281,11 +281,9 @@ export default function Browse() {
             )}
           </div>
           <p className="mt-1 text-muted-foreground text-lg">
-            {profile?.spotifyTopArtists?.length
-              ? "Listening via Spotify"
-              : profile?.streamingService
-                ? `Listening via ${profile.streamingService}`
-                : "What do you want to listen to?"}
+            {profile?.streamingService
+              ? `Listening via ${profile.streamingService}`
+              : "What do you want to listen to?"}
           </p>
         </div>
 

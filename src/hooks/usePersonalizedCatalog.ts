@@ -64,8 +64,8 @@ function trackCoverUrl(
   return `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(artistName + trackName)}&backgroundColor=111827&textColor=ffffff&fontSize=30`;
 }
 
-function realTrackHref(artist: string, title: string, album?: string, spotifyUri?: string): string {
-  const parts = ["real", artist, title, album || "", spotifyUri || ""].map(encodeURIComponent);
+function realTrackHref(artist: string, title: string, album?: string, trackUri?: string): string {
+  const parts = ["real", artist, title, album || "", trackUri || ""].map(encodeURIComponent);
   return `/listen/${parts.join("::")}`;
 }
 

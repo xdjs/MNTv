@@ -243,7 +243,9 @@ export default function ImmersiveNuggetView({
     const { url: imgUrl, isNuggetImage } = getNuggetImage();
     return (
       <div className="w-full h-full overflow-y-auto glass-scrollbar">
-        <div className="relative w-full bg-black" style={{ minHeight: "100%" }}>
+        {/* Sticky image hero — stays pinned while body text scrolls over it.
+            Prevents the gap/overlay break when scrolling up. */}
+        <div className="sticky top-0 w-full h-full">
           {imgUrl && (
             <img
               src={imgUrl}
@@ -283,8 +285,10 @@ export default function ImmersiveNuggetView({
           </div>
         </div>
 
-        <div className="px-5 pb-5 -mt-32 relative z-10 pt-36" style={{
-          background: "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.6) 20%, rgba(0,0,0,0.85) 40%, rgba(0,0,0,0.95) 60%, rgb(0,0,0) 100%)",
+        {/* Body scrolls over the sticky image. Solid black bg-black ensures
+            no gap is visible when scrolling past the gradient overlap zone. */}
+        <div className="px-5 pb-5 -mt-32 relative z-10 pt-36 bg-black" style={{
+          backgroundImage: "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.6) 20%, rgba(0,0,0,0.85) 40%, rgba(0,0,0,0.95) 60%, rgb(0,0,0) 100%)",
         }}>
           <p className="text-sm leading-relaxed text-white/60 mb-4">
             {activeNugget?.text}

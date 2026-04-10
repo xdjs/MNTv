@@ -1283,6 +1283,16 @@ Return ONLY valid JSON:
 }
 
 // ── Nugget Quality Validator ───────────────────────────────────────────
+// ── Shared headline generator — used by both validator and assembler ──
+function generateHeadlineFromText(text: string): string {
+  if (!text) return "";
+  const first = text.split(/[.!?]/)[0]?.trim();
+  if (first && first.length > 10) {
+    return first.length > 80 ? first.slice(0, 77) + "..." : first;
+  }
+  return text.slice(0, 80);
+}
+
 // Agent 3: Code-level check for banned words, vague headlines, structure.
 const BANNED_PHRASES = [
   "likely", "suggests", "implies", "might conjure", "could be", "possibly", "perhaps",
@@ -1308,6 +1318,14 @@ function validateNuggetQuality(nuggets: GeminiNugget[], artist?: string): { vali
   let hallucinatedSourceCount = 0;
   for (let i = 0; i < nuggets.length; i++) {
     const n = nuggets[i];
+    // Empty headline — generate one from the first sentence of text
+    if (!n.headline?.trim() && n.text?.trim()) {
+      n.headline = generateHeadlineFromText(n.text);
+      if (n.headline) console.log(`[Validator] Generated headline for nugget ${i} from text: "${n.headline}"`);
+    }
+    if (!n.headline?.trim()) {
+      issues.push(`Nugget ${i} (${n.kind}): empty headline`);
+    }
     const allText = `${n.headline} ${n.text}`.toLowerCase();
     for (const banned of BANNED_PHRASES) {
       if (allText.includes(banned.toLowerCase())) {
@@ -2714,9 +2732,15 @@ Return ONLY valid JSON:
 
     function assembleNugget(n: any, i: number) {
       const source = n.source || {};
+      let headline = stripCitMarkers(n.headline || "");
+      const text = stripCitMarkers(n.text || "");
+      // Last-resort headline from body text (same logic as validator)
+      if (!headline && text) {
+        headline = generateHeadlineFromText(text);
+      }
       const result: any = {
-        headline: stripCitMarkers(n.headline || ""),
-        text: stripCitMarkers(n.text || ""),
+        headline,
+        text,
         kind: n.kind,
         listenFor: n.listenFor,
         source: {
