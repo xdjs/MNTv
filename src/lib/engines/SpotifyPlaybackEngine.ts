@@ -295,7 +295,9 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
       // Another device took over
       this.deviceLost = true;
       this.stopPolling();
-      this.emitState({ isPlaying: false, currentTime: 0, duration: 0 });
+      // Preserve last known position so the progress bar doesn't snap to 0.
+      // Omit duration so subscribers keep the current value.
+      this.emitState({ isPlaying: false, currentTime: this.lastPosition / 1000 });
       this.onDeviceLostCb?.();
       console.log("[Player] Device lost — playback transferred to another device");
       return;

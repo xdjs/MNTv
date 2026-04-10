@@ -1095,7 +1095,10 @@ export default function Listen() {
     const shouldTrigger = (n: typeof trackNuggets[0]) =>
       !aiFromCache || currentTime >= n.timestampSec;
 
-    if (!isPlaying && aiFromCache) return; // cached: wait for playback
+    // Cached tracks: wait for playback to reach each timestamp.
+    // Fresh SSE: show immediately even if paused — the user is waiting
+    // for content and should see nuggets the moment they arrive.
+    if (!isPlaying && aiFromCache) return;
 
     for (const n of trackNuggets) {
       if (shownNuggetIds.has(n.id)) continue;

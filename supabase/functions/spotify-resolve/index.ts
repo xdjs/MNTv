@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { getSpotifyAppToken } from "../_shared/spotify-token.ts";
+import { getSpotifyAppToken, clearSpotifyAppToken } from "../_shared/spotify-token.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,16 +21,25 @@ serve(async (req) => {
       );
     }
 
-    const token = await getSpotifyAppToken();
+    let token = await getSpotifyAppToken();
     const batch = artists.slice(0, 20);
 
     const results = await Promise.allSettled(
       batch.map(async (name: string) => {
         const q = encodeURIComponent(name.trim());
-        const res = await fetch(
+        let res = await fetch(
           `https://api.spotify.com/v1/search?type=artist&limit=5&q=${q}`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
+        // Retry once on 401 (stale shared token cache)
+        if (res.status === 401) {
+          clearSpotifyAppToken();
+          token = await getSpotifyAppToken();
+          res = await fetch(
+            `https://api.spotify.com/v1/search?type=artist&limit=5&q=${q}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+        }
         if (!res.ok) return { name, id: null, imageUrl: null };
         const data = await res.json();
         const candidates = data.artists?.items || [];
