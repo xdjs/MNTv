@@ -175,12 +175,15 @@ export default function MusicNerdLoadingOrchestrator({
   }, [aiLoading, phase, setPhaseAndRef]);
 
   // ── Research failed → show error state, auto-dismiss after 4s ──
+  // Guard: only fail if aiLoading was true (research actively running).
+  // Prevents a stale aiError from a previous track immediately failing
+  // the next track's pill before useAINuggets clears the error.
   useEffect(() => {
-    if (aiError && phase !== "ready" && phase !== "failed") {
+    if (aiError && !aiLoading && phase !== "ready" && phase !== "failed") {
       clearTimers();
       setPhaseAndRef("failed");
     }
-  }, [aiError, phase, clearTimers, setPhaseAndRef]);
+  }, [aiError, aiLoading, phase, clearTimers, setPhaseAndRef]);
 
   useEffect(() => {
     if (phase !== "failed") return;
