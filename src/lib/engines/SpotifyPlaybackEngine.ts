@@ -235,6 +235,9 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
 
   async seek(seconds: number): Promise<void> {
     this.player?.seek(seconds * 1000);
+    // Update lastPosition so play() re-transfer after device loss
+    // resumes at the new seek position, not the pre-seek one.
+    this.lastPosition = seconds * 1000;
     // Optimistically update time — omit duration so subscribers keep current value
     this.emitState({ isPlaying: this._isPlaying, currentTime: seconds });
   }
