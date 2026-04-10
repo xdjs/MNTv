@@ -21,7 +21,7 @@ serve(async (req) => {
       );
     }
 
-    let token = await getSpotifyAppToken();
+    const token = await getSpotifyAppToken();
     const batch = artists.slice(0, 20);
 
     const results = await Promise.allSettled(
@@ -31,13 +31,14 @@ serve(async (req) => {
           `https://api.spotify.com/v1/search?type=artist&limit=5&q=${q}`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
-        // Retry once on 401 (stale shared token cache)
+        // Retry once on 401 — read fresh token locally to avoid racing
+        // with other concurrent requests that may also be retrying.
         if (res.status === 401) {
           clearSpotifyAppToken();
-          token = await getSpotifyAppToken();
+          const freshToken = await getSpotifyAppToken();
           res = await fetch(
             `https://api.spotify.com/v1/search?type=artist&limit=5&q=${q}`,
-            { headers: { Authorization: `Bearer ${token}` } }
+            { headers: { Authorization: `Bearer ${freshToken}` } }
           );
         }
         if (!res.ok) return { name, id: null, imageUrl: null };
