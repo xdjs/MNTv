@@ -272,7 +272,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         // Assign ref BEFORE init so the upgrade-to-engine effect can read
         // engineRef.current?.service when spReady flips later.
         engineRef.current = am;
-        am.init();
+        am.init().catch((err) => {
+          console.error("[Player] Apple Music engine init failed:", err);
+          // Prevent a broken engine from poisoning engineRef — downstream
+          // code guards on spReady but this keeps the invariant clean.
+          if (engineRef.current === am) engineRef.current = null;
+        });
       });
 
       return () => {
@@ -309,7 +314,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       // Assign ref BEFORE init so the upgrade-to-engine effect can read
       // engineRef.current?.service when spReady flips later.
       engineRef.current = sp;
-      sp.init();
+      sp.init().catch((err) => {
+        console.error("[Player] Spotify engine init failed:", err);
+        if (engineRef.current === sp) engineRef.current = null;
+      });
 
       return () => {
         unsubState();

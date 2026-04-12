@@ -41,7 +41,7 @@ export async function initiateAppleMusicAuth(): Promise<string | null> {
     // 3. Configure MusicKit with the Developer Token
     await window.MusicKit.configure({
       developerToken,
-      app: { name: "MusicNerd TV" },
+      app: { name: "MusicNerd TV", build: "1.0.0" },
     });
 
     const music = window.MusicKit.getInstance();

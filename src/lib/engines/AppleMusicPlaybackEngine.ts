@@ -96,7 +96,7 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
       try {
         instance = await window.MusicKit.configure({
           developerToken: this.developerToken,
-          app: { name: "MusicNerd TV" },
+          app: { name: "MusicNerd TV", build: "1.0.0" },
         });
       } catch (err) {
         console.error("[AppleMusic] configure failed:", err);
@@ -176,13 +176,13 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
   }
 
   /** Sync internal tracking to match an externally-changed track.
-   *  Apple Music has no cross-device detection, so this is only called
-   *  when the engine is swapped in mid-session — rare but harmless. */
-  syncUri(trackUri: string): void {
-    this.lastUri = trackUri;
-    this.hasPlayed = true;
-    this.hasAutoPlayed = true;
-    this._isPlaying = true;
+   *  No-op for Apple Music: MusicKit JS has no cross-device detection,
+   *  so there's no external state to sync to. PlayerContext guards
+   *  syncExternalTrack on service === "spotify", so this is never called
+   *  in current flows — but we implement it to satisfy the PlaybackEngine
+   *  interface without setting phantom state that could mislead consumers. */
+  syncUri(_trackUri: string): void {
+    // intentionally empty
   }
 
   async seek(seconds: number): Promise<void> {

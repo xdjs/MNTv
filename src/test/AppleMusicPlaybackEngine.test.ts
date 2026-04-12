@@ -88,7 +88,7 @@ describe("AppleMusicPlaybackEngine", () => {
 
     expect(window.MusicKit!.configure).toHaveBeenCalledWith({
       developerToken: "dev-token",
-      app: { name: "MusicNerd TV" },
+      app: { name: "MusicNerd TV", build: "1.0.0" },
     });
     expect(engine.ready).toBe(true);
     expect(onReady).toHaveBeenCalledWith(null);
