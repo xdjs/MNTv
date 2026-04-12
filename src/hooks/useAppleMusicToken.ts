@@ -29,19 +29,31 @@ function writeToken(token: StoredToken) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(token));
 }
 
+// In-flight promise dedup — concurrent callers share a single edge function
+// invocation rather than firing N parallel requests.
+let inFlightFetch: Promise<string | null> | null = null;
+
 /** Fetch a fresh Developer Token from the edge function. */
 export async function fetchAppleDeveloperToken(): Promise<string | null> {
-  try {
-    const { data, error } = await supabase.functions.invoke("apple-dev-token", { body: {} });
-    if (error || !data?.token) {
-      console.error("[AppleMusic] Failed to fetch developer token:", error);
+  if (inFlightFetch) return inFlightFetch;
+
+  inFlightFetch = (async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke("apple-dev-token", { body: {} });
+      if (error || !data?.token) {
+        console.error("[AppleMusic] Failed to fetch developer token:", error);
+        return null;
+      }
+      return data.token as string;
+    } catch (err) {
+      console.error("[AppleMusic] Developer token fetch exception:", err);
       return null;
+    } finally {
+      inFlightFetch = null;
     }
-    return data.token as string;
-  } catch (err) {
-    console.error("[AppleMusic] Developer token fetch exception:", err);
-    return null;
-  }
+  })();
+
+  return inFlightFetch;
 }
 
 /** Persist a newly obtained token pair to localStorage. */

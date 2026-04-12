@@ -3,6 +3,7 @@
 // "musickitloaded" events when both call sites race.
 
 const MUSICKIT_SRC = "https://js-cdn.music.apple.com/musickit/v3/musickit.js";
+const LOAD_TIMEOUT_MS = 15_000;
 
 let sdkPromise: Promise<void> | null = null;
 
@@ -17,34 +18,39 @@ export function loadMusicKitSDK(): Promise<void> {
   if (sdkPromise) return sdkPromise;
 
   sdkPromise = new Promise((resolve, reject) => {
-    // Guard against synchronous SDK install (cached service worker, etc.)
-    // that could set window.MusicKit before we attach our listener.
-    const checkAndResolve = () => {
-      if (window.MusicKit) {
-        window.removeEventListener("musickitloaded", onLoaded);
-        resolve();
-        return true;
-      }
-      return false;
+    let settled = false;
+    const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      window.removeEventListener("musickitloaded", onLoaded);
+      fn();
     };
 
-    const onLoaded = () => {
-      window.removeEventListener("musickitloaded", onLoaded);
-      resolve();
-    };
+    // Bail out after 15s if Apple's CDN is unreachable or the musickitloaded
+    // event never fires — prevents the engine and auth flow from hanging forever.
+    const timeoutId = setTimeout(() => {
+      sdkPromise = null;
+      settle(() => reject(new Error(`MusicKit JS load timed out after ${LOAD_TIMEOUT_MS}ms`)));
+    }, LOAD_TIMEOUT_MS);
+
+    const onLoaded = () => settle(() => resolve());
     window.addEventListener("musickitloaded", onLoaded);
 
-    // Re-check after listener registration in case MusicKit installed between
-    // the top-of-function check and the listener attach.
-    if (checkAndResolve()) return;
+    // Guard against synchronous SDK install (cached service worker, etc.)
+    // that could set window.MusicKit between the top-of-function check and
+    // the listener attach.
+    if (window.MusicKit) {
+      settle(() => resolve());
+      return;
+    }
 
     const script = document.createElement("script");
     script.src = MUSICKIT_SRC;
     script.async = true;
     script.onerror = () => {
-      window.removeEventListener("musickitloaded", onLoaded);
       sdkPromise = null;
-      reject(new Error("Failed to load MusicKit JS"));
+      settle(() => reject(new Error("Failed to load MusicKit JS")));
     };
     document.head.appendChild(script);
   });
