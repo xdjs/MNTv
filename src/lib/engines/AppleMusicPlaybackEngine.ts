@@ -1,0 +1,297 @@
+// Apple Music playback engine via MusicKit JS v3.
+// Implements the same PlaybackEngine interface as SpotifyPlaybackEngine so
+// PlayerContext can swap between providers.
+//
+// Key differences from Spotify:
+//   - Native playbackTimeDidChange events (no 250ms polling)
+//   - setQueue + play instead of REST API calls
+//   - No device ID / no cross-device transfer (browser-only)
+//   - Requires an Apple Music subscription for full tracks (previews otherwise)
+
+import type { PlaybackEngine, PlaybackState } from "./types";
+import { loadMusicKitSDK } from "@/lib/musickitLoader";
+import { getIdFromUri, getServiceFromUri } from "@/lib/trackUri";
+
+// ── Engine ────────────────────────────────────────────────────────────
+
+export interface AppleMusicPlaybackEngineOptions {
+  developerToken: string;
+  /** Called when MusicKit is configured and ready. */
+  onReady?: (deviceId: string | null) => void;
+}
+
+/** Extract the catalog ID from an apple:song:{id} URI.
+ *  Returns empty string for non-Apple URIs (e.g. spotify:track:abc), which
+ *  prevents a wrong-service URI from being silently passed to setQueue. */
+function extractAppleCatalogId(trackUri: string): string {
+  if (getServiceFromUri(trackUri) !== "apple-music") return "";
+  const id = getIdFromUri(trackUri);
+  // Apple Music catalog IDs are numeric strings
+  if (!/^\d+$/.test(id)) return "";
+  return id;
+}
+
+export class AppleMusicPlaybackEngine implements PlaybackEngine {
+  readonly service = "apple-music" as const;
+
+  private music: MusicKit.MusicKitInstance | null = null;
+  private _ready = false;
+  private cancelled = false;
+  private initStarted = false;
+
+  // Internal tracking
+  private lastUri: string | null = null;
+  private hasPlayed = false;
+  private hasAutoPlayed = false;
+  private _isPlaying = false;
+
+  // Subscribers
+  private stateListeners: Set<(s: PlaybackState) => void> = new Set();
+  private endListeners: Set<() => void> = new Set();
+
+  // Bound event handlers (kept as props so removeEventListener can match)
+  private boundStateHandler: (event: unknown) => void;
+  private boundTimeHandler: (event: unknown) => void;
+
+  private developerToken: string;
+  private onReadyCb?: (deviceId: string | null) => void;
+
+  constructor(opts: AppleMusicPlaybackEngineOptions) {
+    this.developerToken = opts.developerToken;
+    this.onReadyCb = opts.onReady;
+    this.boundStateHandler = (e) => this.handlePlaybackState(e as MusicKit.PlaybackStateEvent);
+    this.boundTimeHandler = (e) => this.handleTimeChange(e as MusicKit.PlaybackTimeEvent);
+  }
+
+  get ready() { return this._ready; }
+  /** Apple Music has no device ID concept — always null. */
+  get deviceId() { return null; }
+
+  // ── Lifecycle ────────────────────────────────────────────────────────
+
+  async init(): Promise<void> {
+    // Re-entrancy guard: attaching event listeners twice doubles emissions
+    if (this.initStarted) return;
+    this.initStarted = true;
+
+    await loadMusicKitSDK();
+    if (this.cancelled) return;
+
+    if (!window.MusicKit) {
+      console.error("[AppleMusic] MusicKit failed to load");
+      return;
+    }
+
+    // MusicKit.configure() is a one-shot singleton per page load. If it's
+    // already configured (e.g. from useAppleMusicAuth during onboarding),
+    // reuse the existing instance instead of re-configuring.
+    let instance: MusicKit.MusicKitInstance | null = null;
+    try {
+      instance = window.MusicKit.getInstance();
+    } catch {
+      // Not configured yet, fall through
+    }
+
+    if (!instance) {
+      try {
+        instance = await window.MusicKit.configure({
+          developerToken: this.developerToken,
+          app: { name: "MusicNerd TV", build: "1.0.0" },
+        });
+      } catch (err) {
+        console.error("[AppleMusic] configure failed:", err);
+        return;
+      }
+    }
+
+    if (this.cancelled) return;
+    this.music = instance;
+    this._ready = true;
+    this.onReadyCb?.(null);
+
+    // Wire up native events (no polling needed)
+    instance.addEventListener("playbackStateDidChange", this.boundStateHandler);
+    instance.addEventListener("playbackTimeDidChange", this.boundTimeHandler);
+
+    // Auto-play pending URI that was stored before configure resolved
+    if (this.lastUri && !this.hasAutoPlayed) {
+      this.autoPlay(this.lastUri);
+    }
+  }
+
+  cleanup(): void {
+    this.cancelled = true;
+    if (this.music) {
+      try {
+        this.music.removeEventListener("playbackStateDidChange", this.boundStateHandler);
+        this.music.removeEventListener("playbackTimeDidChange", this.boundTimeHandler);
+        this.music.stop();
+      } catch (err) {
+        console.warn("[AppleMusic] cleanup error:", err);
+      }
+      // Don't null the MusicKit singleton — other code may still reference it.
+      this.music = null;
+    }
+  }
+
+  // ── Playback control ────────────────────────────────────────────────
+
+  async loadTrack(trackUri: string): Promise<void> {
+    if (this.lastUri === trackUri) return;
+
+    // Commit lastUri immediately so concurrent loadTrack calls with the
+    // same URI are caught by the dedup guard above. autoPlay's catch
+    // block resets it to null on failure so retries still work.
+    // The pre-load stop() below is a state reset for the new track; the
+    // hasPlayed && lastUri guard in handlePlaybackState ensures this
+    // synchronous stop doesn't trigger a phantom onEnded fire.
+    this.lastUri = trackUri;
+    this.hasPlayed = false;
+    this.hasAutoPlayed = false;
+    this._isPlaying = false;
+
+    try { this.music?.stop(); } catch { /* already stopped */ }
+
+    this.emitState({ isPlaying: false, currentTime: 0, duration: 0 });
+
+    if (!trackUri) return;
+
+    if (this._ready && this.music) {
+      await this.autoPlay(trackUri);
+    }
+    // If not ready, lastUri is already stored above. The onReady-triggered
+    // autoPlay in init() will pick it up.
+  }
+
+  async play(): Promise<void> {
+    try {
+      await this.music?.play();
+    } catch (err) {
+      console.error("[AppleMusic] play failed:", err);
+    }
+  }
+
+  async pause(): Promise<void> {
+    try { this.music?.pause(); } catch { /* already paused */ }
+  }
+
+  /** Sync internal tracking to match an externally-changed track.
+   *  No-op for Apple Music: MusicKit JS has no cross-device detection,
+   *  so there's no external state to sync to. PlayerContext guards
+   *  syncExternalTrack on service === "spotify", so this is never called
+   *  in current flows — but we implement it to satisfy the PlaybackEngine
+   *  interface without setting phantom state that could mislead consumers. */
+  syncUri(_trackUri: string): void {
+    // intentionally empty
+  }
+
+  async seek(seconds: number): Promise<void> {
+    try {
+      await this.music?.seekToTime(seconds);
+    } catch (err) {
+      console.error("[AppleMusic] seek failed:", err);
+    }
+    // Optimistically update time — omit duration so subscribers keep current value
+    this.emitState({ isPlaying: this._isPlaying, currentTime: seconds });
+  }
+
+  stop(): void {
+    try { this.music?.stop(); } catch { /* already stopped */ }
+    this.lastUri = null;
+  }
+
+  // ── Subscriptions ───────────────────────────────────────────────────
+
+  onStateChange(cb: (s: PlaybackState) => void): () => void {
+    this.stateListeners.add(cb);
+    return () => { this.stateListeners.delete(cb); };
+  }
+
+  onTrackEnd(cb: () => void): () => void {
+    this.endListeners.add(cb);
+    return () => { this.endListeners.delete(cb); };
+  }
+
+  // ── Internals ───────────────────────────────────────────────────────
+
+  private emitState(partial: { isPlaying: boolean; currentTime: number; duration?: number }) {
+    const state: PlaybackState = {
+      isPlaying: partial.isPlaying,
+      currentTime: partial.currentTime,
+      duration: partial.duration,
+    };
+    for (const cb of this.stateListeners) cb(state);
+  }
+
+  private async autoPlay(uri: string): Promise<void> {
+    const catalogId = extractAppleCatalogId(uri);
+    if (!catalogId) {
+      console.error("[AppleMusic] Invalid or non-Apple URI:", uri);
+      this.lastUri = null;  // un-commit so retries with a valid URI aren't blocked
+      return;
+    }
+    if (!this.music) return;
+
+    // Apple Music playback requires authorization. Without it, setQueue will
+    // silently fail or return preview clips only. Surface a clear error.
+    if (!this.music.isAuthorized) {
+      console.error("[AppleMusic] Not authorized — user must connect Apple Music before playback");
+      this.lastUri = null;
+      return;
+    }
+
+    if (this.hasAutoPlayed) return;
+    this.hasAutoPlayed = true;
+
+    try {
+      await this.music.setQueue({ song: catalogId, startPlaying: true });
+    } catch (err) {
+      console.error("[AppleMusic] setQueue failed:", err, "URI:", uri);
+      // Un-commit lastUri and reset the autoplay latch so the caller can
+      // retry with the same URI.
+      this.lastUri = null;
+      this.hasAutoPlayed = false;
+    }
+  }
+
+  private handlePlaybackState(event: MusicKit.PlaybackStateEvent): void {
+    if (this.cancelled || !this.music) return;
+
+    const state = event.state;
+    const PS = window.MusicKit?.PlaybackStates;
+    if (!PS) return;
+
+    const isPlaying = state === PS.playing;
+    this._isPlaying = isPlaying;
+    if (isPlaying) this.hasPlayed = true;
+
+    // End-of-track detection: MusicKit reports "completed" (10) or "ended"
+    // (5) when a track finishes naturally. "stopped" is deliberately NOT
+    // included — MusicKit also emits it during buffering transitions and
+    // when music.stop() is called programmatically (e.g. from loadTrack),
+    // which would cause phantom onEnded fires.
+    const isEnd = state === PS.completed || state === PS.ended;
+    if (isEnd && this.hasPlayed && this.lastUri) {
+      this.lastUri = null;
+      this.hasPlayed = false;
+      for (const cb of this.endListeners) cb();
+      return;
+    }
+
+    // Emit state update with latest time/duration from the instance
+    this.emitState({
+      isPlaying,
+      currentTime: this.music.currentPlaybackTime || 0,
+      duration: this.music.currentPlaybackDuration || 0,
+    });
+  }
+
+  private handleTimeChange(event: MusicKit.PlaybackTimeEvent): void {
+    if (this.cancelled) return;
+    this.emitState({
+      isPlaying: this._isPlaying,
+      currentTime: event.currentPlaybackTime || 0,
+      duration: event.currentPlaybackDuration || 0,
+    });
+  }
+}
