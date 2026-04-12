@@ -4,6 +4,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
 const PROFILE_KEY = "musicnerd_profile";
+const PROFILE_UPDATED_EVENT = "musicnerd-profile-updated";
+
+/** Dispatch a custom event so other useUserProfile hook instances re-read
+ *  localStorage. Each useState call creates its own state slot — without
+ *  this sync, PlayerProvider's profile goes stale when Connect.tsx saves,
+ *  and the Apple Music engine never initializes. */
+function notifyProfileUpdated(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(PROFILE_UPDATED_EVENT));
+  }
+}
 
 // ── DB profile sync ───────────────────────────────────────────────────────────
 // Accept userId as a param — callers obtain it from AuthContext (no extra getSession() calls).
@@ -111,6 +122,32 @@ export function useUserProfile() {
     }
   });
 
+  // Sync across hook instances: every call to useUserProfile has its own
+  // independent useState slot, so when Connect.tsx saves a profile, other
+  // instances (like PlayerProvider) never see it. Listen for the custom
+  // event fired by saveProfile/clearProfile and re-read from localStorage.
+  // Also listens to the native `storage` event for cross-tab sync.
+  useEffect(() => {
+    const sync = () => {
+      try {
+        const raw = localStorage.getItem(PROFILE_KEY);
+        const next = raw ? (JSON.parse(raw) as UserProfile) : null;
+        setProfileState(next);
+      } catch {
+        setProfileState(null);
+      }
+    };
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === PROFILE_KEY) sync();
+    };
+    window.addEventListener(PROFILE_UPDATED_EVENT, sync);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(PROFILE_UPDATED_EVENT, sync);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
+
   // Re-load from DB whenever the signed-in user changes.
   // Local (localStorage) data is treated as fresher than DB — it may contain a profile
   // that was just saved but whose async DB write hasn't landed yet.
@@ -140,6 +177,7 @@ export function useUserProfile() {
         };
         localStorage.setItem(PROFILE_KEY, JSON.stringify(merged));
         setProfileState(merged);
+        notifyProfileUpdated();
         return;
       }
 
@@ -156,6 +194,7 @@ export function useUserProfile() {
       };
       localStorage.setItem(PROFILE_KEY, JSON.stringify(merged));
       setProfileState(merged);
+      notifyProfileUpdated();
     });
     return () => { cancelled = true; };
   }, [user?.id]);
@@ -163,12 +202,14 @@ export function useUserProfile() {
   const saveProfile = useCallback(async (p: UserProfile) => {
     localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
     setProfileState(p);
+    notifyProfileUpdated();
     if (user?.id) await saveProfileToDB(p, user.id);
   }, [user?.id]);
 
   const clearProfile = useCallback(() => {
     localStorage.removeItem(PROFILE_KEY);
     setProfileState(null);
+    notifyProfileUpdated();
   }, []);
 
   return { profile, saveProfile, clearProfile };
