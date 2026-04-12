@@ -78,7 +78,18 @@ export const DEMO_TRACKS: DemoTrackMeta[] = [
   { id: "demo-bad-guy", artist: "Billie Eilish", title: "bad guy", album: "WHEN WE ALL FALL ASLEEP, WHERE DO WE GO?", trackUri: "spotify:track:2Fxmhks0bxGSBdJ92vM42m", coverArtUrl: "https://i.scdn.co/image/ab67616d0000b27350a3147b4edd7701a876c6ce", slug: "billie" },
 ];
 
-/** Pick the right playable URI for this demo track based on the user's active service. */
+/**
+ * Pick the right playable URI for this demo track based on the user's active service.
+ *
+ * CAUTION — silent Spotify fallback: Apple Music users asking for a demo
+ * without an `appleMusicUri` will receive a `spotify:track:...` URI that
+ * the Apple Music engine cannot play. Callers that route tracks into the
+ * engine must pre-filter the demo list (see Listen.tsx's P5 fallback,
+ * which filters `DEMO_TRACKS` by `!!d.appleMusicUri` for Apple users).
+ * Browse.tsx is safe because every tile the user can click has an
+ * `appleMusicUri` set when the demo appears in the catalog; once more
+ * Apple IDs are added to DEMO_TRACKS in Phase 6b/7, this caveat shrinks.
+ */
 export function getDemoTrackUri(demo: DemoTrackMeta, service: string | undefined): string {
   if (service === "Apple Music" && demo.appleMusicUri) return demo.appleMusicUri;
   return demo.trackUri;
