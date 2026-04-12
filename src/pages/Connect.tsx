@@ -8,6 +8,7 @@ import type { UserProfile } from "@/mock/types";
 import spotifyLogo from "@/assets/spotify-logo.png";
 import { initiateSpotifyAuth } from "@/hooks/useSpotifyAuth";
 import { initiateAppleMusicAuth } from "@/hooks/useAppleMusicAuth";
+import { useAppleMusicToken } from "@/hooks/useAppleMusicToken";
 
 type Tier = "casual" | "curious" | "nerd";
 
@@ -41,8 +42,15 @@ export default function Connect() {
   const [pendingArtistIds, setPendingArtistIds] = useState<Record<string, string>>({});
   const [pendingTrackImages, setPendingTrackImages] = useState<{ title: string; artist: string; imageUrl: string }[]>([]);
   const [pendingDisplayName, setPendingDisplayName] = useState<string | null>(null);
+  // hasMusicToken is live from localStorage so it survives the Spotify OAuth
+  // redirect (React state is wiped on remount, but the token persists).
+  const { hasMusicToken } = useAppleMusicToken();
   const [appleMusicConnecting, setAppleMusicConnecting] = useState(false);
-  const [appleMusicConnected, setAppleMusicConnected] = useState(false);
+  const [appleMusicConnected, setAppleMusicConnected] = useState(() => hasMusicToken);
+  // Keep local state in sync when the hook detects a stored token.
+  useEffect(() => {
+    if (hasMusicToken) setAppleMusicConnected(true);
+  }, [hasMusicToken]);
   const [lastFmUsername, setLastFmUsername] = useState("");
   const [lastFmSaved, setLastFmSaved] = useState(false);
   const [showLastFm, setShowLastFm] = useState(false);

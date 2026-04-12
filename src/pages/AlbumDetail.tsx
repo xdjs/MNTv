@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { getAlbumById, getTracksForAlbum, getArtistById } from "@/mock/tracks";
 import { supabase } from "@/integrations/supabase/client";
 import PageTransition from "@/components/PageTransition";
+import AppleMusicComingSoon from "@/components/AppleMusicComingSoon";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
 import { isSpotifyPrefix, parseSpotifyAlbum } from "@/lib/routeParsing";
 
@@ -39,29 +40,6 @@ interface SpotifyAlbumData {
 export default function AlbumDetail() {
   const { albumId: rawAlbumId } = useParams<{ albumId: string }>();
   const { profile } = useUserProfile();
-  const navigate = useNavigate();
-
-  // Apple Music: album detail requires the extended spotify-album edge
-  // function (Phase 5). Show a placeholder until that lands.
-  if (profile?.streamingService === "Apple Music") {
-    return (
-      <PageTransition>
-        <div className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
-          <p className="text-5xl mb-6">💿</p>
-          <h1 className="text-2xl font-black text-foreground mb-2">Album pages are coming soon</h1>
-          <p className="text-sm text-muted-foreground max-w-sm mb-8">
-            Album detail for Apple Music isn't wired up yet. For now, head back to Browse and explore the demo tracks.
-          </p>
-          <button
-            onClick={() => navigate("/browse")}
-            className="rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
-          >
-            Back to Browse
-          </button>
-        </div>
-      </PageTransition>
-    );
-  }
 
   const isSpotifyAlbum = isSpotifyPrefix(rawAlbumId);
 
@@ -69,6 +47,19 @@ export default function AlbumDetail() {
     if (!rawAlbumId) return null;
     return parseSpotifyAlbum(rawAlbumId);
   }, [rawAlbumId]);
+
+  // Apple Music: album detail requires the extended spotify-album edge
+  // function (Phase 5). Show a placeholder until that lands.
+  // Must be checked AFTER all hook calls to satisfy rules of hooks.
+  if (profile?.streamingService === "Apple Music") {
+    return (
+      <AppleMusicComingSoon
+        emoji="💿"
+        title="Album pages are coming soon"
+        description="Album detail for Apple Music isn't wired up yet. For now, head back to Browse and explore the demo tracks."
+      />
+    );
+  }
 
   if (isSpotifyAlbum && parsedSpotify?.spotifyAlbumId) {
     return (

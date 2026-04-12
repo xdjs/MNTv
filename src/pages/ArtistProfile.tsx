@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { getArtistById, getAlbumsForArtist, getTracksForArtist, artists } from "@/mock/tracks";
 import { supabase } from "@/integrations/supabase/client";
 import PageTransition from "@/components/PageTransition";
+import AppleMusicComingSoon from "@/components/AppleMusicComingSoon";
 import TileRow from "@/components/TileRow";
 import { useArtistImage } from "@/hooks/useArtistImage";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
@@ -54,36 +55,9 @@ interface RealArtistData {
 
 // ── Main component ───────────────────────────────────────────────────
 
-function AppleMusicComingSoon() {
-  const navigate = useNavigate();
-  return (
-    <PageTransition>
-      <div className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
-        <p className="text-5xl mb-6">🎵</p>
-        <h1 className="text-2xl font-black text-foreground mb-2">Artist pages are coming soon</h1>
-        <p className="text-sm text-muted-foreground max-w-sm mb-8">
-          Artist profiles for Apple Music aren't wired up yet. For now, head back to Browse and explore the demo tracks.
-        </p>
-        <button
-          onClick={() => navigate("/browse")}
-          className="rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
-        >
-          Back to Browse
-        </button>
-      </div>
-    </PageTransition>
-  );
-}
-
 export default function ArtistProfile() {
   const { artistId: rawArtistId } = useParams<{ artistId: string }>();
   const { profile } = useUserProfile();
-
-  // Apple Music: artist detail requires the extended spotify-artist edge
-  // function (Phase 5). Show a placeholder until that lands.
-  if (profile?.streamingService === "Apple Music") {
-    return <AppleMusicComingSoon />;
-  }
 
   const isSpotifyArtist = isSpotifyPrefix(rawArtistId);
   const isRealArtist = isRealPrefix(rawArtistId);
@@ -97,6 +71,19 @@ export default function ArtistProfile() {
     if (!rawArtistId) return null;
     return parseRealArtist(rawArtistId);
   }, [rawArtistId]);
+
+  // Apple Music: artist detail requires the extended spotify-artist edge
+  // function (Phase 5). Show a placeholder until that lands.
+  // Must be checked AFTER all hook calls to satisfy rules of hooks.
+  if (profile?.streamingService === "Apple Music") {
+    return (
+      <AppleMusicComingSoon
+        emoji="🎵"
+        title="Artist pages are coming soon"
+        description="Artist profiles for Apple Music aren't wired up yet. For now, head back to Browse and explore the demo tracks."
+      />
+    );
+  }
 
   if (isSpotifyArtist && parsedSpotify?.spotifyId) {
     return (

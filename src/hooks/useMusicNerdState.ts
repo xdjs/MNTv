@@ -103,7 +103,9 @@ export function useUserProfile() {
         try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || "null"); } catch { return null; }
       })() as UserProfile | null;
 
-      // If local already has Spotify taste data, it's fresher — don't overwrite it with stale DB
+      // If local already has Spotify taste data, it's fresher — don't overwrite it with stale DB.
+      // Preserve local's streamingService if set (handles Apple Music users who previously
+      // had Spotify data in the same profile row).
       if (local?.spotifyTopArtists?.length && local.spotifyArtistImages
           && Object.keys(local.spotifyArtistImages).length > 0) {
         // Only pull non-Spotify fields from DB (tier, lastFm) if local is missing them
@@ -111,17 +113,21 @@ export function useUserProfile() {
           ...local,
           calculatedTier: local.calculatedTier || dbProfile.calculatedTier,
           lastFmUsername: local.lastFmUsername || dbProfile.lastFmUsername,
-          streamingService: "Spotify",
+          // Preserve local.streamingService — only force "Spotify" if it's unset
+          streamingService: local.streamingService || "Spotify",
         };
         localStorage.setItem(PROFILE_KEY, JSON.stringify(merged));
         setProfileState(merged);
         return;
       }
 
-      // No local Spotify data — use DB profile (e.g. new device sign-in)
+      // No local Spotify data — use DB profile (e.g. new device sign-in).
+      // Respect the DB's streamingService; only force "Spotify" when DB service is empty
+      // AND spotifyTopArtists is populated (covers legacy rows where service wasn't persisted).
       const merged: UserProfile = {
         ...dbProfile,
-        streamingService: (dbProfile.spotifyTopArtists?.length ?? 0) > 0 ? "Spotify" : dbProfile.streamingService,
+        streamingService: dbProfile.streamingService
+          || ((dbProfile.spotifyTopArtists?.length ?? 0) > 0 ? "Spotify" : ""),
         spotifyArtistImages: dbProfile.spotifyArtistImages ?? local?.spotifyArtistImages,
         spotifyArtistIds: dbProfile.spotifyArtistIds ?? local?.spotifyArtistIds,
         spotifyTrackImages: dbProfile.spotifyTrackImages ?? local?.spotifyTrackImages,
