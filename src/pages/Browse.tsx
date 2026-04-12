@@ -36,7 +36,7 @@ export default function Browse() {
       imageUrl: "https://i.scdn.co/image/ab67616d0000b2738ac778cc7d88779f74d33311",
       title: "Around the World",
       subtitle: "Daft Punk",
-      href: "/listen/real::Daft%20Punk::Around%20the%20World::Homework::spotify:track:1pKYYY0dkg23sQQXi0Q5zN?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b2738ac778cc7d88779f74d33311",
+      href: "/listen/demo-around-the-world?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b2738ac778cc7d88779f74d33311",
     },
     {
       id: "demo-weird-fishes",

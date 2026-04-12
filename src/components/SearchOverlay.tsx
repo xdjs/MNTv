@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Search, X, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
+import { useUserProfile } from "@/hooks/useMusicNerdState";
 
 interface SpotifyArtist { id: string; name: string; imageUrl: string }
 interface SpotifyTrack { title: string; artist: string; album: string; imageUrl: string; uri: string }
@@ -20,6 +21,8 @@ export default function SearchOverlay({ open, onClose }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const navigate = useNavigate();
+  const { profile } = useUserProfile();
+  const isAppleMusicUser = profile?.streamingService === "Apple Music";
 
   const hasSpotifyResults = spotifyResults && (spotifyResults.artists.length + spotifyResults.tracks.length > 0);
 
@@ -46,6 +49,8 @@ export default function SearchOverlay({ open, onClose }: Props) {
   }, []);
 
   useEffect(() => {
+    // Apple Music users: search isn't wired yet (Phase 5). Skip the debounce.
+    if (isAppleMusicUser) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!query.trim()) {
       setSpotifyResults(null);
@@ -55,7 +60,7 @@ export default function SearchOverlay({ open, onClose }: Props) {
     setSpotifyLoading(true);
     debounceRef.current = setTimeout(() => searchSpotify(query), 300);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [query, searchSpotify]);
+  }, [query, searchSpotify, isAppleMusicUser]);
 
   useEffect(() => {
     if (open) {
@@ -94,8 +99,9 @@ export default function SearchOverlay({ open, onClose }: Props) {
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search artists, albums, tracks…"
-              className="flex-1 bg-transparent text-xl md:text-3xl font-bold text-foreground placeholder:text-muted-foreground/50 outline-none"
+              placeholder={isAppleMusicUser ? "Search coming soon for Apple Music" : "Search artists, albums, tracks…"}
+              disabled={isAppleMusicUser}
+              className="flex-1 bg-transparent text-xl md:text-3xl font-bold text-foreground placeholder:text-muted-foreground/50 outline-none disabled:cursor-not-allowed"
               style={{ fontFamily: "'Nunito Sans', sans-serif" }}
             />
             <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
@@ -105,12 +111,21 @@ export default function SearchOverlay({ open, onClose }: Props) {
 
           {/* Results */}
           <div className="flex-1 overflow-y-auto px-4 md:px-10 pt-6 md:pt-8 pb-20">
-            {noResults && (
+            {isAppleMusicUser && (
+              <div className="flex flex-col items-center justify-center text-center mt-20 px-6">
+                <p className="text-4xl mb-4">🎵</p>
+                <p className="text-xl font-bold text-foreground mb-2">Search is coming soon</p>
+                <p className="text-sm text-muted-foreground max-w-sm">
+                  Apple Music search isn't wired up yet. For now, use the demo tracks on the Browse page to explore MusicNerd TV.
+                </p>
+              </div>
+            )}
+            {!isAppleMusicUser && noResults && (
               <p className="text-muted-foreground text-lg">No results for "{query}"</p>
             )}
 
             {/* === Spotify results === */}
-            {query.trim().length >= 2 && (
+            {!isAppleMusicUser && query.trim().length >= 2 && (
               <>
                 {spotifyLoading && !hasSpotifyResults && (
                   <div className="flex items-center gap-2 text-muted-foreground mt-4">

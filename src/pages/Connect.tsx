@@ -7,6 +7,7 @@ import { useUserProfile, getStoredProfile } from "@/hooks/useMusicNerdState";
 import type { UserProfile } from "@/mock/types";
 import spotifyLogo from "@/assets/spotify-logo.png";
 import { initiateSpotifyAuth } from "@/hooks/useSpotifyAuth";
+import { initiateAppleMusicAuth } from "@/hooks/useAppleMusicAuth";
 
 type Tier = "casual" | "curious" | "nerd";
 
@@ -40,6 +41,8 @@ export default function Connect() {
   const [pendingArtistIds, setPendingArtistIds] = useState<Record<string, string>>({});
   const [pendingTrackImages, setPendingTrackImages] = useState<{ title: string; artist: string; imageUrl: string }[]>([]);
   const [pendingDisplayName, setPendingDisplayName] = useState<string | null>(null);
+  const [appleMusicConnecting, setAppleMusicConnecting] = useState(false);
+  const [appleMusicConnected, setAppleMusicConnected] = useState(false);
   const [lastFmUsername, setLastFmUsername] = useState("");
   const [lastFmSaved, setLastFmSaved] = useState(false);
   const [showLastFm, setShowLastFm] = useState(false);
@@ -78,9 +81,30 @@ export default function Connect() {
     catch (e) { console.error("Spotify auth error:", e); setSpotifyConnecting(false); }
   };
 
+  const handleConnectAppleMusic = async () => {
+    setAppleMusicConnecting(true);
+    try {
+      const mut = await initiateAppleMusicAuth();
+      if (mut) {
+        setAppleMusicConnected(true);
+        // Phase 5 will wire fetchAppleMusicTaste here. For now, the Music User
+        // Token is already stored in localStorage by initiateAppleMusicAuth.
+      }
+    } catch (e) {
+      console.error("Apple Music auth error:", e);
+    } finally {
+      setAppleMusicConnecting(false);
+    }
+  };
+
   const handleTierSelect = (t: Tier) => {
+    const streamingService = pendingSpotifyArtists?.length
+      ? "Spotify"
+      : appleMusicConnected
+        ? "Apple Music"
+        : "";
     const profile: UserProfile = {
-      streamingService: pendingSpotifyArtists?.length ? "Spotify" : "",
+      streamingService,
       spotifyDisplayName: pendingDisplayName || undefined,
       spotifyTopArtists: pendingSpotifyArtists || undefined,
       spotifyTopTracks: pendingSpotifyTracks || undefined,
@@ -185,15 +209,26 @@ export default function Connect() {
                       )}
                     </div>
 
-                    {/* Apple Music — coming soon */}
-                    <div className="flex items-center gap-4 w-full rounded-2xl border bg-foreground/5 px-5 py-4 text-left font-semibold text-foreground/40 border-foreground/10 cursor-not-allowed">
-                      <span className="text-2xl">🎵</span>
-                      <span className="flex-1">Apple Music</span>
-                      <span className="text-xs text-muted-foreground/60">Coming soon</span>
-                    </div>
+                    {/* Apple Music — connect or show connected */}
+                    {!appleMusicConnected ? (
+                      <button onClick={handleConnectAppleMusic} disabled={appleMusicConnecting} className="flex items-center gap-4 w-full rounded-2xl border bg-foreground/5 px-5 py-4 text-left font-semibold text-foreground transition-all duration-200 disabled:opacity-70 border-pink-500/40 hover:border-pink-500 hover:shadow-[0_0_20px_rgba(236,72,153,0.3)]">
+                        <span className="text-2xl">🎵</span>
+                        <span className="flex-1">Apple Music</span>
+                        {appleMusicConnecting ? <Spinner className="h-4 w-4 text-pink-400" /> : <span className="text-xs text-muted-foreground">Connect</span>}
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-4 w-full rounded-2xl border bg-foreground/5 px-5 py-4 text-left font-semibold text-foreground border-pink-500/60 ring-1 ring-pink-500/30">
+                        <span className="text-2xl">🎵</span>
+                        <div className="flex-1 min-w-0">
+                          <p>Apple Music</p>
+                          <p className="text-xs font-normal text-pink-400 truncate">Connected</p>
+                        </div>
+                        <span className="text-xs font-semibold text-pink-400">✓</span>
+                      </div>
+                    )}
 
-                    {/* Continue (only shown after Spotify connected) */}
-                    {pendingSpotifyArtists && (
+                    {/* Continue (shown after any service connected) */}
+                    {(pendingSpotifyArtists || appleMusicConnected) && (
                       <button
                         onClick={() => goNext()}
                         className="w-full rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"

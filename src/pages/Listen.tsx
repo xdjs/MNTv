@@ -18,7 +18,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 const ImmersiveNuggetView = lazy(() => import("@/components/immersive/ImmersiveNuggetView"));
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { useAINuggets } from "@/hooks/useAINuggets";
-import { getSeedCompanion, getDemoTrackById, DEMO_TRACKS } from "@/data/seedNuggets";
+import { getSeedCompanion, getDemoTrackById, getDemoTrackUri, DEMO_TRACKS } from "@/data/seedNuggets";
 import { useSpotifyToken } from "@/hooks/useSpotifyToken";
 import { initiateSpotifyAuth } from "@/hooks/useSpotifyAuth";
 import { usePlayer } from "@/contexts/PlayerContext";
@@ -47,9 +47,16 @@ export default function Listen() {
 
   // ── Track parsing — demo IDs or real::<artist>::<title>::<album>::<uri> ──
   const realTrackMeta = useMemo(() => {
-    // Demo track lookup (e.g. "demo-weird-fishes")
+    // Demo track lookup (e.g. "demo-weird-fishes"). Pick the URI for the
+    // user's active service so Apple Music users get apple:song:X instead
+    // of the Spotify default URI.
     const demo = rawTrackId ? getDemoTrackById(rawTrackId) : null;
-    if (demo) return { artist: demo.artist, title: demo.title, album: demo.album, trackUri: demo.trackUri };
+    if (demo) return {
+      artist: demo.artist,
+      title: demo.title,
+      album: demo.album,
+      trackUri: getDemoTrackUri(demo, profile?.streamingService),
+    };
 
     if (!rawTrackId?.startsWith("real%3A%3A") && !rawTrackId?.startsWith("real::")) return null;
     const decoded = decodeURIComponent(rawTrackId);
@@ -60,7 +67,7 @@ export default function Listen() {
       album: decodeURIComponent(parts[3] || "") || undefined,
       trackUri: decodeURIComponent(parts[4] || "") || undefined,
     };
-  }, [rawTrackId]);
+  }, [rawTrackId, profile?.streamingService]);
 
   const trackId = rawTrackId || "";
 
@@ -104,18 +111,24 @@ export default function Listen() {
   // ── Playback source resolution ───────────────────────────────────────
   const { hasSpotifyToken } = useSpotifyToken();
   const [trackUri, setTrackUri] = useState<string | null>(null);
+  const isAppleMusicUser = profile?.streamingService === "Apple Music";
 
-  // Resolve Spotify URI — from route (real tracks) or by searching Spotify
+  // Resolve track URI — from route (real tracks) or by searching Spotify.
+  // Apple Music users rely on the URI being baked into the route; there's
+  // no apple-search edge function yet (Phase 5).
   useEffect(() => {
     setTrackUri(null);
 
-    // Real track with URI baked into the route
+    // Real track with URI baked into the route — works for both services
     if (realTrackMeta?.trackUri) {
       setTrackUri(realTrackMeta.trackUri);
       return;
     }
 
-    // No Spotify token → skip Spotify search
+    // Gate Spotify search on streamingService (not just hasSpotifyToken) —
+    // an Apple Music user with a stale Spotify token would otherwise pollute
+    // trackUri with a Spotify URI that the Apple engine can't play.
+    if (isAppleMusicUser) return;
     if (!hasSpotifyToken || !track) return;
 
     let cancelled = false;
@@ -1307,8 +1320,9 @@ export default function Listen() {
           )}
         </motion.div>
 
-        {/* Spotify URI resolving indicator */}
-        {hasSpotifyToken && !trackUri && !isExternalListenMode && (
+        {/* URI resolving indicator (Spotify users only — Apple Music users
+            need a baked-in URI from the route since apple-search isn't wired) */}
+        {hasSpotifyToken && !isAppleMusicUser && !trackUri && !isExternalListenMode && (
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1319,7 +1333,7 @@ export default function Listen() {
         )}
 
         {/* Spotify session expired — reconnect prompt */}
-        {!hasSpotifyToken && trackUri && (
+        {!hasSpotifyToken && !isAppleMusicUser && trackUri && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
