@@ -52,7 +52,7 @@ export default function Browse() {
       subtitle: "Pete Rango",
       href: "/listen/demo-oms-at-play?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b27305b43e15352510b1b9c9a5a5",
     },
-{
+    {
       id: "demo-slack",
       imageUrl: "https://i.scdn.co/image/ab67616d0000b273e9c4a69ecd5c43229cfd03f3",
       title: "SLACK",

@@ -184,7 +184,7 @@ export default function Listen() {
     }
     findSpotifyUri();
     return () => { cancelled = true; };
-  }, [hasSpotifyToken, isAppleMusicUser, realTrackMeta?.trackUri, track]);
+  }, [hasSpotifyToken, isAppleMusicUser, realTrackMeta?.trackUri, track?.artist, track?.title]);
 
   const [shuffleOn, setShuffleOn] = useState(false); // kept for PlaybackBar UI only
   const isMobile = useIsMobile();
