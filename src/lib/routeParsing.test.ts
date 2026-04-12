@@ -2,9 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   isSpotifyPrefix,
   isRealPrefix,
+  isApplePrefix,
   parseSpotifyArtist,
   parseRealArtist,
   parseSpotifyAlbum,
+  parseAppleArtist,
+  parseAppleAlbum,
 } from "./routeParsing";
 
 describe("isSpotifyPrefix", () => {
@@ -152,5 +155,96 @@ describe("parseSpotifyAlbum", () => {
       artistName: "Daft Punk",
       artistSpotifyId: artistId,
     });
+  });
+});
+
+describe("isApplePrefix", () => {
+  it("detects raw apple:: prefix", () => {
+    expect(isApplePrefix("apple::178834::Radiohead")).toBe(true);
+  });
+
+  it("detects URL-encoded apple:: prefix", () => {
+    expect(isApplePrefix("apple%3A%3A178834%3A%3ARadiohead")).toBe(true);
+  });
+
+  it("rejects spotify:: prefix", () => {
+    expect(isApplePrefix("spotify::abc123::Radiohead")).toBe(false);
+  });
+
+  it("rejects real:: prefix", () => {
+    expect(isApplePrefix("real::Radiohead")).toBe(false);
+  });
+
+  it("rejects undefined", () => {
+    expect(isApplePrefix(undefined)).toBe(false);
+  });
+});
+
+describe("parseAppleArtist", () => {
+  it("parses raw apple::{id}::{name}", () => {
+    const result = parseAppleArtist("apple::178834::Radiohead");
+    expect(result).toEqual({ appleId: "178834", artistName: "Radiohead" });
+  });
+
+  it("parses URL-encoded input", () => {
+    const raw = encodeURIComponent("apple::178834::Radiohead");
+    const result = parseAppleArtist(raw);
+    expect(result).toEqual({ appleId: "178834", artistName: "Radiohead" });
+  });
+
+  it("handles names with special characters", () => {
+    const result = parseAppleArtist("apple::1234::Beyoncé");
+    expect(result).toEqual({ appleId: "1234", artistName: "Beyoncé" });
+  });
+
+  it("returns null for missing ID", () => {
+    expect(parseAppleArtist("apple::::Radiohead")).toBeNull();
+  });
+
+  it("returns null for non-apple prefix", () => {
+    expect(parseAppleArtist("spotify::abc::name")).toBeNull();
+  });
+
+  it("returns empty artistName when name segment is missing", () => {
+    const result = parseAppleArtist("apple::178834");
+    expect(result).toEqual({ appleId: "178834", artistName: "" });
+  });
+});
+
+describe("parseAppleAlbum", () => {
+  it("parses apple::{albumId}::{artistName}::{artistId}", () => {
+    const result = parseAppleAlbum("apple::1440833060::Radiohead::178834");
+    expect(result).toEqual({
+      appleAlbumId: "1440833060",
+      artistName: "Radiohead",
+      artistAppleId: "178834",
+    });
+  });
+
+  it("parses URL-encoded input", () => {
+    const raw = encodeURIComponent("apple::1440833060::Radiohead::178834");
+    const result = parseAppleAlbum(raw);
+    expect(result).toEqual({
+      appleAlbumId: "1440833060",
+      artistName: "Radiohead",
+      artistAppleId: "178834",
+    });
+  });
+
+  it("handles missing artistAppleId", () => {
+    const result = parseAppleAlbum("apple::1440833060::Some Artist");
+    expect(result).toEqual({
+      appleAlbumId: "1440833060",
+      artistName: "Some Artist",
+      artistAppleId: "",
+    });
+  });
+
+  it("returns null for missing albumId", () => {
+    expect(parseAppleAlbum("apple::::ArtistName::artistId")).toBeNull();
+  });
+
+  it("returns null for non-apple prefix", () => {
+    expect(parseAppleAlbum("spotify::something::artist")).toBeNull();
   });
 });

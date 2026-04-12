@@ -1,8 +1,11 @@
 import { createContext, useContext, useRef, useState, useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { useSpotifyToken } from "@/hooks/useSpotifyToken";
+import { useAppleMusicToken } from "@/hooks/useAppleMusicToken";
+import { useUserProfile } from "@/hooks/useMusicNerdState";
 import { useCurrentlyPlaying, type ExternalTrack } from "@/hooks/useCurrentlyPlaying";
 import { SpotifyPlaybackEngine, type SpotifyStateTrack } from "@/lib/engines/SpotifyPlaybackEngine";
-import type { ServiceType } from "@/lib/engines/types";
+import { AppleMusicPlaybackEngine } from "@/lib/engines/AppleMusicPlaybackEngine";
+import type { PlaybackEngine, ServiceType } from "@/lib/engines/types";
 import type { Nugget, Source } from "@/mock/types";
 
 // Re-export for consumers that import from PlayerContext
@@ -121,11 +124,13 @@ export function usePlayer(): PlayerContextType {
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const { hasSpotifyToken, getValidToken } = useSpotifyToken();
+  const { hasMusicToken, getDeveloperToken } = useAppleMusicToken();
+  const { profile } = useUserProfile();
 
-  // Playback engine ref
-  const engineRef = useRef<SpotifyPlaybackEngine | null>(null);
+  // Playback engine ref (Spotify or Apple Music — selected by profile service)
+  const engineRef = useRef<PlaybackEngine | null>(null);
 
-  // Playback state (driven by engine callbacks)
+  // Playback state (driven by engine callbacks — generic across services)
   const [spReady, setSpReady] = useState(false);
   const [spPlaying, setSpPlaying] = useState(false);
   const [spTime, setSpTime] = useState(0);
@@ -143,10 +148,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const currentTrackUriRef = useRef<string | null>(null);
   currentTrackUriRef.current = currentTrackUri;
 
-  // External playback detection
+  // External playback detection — Spotify-only (Apple Music has no cross-device API)
   const [isExternalListenMode, setIsExternalListenMode] = useState(false);
   const externalTrack = useCurrentlyPlaying({
-    suppressPolling: activePlayer !== "none",
+    suppressPolling: activePlayer !== "none" || profile?.streamingService !== "Spotify",
     ownDeviceId: spDeviceId,
   });
   const setExternalListenMode = useCallback((mode: boolean) => {
@@ -220,44 +225,100 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     return prev;
   }, []);
 
-  // ── Engine init (once, on mount if token available) ────────────────
+  // ── Engine init (on profile service change, if token available) ────
+
+  const service = profile?.streamingService;
 
   useEffect(() => {
-    if (!hasSpotifyToken) return;
+    // Determine which engine to create based on profile service + token.
+    // Apple Music and Spotify are mutually exclusive — only one engine at a time.
 
-    const engine = new SpotifyPlaybackEngine({
-      getOAuthToken: getValidToken,
-      onReady: (deviceId) => {
-        setSpReady(true);
-        setSpDeviceId(deviceId);
-      },
-      onSpotifyStateTrack: (track) => setSpotifyStateTrack(track),
-      onDeviceLost: () => setSpPlaying(false),
-    });
+    if (service === "Apple Music" && hasMusicToken) {
+      let cancelled = false;
+      let currentEngine: AppleMusicPlaybackEngine | null = null;
+      let unsubState: (() => void) | null = null;
+      let unsubEnd: (() => void) | null = null;
 
-    const unsubState = engine.onStateChange((state) => {
-      setSpPlaying(state.isPlaying);
-      setSpTime(state.currentTime);
-      // duration is optional on PlaybackState (omitted = "keep current").
-      // Use != null to safely handle both undefined and null.
-      if (state.duration != null) setSpDuration(state.duration);
-    });
+      getDeveloperToken().then((devToken) => {
+        if (cancelled || !devToken) return;
+        const am = new AppleMusicPlaybackEngine({
+          developerToken: devToken,
+          onReady: () => {
+            // Guard against late onReady firing after the effect was cancelled
+            if (cancelled) return;
+            setSpReady(true);
+            setSpDeviceId(null);  // Apple Music has no device ID
+          },
+        });
+        currentEngine = am;
 
-    const unsubEnd = engine.onTrackEnd(() => {
-      onEndedRef.current?.();
-    });
+        unsubState = am.onStateChange((state) => {
+          setSpPlaying(state.isPlaying);
+          setSpTime(state.currentTime);
+          if (state.duration != null) setSpDuration(state.duration);
+        });
+        unsubEnd = am.onTrackEnd(() => {
+          onEndedRef.current?.();
+        });
 
-    engine.init();
-    engineRef.current = engine;
+        // Assign ref BEFORE init so the upgrade-to-engine effect can read
+        // engineRef.current?.service when spReady flips later.
+        engineRef.current = am;
+        am.init();
+      });
 
-    return () => {
-      unsubState();
-      unsubEnd();
-      engine.cleanup();
-      engineRef.current = null;
-    };
+      return () => {
+        cancelled = true;
+        unsubState?.();
+        unsubEnd?.();
+        currentEngine?.cleanup();
+        if (engineRef.current === currentEngine) engineRef.current = null;
+        setSpReady(false);
+        setSpDeviceId(null);
+      };
+    }
+
+    if (service === "Spotify" && hasSpotifyToken) {
+      const sp = new SpotifyPlaybackEngine({
+        getOAuthToken: getValidToken,
+        onReady: (deviceId) => {
+          setSpReady(true);
+          setSpDeviceId(deviceId);
+        },
+        onSpotifyStateTrack: (track) => setSpotifyStateTrack(track),
+        onDeviceLost: () => setSpPlaying(false),
+      });
+
+      const unsubState = sp.onStateChange((state) => {
+        setSpPlaying(state.isPlaying);
+        setSpTime(state.currentTime);
+        if (state.duration != null) setSpDuration(state.duration);
+      });
+      const unsubEnd = sp.onTrackEnd(() => {
+        onEndedRef.current?.();
+      });
+
+      // Assign ref BEFORE init so the upgrade-to-engine effect can read
+      // engineRef.current?.service when spReady flips later.
+      engineRef.current = sp;
+      sp.init();
+
+      return () => {
+        unsubState();
+        unsubEnd();
+        sp.cleanup();
+        // Only null the ref if it still points to THIS engine — prevents
+        // clobbering a newer engine created by a rapid service switch.
+        if (engineRef.current === sp) engineRef.current = null;
+        setSpReady(false);
+        setSpDeviceId(null);
+      };
+    }
+
+    // No engine — user hasn't connected a service yet
+    return;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasSpotifyToken]);
+  }, [service, hasSpotifyToken, hasMusicToken]);
 
   // ── loadTrack ─────────────────────────────────────────────────────
 
@@ -276,14 +337,17 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setSpDuration(0);
     setSpPlaying(false);
 
+    const engineService = engineRef.current?.service;
     setCurrentTrackUri(trackUri || null);
-    setActivePlayer(spReady && trackUri ? "spotify" : "none");
+    setActivePlayer(spReady && trackUri && engineService ? engineService : "none");
   }, [spReady]);
 
   /** Sync tracking state to match an externally-changed track.
+   *  Spotify-only — Apple Music has no cross-device detection.
    *  Unlike loadTrack, this does NOT pause or restart playback — the SDK
    *  is already playing the right track. */
   const syncExternalTrack = useCallback((trackUri: string) => {
+    if (engineRef.current?.service !== "spotify") return;
     setCurrentTrackUri(trackUri);
     currentTrackUriRef.current = trackUri;
     hasAutoPlayedRef.current = true;
@@ -293,19 +357,20 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     engineRef.current?.syncUri(trackUri);
   }, []);
 
-  // ── Upgrade to Spotify when SDK becomes ready after loadTrack ─────
+  // ── Upgrade to active engine when SDK becomes ready after loadTrack ─
   useEffect(() => {
-    if (spReady && currentTrackUri && activePlayer !== "spotify") {
-      console.log("[Player] Spotify SDK ready — switching to Spotify");
-      setActivePlayer("spotify");
+    const engineService = engineRef.current?.service;
+    if (spReady && currentTrackUri && engineService && activePlayer !== engineService) {
+      console.log(`[Player] ${engineService} SDK ready — switching`);
+      setActivePlayer(engineService);
       hasAutoPlayedRef.current = false;
     }
   }, [spReady, currentTrackUri, activePlayer]);
 
-  // ── Auto-play when Spotify is active and ready ────────────────────
+  // ── Auto-play when engine is active and ready ─────────────────────
 
   useEffect(() => {
-    if (activePlayer === "spotify" && spReady && currentTrackUri && !hasAutoPlayedRef.current) {
+    if (activePlayer !== "none" && spReady && currentTrackUri && !hasAutoPlayedRef.current) {
       hasAutoPlayedRef.current = true;
       engineRef.current?.loadTrack(currentTrackUri);
     }
@@ -323,8 +388,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const toggle = useCallback(() => {
     if (activePlayer === "none") {
-      if (currentTrackUri && spReady) {
-        setActivePlayer("spotify");
+      const engineService = engineRef.current?.service;
+      if (currentTrackUri && spReady && engineService) {
+        setActivePlayer(engineService);
         hasAutoPlayedRef.current = false;
       }
       return;

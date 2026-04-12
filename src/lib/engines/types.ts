@@ -25,6 +25,12 @@ export interface PlaybackEngine {
   seek(seconds: number): Promise<void>;
   stop(): void;
 
+  /** Sync internal tracking to match an externally-changed track.
+   *  Called when a track change is detected outside our control (e.g. user
+   *  skips on their phone via Spotify Connect). Engines that don't support
+   *  cross-device detection should treat this as a hint/no-op. */
+  syncUri(trackUri: string): void;
+
   /** Subscribe to playback state changes. Returns unsubscribe function. */
   onStateChange(cb: (state: PlaybackState) => void): () => void;
   /** Subscribe to track-end events. Returns unsubscribe function. */
