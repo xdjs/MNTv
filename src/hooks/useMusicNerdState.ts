@@ -46,6 +46,26 @@ async function loadProfileFromDB(userId: string): Promise<UserProfile | null> {
   };
 }
 
+/**
+ * Resolve which streamingService to use when merging a local and DB profile.
+ *
+ * Priority:
+ *  1. Preserve an explicit streamingService on whichever source is the base
+ *  2. Fall back to "Spotify" only if spotifyTopArtists is populated (legacy
+ *     profile rows from before streaming_service was persisted)
+ *  3. Otherwise empty string (guest-like state)
+ *
+ * Exported for unit testing. Used by useUserProfile's hydrate effect.
+ */
+export function resolveStreamingService(
+  baseService: UserProfile["streamingService"] | undefined,
+  spotifyTopArtistsCount: number
+): UserProfile["streamingService"] {
+  if (baseService) return baseService;
+  if (spotifyTopArtistsCount > 0) return "Spotify";
+  return "";
+}
+
 async function saveProfileToDB(p: UserProfile, userId: string): Promise<void> {
   // Build taste data from profile fields
   const tasteData: TasteData | null =
@@ -113,8 +133,10 @@ export function useUserProfile() {
           ...local,
           calculatedTier: local.calculatedTier || dbProfile.calculatedTier,
           lastFmUsername: local.lastFmUsername || dbProfile.lastFmUsername,
-          // Preserve local.streamingService — only force "Spotify" if it's unset
-          streamingService: local.streamingService || "Spotify",
+          streamingService: resolveStreamingService(
+            local.streamingService,
+            local.spotifyTopArtists?.length ?? 0
+          ),
         };
         localStorage.setItem(PROFILE_KEY, JSON.stringify(merged));
         setProfileState(merged);
@@ -122,12 +144,12 @@ export function useUserProfile() {
       }
 
       // No local Spotify data — use DB profile (e.g. new device sign-in).
-      // Respect the DB's streamingService; only force "Spotify" when DB service is empty
-      // AND spotifyTopArtists is populated (covers legacy rows where service wasn't persisted).
       const merged: UserProfile = {
         ...dbProfile,
-        streamingService: dbProfile.streamingService
-          || ((dbProfile.spotifyTopArtists?.length ?? 0) > 0 ? "Spotify" : ""),
+        streamingService: resolveStreamingService(
+          dbProfile.streamingService,
+          dbProfile.spotifyTopArtists?.length ?? 0
+        ),
         spotifyArtistImages: dbProfile.spotifyArtistImages ?? local?.spotifyArtistImages,
         spotifyArtistIds: dbProfile.spotifyArtistIds ?? local?.spotifyArtistIds,
         spotifyTrackImages: dbProfile.spotifyTrackImages ?? local?.spotifyTrackImages,
