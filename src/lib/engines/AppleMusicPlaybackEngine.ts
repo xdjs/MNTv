@@ -44,6 +44,7 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
   private hasPlayed = false;
   private hasAutoPlayed = false;
   private _isPlaying = false;
+  private pollInterval: number | null = null;
 
   // Subscribers
   private stateListeners: Set<(s: PlaybackState) => void> = new Set();
@@ -109,9 +110,17 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
     this._ready = true;
     this.onReadyCb?.(null);
 
-    // Wire up native events (no polling needed)
+    // Wire up native playback events. We still poll at 250ms for smooth
+    // progress-bar updates — playbackTimeDidChange fires ~1s which looks
+    // chunky compared to Spotify's 250ms cadence.
     instance.addEventListener("playbackStateDidChange", this.boundStateHandler);
     instance.addEventListener("playbackTimeDidChange", this.boundTimeHandler);
+
+    // Log subscription status for diagnostics. Preview-mode playback
+    // (30s clips instead of full tracks) almost always means the Apple ID
+    // has no active Apple Music subscription, but other causes exist
+    // (dev token scope, auth state) — dump everything observable.
+    this.logSubscriptionStatus();
 
     // Auto-play pending URI that was stored before configure resolved
     if (this.lastUri && !this.hasAutoPlayed) {
@@ -119,8 +128,43 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
     }
   }
 
+  /** Best-effort subscription probe. Logs what MusicKit exposes about the
+   *  user's authorization and storefront. Apple doesn't publish a
+   *  `/v1/me/subscription` endpoint, so we lean on `isAuthorized`,
+   *  `storefrontCountryCode`, and a `/v1/me/storefront` round-trip (which
+   *  requires a valid Music User Token). */
+  private async logSubscriptionStatus(): Promise<void> {
+    if (!this.music) return;
+    const m = this.music as unknown as {
+      isAuthorized?: boolean;
+      storefrontCountryCode?: string;
+      storefrontId?: string;
+      musicUserToken?: string;
+      developerToken?: string;
+      api?: {
+        music?: (path: string, params?: unknown) => Promise<unknown>;
+      };
+    };
+    const snapshot = {
+      isAuthorized: m.isAuthorized,
+      storefrontCountryCode: m.storefrontCountryCode,
+      storefrontId: m.storefrontId,
+      hasMusicUserToken: !!m.musicUserToken,
+      hasDeveloperToken: !!m.developerToken,
+    };
+    console.log("[AppleMusic] subscription snapshot:", snapshot);
+
+    try {
+      const storefront = await m.api?.music?.("v1/me/storefront");
+      console.log("[AppleMusic] /v1/me/storefront:", storefront);
+    } catch (err) {
+      console.warn("[AppleMusic] /v1/me/storefront failed:", err);
+    }
+  }
+
   cleanup(): void {
     this.cancelled = true;
+    this.stopPolling();
     if (this.music) {
       try {
         this.music.removeEventListener("playbackStateDidChange", this.boundStateHandler);
@@ -265,6 +309,17 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
     this._isPlaying = isPlaying;
     if (isPlaying) this.hasPlayed = true;
 
+    // Preview detection: a full-track setQueue that reports
+    // currentPlaybackDuration ≤ 30s means MusicKit handed us a preview
+    // clip instead of the full track — almost always a subscription issue.
+    if (isPlaying && this.music.currentPlaybackDuration && this.music.currentPlaybackDuration <= 30) {
+      console.warn(
+        "[AppleMusic] Playing a 30s preview clip, not full track.",
+        "Duration:", this.music.currentPlaybackDuration,
+        "— check Apple Music subscription status."
+      );
+    }
+
     // End-of-track detection: MusicKit reports "completed" (10) or "ended"
     // (5) when a track finishes naturally. "stopped" is deliberately NOT
     // included — MusicKit also emits it during buffering transitions and
@@ -272,11 +327,18 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
     // which would cause phantom onEnded fires.
     const isEnd = state === PS.completed || state === PS.ended;
     if (isEnd && this.hasPlayed && this.lastUri) {
+      this.stopPolling();
       this.lastUri = null;
       this.hasPlayed = false;
       for (const cb of this.endListeners) cb();
       return;
     }
+
+    // Drive the progress bar at 250ms while playing. Stop the interval
+    // whenever playback isn't active so we don't leak timers or emit
+    // spurious time updates while paused/buffering.
+    if (isPlaying) this.startPolling();
+    else this.stopPolling();
 
     // Emit state update with latest time/duration from the instance
     this.emitState({
@@ -293,5 +355,27 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
       currentTime: event.currentPlaybackTime || 0,
       duration: event.currentPlaybackDuration || 0,
     });
+  }
+
+  /** Poll currentPlaybackTime at 250ms to smooth the progress bar. MusicKit's
+   *  playbackTimeDidChange event fires ~1s which makes the bar look chunky
+   *  vs Spotify's 250ms cadence. */
+  private startPolling(): void {
+    if (this.pollInterval !== null) return;
+    this.pollInterval = window.setInterval(() => {
+      if (!this.music || this.cancelled) return;
+      this.emitState({
+        isPlaying: this._isPlaying,
+        currentTime: this.music.currentPlaybackTime || 0,
+        duration: this.music.currentPlaybackDuration || 0,
+      });
+    }, 250);
+  }
+
+  private stopPolling(): void {
+    if (this.pollInterval !== null) {
+      window.clearInterval(this.pollInterval);
+      this.pollInterval = null;
+    }
   }
 }
