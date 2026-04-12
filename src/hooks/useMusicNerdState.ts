@@ -175,7 +175,6 @@ export function useUserProfile() {
           ),
         };
         localStorage.setItem(PROFILE_KEY, JSON.stringify(merged));
-        setProfileState(merged);
         notifyProfileUpdated();
         return;
       }
@@ -192,22 +191,23 @@ export function useUserProfile() {
         spotifyTrackImages: dbProfile.spotifyTrackImages ?? local?.spotifyTrackImages,
       };
       localStorage.setItem(PROFILE_KEY, JSON.stringify(merged));
-      setProfileState(merged);
       notifyProfileUpdated();
     });
     return () => { cancelled = true; };
   }, [user?.id]);
 
+  // Mutating callbacks write to localStorage then dispatch the profile-updated
+  // event. The event fires synchronously and the listener above re-reads
+  // localStorage, so the originating instance gets its own update through the
+  // same path as every other instance — single data flow, no double-set.
   const saveProfile = useCallback(async (p: UserProfile) => {
     localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
-    setProfileState(p);
     notifyProfileUpdated();
     if (user?.id) await saveProfileToDB(p, user.id);
   }, [user?.id]);
 
   const clearProfile = useCallback(() => {
     localStorage.removeItem(PROFILE_KEY);
-    setProfileState(null);
     notifyProfileUpdated();
   }, []);
 

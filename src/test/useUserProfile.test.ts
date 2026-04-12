@@ -31,6 +31,7 @@ const PROFILE_KEY = "musicnerd_profile";
 describe("useUserProfile cross-instance sync", () => {
   beforeEach(() => {
     localStorage.clear();
+    vi.clearAllMocks();
   });
 
   it("syncs profile across two hook instances when one calls saveProfile", async () => {
