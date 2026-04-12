@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 //     No refresh mechanism — if expired/revoked, user must re-authorize.
 
 const STORAGE_KEY = "apple_music_token";
+const TOKEN_SAVED_EVENT = "apple-music-token-saved";
 
 interface StoredToken {
   musicUserToken: string;
@@ -62,21 +63,34 @@ export function saveAppleMusicToken(musicUserToken: string, developerToken: stri
   // from the client to reduce staleness risk from key rotations.
   const devTokenExpiresAt = Date.now() + 30 * 24 * 60 * 60 * 1000;
   writeToken({ musicUserToken, developerToken, devTokenExpiresAt });
+  // Notify same-tab listeners — the `storage` event only fires cross-tab.
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(TOKEN_SAVED_EVENT));
+  }
 }
 
 export function useAppleMusicToken() {
   const [hasMusicToken, setHasMusicToken] = useState(() => !!readToken());
 
-  // Keep checking until the token appears (covers popup auth storing token after mount).
+  // Update hasMusicToken when a token is written externally — after the
+  // authorize popup saves via saveAppleMusicToken (same-tab custom event)
+  // or when another tab writes to localStorage (cross-tab storage event).
+  // Event-driven instead of polling so we don't burn CPU forever after
+  // clearToken() if the user never re-authorizes.
   useEffect(() => {
     if (hasMusicToken) return;
-    const id = setInterval(() => {
-      if (readToken()) {
-        setHasMusicToken(true);
-        clearInterval(id);
-      }
-    }, 500);
-    return () => clearInterval(id);
+    const check = () => {
+      if (readToken()) setHasMusicToken(true);
+    };
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY) check();
+    };
+    window.addEventListener("storage", onStorage);
+    window.addEventListener(TOKEN_SAVED_EVENT, check);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener(TOKEN_SAVED_EVENT, check);
+    };
   }, [hasMusicToken]);
 
   /** Return the stored Music User Token, or null if missing. No refresh — MUT is session-scoped. */

@@ -317,6 +317,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
     // No engine — user hasn't connected a service yet
     return;
+  // getValidToken and getDeveloperToken are intentionally omitted from deps:
+  // both are useCallback([])-stable and re-including them would churn the
+  // effect on every parent re-render, destroying and recreating engines.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [service, hasSpotifyToken, hasMusicToken]);
 

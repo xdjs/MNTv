@@ -243,12 +243,16 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
     // followed by a retry with a valid URI isn't blocked by the dedup guard.
     if (this.hasAutoPlayed) return;
     this.hasAutoPlayed = true;
-    this.lastUri = uri;
 
     try {
       await this.music.setQueue({ song: catalogId, startPlaying: true });
+      // Only commit lastUri on success so a failed setQueue doesn't poison
+      // the dedup guard and block subsequent retries with the same URI.
+      this.lastUri = uri;
     } catch (err) {
       console.error("[AppleMusic] setQueue failed:", err, "URI:", uri);
+      // Reset the autoplay latch so the caller can retry with the same URI.
+      this.hasAutoPlayed = false;
     }
   }
 
@@ -263,11 +267,12 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
     this._isPlaying = isPlaying;
     if (isPlaying) this.hasPlayed = true;
 
-    // End-of-track detection: MusicKit reports one of "completed" (10),
-    // "ended" (5), or "stopped" (4) when a track finishes naturally.
-    // Only fire onEnded if the track actually played at least once
-    // (prevents phantom end events during load).
-    const isEnd = state === PS.completed || state === PS.ended || state === PS.stopped;
+    // End-of-track detection: MusicKit reports "completed" (10) or "ended"
+    // (5) when a track finishes naturally. "stopped" is deliberately NOT
+    // included — MusicKit also emits it during buffering transitions and
+    // when music.stop() is called programmatically (e.g. from loadTrack),
+    // which would cause phantom onEnded fires.
+    const isEnd = state === PS.completed || state === PS.ended;
     if (isEnd && this.hasPlayed && this.lastUri) {
       this.lastUri = null;
       this.hasPlayed = false;
