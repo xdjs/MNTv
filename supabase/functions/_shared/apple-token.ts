@@ -10,6 +10,11 @@
 //   APPLE_MUSIC_KEY_ID     — 10-char Key ID from Apple Developer portal
 //   APPLE_MUSIC_TEAM_ID    — 10-char Team ID
 //   APPLE_MUSIC_PRIVATE_KEY — Contents of the .p8 file (PEM format)
+//
+// Key rotation: if APPLE_MUSIC_PRIVATE_KEY is rotated (e.g. due to compromise),
+// warm Deno isolates will continue serving the old cached JWT until they cold-
+// start. To force an immediate rotation across all isolates, redeploy the
+// edge function after setting the new secret — that replaces all workers.
 
 let cachedToken: string | null = null;
 let tokenExpiresAt = 0;

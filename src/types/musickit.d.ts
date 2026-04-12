@@ -13,19 +13,23 @@ declare namespace MusicKit {
     suppressErrorDialog?: boolean;
   }
 
-  /** Playback state enum — integer values per MusicKit v3 spec */
-  enum PlaybackStates {
-    none = 0,
-    loading = 1,
-    playing = 2,
-    paused = 3,
-    stopped = 4,
-    ended = 5,
-    seeking = 6,
-    waiting = 8,
-    stalled = 9,
-    completed = 10,
-  }
+  /** Playback state values per MusicKit v3 spec. Declared as a runtime
+   *  object (not a TS enum) so ambient emit semantics stay predictable
+   *  across bundlers. The engine reads window.MusicKit.PlaybackStates at
+   *  runtime and compares numeric values. */
+  const PlaybackStates: {
+    readonly none: 0;
+    readonly loading: 1;
+    readonly playing: 2;
+    readonly paused: 3;
+    readonly stopped: 4;
+    readonly ended: 5;
+    readonly seeking: 6;
+    readonly waiting: 8;
+    readonly stalled: 9;
+    readonly completed: 10;
+  };
+  type PlaybackStates = typeof PlaybackStates[keyof typeof PlaybackStates];
 
   interface Artwork {
     url?: string;         // Contains {w}x{h} template placeholders

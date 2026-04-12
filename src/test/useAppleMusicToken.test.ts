@@ -100,7 +100,7 @@ describe("useAppleMusicToken", () => {
     const { result } = renderHook(() => useAppleMusicToken());
     const token = await result.current.getDeveloperToken();
 
-    expect(supabase.functions.invoke).toHaveBeenCalledWith("apple-dev-token", expect.anything());
+    expect(supabase.functions.invoke).toHaveBeenCalledWith("apple-dev-token");
     expect(token).toBe("fresh-dev-token");
 
     // The stored token should have been updated

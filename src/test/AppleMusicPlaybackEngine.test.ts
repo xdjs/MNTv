@@ -51,7 +51,8 @@ vi.stubGlobal("MusicKit", {
 // Short-circuit the SDK script loader by pretending it's already loaded
 (window as any).MusicKit = (window as any).MusicKit || globalThis.MusicKit;
 
-import { AppleMusicPlaybackEngine, _resetSdkStateForTests } from "@/lib/engines/AppleMusicPlaybackEngine";
+import { AppleMusicPlaybackEngine } from "@/lib/engines/AppleMusicPlaybackEngine";
+import { _resetMusicKitLoaderForTests } from "@/lib/musickitLoader";
 
 describe("AppleMusicPlaybackEngine", () => {
   const onReady = vi.fn();
@@ -59,7 +60,7 @@ describe("AppleMusicPlaybackEngine", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     eventListeners.clear();
-    _resetSdkStateForTests();
+    _resetMusicKitLoaderForTests();
 
     // Re-attach the MusicKit stub onto window for each test
     (window as any).MusicKit = {

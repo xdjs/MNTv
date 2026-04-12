@@ -40,7 +40,7 @@ export async function fetchAppleDeveloperToken(): Promise<string | null> {
 
   inFlightFetch = (async () => {
     try {
-      const { data, error } = await supabase.functions.invoke("apple-dev-token", { body: {} });
+      const { data, error } = await supabase.functions.invoke("apple-dev-token");
       if (error || !data?.token) {
         console.error("[AppleMusic] Failed to fetch developer token:", error);
         return null;
@@ -112,8 +112,13 @@ export function useAppleMusicToken() {
     const fresh = await fetchAppleDeveloperToken();
     if (!fresh) return null;
 
+    // Only persist when we have a Music User Token to pair it with. In
+    // practice this always runs from PlayerContext after hasMusicToken
+    // flipped true, so `stored` is non-null; this guard is defensive.
+    // If called pre-auth (no stored token yet), the fresh token is
+    // returned unpersisted — the caller gets a working token and the
+    // next authorize() flow will persist the pair via saveAppleMusicToken.
     if (stored) {
-      // Keep existing MUT, refresh the developer token
       writeToken({
         ...stored,
         developerToken: fresh,

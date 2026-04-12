@@ -9,13 +9,8 @@
 //   - Requires an Apple Music subscription for full tracks (previews otherwise)
 
 import type { PlaybackEngine, PlaybackState } from "./types";
-import { loadMusicKitSDK, _resetMusicKitLoaderForTests } from "@/lib/musickitLoader";
+import { loadMusicKitSDK } from "@/lib/musickitLoader";
 import { getIdFromUri, getServiceFromUri } from "@/lib/trackUri";
-
-/** Reset module-level SDK state — only for tests. Re-exported for backward compat. */
-export function _resetSdkStateForTests(): void {
-  _resetMusicKitLoaderForTests();
-}
 
 // ── Engine ────────────────────────────────────────────────────────────
 
@@ -144,8 +139,13 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
   async loadTrack(trackUri: string): Promise<void> {
     if (this.lastUri === trackUri) return;
 
-    // Reset state
-    this.lastUri = null;
+    // Commit lastUri immediately so concurrent loadTrack calls with the
+    // same URI are caught by the dedup guard above. autoPlay's catch
+    // block resets it to null on failure so retries still work.
+    // The pre-load stop() below is a state reset for the new track; the
+    // hasPlayed && lastUri guard in handlePlaybackState ensures this
+    // synchronous stop doesn't trigger a phantom onEnded fire.
+    this.lastUri = trackUri;
     this.hasPlayed = false;
     this.hasAutoPlayed = false;
     this._isPlaying = false;
@@ -158,10 +158,9 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
 
     if (this._ready && this.music) {
       await this.autoPlay(trackUri);
-    } else {
-      // Store for auto-play once init() resolves
-      this.lastUri = trackUri;
     }
+    // If not ready, lastUri is already stored above. The onReady-triggered
+    // autoPlay in init() will pick it up.
   }
 
   async play(): Promise<void> {
@@ -228,6 +227,7 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
     const catalogId = extractAppleCatalogId(uri);
     if (!catalogId) {
       console.error("[AppleMusic] Invalid or non-Apple URI:", uri);
+      this.lastUri = null;  // un-commit so retries with a valid URI aren't blocked
       return;
     }
     if (!this.music) return;
@@ -236,22 +236,20 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
     // silently fail or return preview clips only. Surface a clear error.
     if (!this.music.isAuthorized) {
       console.error("[AppleMusic] Not authorized — user must connect Apple Music before playback");
+      this.lastUri = null;
       return;
     }
 
-    // Mark as "attempted" only after validation passes, so an invalid URI
-    // followed by a retry with a valid URI isn't blocked by the dedup guard.
     if (this.hasAutoPlayed) return;
     this.hasAutoPlayed = true;
 
     try {
       await this.music.setQueue({ song: catalogId, startPlaying: true });
-      // Only commit lastUri on success so a failed setQueue doesn't poison
-      // the dedup guard and block subsequent retries with the same URI.
-      this.lastUri = uri;
     } catch (err) {
       console.error("[AppleMusic] setQueue failed:", err, "URI:", uri);
-      // Reset the autoplay latch so the caller can retry with the same URI.
+      // Un-commit lastUri and reset the autoplay latch so the caller can
+      // retry with the same URI.
+      this.lastUri = null;
       this.hasAutoPlayed = false;
     }
   }
