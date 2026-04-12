@@ -4,8 +4,10 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { getArtistById, getAlbumsForArtist, getTracksForArtist, artists } from "@/mock/tracks";
 import { supabase } from "@/integrations/supabase/client";
 import PageTransition from "@/components/PageTransition";
+import AppleMusicComingSoon from "@/components/AppleMusicComingSoon";
 import TileRow from "@/components/TileRow";
 import { useArtistImage } from "@/hooks/useArtistImage";
+import { useUserProfile } from "@/hooks/useMusicNerdState";
 import { isSpotifyPrefix, isRealPrefix, parseSpotifyArtist, parseRealArtist } from "@/lib/routeParsing";
 
 // ── Types for real (Spotify) artist data ─────────────────────────────
@@ -55,6 +57,7 @@ interface RealArtistData {
 
 export default function ArtistProfile() {
   const { artistId: rawArtistId } = useParams<{ artistId: string }>();
+  const { profile } = useUserProfile();
 
   const isSpotifyArtist = isSpotifyPrefix(rawArtistId);
   const isRealArtist = isRealPrefix(rawArtistId);
@@ -68,6 +71,19 @@ export default function ArtistProfile() {
     if (!rawArtistId) return null;
     return parseRealArtist(rawArtistId);
   }, [rawArtistId]);
+
+  // Apple Music: artist detail requires the extended spotify-artist edge
+  // function (Phase 5). Show a placeholder until that lands.
+  // Must be checked AFTER all hook calls to satisfy rules of hooks.
+  if (profile?.streamingService === "Apple Music") {
+    return (
+      <AppleMusicComingSoon
+        emoji="🎵"
+        title="Artist pages are coming soon"
+        description="Artist profiles for Apple Music aren't wired up yet. For now, head back to Browse and explore the demo tracks."
+      />
+    );
+  }
 
   if (isSpotifyArtist && parsedSpotify?.spotifyId) {
     return (

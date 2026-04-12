@@ -46,6 +46,26 @@ async function loadProfileFromDB(userId: string): Promise<UserProfile | null> {
   };
 }
 
+/**
+ * Resolve which streamingService to use when merging a local and DB profile.
+ *
+ * Priority:
+ *  1. Preserve an explicit streamingService on whichever source is the base
+ *  2. Fall back to "Spotify" only if spotifyTopArtists is populated (legacy
+ *     profile rows from before streaming_service was persisted)
+ *  3. Otherwise empty string (guest-like state)
+ *
+ * Exported for unit testing. Used by useUserProfile's hydrate effect.
+ */
+export function resolveStreamingService(
+  baseService: UserProfile["streamingService"] | undefined,
+  spotifyTopArtistsCount: number
+): UserProfile["streamingService"] {
+  if (baseService) return baseService;
+  if (spotifyTopArtistsCount > 0) return "Spotify";
+  return "";
+}
+
 async function saveProfileToDB(p: UserProfile, userId: string): Promise<void> {
   // Build taste data from profile fields
   const tasteData: TasteData | null =
@@ -103,7 +123,9 @@ export function useUserProfile() {
         try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || "null"); } catch { return null; }
       })() as UserProfile | null;
 
-      // If local already has Spotify taste data, it's fresher — don't overwrite it with stale DB
+      // If local already has Spotify taste data, it's fresher — don't overwrite it with stale DB.
+      // Preserve local's streamingService if set (handles Apple Music users who previously
+      // had Spotify data in the same profile row).
       if (local?.spotifyTopArtists?.length && local.spotifyArtistImages
           && Object.keys(local.spotifyArtistImages).length > 0) {
         // Only pull non-Spotify fields from DB (tier, lastFm) if local is missing them
@@ -111,17 +133,23 @@ export function useUserProfile() {
           ...local,
           calculatedTier: local.calculatedTier || dbProfile.calculatedTier,
           lastFmUsername: local.lastFmUsername || dbProfile.lastFmUsername,
-          streamingService: "Spotify",
+          streamingService: resolveStreamingService(
+            local.streamingService,
+            local.spotifyTopArtists?.length ?? 0
+          ),
         };
         localStorage.setItem(PROFILE_KEY, JSON.stringify(merged));
         setProfileState(merged);
         return;
       }
 
-      // No local Spotify data — use DB profile (e.g. new device sign-in)
+      // No local Spotify data — use DB profile (e.g. new device sign-in).
       const merged: UserProfile = {
         ...dbProfile,
-        streamingService: (dbProfile.spotifyTopArtists?.length ?? 0) > 0 ? "Spotify" : dbProfile.streamingService,
+        streamingService: resolveStreamingService(
+          dbProfile.streamingService,
+          dbProfile.spotifyTopArtists?.length ?? 0
+        ),
         spotifyArtistImages: dbProfile.spotifyArtistImages ?? local?.spotifyArtistImages,
         spotifyArtistIds: dbProfile.spotifyArtistIds ?? local?.spotifyArtistIds,
         spotifyTrackImages: dbProfile.spotifyTrackImages ?? local?.spotifyTrackImages,

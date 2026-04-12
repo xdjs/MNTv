@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { getAlbumById, getTracksForAlbum, getArtistById } from "@/mock/tracks";
 import { supabase } from "@/integrations/supabase/client";
 import PageTransition from "@/components/PageTransition";
+import AppleMusicComingSoon from "@/components/AppleMusicComingSoon";
+import { useUserProfile } from "@/hooks/useMusicNerdState";
 import { isSpotifyPrefix, parseSpotifyAlbum } from "@/lib/routeParsing";
 
 // ── Types for Spotify album data ─────────────────────────────────────
@@ -37,6 +39,7 @@ interface SpotifyAlbumData {
 
 export default function AlbumDetail() {
   const { albumId: rawAlbumId } = useParams<{ albumId: string }>();
+  const { profile } = useUserProfile();
 
   const isSpotifyAlbum = isSpotifyPrefix(rawAlbumId);
 
@@ -44,6 +47,19 @@ export default function AlbumDetail() {
     if (!rawAlbumId) return null;
     return parseSpotifyAlbum(rawAlbumId);
   }, [rawAlbumId]);
+
+  // Apple Music: album detail requires the extended spotify-album edge
+  // function (Phase 5). Show a placeholder until that lands.
+  // Must be checked AFTER all hook calls to satisfy rules of hooks.
+  if (profile?.streamingService === "Apple Music") {
+    return (
+      <AppleMusicComingSoon
+        emoji="💿"
+        title="Album pages are coming soon"
+        description="Album detail for Apple Music isn't wired up yet. For now, head back to Browse and explore the demo tracks."
+      />
+    );
+  }
 
   if (isSpotifyAlbum && parsedSpotify?.spotifyAlbumId) {
     return (
