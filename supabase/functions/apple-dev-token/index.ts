@@ -11,6 +11,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getAppleDeveloperToken } from "../_shared/apple-token.ts";
 
+// Wildcard origin is safe here — access is gated by the Supabase JWT
+// validation below, so no unauthenticated cross-origin caller can obtain
+// a token. Matches the CORS pattern used across the repo's edge functions.
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":

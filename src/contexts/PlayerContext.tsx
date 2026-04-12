@@ -226,7 +226,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ── Engine init (on profile service change, if token available) ────
-
+  //
+  // Two string namespaces at play here — don't confuse them:
+  //   • profile.streamingService: display label, "Spotify" | "Apple Music" | ""
+  //     (matches the DB `streaming_service` column and onboarding UI)
+  //   • engine.service (ServiceType): kebab-case id, "spotify" | "apple-music" | "none"
+  //     (used for PlayerContext's activePlayer state and engine dispatch)
+  //
+  // Profile strings are translated to engine strings below; engine.service is
+  // used downstream for setActivePlayer and syncExternalTrack guards.
   const service = profile?.streamingService;
 
   useEffect(() => {

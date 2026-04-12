@@ -72,26 +72,28 @@ export function saveAppleMusicToken(musicUserToken: string, developerToken: stri
 export function useAppleMusicToken() {
   const [hasMusicToken, setHasMusicToken] = useState(() => !!readToken());
 
-  // Update hasMusicToken when a token is written externally — after the
-  // authorize popup saves via saveAppleMusicToken (same-tab custom event)
-  // or when another tab writes to localStorage (cross-tab storage event).
+  // Sync hasMusicToken with localStorage writes from outside this hook —
+  //  • same tab: saveAppleMusicToken dispatches TOKEN_SAVED_EVENT
+  //  • cross-tab: the native `storage` event fires when localStorage changes
+  //    in another tab (add, update, or remove the key)
   // Event-driven instead of polling so we don't burn CPU forever after
-  // clearToken() if the user never re-authorizes.
+  // clearToken() if the user never re-authorizes, and we correctly reflect
+  // cross-tab clears (tab B logs out → tab A flips to hasMusicToken=false).
   useEffect(() => {
-    if (hasMusicToken) return;
-    const check = () => {
-      if (readToken()) setHasMusicToken(true);
+    const syncFromStorage = () => {
+      const present = !!readToken();
+      setHasMusicToken((prev) => (prev === present ? prev : present));
     };
     const onStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY) check();
+      if (e.key === STORAGE_KEY) syncFromStorage();
     };
     window.addEventListener("storage", onStorage);
-    window.addEventListener(TOKEN_SAVED_EVENT, check);
+    window.addEventListener(TOKEN_SAVED_EVENT, syncFromStorage);
     return () => {
       window.removeEventListener("storage", onStorage);
-      window.removeEventListener(TOKEN_SAVED_EVENT, check);
+      window.removeEventListener(TOKEN_SAVED_EVENT, syncFromStorage);
     };
-  }, [hasMusicToken]);
+  }, []);
 
   /** Return the stored Music User Token, or null if missing. No refresh — MUT is session-scoped. */
   const getMusicUserToken = useCallback((): string | null => {

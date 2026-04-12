@@ -77,34 +77,11 @@ export interface AppleMusicTaste {
 /**
  * Fetch a taste profile from the user's Apple Music library.
  *
- * **NOT YET IMPLEMENTED** — the `apple-taste` edge function is scheduled for
- * Phase 5. Apple Music has no `/me/top/artists` equivalent, so Phase 5 will
- * combine `/me/history/heavy-rotation` + `/me/recent/played/tracks` into a
- * best-effort taste profile (marked `partial: true` in the response).
- *
- * Callers will currently receive `null`. When Phase 5 lands, delete this stub
- * and uncomment the implementation below.
+ * TODO(Phase 5): implement the `apple-taste` edge function. Apple Music has
+ * no `/me/top/artists` equivalent, so Phase 5 will combine `heavy-rotation`
+ * + `recent/played/tracks` into a best-effort profile marked `partial: true`.
  */
 export async function fetchAppleMusicTaste(_musicUserToken: string): Promise<AppleMusicTaste | null> {
   console.warn("[AppleMusic] fetchAppleMusicTaste: apple-taste edge function not yet deployed (Phase 5)");
   return null;
-
-  // Phase 5 implementation (keep for reference):
-  // const storefront = window.MusicKit?.getInstance?.()?.storefrontCountryCode || "us";
-  // const { data, error } = await supabase.functions.invoke("apple-taste", {
-  //   body: { musicUserToken: _musicUserToken, storefront },
-  // });
-  // if (error || !data) {
-  //   console.error("[AppleMusic] Taste fetch error:", error);
-  //   return null;
-  // }
-  // return {
-  //   topArtists: data.topArtists || [],
-  //   topTracks: data.topTracks || [],
-  //   artistImages: data.artistImages || {},
-  //   artistIds: data.artistIds || {},
-  //   trackImages: data.trackImages || [],
-  //   displayName: data.displayName || null,
-  //   partial: data.partial === true,
-  // };
 }

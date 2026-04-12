@@ -45,7 +45,20 @@ export function loadMusicKitSDK(): Promise<void> {
       return;
     }
 
-    const script = document.createElement("script");
+    // Reuse an existing <script> tag if a previous load attempt timed out
+    // or errored. Without this, each retry would append a duplicate tag.
+    let script = document.querySelector<HTMLScriptElement>(
+      `script[src="${MUSICKIT_SRC}"]`
+    );
+    if (script) {
+      script.addEventListener("error", () => {
+        sdkPromise = null;
+        settle(() => reject(new Error("Failed to load MusicKit JS")));
+      });
+      return;
+    }
+
+    script = document.createElement("script");
     script.src = MUSICKIT_SRC;
     script.async = true;
     script.onerror = () => {
