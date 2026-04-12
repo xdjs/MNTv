@@ -9,11 +9,10 @@ const PROFILE_UPDATED_EVENT = "musicnerd-profile-updated";
 /** Dispatch a custom event so other useUserProfile hook instances re-read
  *  localStorage. Each useState call creates its own state slot — without
  *  this sync, PlayerProvider's profile goes stale when Connect.tsx saves,
- *  and the Apple Music engine never initializes. */
+ *  and the Apple Music engine never initializes.
+ *  Vite SPA — no SSR guard needed. */
 function notifyProfileUpdated(): void {
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event(PROFILE_UPDATED_EVENT));
-  }
+  window.dispatchEvent(new Event(PROFILE_UPDATED_EVENT));
 }
 
 // ── DB profile sync ───────────────────────────────────────────────────────────
