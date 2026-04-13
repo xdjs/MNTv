@@ -165,9 +165,19 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
     };
     console.log("[AppleMusic] subscription snapshot:", snapshot);
 
+    // The /v1/me/storefront call is a MUT validity probe. Log just the
+    // extracted storefront id rather than the whole response so the
+    // diagnostic stays tight — the rest of the payload (supported
+    // languages, etc.) is noise for what we're trying to diagnose.
     try {
-      const storefront = await m.api?.music?.("v1/me/storefront");
-      console.log("[AppleMusic] /v1/me/storefront:", storefront);
+      const storefront = await m.api?.music?.("v1/me/storefront") as {
+        data?: Array<{ id?: string; attributes?: { name?: string } }>;
+      } | undefined;
+      const entry = storefront?.data?.[0];
+      console.log("[AppleMusic] /v1/me/storefront ok:", {
+        id: entry?.id,
+        name: entry?.attributes?.name,
+      });
     } catch (err) {
       console.warn("[AppleMusic] /v1/me/storefront failed:", err);
     }
@@ -330,12 +340,14 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
     this._isPlaying = isPlaying;
     if (isPlaying) this.hasPlayed = true;
 
-    // Preview detection: a full-track setQueue that reports
-    // currentPlaybackDuration ≤ APPLE_MUSIC_PREVIEW_DURATION_S means
-    // MusicKit handed us a preview clip instead of the full track —
-    // almost always a subscription issue. Gated by hasWarnedPreview so
-    // a short track paused/resumed many times doesn't spam the console;
-    // reset in loadTrack() when a new URI commits.
+    // Short-duration detection: currentPlaybackDuration ≤
+    // APPLE_MUSIC_PREVIEW_DURATION_S often means MusicKit served a
+    // preview clip instead of the full track (subscription issue), but
+    // a genuinely short track (interlude, ambient, skit) will also hit
+    // this. The warning includes the URI so a developer can verify at
+    // a glance whether the short duration is legit. Gated by
+    // hasWarnedPreview to avoid console spam on pause/resume; reset
+    // in loadTrack() when a new URI commits.
     if (
       !this.hasWarnedPreview &&
       isPlaying &&
@@ -344,9 +356,9 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
     ) {
       this.hasWarnedPreview = true;
       console.warn(
-        "[AppleMusic] Playing a preview clip, not full track.",
-        "Duration:", this.music.currentPlaybackDuration,
-        "— check Apple Music subscription status."
+        "[AppleMusic] Short duration detected (likely preview clip).",
+        { duration: this.music.currentPlaybackDuration, trackUri: this.lastUri },
+        "— verify the track is not legitimately short and check Apple Music subscription."
       );
     }
 

@@ -327,9 +327,8 @@ describe("AppleMusicPlaybackEngine", () => {
       stateCb!({ state: 2 /* playing */ });
 
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining("preview clip"),
-        expect.anything(),
-        expect.anything(),
+        expect.stringContaining("Short duration"),
+        expect.objectContaining({ duration: 30 }),
         expect.anything()
       );
     } finally {
@@ -355,7 +354,7 @@ describe("AppleMusicPlaybackEngine", () => {
       stateCb!({ state: 2 });
 
       const previewWarns = warnSpy.mock.calls.filter((args) =>
-        typeof args[0] === "string" && args[0].includes("preview clip")
+        typeof args[0] === "string" && args[0].includes("Short duration")
       );
       expect(previewWarns.length).toBe(1);
     } finally {
@@ -379,7 +378,7 @@ describe("AppleMusicPlaybackEngine", () => {
       stateCb!({ state: 2 });
 
       const previewWarns = warnSpy.mock.calls.filter((args) =>
-        typeof args[0] === "string" && args[0].includes("preview clip")
+        typeof args[0] === "string" && args[0].includes("Short duration")
       );
       expect(previewWarns.length).toBe(2);
     } finally {
@@ -430,7 +429,7 @@ describe("AppleMusicPlaybackEngine", () => {
       stateCb!({ state: 2 });
 
       const previewWarns = warnSpy.mock.calls.filter((args) =>
-        typeof args[0] === "string" && args[0].includes("preview clip")
+        typeof args[0] === "string" && args[0].includes("Short duration")
       );
       expect(previewWarns.length).toBe(0);
     } finally {
