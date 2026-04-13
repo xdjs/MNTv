@@ -145,10 +145,8 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
    *  Only booleans are logged for any token field — the Music User Token
    *  is a short-lived credential and must never be logged in full.
    *
-   *  TODO: This diagnostic is intentionally always-on to investigate a
-   *  live preview-playback bug on staging. Once that's resolved, either
-   *  gate behind `import.meta.env.DEV` or a `debug` option in
-   *  AppleMusicPlaybackEngineOptions, or remove entirely.
+   *  Gated behind `import.meta.env.DEV` — costs a `/v1/me/storefront`
+   *  round-trip and was leaking to production console output otherwise.
    *
    *  The `as unknown as {...}` cast below bypasses the MusicKit JS v3
    *  type definitions to read fields the official types don't expose
@@ -338,7 +336,7 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
     // log the subscription snapshot. Guarded so it only fires once.
     // .catch() handles any unexpected rejection from the fire-and-forget
     // async call; the method already catches its own API errors.
-    if (!this.hasLoggedSubscriptionStatus) {
+    if (!this.hasLoggedSubscriptionStatus && import.meta.env.DEV) {
       this.hasLoggedSubscriptionStatus = true;
       this.logSubscriptionStatus().catch(() => { /* diagnostic only */ });
     }

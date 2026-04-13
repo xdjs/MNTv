@@ -9,6 +9,7 @@ import spotifyLogo from "@/assets/spotify-logo.png";
 import { initiateSpotifyAuth } from "@/hooks/useSpotifyAuth";
 import { initiateAppleMusicAuth } from "@/hooks/useAppleMusicAuth";
 import { useAppleMusicToken } from "@/hooks/useAppleMusicToken";
+import { supabase } from "@/integrations/supabase/client";
 
 type Tier = "casual" | "curious" | "nerd";
 
@@ -96,6 +97,15 @@ export default function Connect() {
     setAppleMusicConnecting(true);
     setAppleMusicError(null);
     try {
+      // The apple-dev-token edge function requires a Supabase session and
+      // returns 401 otherwise. Pre-flight the check so we surface an
+      // actionable message instead of a generic "couldn't connect" loop.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setAppleMusicError("Sign in to MusicNerd before connecting Apple Music.");
+        return;
+      }
+
       const musicUserToken = await initiateAppleMusicAuth();
       if (musicUserToken) {
         setAppleMusicConnected(true);
