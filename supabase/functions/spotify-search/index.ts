@@ -1,5 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getSpotifyAppToken, clearSpotifyAppToken } from "../_shared/spotify-token.ts";
+import { getAppleDeveloperToken } from "../_shared/apple-token.ts";
+import {
+  appleGet,
+  normalizeAppleArtistCompact,
+  normalizeAppleTrack,
+  safeStorefront,
+} from "../_shared/apple-utils.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,8 +20,14 @@ serve(async (req) => {
   }
 
   try {
-    const { query, artist, title, recommend } = await req.json();
+    const { query, artist, title, recommend, service, storefront: rawStorefront } = await req.json();
+    const isApple = service === "apple" || service === "apple-music";
 
+    if (isApple) {
+      return handleAppleSearch({ query, artist, title, recommend, storefront: rawStorefront });
+    }
+
+    // ── Spotify path (default) ───────────────────────────────────────
     const token = await getSpotifyAppToken();
 
     // ── Recommendations mode: seed by track ID ──────────────────────
@@ -48,7 +61,7 @@ serve(async (req) => {
     if ((!query && !title) || (query && typeof query !== "string")) {
       return new Response(
         JSON.stringify({ artists: [], tracks: [] }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -89,10 +102,85 @@ serve(async (req) => {
     console.error("spotify-search error:", err);
     return new Response(
       JSON.stringify({ error: (err as Error).message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });
+
+// ── Apple Music path ────────────────────────────────────────────────────
+
+async function handleAppleSearch(args: {
+  query?: string;
+  artist?: string;
+  title?: string;
+  recommend?: string;
+  storefront?: string;
+}): Promise<Response> {
+  const { query, artist, title, recommend, storefront: rawStorefront } = args;
+  const storefront = safeStorefront(rawStorefront);
+  const devToken = await getAppleDeveloperToken();
+
+  // Apple Music has no seed-based recommendations endpoint. Return an empty
+  // tracks array — clients are expected to fall back to Last.fm similar
+  // tracks for recommendations when the active service is Apple Music.
+  if (recommend) {
+    return new Response(JSON.stringify({ tracks: [] }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  if ((!query && !title) || (query && typeof query !== "string")) {
+    return new Response(
+      JSON.stringify({ artists: [], tracks: [] }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
+  // Build the search term. Apple Music has no field filters, so for
+  // precise {artist, title} lookups we concatenate them — the engine
+  // handles that as well as most short free-form queries.
+  let term: string;
+  if (artist && title) term = `${artist} ${title}`;
+  else term = (query || "").trim();
+
+  const data = await appleGet<{
+    results?: {
+      artists?: {
+        data?: Array<{ id?: string; attributes?: { name?: string; artwork?: { url?: string } } }>;
+      };
+      songs?: {
+        data?: Array<{
+          id?: string;
+          attributes?: {
+            name?: string;
+            artistName?: string;
+            albumName?: string;
+            artwork?: { url?: string };
+            durationInMillis?: number;
+          };
+        }>;
+      };
+    };
+  }>(
+    `/catalog/${storefront}/search?types=artists,songs&limit=20&term=${encodeURIComponent(term)}`,
+    devToken,
+  );
+
+  const artistData = data?.results?.artists?.data || [];
+  const songData = data?.results?.songs?.data || [];
+
+  const artists = artistData.map((a) => normalizeAppleArtistCompact(a));
+  const tracks = songData.map((s) => {
+    const t = normalizeAppleTrack(s);
+    // Search results don't include trackNumber; omit it to match Spotify search shape.
+    const { trackNumber: _tn, ...rest } = t;
+    return rest;
+  });
+
+  return new Response(JSON.stringify({ artists, tracks }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
 
 function normalizeRecommendations(data: any) {
   return (data.tracks || [])
