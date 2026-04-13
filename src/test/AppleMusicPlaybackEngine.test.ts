@@ -194,4 +194,200 @@ describe("AppleMusicPlaybackEngine", () => {
     expect(mockMusic.removeEventListener).toHaveBeenCalledWith("playbackTimeDidChange", expect.any(Function));
     expect(mockMusic.stop).toHaveBeenCalled();
   });
+
+  // ── Polling lifecycle ─────────────────────────────────────────────────
+
+  it("polls currentPlaybackTime at 250ms while playing", async () => {
+    vi.useFakeTimers();
+    try {
+      const engine = new AppleMusicPlaybackEngine({ developerToken: "dev-token" });
+      await engine.init();
+
+      const stateSpy = vi.fn();
+      engine.onStateChange(stateSpy);
+
+      mockMusic.currentPlaybackTime = 10;
+      mockMusic.currentPlaybackDuration = 200;
+
+      // Enter playing state — starts the interval
+      const stateCb = eventListeners.get("playbackStateDidChange");
+      stateCb!({ state: 2 /* playing */ });
+      stateSpy.mockClear();
+
+      mockMusic.currentPlaybackTime = 10.25;
+      vi.advanceTimersByTime(250);
+      expect(stateSpy).toHaveBeenCalledWith(expect.objectContaining({ currentTime: 10.25 }));
+
+      mockMusic.currentPlaybackTime = 10.5;
+      vi.advanceTimersByTime(250);
+      expect(stateSpy).toHaveBeenCalledWith(expect.objectContaining({ currentTime: 10.5 }));
+
+      expect(stateSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops polling when playback pauses", async () => {
+    vi.useFakeTimers();
+    try {
+      const engine = new AppleMusicPlaybackEngine({ developerToken: "dev-token" });
+      await engine.init();
+
+      const stateSpy = vi.fn();
+      engine.onStateChange(stateSpy);
+
+      mockMusic.currentPlaybackTime = 5;
+      mockMusic.currentPlaybackDuration = 200;
+
+      const stateCb = eventListeners.get("playbackStateDidChange");
+      stateCb!({ state: 2 /* playing */ });
+      vi.advanceTimersByTime(250);
+      stateCb!({ state: 3 /* paused */ });
+      stateSpy.mockClear();
+
+      // Time advances past several poll intervals but we're paused — no more ticks
+      mockMusic.currentPlaybackTime = 6;
+      vi.advanceTimersByTime(1000);
+
+      // Only the state-change event itself may emit; the interval must not fire.
+      // Filter the spy to just "driven by the poll" calls — those would be the
+      // ones fired without an accompanying state-change event. Since we cleared
+      // above and don't fire another state-change, any call means the poll leaked.
+      expect(stateSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("skips emission when polled time and duration are unchanged", async () => {
+    vi.useFakeTimers();
+    try {
+      const engine = new AppleMusicPlaybackEngine({ developerToken: "dev-token" });
+      await engine.init();
+
+      const stateSpy = vi.fn();
+      engine.onStateChange(stateSpy);
+
+      mockMusic.currentPlaybackTime = 7;
+      mockMusic.currentPlaybackDuration = 200;
+
+      const stateCb = eventListeners.get("playbackStateDidChange");
+      stateCb!({ state: 2 });
+      stateSpy.mockClear();
+
+      // First tick records values
+      vi.advanceTimersByTime(250);
+      const firstCallCount = stateSpy.mock.calls.length;
+
+      // Subsequent ticks with no change should not emit
+      vi.advanceTimersByTime(250);
+      vi.advanceTimersByTime(250);
+      vi.advanceTimersByTime(250);
+
+      expect(stateSpy.mock.calls.length).toBe(firstCallCount);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("cleanup() stops polling so no interval leaks", async () => {
+    vi.useFakeTimers();
+    try {
+      const engine = new AppleMusicPlaybackEngine({ developerToken: "dev-token" });
+      await engine.init();
+
+      const stateCb = eventListeners.get("playbackStateDidChange");
+      stateCb!({ state: 2 });
+
+      engine.cleanup();
+
+      const stateSpy = vi.fn();
+      engine.onStateChange(stateSpy);
+
+      mockMusic.currentPlaybackTime = 99;
+      vi.advanceTimersByTime(1000);
+
+      expect(stateSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("warns when currentPlaybackDuration is ≤30s at playback start", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const engine = new AppleMusicPlaybackEngine({ developerToken: "dev-token" });
+      await engine.init();
+
+      mockMusic.currentPlaybackDuration = 30;
+      mockMusic.currentPlaybackTime = 0;
+
+      const stateCb = eventListeners.get("playbackStateDidChange");
+      stateCb!({ state: 2 /* playing */ });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("preview clip"),
+        expect.anything(),
+        expect.anything(),
+        expect.anything()
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("does not warn when currentPlaybackDuration is a full track", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const engine = new AppleMusicPlaybackEngine({ developerToken: "dev-token" });
+      await engine.init();
+
+      mockMusic.currentPlaybackDuration = 429;
+      mockMusic.currentPlaybackTime = 0;
+
+      const stateCb = eventListeners.get("playbackStateDidChange");
+      stateCb!({ state: 2 });
+
+      const previewWarns = warnSpy.mock.calls.filter((args) =>
+        typeof args[0] === "string" && args[0].includes("preview clip")
+      );
+      expect(previewWarns.length).toBe(0);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("logs subscription snapshot once, on the first state change (not during init)", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const engine = new AppleMusicPlaybackEngine({ developerToken: "dev-token" });
+      await engine.init();
+
+      // init() must NOT emit the snapshot — auth state isn't guaranteed
+      // populated at configure() resolve time.
+      const initSnapshots = logSpy.mock.calls.filter((args) =>
+        typeof args[0] === "string" && args[0].includes("subscription snapshot")
+      );
+      expect(initSnapshots.length).toBe(0);
+
+      // First state change fires the snapshot
+      const stateCb = eventListeners.get("playbackStateDidChange");
+      stateCb!({ state: 2 });
+
+      const afterFirst = logSpy.mock.calls.filter((args) =>
+        typeof args[0] === "string" && args[0].includes("subscription snapshot")
+      );
+      expect(afterFirst.length).toBe(1);
+
+      // A second state change must not log the snapshot again
+      stateCb!({ state: 3 });
+      const afterSecond = logSpy.mock.calls.filter((args) =>
+        typeof args[0] === "string" && args[0].includes("subscription snapshot")
+      );
+      expect(afterSecond.length).toBe(1);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
 });

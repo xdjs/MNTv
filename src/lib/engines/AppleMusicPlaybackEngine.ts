@@ -12,6 +12,11 @@ import type { PlaybackEngine, PlaybackState } from "./types";
 import { loadMusicKitSDK } from "@/lib/musickitLoader";
 import { getIdFromUri, getServiceFromUri } from "@/lib/trackUri";
 
+/** Apple Music preview clips are exactly 30 seconds. Anything at or below
+ *  this at playback start means MusicKit served a preview instead of the
+ *  full track — almost always a subscription issue. */
+const APPLE_MUSIC_PREVIEW_DURATION_S = 30;
+
 // ── Engine ────────────────────────────────────────────────────────────
 
 export interface AppleMusicPlaybackEngineOptions {
@@ -45,6 +50,9 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
   private hasAutoPlayed = false;
   private _isPlaying = false;
   private pollInterval: number | null = null;
+  private lastPolledTime = -1;
+  private lastPolledDuration = -1;
+  private hasLoggedSubscriptionStatus = false;
 
   // Subscribers
   private stateListeners: Set<(s: PlaybackState) => void> = new Set();
@@ -116,11 +124,10 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
     instance.addEventListener("playbackStateDidChange", this.boundStateHandler);
     instance.addEventListener("playbackTimeDidChange", this.boundTimeHandler);
 
-    // Log subscription status for diagnostics. Preview-mode playback
-    // (30s clips instead of full tracks) almost always means the Apple ID
-    // has no active Apple Music subscription, but other causes exist
-    // (dev token scope, auth state) — dump everything observable.
-    this.logSubscriptionStatus();
+    // NOTE: subscription diagnostics fire on the first playbackStateDidChange,
+    // not here. At configure() resolve time, isAuthorized/musicUserToken
+    // may not be fully populated yet — MusicKit finalizes auth state
+    // asynchronously after the configure promise resolves.
 
     // Auto-play pending URI that was stored before configure resolved
     if (this.lastUri && !this.hasAutoPlayed) {
@@ -132,7 +139,10 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
    *  user's authorization and storefront. Apple doesn't publish a
    *  `/v1/me/subscription` endpoint, so we lean on `isAuthorized`,
    *  `storefrontCountryCode`, and a `/v1/me/storefront` round-trip (which
-   *  requires a valid Music User Token). */
+   *  requires a valid Music User Token).
+   *
+   *  Only booleans are logged for any token field — the Music User Token
+   *  is a short-lived credential and must never be logged in full. */
   private async logSubscriptionStatus(): Promise<void> {
     if (!this.music) return;
     const m = this.music as unknown as {
@@ -149,8 +159,8 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
       isAuthorized: m.isAuthorized,
       storefrontCountryCode: m.storefrontCountryCode,
       storefrontId: m.storefrontId,
-      hasMusicUserToken: !!m.musicUserToken,
-      hasDeveloperToken: !!m.developerToken,
+      hasMusicUserToken: !!m.musicUserToken, // boolean only — never log the token value
+      hasDeveloperToken: !!m.developerToken, // boolean only — never log the token value
     };
     console.log("[AppleMusic] subscription snapshot:", snapshot);
 
@@ -301,6 +311,13 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
   private handlePlaybackState(event: MusicKit.PlaybackStateEvent): void {
     if (this.cancelled || !this.music) return;
 
+    // First state change after configure — now that MusicKit has settled,
+    // log the subscription snapshot. Guarded so it only fires once.
+    if (!this.hasLoggedSubscriptionStatus) {
+      this.hasLoggedSubscriptionStatus = true;
+      this.logSubscriptionStatus();
+    }
+
     const state = event.state;
     const PS = window.MusicKit?.PlaybackStates;
     if (!PS) return;
@@ -310,11 +327,16 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
     if (isPlaying) this.hasPlayed = true;
 
     // Preview detection: a full-track setQueue that reports
-    // currentPlaybackDuration ≤ 30s means MusicKit handed us a preview
-    // clip instead of the full track — almost always a subscription issue.
-    if (isPlaying && this.music.currentPlaybackDuration && this.music.currentPlaybackDuration <= 30) {
+    // currentPlaybackDuration ≤ APPLE_MUSIC_PREVIEW_DURATION_S means
+    // MusicKit handed us a preview clip instead of the full track —
+    // almost always a subscription issue.
+    if (
+      isPlaying &&
+      this.music.currentPlaybackDuration &&
+      this.music.currentPlaybackDuration <= APPLE_MUSIC_PREVIEW_DURATION_S
+    ) {
       console.warn(
-        "[AppleMusic] Playing a 30s preview clip, not full track.",
+        "[AppleMusic] Playing a preview clip, not full track.",
         "Duration:", this.music.currentPlaybackDuration,
         "— check Apple Music subscription status."
       );
@@ -359,15 +381,22 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
 
   /** Poll currentPlaybackTime at 250ms to smooth the progress bar. MusicKit's
    *  playbackTimeDidChange event fires ~1s which makes the bar look chunky
-   *  vs Spotify's 250ms cadence. */
+   *  vs Spotify's 250ms cadence. Skips emission when time and duration
+   *  haven't changed since the last poll to avoid forcing no-op React
+   *  re-renders during buffering/stalled playback. */
   private startPolling(): void {
     if (this.pollInterval !== null) return;
     this.pollInterval = window.setInterval(() => {
       if (!this.music || this.cancelled) return;
+      const t = this.music.currentPlaybackTime || 0;
+      const d = this.music.currentPlaybackDuration || 0;
+      if (t === this.lastPolledTime && d === this.lastPolledDuration) return;
+      this.lastPolledTime = t;
+      this.lastPolledDuration = d;
       this.emitState({
         isPlaying: this._isPlaying,
-        currentTime: this.music.currentPlaybackTime || 0,
-        duration: this.music.currentPlaybackDuration || 0,
+        currentTime: t,
+        duration: d,
       });
     }, 250);
   }
@@ -377,5 +406,7 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
       window.clearInterval(this.pollInterval);
       this.pollInterval = null;
     }
+    this.lastPolledTime = -1;
+    this.lastPolledDuration = -1;
   }
 }
