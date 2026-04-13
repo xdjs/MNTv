@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 //     No refresh mechanism — if expired/revoked, user must re-authorize.
 
 const STORAGE_KEY = "apple_music_token";
-const TOKEN_SAVED_EVENT = "apple-music-token-saved";
+const TOKEN_CHANGED_EVENT = "apple-music-token-changed";
 
 interface StoredToken {
   musicUserToken: string;
@@ -65,7 +65,7 @@ export function saveAppleMusicToken(musicUserToken: string, developerToken: stri
   writeToken({ musicUserToken, developerToken, devTokenExpiresAt });
   // Notify same-tab listeners — the `storage` event only fires cross-tab.
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event(TOKEN_SAVED_EVENT));
+    window.dispatchEvent(new Event(TOKEN_CHANGED_EVENT));
   }
 }
 
@@ -73,7 +73,7 @@ export function useAppleMusicToken() {
   const [hasMusicToken, setHasMusicToken] = useState(() => !!readToken());
 
   // Sync hasMusicToken with localStorage writes from outside this hook —
-  //  • same tab: saveAppleMusicToken dispatches TOKEN_SAVED_EVENT
+  //  • same tab: saveAppleMusicToken / clearToken dispatch TOKEN_CHANGED_EVENT
   //  • cross-tab: the native `storage` event fires when localStorage changes
   //    in another tab (add, update, or remove the key)
   // Event-driven instead of polling so we don't burn CPU forever after
@@ -88,10 +88,10 @@ export function useAppleMusicToken() {
       if (e.key === STORAGE_KEY) syncFromStorage();
     };
     window.addEventListener("storage", onStorage);
-    window.addEventListener(TOKEN_SAVED_EVENT, syncFromStorage);
+    window.addEventListener(TOKEN_CHANGED_EVENT, syncFromStorage);
     return () => {
       window.removeEventListener("storage", onStorage);
-      window.removeEventListener(TOKEN_SAVED_EVENT, syncFromStorage);
+      window.removeEventListener(TOKEN_CHANGED_EVENT, syncFromStorage);
     };
   }, []);
 
@@ -131,6 +131,11 @@ export function useAppleMusicToken() {
   const clearToken = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
     setHasMusicToken(false);
+    // Mirror saveAppleMusicToken — notify same-tab listeners so sibling hook
+    // instances flip to hasMusicToken=false without waiting for a reload.
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event(TOKEN_CHANGED_EVENT));
+    }
   }, []);
 
   return { hasMusicToken, getMusicUserToken, getDeveloperToken, clearToken };

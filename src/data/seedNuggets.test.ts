@@ -55,9 +55,10 @@ describe("DEMO_TRACKS shape", () => {
     }
   });
 
-  it("at least one demo track has an Apple Music URI (fast-path playability)", () => {
-    const withApple = DEMO_TRACKS.filter((d) => d.appleMusicUri);
-    expect(withApple.length).toBeGreaterThan(0);
+  it("every demo track has an Apple Music URI (cross-service playability)", () => {
+    for (const demo of DEMO_TRACKS) {
+      expect(demo.appleMusicUri, `${demo.id} is missing appleMusicUri`).toBeTruthy();
+    }
   });
 
   it("Apple Music URIs follow the apple:song:{id} format", () => {
