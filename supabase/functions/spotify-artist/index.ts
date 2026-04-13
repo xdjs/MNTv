@@ -2,6 +2,16 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { CACHE_TTL_MS } from "../_shared/config.ts";
 import { getSpotifyAppToken, clearSpotifyAppToken } from "../_shared/spotify-token.ts";
+import { getAppleDeveloperToken } from "../_shared/apple-token.ts";
+import {
+  appleGet,
+  isValidAppleCatalogId,
+  normalizeAppleArtistCompact,
+  normalizeAppleAlbumListItem,
+  normalizeAppleTrack,
+  resolveArtworkUrl,
+  safeStorefront,
+} from "../_shared/apple-utils.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -102,6 +112,46 @@ async function spotifyGet(path: string, token: string) {
   return res.json();
 }
 
+// ── Cross-service cache helpers ─────────────────────────────────────────
+
+type ArtistCacheRow = { data: unknown; created_at: string };
+
+function isFreshCacheRow(row: ArtistCacheRow | null | undefined): boolean {
+  if (!row) return false;
+  return Date.now() - new Date(row.created_at).getTime() < CACHE_TTL_MS;
+}
+
+function isValidArtistCachePayload(data: unknown): data is { artist: { bio?: string; bioGrounded?: boolean }; topTracks: unknown } {
+  return !!data && typeof data === "object" && "artist" in data && "topTracks" in data;
+}
+
+/** Look up a cached artist bio by canonical name across services. Used
+ *  when an Apple lookup misses the `(id, apple)` cache but the artist is
+ *  already cached under Spotify (or vice-versa). AI bios are expensive —
+ *  reuse across services whenever possible. */
+async function findCrossServiceBio(
+  db: ReturnType<typeof createClient>,
+  canonicalName: string,
+  excludeService: "spotify" | "apple",
+): Promise<{ bio: string; grounded: boolean } | null> {
+  if (!canonicalName) return null;
+  const { data, error } = await db
+    .from("artist_cache")
+    .select("data, service")
+    .eq("canonical_name", canonicalName)
+    .neq("service", excludeService)
+    .limit(1);
+  if (error || !data || !data.length) return null;
+  const row = data[0] as { data: unknown; service: string };
+  const payload = row.data;
+  if (!payload || typeof payload !== "object" || !("artist" in payload)) return null;
+  const artist = (payload as { artist?: { bio?: string; bioGrounded?: boolean } }).artist;
+  if (!artist?.bio) return null;
+  return { bio: artist.bio, grounded: !!artist.bioGrounded };
+}
+
+// ── Main handler ────────────────────────────────────────────────────────
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -109,16 +159,28 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { artistId: providedId, artistName } = body;
+    const { artistId: providedId, artistName, service, storefront: rawStorefront } = body;
+    const isApple = service === "apple" || service === "apple-music";
 
     if (!providedId && (!artistName || typeof artistName !== "string")) {
       return new Response(
         JSON.stringify({ error: "artistId or artistName required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     const db = getSupabaseAdmin();
+
+    if (isApple) {
+      return handleAppleArtist({
+        db,
+        providedId: typeof providedId === "string" ? providedId : undefined,
+        artistName: typeof artistName === "string" ? artistName : undefined,
+        storefront: rawStorefront,
+      });
+    }
+
+    // ── Spotify path (default) ────────────────────────────────────────
 
     // Early cache check when we already have a Spotify ID — avoids Spotify API call entirely
     if (providedId && typeof providedId === "string") {
@@ -129,13 +191,12 @@ serve(async (req) => {
         .eq("service", "spotify")
         .single();
 
-      if (cached && Date.now() - new Date(cached.created_at).getTime() < CACHE_TTL_MS) {
-        const d = cached.data;
-        if (d && typeof d === "object" && d.artist && d.topTracks) {
-          return new Response(JSON.stringify(d), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
+      if (isFreshCacheRow(cached) && isValidArtistCachePayload(cached!.data)) {
+        return new Response(JSON.stringify(cached!.data), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (cached && !isValidArtistCachePayload(cached.data)) {
         console.warn(`[spotify-artist] Malformed cache for ${providedId}, refetching`);
       }
     }
@@ -151,7 +212,7 @@ serve(async (req) => {
       if (!directData) {
         return new Response(
           JSON.stringify({ found: false }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
       artist = directData;
@@ -162,12 +223,12 @@ serve(async (req) => {
       const searchData = await spotifyGet(`/search?type=artist&limit=5&q=${q}`, token);
       const candidates = searchData?.artists?.items || [];
       artist = candidates.find((a: any) => a.name.toLowerCase() === artistName.trim().toLowerCase())
-            || candidates[0];
+        || candidates[0];
 
       if (!artist) {
         return new Response(
           JSON.stringify({ found: false }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
       artistId = artist.id;
@@ -180,27 +241,25 @@ serve(async (req) => {
         .eq("service", "spotify")
         .single();
 
-      if (cached && Date.now() - new Date(cached.created_at).getTime() < CACHE_TTL_MS) {
-        const d = cached.data;
-        if (d && typeof d === "object" && d.artist && d.topTracks) {
-          return new Response(JSON.stringify(d), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
+      if (isFreshCacheRow(cached) && isValidArtistCachePayload(cached!.data)) {
+        return new Response(JSON.stringify(cached!.data), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (cached && !isValidArtistCachePayload(cached.data)) {
         console.warn(`[spotify-artist] Malformed cache for ${artistId}, refetching`);
       }
     }
 
-    // 2. Fetch top tracks, albums, and related artists in parallel
-    // Some endpoints may be unavailable (Spotify deprecated related-artists and
-    // top-tracks for dev-mode apps in Feb 2026), so we handle nulls gracefully.
+    // Fetch top tracks, albums, and related artists in parallel. Spotify deprecated
+    // related-artists and top-tracks for dev-mode apps in Feb 2026 — we handle nulls
+    // gracefully and fall back to album-track mining.
     const [topTracksData, albumsData, relatedData] = await Promise.all([
       spotifyGet(`/artists/${artistId}/top-tracks?market=US`, token),
       spotifyGet(`/artists/${artistId}/albums?include_groups=album,single&limit=20&market=US`, token),
       spotifyGet(`/artists/${artistId}/related-artists`, token),
     ]);
 
-    // Build top tracks from album tracks if top-tracks endpoint is unavailable
     let topTracks: any[] = [];
     if (topTracksData?.tracks?.length) {
       topTracks = topTracksData.tracks.slice(0, 10).map((t: any) => ({
@@ -212,7 +271,6 @@ serve(async (req) => {
         durationMs: t.duration_ms || 0,
       }));
     } else if (albumsData?.items?.length) {
-      // Fallback: fetch tracks from the first few albums
       const albumIds = albumsData.items.slice(0, 3).map((a: any) => a.id);
       for (const albumId of albumIds) {
         if (topTracks.length >= 10) break;
@@ -233,13 +291,18 @@ serve(async (req) => {
       }
     }
 
-    // 3. Generate AI bio with track/album context for grounding (prevents hallucination)
-    const bioResult = await generateArtistBio(
-      artist.name,
-      artist.genres || [],
-      topTracks.map((t: any) => t.title),
-      (albumsData?.items || []).slice(0, 5).map((a: any) => a.name),
-    );
+    // Cross-service bio reuse: if Apple has already cached a bio for this
+    // artist (matched by canonical name), skip the expensive Gemini call.
+    const canonicalName = (artist.name || "").toLowerCase().trim();
+    const reusedBio = await findCrossServiceBio(db, canonicalName, "spotify");
+    const bioResult = reusedBio
+      ? { text: reusedBio.bio, grounded: reusedBio.grounded }
+      : await generateArtistBio(
+        artist.name,
+        artist.genres || [],
+        topTracks.map((t: any) => t.title),
+        (albumsData?.items || []).slice(0, 5).map((a: any) => a.name),
+      );
 
     // Normalize response
     const result = {
@@ -271,19 +334,21 @@ serve(async (req) => {
     };
 
     // Write to cache (fire-and-forget — don't block response)
-    // Note: concurrent cold-cache requests for the same artist will both generate a bio,
-    // but upsert is idempotent so the second write just overwrites with equivalent data.
-    const artistName = result.artist?.name || "";
+    // Concurrent cold-cache requests for the same artist will both generate
+    // a bio, but upsert is idempotent so the second write overwrites with
+    // equivalent data.
     db.from("artist_cache")
       .upsert({
         artist_id: artistId,
         service: "spotify",
-        canonical_name: artistName.toLowerCase().trim() || null,
+        canonical_name: canonicalName || null,
         data: result,
         created_at: new Date().toISOString(),
       })
-      .then(({ error }) => { if (error) console.error("[spotify-artist] cache write failed:", error.message); })
-      .catch((err) => console.error("[spotify-artist] cache write exception:", err));
+      .then(({ error }: { error: unknown }) => {
+        if (error) console.error("[spotify-artist] cache write failed:", (error as { message?: string }).message);
+      })
+      .catch((err: unknown) => console.error("[spotify-artist] cache write exception:", err));
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -292,7 +357,164 @@ serve(async (req) => {
     console.error("spotify-artist error:", err);
     return new Response(
       JSON.stringify({ error: (err as Error).message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });
+
+// ── Apple Music path ────────────────────────────────────────────────────
+
+interface AppleArtistViews {
+  "top-songs"?: { data?: Array<{ id?: string; attributes?: Record<string, unknown> }> };
+  "similar-artists"?: { data?: Array<{ id?: string; attributes?: Record<string, unknown> }> };
+}
+
+interface AppleArtistResource {
+  id?: string;
+  type?: string;
+  attributes?: {
+    name?: string;
+    genreNames?: string[];
+    artwork?: { url?: string };
+  };
+  views?: AppleArtistViews;
+}
+
+async function handleAppleArtist(args: {
+  db: ReturnType<typeof createClient>;
+  providedId?: string;
+  artistName?: string;
+  storefront?: string;
+}): Promise<Response> {
+  const { db, providedId, artistName, storefront: rawStorefront } = args;
+  const storefront = safeStorefront(rawStorefront);
+  const devToken = await getAppleDeveloperToken();
+
+  // Resolve an Apple catalog ID. Direct ID → skip search.
+  let artistId: string | undefined = providedId;
+
+  if (!artistId && artistName) {
+    const q = encodeURIComponent(artistName.trim());
+    const searchData = await appleGet<{
+      results?: { artists?: { data?: Array<{ id?: string; attributes?: { name?: string } }> } };
+    }>(
+      `/catalog/${storefront}/search?types=artists&limit=5&term=${q}`,
+      devToken,
+    );
+    const candidates = searchData?.results?.artists?.data || [];
+    const target = artistName.trim().toLowerCase();
+    const match = candidates.find((a) => (a.attributes?.name || "").toLowerCase() === target)
+      || candidates[0];
+    artistId = match?.id;
+  }
+
+  if (!artistId || !isValidAppleCatalogId(artistId)) {
+    return new Response(
+      JSON.stringify({ found: false }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
+  // Cache check — composite key (artist_id, 'apple')
+  const { data: cached } = await db
+    .from("artist_cache")
+    .select("data, created_at")
+    .eq("artist_id", artistId)
+    .eq("service", "apple")
+    .single();
+
+  if (isFreshCacheRow(cached as ArtistCacheRow | null) && isValidArtistCachePayload((cached as ArtistCacheRow).data)) {
+    return new Response(JSON.stringify((cached as ArtistCacheRow).data), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // Fetch artist base + top-songs + similar-artists in one call, albums separately.
+  const [artistData, albumsData] = await Promise.all([
+    appleGet<{ data?: AppleArtistResource[] }>(
+      `/catalog/${storefront}/artists/${artistId}?views=top-songs,similar-artists`,
+      devToken,
+    ),
+    appleGet<{ data?: Array<{ id?: string; attributes?: Record<string, unknown> }> }>(
+      `/catalog/${storefront}/artists/${artistId}/albums?limit=20`,
+      devToken,
+    ),
+  ]);
+
+  const artist = artistData?.data?.[0];
+  if (!artist) {
+    return new Response(
+      JSON.stringify({ found: false }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
+  const attrs = artist.attributes || {};
+  const name = attrs.name || "";
+  const canonicalName = name.toLowerCase().trim();
+  const imageUrl = resolveArtworkUrl(attrs.artwork);
+  const genres = attrs.genreNames || [];
+
+  // Top tracks from views
+  const topSongs = artist.views?.["top-songs"]?.data || [];
+  const topTracks = topSongs.slice(0, 10).map((s) => normalizeAppleTrack(s));
+
+  // Related artists from views
+  const similar = artist.views?.["similar-artists"]?.data || [];
+  const relatedArtists = similar.slice(0, 10).map((a) => {
+    const compact = normalizeAppleArtistCompact(a);
+    const g = (a.attributes as { genreNames?: string[] } | undefined)?.genreNames || [];
+    return { ...compact, genres: g.slice(0, 2) };
+  });
+
+  // Albums
+  const rawAlbums = albumsData?.data || [];
+  const albums = rawAlbums.map((al) => normalizeAppleAlbumListItem(al));
+
+  // Cross-service bio reuse: check if Spotify already cached a bio for
+  // this artist (matched by canonical name). Bio generation is expensive
+  // (~20s Gemini call with grounding), so reuse whenever possible.
+  const reusedBio = await findCrossServiceBio(db, canonicalName, "apple");
+  const bioResult = reusedBio
+    ? { text: reusedBio.bio, grounded: reusedBio.grounded }
+    : await generateArtistBio(
+      name,
+      genres,
+      topTracks.map((t) => t.title),
+      albums.slice(0, 5).map((a) => a.name),
+    );
+
+  const result = {
+    found: true,
+    artist: {
+      id: artistId,
+      name,
+      imageUrl,
+      genres,
+      followers: 0, // Apple Music has no follower count
+      bio: bioResult.text,
+      bioGrounded: bioResult.grounded,
+    },
+    topTracks,
+    albums,
+    relatedArtists,
+  };
+
+  // Fire-and-forget cache write
+  db.from("artist_cache")
+    .upsert({
+      artist_id: artistId,
+      service: "apple",
+      canonical_name: canonicalName || null,
+      data: result,
+      created_at: new Date().toISOString(),
+    })
+    .then(({ error }: { error: unknown }) => {
+      if (error) console.error("[spotify-artist] apple cache write failed:", (error as { message?: string }).message);
+    })
+    .catch((err: unknown) => console.error("[spotify-artist] apple cache write exception:", err));
+
+  return new Response(JSON.stringify(result), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
