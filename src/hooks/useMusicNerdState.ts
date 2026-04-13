@@ -4,6 +4,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
 const PROFILE_KEY = "musicnerd_profile";
+const PROFILE_UPDATED_EVENT = "musicnerd-profile-updated";
+
+/** Dispatch a custom event so other useUserProfile hook instances re-read
+ *  localStorage. Each useState call creates its own state slot — without
+ *  this sync, PlayerProvider's profile goes stale when Connect.tsx saves,
+ *  and the Apple Music engine never initializes.
+ *  Vite SPA — no SSR guard needed. */
+function notifyProfileUpdated(): void {
+  window.dispatchEvent(new Event(PROFILE_UPDATED_EVENT));
+}
 
 // ── DB profile sync ───────────────────────────────────────────────────────────
 // Accept userId as a param — callers obtain it from AuthContext (no extra getSession() calls).
@@ -44,6 +54,26 @@ async function loadProfileFromDB(userId: string): Promise<UserProfile | null> {
     spotifyTrackImages: taste?.trackImages ?? undefined,
     calculatedTier: (data.tier as UserProfile["calculatedTier"]) || "casual",
   };
+}
+
+/**
+ * Resolve which streamingService to use when merging a local and DB profile.
+ *
+ * Priority:
+ *  1. Preserve an explicit streamingService on whichever source is the base
+ *  2. Fall back to "Spotify" only if spotifyTopArtists is populated (legacy
+ *     profile rows from before streaming_service was persisted)
+ *  3. Otherwise empty string (guest-like state)
+ *
+ * Exported for unit testing. Used by useUserProfile's hydrate effect.
+ */
+export function resolveStreamingService(
+  baseService: UserProfile["streamingService"] | undefined,
+  spotifyTopArtistsCount: number
+): UserProfile["streamingService"] {
+  if (baseService) return baseService;
+  if (spotifyTopArtistsCount > 0) return "Spotify";
+  return "";
 }
 
 async function saveProfileToDB(p: UserProfile, userId: string): Promise<void> {
@@ -91,6 +121,32 @@ export function useUserProfile() {
     }
   });
 
+  // Sync across hook instances: every call to useUserProfile has its own
+  // independent useState slot, so when Connect.tsx saves a profile, other
+  // instances (like PlayerProvider) never see it. Listen for the custom
+  // event fired by saveProfile/clearProfile and re-read from localStorage.
+  // Also listens to the native `storage` event for cross-tab sync.
+  useEffect(() => {
+    const sync = () => {
+      try {
+        const raw = localStorage.getItem(PROFILE_KEY);
+        const next = raw ? (JSON.parse(raw) as UserProfile) : null;
+        setProfileState(next);
+      } catch {
+        setProfileState(null);
+      }
+    };
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === PROFILE_KEY) sync();
+    };
+    window.addEventListener(PROFILE_UPDATED_EVENT, sync);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(PROFILE_UPDATED_EVENT, sync);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
+
   // Re-load from DB whenever the signed-in user changes.
   // Local (localStorage) data is treated as fresher than DB — it may contain a profile
   // that was just saved but whose async DB write hasn't landed yet.
@@ -103,7 +159,9 @@ export function useUserProfile() {
         try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || "null"); } catch { return null; }
       })() as UserProfile | null;
 
-      // If local already has Spotify taste data, it's fresher — don't overwrite it with stale DB
+      // If local already has Spotify taste data, it's fresher — don't overwrite it with stale DB.
+      // Preserve local's streamingService if set (handles Apple Music users who previously
+      // had Spotify data in the same profile row).
       if (local?.spotifyTopArtists?.length && local.spotifyArtistImages
           && Object.keys(local.spotifyArtistImages).length > 0) {
         // Only pull non-Spotify fields from DB (tier, lastFm) if local is missing them
@@ -111,36 +169,46 @@ export function useUserProfile() {
           ...local,
           calculatedTier: local.calculatedTier || dbProfile.calculatedTier,
           lastFmUsername: local.lastFmUsername || dbProfile.lastFmUsername,
-          streamingService: "Spotify",
+          streamingService: resolveStreamingService(
+            local.streamingService,
+            local.spotifyTopArtists?.length ?? 0
+          ),
         };
         localStorage.setItem(PROFILE_KEY, JSON.stringify(merged));
-        setProfileState(merged);
+        notifyProfileUpdated();
         return;
       }
 
-      // No local Spotify data — use DB profile (e.g. new device sign-in)
+      // No local Spotify data — use DB profile (e.g. new device sign-in).
       const merged: UserProfile = {
         ...dbProfile,
-        streamingService: (dbProfile.spotifyTopArtists?.length ?? 0) > 0 ? "Spotify" : dbProfile.streamingService,
+        streamingService: resolveStreamingService(
+          dbProfile.streamingService,
+          dbProfile.spotifyTopArtists?.length ?? 0
+        ),
         spotifyArtistImages: dbProfile.spotifyArtistImages ?? local?.spotifyArtistImages,
         spotifyArtistIds: dbProfile.spotifyArtistIds ?? local?.spotifyArtistIds,
         spotifyTrackImages: dbProfile.spotifyTrackImages ?? local?.spotifyTrackImages,
       };
       localStorage.setItem(PROFILE_KEY, JSON.stringify(merged));
-      setProfileState(merged);
+      notifyProfileUpdated();
     });
     return () => { cancelled = true; };
   }, [user?.id]);
 
+  // Mutating callbacks write to localStorage then dispatch the profile-updated
+  // event. The event fires synchronously and the listener above re-reads
+  // localStorage, so the originating instance gets its own update through the
+  // same path as every other instance — single data flow, no double-set.
   const saveProfile = useCallback(async (p: UserProfile) => {
     localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
-    setProfileState(p);
+    notifyProfileUpdated();
     if (user?.id) await saveProfileToDB(p, user.id);
   }, [user?.id]);
 
   const clearProfile = useCallback(() => {
     localStorage.removeItem(PROFILE_KEY);
-    setProfileState(null);
+    notifyProfileUpdated();
   }, []);
 
   return { profile, saveProfile, clearProfile };

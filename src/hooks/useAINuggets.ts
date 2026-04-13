@@ -44,10 +44,23 @@ export function makeTimestamp(index: number, totalNuggets: number, durationSec: 
   return Math.min(Math.floor(earlyStart + spacing * (index + 1)), durationSec - 10);
 }
 
-function makeNugget(n: AINuggetData, nuggetId: string, sourceId: string, trackId: string, timestampSec: number): Nugget {
+export function makeNugget(n: AINuggetData, nuggetId: string, sourceId: string, trackId: string, timestampSec: number): Nugget {
+  // Client-side headline guard — if server sent an empty headline,
+  // derive one from the text (same logic as server-side generateHeadlineFromText).
+  let headline = n.headline;
+  if (!headline.trim() && n.text.trim()) {
+    const first = n.text.split(/[.!?]\s+/)[0].trim().replace(/[.!?]+$/, "");
+    headline = first && first.length > 10
+      ? (first.length > 80 ? first.slice(0, 77) + "..." : first)
+      : (n.text.length > 80 ? n.text.slice(0, 77) + "..." : n.text);
+  }
+  // Last resort — both headline and text empty (malformed server response)
+  if (!headline.trim()) {
+    headline = "Music Fact";
+  }
   return {
     id: nuggetId, trackId, timestampSec, durationMs: 7000,
-    headline: n.headline, text: n.text, kind: n.kind,
+    headline, text: n.text, kind: n.kind,
     listenFor: n.listenFor || false, sourceId,
     imageUrl: n.imageUrl, imageCaption: n.imageCaption,
   };

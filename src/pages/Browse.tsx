@@ -36,7 +36,7 @@ export default function Browse() {
       imageUrl: "https://i.scdn.co/image/ab67616d0000b2738ac778cc7d88779f74d33311",
       title: "Around the World",
       subtitle: "Daft Punk",
-      href: "/listen/real::Daft%20Punk::Around%20the%20World::Homework::spotify:track:1pKYYY0dkg23sQQXi0Q5zN?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b2738ac778cc7d88779f74d33311",
+      href: "/listen/demo-around-the-world?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b2738ac778cc7d88779f74d33311",
     },
     {
       id: "demo-weird-fishes",
@@ -50,14 +50,14 @@ export default function Browse() {
       imageUrl: "https://i.scdn.co/image/ab67616d0000b27305b43e15352510b1b9c9a5a5",
       title: "Oms at Play",
       subtitle: "Pete Rango",
-      href: "/listen/real::Pete%20Rango::Oms%20at%20Play::Savage%20Planet::spotify:track:7mYphBaMfblb6iu1saj3MC?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b27305b43e15352510b1b9c9a5a5",
+      href: "/listen/demo-oms-at-play?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b27305b43e15352510b1b9c9a5a5",
     },
-{
+    {
       id: "demo-slack",
       imageUrl: "https://i.scdn.co/image/ab67616d0000b273e9c4a69ecd5c43229cfd03f3",
       title: "SLACK",
       subtitle: "Jamee Cornelia",
-      href: "/listen/real::Jamee%20Cornelia::SLACK::HARVEST::spotify:track:5bU8cB57AfhTtO0qj9zy3X?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b273e9c4a69ecd5c43229cfd03f3",
+      href: "/listen/demo-slack?art=https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b273e9c4a69ecd5c43229cfd03f3",
     },
     {
       id: "demo-humble",
@@ -108,6 +108,7 @@ export default function Browse() {
   const handleSignOut = () => {
     clearProfile();
     localStorage.removeItem("spotify_playback_token");
+    localStorage.removeItem("apple_music_token");
     sessionStorage.removeItem("musicnerd_redirect");
     sessionStorage.removeItem("spotify_pending_taste");
     // Hard navigate to avoid ProtectedRoute redirect race — clearProfile()
