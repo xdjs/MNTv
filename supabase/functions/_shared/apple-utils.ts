@@ -234,6 +234,12 @@ export function rankAppleArtists(
   // Heavy rotation: +3 per occurrence — ranks an artist higher than a
   // long tail of one-off plays. When the resource itself is an artist,
   // capture its catalog id directly.
+  //
+  // In practice Apple's /me/history/heavy-rotation almost never returns
+  // `artists`-typed resources — it's mostly albums — so artistIds tends
+  // to stay empty. Downstream callers should not rely on it being
+  // populated; it's best-effort for the rare case where Apple does
+  // surface an artist directly.
   for (const item of rotationItems) {
     if (!item.type || !ROTATION_ARTIST_TYPES.has(item.type)) continue;
     const attrs = item.attributes as AppleListeningAttributes | undefined;
@@ -358,5 +364,14 @@ export async function appleGet<T = unknown>(
     console.warn(`[apple-utils] ${path} -> ${res.status}`);
     return null;
   }
-  return res.json() as Promise<T>;
+  // Apple occasionally returns a 200 with a non-JSON body during
+  // incidents (HTML error pages from upstream CDN layers). Catch the
+  // parse error and return null so the contract stays consistent with
+  // every other failure mode — callers already handle null gracefully.
+  try {
+    return (await res.json()) as T;
+  } catch (err) {
+    console.warn(`[apple-utils] JSON parse failed for ${path}:`, err);
+    return null;
+  }
 }

@@ -94,6 +94,13 @@ serve(async (req) => {
       });
     }
 
+    // Storefront is passed through to the response as `country` only.
+    // Apple's /me/history/* and /me/recent/* endpoints don't take a
+    // storefront path segment — they're user-scoped and Apple resolves
+    // the user's storefront from the MUT. The client already has the
+    // storefront from MusicKit.getInstance().storefrontCountryCode and
+    // we echo it back for consistency with spotify-taste's `country`
+    // field rather than to influence the Apple requests below.
     const storefront = safeStorefront(rawStorefront);
     const devToken = await getAppleDeveloperToken();
 

@@ -213,13 +213,13 @@ async function findCrossServiceBio(
   if (!callerGenres.length) return null;
   const { data, error } = await db
     .from("artist_cache")
-    .select("data, service")
+    .select("data")
     .eq("canonical_name", canonicalName)
     .neq("service", excludeService)
     .order("created_at", { ascending: false })
     .limit(1);
   if (error || !data || !data.length) return null;
-  const row = data[0] as { data: unknown; service: string };
+  const row = data[0] as { data: unknown };
   const payload = row.data;
   if (!payload || typeof payload !== "object") return null;
   const artist = (payload as { artist?: { bio?: string; bioGrounded?: boolean; genres?: string[] } }).artist;
@@ -595,6 +595,12 @@ async function handleAppleArtist(args: {
   // this artist (matched by canonical name AND overlapping genres).
   // Bio generation is expensive (~20s Gemini call with grounding), so
   // reuse whenever possible.
+  //
+  // Note: this runs AFTER the Apple artist+albums fetches rather than
+  // in parallel because canonicalName depends on the artist fetch
+  // result. The sequential cost (~10-30ms DB round trip) is small
+  // compared to Gemini bio generation it may save, and the cold-miss
+  // path is the only one that pays for it at all.
   const reusedBio = await findCrossServiceBio(db, canonicalName, "apple", genres);
   const bioResult = reusedBio
     ? { text: reusedBio.bio, grounded: reusedBio.grounded }

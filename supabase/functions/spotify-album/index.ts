@@ -175,8 +175,13 @@ async function handleAppleAlbum(args: {
   // of relying on Apple's undocumented default behavior. A silent default
   // change would leave this endpoint returning empty tracks / empty
   // artist data without a shape break — much harder to detect.
+  //
+  // `limit[tracks]=300` is a cheap first-pass mitigation for long albums
+  // (compilations, boxsets, DJ mixes). 300 covers every album in the
+  // Apple catalog today; full pagination via the `next` cursor would be
+  // the proper fix and is tracked as a follow-up.
   const data = await appleGet<AppleAlbumDetailResponse>(
-    `/catalog/${storefront}/albums/${albumId}?include=tracks,artists`,
+    `/catalog/${storefront}/albums/${albumId}?include=tracks,artists&limit[tracks]=300`,
     devToken,
   );
 
