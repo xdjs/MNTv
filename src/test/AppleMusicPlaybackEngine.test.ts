@@ -337,6 +337,86 @@ describe("AppleMusicPlaybackEngine", () => {
     }
   });
 
+  it("preview warn fires once per track even across multiple pause/resume cycles", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const engine = new AppleMusicPlaybackEngine({ developerToken: "dev-token" });
+      await engine.init();
+
+      mockMusic.currentPlaybackDuration = 30;
+      mockMusic.currentPlaybackTime = 0;
+
+      const stateCb = eventListeners.get("playbackStateDidChange");
+      // playing → paused → playing → paused → playing
+      stateCb!({ state: 2 });
+      stateCb!({ state: 3 });
+      stateCb!({ state: 2 });
+      stateCb!({ state: 3 });
+      stateCb!({ state: 2 });
+
+      const previewWarns = warnSpy.mock.calls.filter((args) =>
+        typeof args[0] === "string" && args[0].includes("preview clip")
+      );
+      expect(previewWarns.length).toBe(1);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("preview warn re-arms when loadTrack commits a new URI", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const engine = new AppleMusicPlaybackEngine({ developerToken: "dev-token" });
+      await engine.init();
+
+      mockMusic.currentPlaybackDuration = 30;
+      const stateCb = eventListeners.get("playbackStateDidChange");
+
+      await engine.loadTrack("apple:song:111");
+      stateCb!({ state: 2 });
+
+      await engine.loadTrack("apple:song:222");
+      stateCb!({ state: 2 });
+
+      const previewWarns = warnSpy.mock.calls.filter((args) =>
+        typeof args[0] === "string" && args[0].includes("preview clip")
+      );
+      expect(previewWarns.length).toBe(2);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("stopPolling resets lastPolledTime so first tick after resume always emits", async () => {
+    vi.useFakeTimers();
+    try {
+      const engine = new AppleMusicPlaybackEngine({ developerToken: "dev-token" });
+      await engine.init();
+
+      const stateSpy = vi.fn();
+      engine.onStateChange(stateSpy);
+
+      mockMusic.currentPlaybackTime = 42;
+      mockMusic.currentPlaybackDuration = 200;
+
+      const stateCb = eventListeners.get("playbackStateDidChange");
+      stateCb!({ state: 2 /* playing */ });
+      vi.advanceTimersByTime(250); // records t=42
+      stateCb!({ state: 3 /* paused — stopPolling, reset last* */ });
+      stateSpy.mockClear();
+
+      // Resume with the SAME time — without the reset, the poll would
+      // skip this tick because t hasn't changed.
+      stateCb!({ state: 2 });
+      stateSpy.mockClear();
+      vi.advanceTimersByTime(250);
+
+      expect(stateSpy).toHaveBeenCalledWith(expect.objectContaining({ currentTime: 42 }));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not warn when currentPlaybackDuration is a full track", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {

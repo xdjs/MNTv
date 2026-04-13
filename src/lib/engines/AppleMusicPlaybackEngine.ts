@@ -53,6 +53,7 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
   private lastPolledTime = -1;
   private lastPolledDuration = -1;
   private hasLoggedSubscriptionStatus = false;
+  private hasWarnedPreview = false;
 
   // Subscribers
   private stateListeners: Set<(s: PlaybackState) => void> = new Set();
@@ -203,6 +204,7 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
     this.hasPlayed = false;
     this.hasAutoPlayed = false;
     this._isPlaying = false;
+    this.hasWarnedPreview = false;
 
     try { this.music?.stop(); } catch { /* already stopped */ }
 
@@ -313,9 +315,11 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
 
     // First state change after configure — now that MusicKit has settled,
     // log the subscription snapshot. Guarded so it only fires once.
+    // .catch() handles any unexpected rejection from the fire-and-forget
+    // async call; the method already catches its own API errors.
     if (!this.hasLoggedSubscriptionStatus) {
       this.hasLoggedSubscriptionStatus = true;
-      this.logSubscriptionStatus();
+      this.logSubscriptionStatus().catch(() => { /* diagnostic only */ });
     }
 
     const state = event.state;
@@ -329,12 +333,16 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
     // Preview detection: a full-track setQueue that reports
     // currentPlaybackDuration ≤ APPLE_MUSIC_PREVIEW_DURATION_S means
     // MusicKit handed us a preview clip instead of the full track —
-    // almost always a subscription issue.
+    // almost always a subscription issue. Gated by hasWarnedPreview so
+    // a short track paused/resumed many times doesn't spam the console;
+    // reset in loadTrack() when a new URI commits.
     if (
+      !this.hasWarnedPreview &&
       isPlaying &&
       this.music.currentPlaybackDuration &&
       this.music.currentPlaybackDuration <= APPLE_MUSIC_PREVIEW_DURATION_S
     ) {
+      this.hasWarnedPreview = true;
       console.warn(
         "[AppleMusic] Playing a preview clip, not full track.",
         "Duration:", this.music.currentPlaybackDuration,
@@ -370,6 +378,12 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
     });
   }
 
+  /** Native playbackTimeDidChange events fire at ~1s cadence. This path
+   *  coexists with the 250ms poll in startPolling() intentionally: the
+   *  event gives us the authoritative value from MusicKit whenever it
+   *  fires, and the poll smooths the gaps between fires so the progress
+   *  bar doesn't look chunky. Both call emitState — don't delete one
+   *  thinking the other makes it redundant. */
   private handleTimeChange(event: MusicKit.PlaybackTimeEvent): void {
     if (this.cancelled) return;
     this.emitState({
