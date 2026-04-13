@@ -49,7 +49,7 @@ export function makeNugget(n: AINuggetData, nuggetId: string, sourceId: string, 
   // derive one from the text (same logic as server-side generateHeadlineFromText).
   let headline = n.headline;
   if (!headline.trim() && n.text.trim()) {
-    const first = n.text.split(/[.!?]\s+/)[0]?.trim();
+    const first = n.text.split(/[.!?]\s+/)[0].trim().replace(/[.!?]+$/, "");
     headline = first && first.length > 10
       ? (first.length > 80 ? first.slice(0, 77) + "..." : first)
       : (n.text.length > 80 ? n.text.slice(0, 77) + "..." : n.text);

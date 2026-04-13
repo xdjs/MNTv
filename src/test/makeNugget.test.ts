@@ -56,6 +56,26 @@ describe("makeNugget headline derivation", () => {
     expect(result.headline.length).toBe(80);
   });
 
+  it("derives headline when server sends whitespace-only headline + valid text", () => {
+    const n = make({ headline: "   ", text: "He played guitar on the track. More text." });
+    const result = makeNugget(n, "nug-1", "src-1", "track-1", 60);
+    expect(result.headline).toBe("He played guitar on the track");
+  });
+
+  it("handles ! and ? sentence endings", () => {
+    const exclaim = make({ headline: "", text: "What a solo! This is the key part." });
+    expect(makeNugget(exclaim, "nug-1", "src-1", "track-1", 60).headline).toBe("What a solo");
+
+    const question = make({ headline: "", text: "Did you hear that riff? It changed rock music." });
+    expect(makeNugget(question, "nug-2", "src-2", "track-1", 60).headline).toBe("Did you hear that riff");
+  });
+
+  it("strips trailing punctuation from single-sentence text", () => {
+    const n = make({ headline: "", text: "Only sentence." });
+    const result = makeNugget(n, "nug-1", "src-1", "track-1", 60);
+    expect(result.headline).toBe("Only sentence");
+  });
+
   it("uses 'Music Fact' placeholder when both headline and text are empty", () => {
     const n = make({ headline: "", text: "" });
     const result = makeNugget(n, "nug-1", "src-1", "track-1", 60);
