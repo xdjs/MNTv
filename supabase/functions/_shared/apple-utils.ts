@@ -82,6 +82,15 @@ export function safeStorefront(raw: unknown): string {
   return /^[a-z]{2}$/.test(s) ? s : "us";
 }
 
+/** Single source of truth for detecting the Apple Music service flag on an
+ *  edge-function request body. Accepts both "apple" and "apple-music"
+ *  because the frontend's getServiceFromUri() returns "apple-music" while
+ *  the DB column values use "apple". Keeping both synonyms in one helper
+ *  means a future third variant only needs updating here. */
+export function isAppleService(service: unknown): boolean {
+  return service === "apple" || service === "apple-music";
+}
+
 /** Normalize an Apple song resource to the Spotify-track response shape. */
 export function normalizeAppleTrack(song: AppleResource | null | undefined): NormalizedTrack {
   const a = (song?.attributes || {}) as {
@@ -153,30 +162,198 @@ export function isValidAppleCatalogId(id: unknown): id is string {
   return typeof id === "string" && /^\d+$/.test(id);
 }
 
+// ── Search match helpers ───────────────────────────────────────────────
+
+/** Pick the best artist candidate for a name match: prefer a case-insensitive
+ *  exact match on the trimmed target, fall back to the first candidate in the
+ *  list (Apple/Spotify search return popularity-ordered results so the first
+ *  is a reasonable default). Shared across spotify-resolve (Apple branch),
+ *  spotify-artist (Spotify branch), and spotify-artist (Apple branch) — a
+ *  bug here previously would have silently mispicked artists across every
+ *  edge function. Generic over candidate shape via the `getName` accessor. */
+export function pickBestArtistMatch<T>(
+  candidates: T[],
+  target: string,
+  getName: (candidate: T) => string | undefined,
+): T | undefined {
+  if (!candidates.length) return undefined;
+  const lowered = target.trim().toLowerCase();
+  if (!lowered) return candidates[0];
+  return candidates.find((c) => (getName(c) || "").toLowerCase() === lowered)
+    || candidates[0];
+}
+
+// ── apple-taste helpers ────────────────────────────────────────────────
+
+/** Heavy rotation items can be albums, artists, stations, or playlists.
+ *  Only the first two map cleanly to an artist name — station/playlist
+ *  names (e.g. "Today's Hits") would pollute the artist ranking if
+ *  counted. */
+const ROTATION_ARTIST_TYPES = new Set(["artists", "albums"]);
+
+export interface ArtistRankSummary {
+  topArtists: string[];
+  artistImages: Record<string, string>;
+  artistIds: Record<string, string>;
+}
+
+type AppleListeningAttributes = {
+  name?: string;
+  artistName?: string;
+  artwork?: AppleArtwork;
+};
+
+/** Rank artists by weighted frequency across recent plays and heavy
+ *  rotation. +1 per recent play, +3 per heavy-rotation hit. Returns the
+ *  top `maxArtists` names plus the image/id maps keyed by artist name.
+ *
+ *  This is pure: it takes parsed Apple resource arrays and returns plain
+ *  objects. Apple-taste calls it; unit tests cover it directly from
+ *  Vitest without Deno globals. */
+export function rankAppleArtists(
+  recentItems: AppleResource[],
+  rotationItems: AppleResource[],
+  maxArtists = 20,
+): ArtistRankSummary {
+  const artistCounts: Record<string, number> = {};
+  const artistImages: Record<string, string> = {};
+  const artistIds: Record<string, string> = {};
+
+  // Recent plays: +1 per occurrence
+  for (const song of recentItems) {
+    const attrs = song.attributes as AppleListeningAttributes | undefined;
+    const name = attrs?.artistName;
+    if (!name) continue;
+    artistCounts[name] = (artistCounts[name] || 0) + 1;
+    if (!artistImages[name]) {
+      const art = resolveArtworkUrl(attrs?.artwork);
+      if (art) artistImages[name] = art;
+    }
+  }
+
+  // Heavy rotation: +3 per occurrence — ranks an artist higher than a
+  // long tail of one-off plays. When the resource itself is an artist,
+  // capture its catalog id directly.
+  for (const item of rotationItems) {
+    if (!item.type || !ROTATION_ARTIST_TYPES.has(item.type)) continue;
+    const attrs = item.attributes as AppleListeningAttributes | undefined;
+    // For albums, prefer artistName; for artists, attrs.name IS the artist name.
+    const name = attrs?.artistName
+      || (item.type === "artists" ? attrs?.name : undefined);
+    if (!name) continue;
+    artistCounts[name] = (artistCounts[name] || 0) + 3;
+    if (!artistImages[name]) {
+      const art = resolveArtworkUrl(attrs?.artwork);
+      if (art) artistImages[name] = art;
+    }
+    if (item.type === "artists" && item.id && !artistIds[name]) {
+      artistIds[name] = item.id;
+    }
+  }
+
+  const topArtists = Object.entries(artistCounts)
+    .sort(([, ac], [, bc]) => bc - ac)
+    .map(([name]) => name)
+    .slice(0, maxArtists);
+
+  return { topArtists, artistImages, artistIds };
+}
+
+export interface UniqueAppleTrack {
+  title: string;
+  artist: string;
+  imageUrl: string;
+  uri: string;
+}
+
+/** Collect up to `limit` unique (title, artist) tracks from recent plays,
+ *  preserving the recency order Apple returns. Pure — shared by apple-taste
+ *  and its unit tests. */
+export function buildUniqueAppleTracks(
+  recentItems: AppleResource[],
+  limit = 15,
+): UniqueAppleTrack[] {
+  const seen = new Set<string>();
+  const tracks: UniqueAppleTrack[] = [];
+
+  for (const song of recentItems) {
+    const attrs = song.attributes as AppleListeningAttributes | undefined;
+    const title = attrs?.name;
+    const artist = attrs?.artistName;
+    if (!title || !artist) continue;
+    const key = `${title}::${artist}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    tracks.push({
+      title,
+      artist,
+      imageUrl: resolveArtworkUrl(attrs?.artwork),
+      uri: buildAppleSongUri(song.id),
+    });
+    if (tracks.length >= limit) break;
+  }
+  return tracks;
+}
+
 // ── Fetch wrapper (uses global fetch — works in Deno and Node 18+) ─────
+
+/** Default request timeout for Apple Music API calls. Lower than Supabase's
+ *  function-level wall-clock so a hung Apple endpoint doesn't block the
+ *  whole function. Tunable per-call via the `timeoutMs` option. */
+const DEFAULT_APPLE_TIMEOUT_MS = 8000;
+
+export interface AppleGetOptions {
+  /** Music User Token — required for /me/* endpoints, omitted otherwise. */
+  musicUserToken?: string;
+  /** Timeout in milliseconds. Defaults to DEFAULT_APPLE_TIMEOUT_MS. */
+  timeoutMs?: number;
+}
 
 /** Wrapper for Apple Music API calls. Always attaches the developer token;
  *  attaches the Music User Token when provided (required by `/me/*`
  *  endpoints). Returns parsed JSON on 2xx, null otherwise — callers handle
- *  the null case so a missing artist or stale token doesn't throw. */
+ *  the null case so a missing artist or stale token doesn't throw.
+ *
+ *  Rejects absolute URLs: callers must pass relative paths (like
+ *  `/catalog/us/artists/123`). This prevents future refactors from turning
+ *  the helper into an SSRF vector that would leak the developer token to
+ *  an attacker-controlled host. */
 export async function appleGet<T = unknown>(
   path: string,
   devToken: string,
-  musicUserToken?: string,
+  musicUserTokenOrOptions?: string | AppleGetOptions,
 ): Promise<T | null> {
+  if (path.startsWith("http")) {
+    console.warn(`[apple-utils] rejecting absolute URL: ${path}`);
+    return null;
+  }
+
+  const opts: AppleGetOptions =
+    typeof musicUserTokenOrOptions === "string"
+      ? { musicUserToken: musicUserTokenOrOptions }
+      : musicUserTokenOrOptions || {};
+
   const headers: Record<string, string> = {
     Authorization: `Bearer ${devToken}`,
   };
-  if (musicUserToken) headers["Music-User-Token"] = musicUserToken;
+  if (opts.musicUserToken) headers["Music-User-Token"] = opts.musicUserToken;
 
-  const url = path.startsWith("http") ? path : `${APPLE_API_BASE}${path}`;
+  const url = `${APPLE_API_BASE}${path}`;
+  const controller = new AbortController();
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_APPLE_TIMEOUT_MS;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   let res: Response;
   try {
-    res = await fetch(url, { headers });
+    res = await fetch(url, { headers, signal: controller.signal });
   } catch (err) {
-    console.warn(`[apple-utils] fetch failed for ${path}:`, err);
+    const name = err instanceof Error ? err.name : "unknown";
+    console.warn(`[apple-utils] fetch failed for ${path} (${name}):`, err);
     return null;
+  } finally {
+    clearTimeout(timer);
   }
+
   if (!res.ok) {
     console.warn(`[apple-utils] ${path} -> ${res.status}`);
     return null;

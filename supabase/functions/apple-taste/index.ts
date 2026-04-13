@@ -1,6 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getAppleDeveloperToken } from "../_shared/apple-token.ts";
-import { appleGet, resolveArtworkUrl, safeStorefront } from "../_shared/apple-utils.ts";
+import {
+  appleGet,
+  buildUniqueAppleTracks,
+  rankAppleArtists,
+  safeStorefront,
+  type AppleResource,
+} from "../_shared/apple-utils.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,41 +28,65 @@ const corsHeaders = {
 //                                       signal we rank artists by
 //
 // Artists are weighted: +1 per recent play, +3 per heavy-rotation hit.
+// The ranking logic lives in _shared/apple-utils.ts for unit test coverage.
 
-interface AppleSongResource {
-  id?: string;
-  type?: string;
-  attributes?: {
-    name?: string;
-    artistName?: string;
-    artwork?: { url?: string };
-  };
-}
-
-interface AppleHistoryResource {
-  id?: string;
-  type?: string;
-  attributes?: {
-    name?: string;
-    artistName?: string;
-    artwork?: { url?: string };
-  };
-}
+// Apple Music User Token character set — same allowlist spotify-taste uses
+// for its access token, prevents CR/LF/NUL from reaching the headers layer.
+const MUT_PATTERN = /^[A-Za-z0-9\-_=+/.]+$/;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Belt-and-suspenders auth: verify the Supabase session inside the
+  // function rather than trusting the gateway default alone. Matches the
+  // pattern in apple-dev-token — a single config.toml edit shouldn't be
+  // able to expose this endpoint.
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) {
+    return new Response(
+      JSON.stringify({ error: "Unauthorized" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
   try {
-    const body = await req.json();
-    const { musicUserToken, storefront: rawStorefront } = body ?? {};
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new Error("Supabase environment not configured");
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    const { data: userData, error: userError } = await supabase.auth.getUser(
+      authHeader.replace(/^Bearer\s+/i, ""),
+    );
+    if (userError || !userData?.user) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    const { musicUserToken, storefront: rawStorefront } =
+      (body ?? {}) as { musicUserToken?: unknown; storefront?: unknown };
 
     if (
       !musicUserToken ||
       typeof musicUserToken !== "string" ||
       musicUserToken.length < 10 ||
-      musicUserToken.length > 4096
+      musicUserToken.length > 4096 ||
+      !MUT_PATTERN.test(musicUserToken)
     ) {
       return new Response(JSON.stringify({ error: "Invalid musicUserToken" }), {
         status: 400,
@@ -68,83 +99,40 @@ serve(async (req) => {
 
     // Parallel: heavy-rotation resources + recent played tracks
     const [rotation, recent] = await Promise.all([
-      appleGet<{ data?: AppleHistoryResource[] }>(
+      appleGet<{ data?: AppleResource[] }>(
         "/me/history/heavy-rotation?limit=20",
         devToken,
         musicUserToken,
       ),
-      appleGet<{ data?: AppleSongResource[] }>(
+      appleGet<{ data?: AppleResource[] }>(
         "/me/recent/played/tracks?limit=50",
         devToken,
         musicUserToken,
       ),
     ]);
 
-    const recentItems: AppleSongResource[] = recent?.data || [];
-    const rotationItems: AppleHistoryResource[] = rotation?.data || [];
-
-    // ── Rank artists by weighted frequency ─────────────────────────────
-    const artistCounts: Record<string, number> = {};
-    const artistImages: Record<string, string> = {};
-    const artistIds: Record<string, string> = {};
-
-    // Recent plays: +1 per occurrence
-    for (const song of recentItems) {
-      const name = song.attributes?.artistName;
-      if (!name) continue;
-      artistCounts[name] = (artistCounts[name] || 0) + 1;
-      if (!artistImages[name]) {
-        const art = resolveArtworkUrl(song.attributes?.artwork);
-        if (art) artistImages[name] = art;
-      }
+    // If BOTH Apple calls failed, we're either talking to a rate-limited
+    // / down Apple Music API or the Music User Token is stale/revoked.
+    // Reporting 200 with empty data would let the client persist a blank
+    // taste profile over the user's real data. Surface the error so the
+    // client can distinguish transient failures from "empty library".
+    if (rotation === null && recent === null) {
+      console.warn("[apple-taste] both Apple fetches failed — returning 503");
+      return new Response(
+        JSON.stringify({ error: "Apple Music temporarily unavailable" }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
-    // Heavy rotation: +3 per occurrence — ranks an artist higher than a
-    // long tail of one-off plays would on their own. When the resource
-    // itself is an artist (rare), capture its id directly.
-    for (const item of rotationItems) {
-      const name = item.attributes?.artistName || item.attributes?.name;
-      if (!name) continue;
-      artistCounts[name] = (artistCounts[name] || 0) + 3;
-      if (!artistImages[name]) {
-        const art = resolveArtworkUrl(item.attributes?.artwork);
-        if (art) artistImages[name] = art;
-      }
-      if (item.type === "artists" && item.id && !artistIds[name]) {
-        artistIds[name] = item.id;
-      }
-    }
+    const recentItems: AppleResource[] = recent?.data || [];
+    const rotationItems: AppleResource[] = rotation?.data || [];
 
-    const topArtists = Object.entries(artistCounts)
-      .sort(([, ac], [, bc]) => bc - ac)
-      .map(([name]) => name)
-      .slice(0, 20);
+    const { topArtists, artistImages, artistIds } = rankAppleArtists(
+      recentItems,
+      rotationItems,
+    );
 
-    // ── Build top tracks (unique titles, preserve recent order) ────────
-    const seen = new Set<string>();
-    const uniqueTracks: Array<{
-      title: string;
-      artist: string;
-      imageUrl: string;
-      uri: string;
-    }> = [];
-
-    for (const song of recentItems) {
-      const title = song.attributes?.name;
-      const artist = song.attributes?.artistName;
-      if (!title || !artist) continue;
-      const key = `${title}::${artist}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      uniqueTracks.push({
-        title,
-        artist,
-        imageUrl: resolveArtworkUrl(song.attributes?.artwork),
-        uri: song.id ? `apple:song:${song.id}` : "",
-      });
-      if (uniqueTracks.length >= 15) break;
-    }
-
+    const uniqueTracks = buildUniqueAppleTracks(recentItems);
     const topTrackStrings = uniqueTracks.map((t) => `${t.title} — ${t.artist}`);
 
     return new Response(
@@ -161,9 +149,12 @@ serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
+    // Log full error server-side but return a generic message. Internal
+    // errors (missing env vars, signing failures, etc.) must not leak to
+    // unauthenticated clients.
     console.error("apple-taste error:", e);
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
+      JSON.stringify({ error: "Service temporarily unavailable" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }

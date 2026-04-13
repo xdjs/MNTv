@@ -3,6 +3,7 @@ import { getSpotifyAppToken, clearSpotifyAppToken } from "../_shared/spotify-tok
 import { getAppleDeveloperToken } from "../_shared/apple-token.ts";
 import {
   appleGet,
+  isAppleService,
   normalizeAppleArtistCompact,
   normalizeAppleTrack,
   safeStorefront,
@@ -21,9 +22,8 @@ serve(async (req) => {
 
   try {
     const { query, artist, title, recommend, service, storefront: rawStorefront } = await req.json();
-    const isApple = service === "apple" || service === "apple-music";
 
-    if (isApple) {
+    if (isAppleService(service)) {
       return handleAppleSearch({ query, artist, title, recommend, storefront: rawStorefront });
     }
 
@@ -172,8 +172,10 @@ async function handleAppleSearch(args: {
   const artists = artistData.map((a) => normalizeAppleArtistCompact(a));
   const tracks = songData.map((s) => {
     const t = normalizeAppleTrack(s);
-    // Search results don't include trackNumber; omit it to match Spotify search shape.
-    const { trackNumber: _tn, ...rest } = t;
+    // Search results are the Spotify { title, artist, album, imageUrl, uri }
+    // shape — strip trackNumber and durationMs that normalizeAppleTrack
+    // includes for album-context callers.
+    const { trackNumber: _tn, durationMs: _d, ...rest } = t;
     return rest;
   });
 

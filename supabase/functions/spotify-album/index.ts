@@ -3,6 +3,8 @@ import { getSpotifyAppToken, clearSpotifyAppToken } from "../_shared/spotify-tok
 import { getAppleDeveloperToken } from "../_shared/apple-token.ts";
 import {
   appleGet,
+  buildAppleSongUri,
+  isAppleService,
   isValidAppleCatalogId,
   resolveArtworkUrl,
   safeStorefront,
@@ -30,9 +32,8 @@ serve(async (req) => {
     }
 
     const { albumId, market, service, storefront: rawStorefront } = await req.json();
-    const isApple = service === "apple" || service === "apple-music";
 
-    if (isApple) {
+    if (isAppleService(service)) {
       return handleAppleAlbum({ albumId, storefront: rawStorefront });
     }
 
@@ -120,6 +121,40 @@ serve(async (req) => {
 
 // ── Apple Music path ────────────────────────────────────────────────────
 
+interface AppleAlbumDetailResponse {
+  data?: Array<{
+    id?: string;
+    attributes?: {
+      name?: string;
+      artistName?: string;
+      artwork?: { url?: string };
+      releaseDate?: string;
+      isSingle?: boolean;
+      trackCount?: number;
+      genreNames?: string[];
+      recordLabel?: string;
+    };
+    relationships?: {
+      artists?: {
+        data?: Array<{ id?: string; attributes?: { name?: string } }>;
+      };
+      tracks?: {
+        data?: Array<{
+          id?: string;
+          attributes?: {
+            name?: string;
+            artistName?: string;
+            albumName?: string;
+            artwork?: { url?: string };
+            durationInMillis?: number;
+            trackNumber?: number;
+          };
+        }>;
+      };
+    };
+  }>;
+}
+
 async function handleAppleAlbum(args: {
   albumId?: string;
   storefront?: string;
@@ -136,40 +171,12 @@ async function handleAppleAlbum(args: {
   const storefront = safeStorefront(rawStorefront);
   const devToken = await getAppleDeveloperToken();
 
-  const data = await appleGet<{
-    data?: Array<{
-      id?: string;
-      attributes?: {
-        name?: string;
-        artistName?: string;
-        artwork?: { url?: string };
-        releaseDate?: string;
-        isSingle?: boolean;
-        trackCount?: number;
-        genreNames?: string[];
-        recordLabel?: string;
-      };
-      relationships?: {
-        artists?: {
-          data?: Array<{ id?: string; attributes?: { name?: string } }>;
-        };
-        tracks?: {
-          data?: Array<{
-            id?: string;
-            attributes?: {
-              name?: string;
-              artistName?: string;
-              albumName?: string;
-              artwork?: { url?: string };
-              durationInMillis?: number;
-              trackNumber?: number;
-            };
-          }>;
-        };
-      };
-    }>;
-  }>(
-    `/catalog/${storefront}/albums/${albumId}`,
+  // Explicitly request the `tracks` and `artists` relationships instead
+  // of relying on Apple's undocumented default behavior. A silent default
+  // change would leave this endpoint returning empty tracks / empty
+  // artist data without a shape break — much harder to detect.
+  const data = await appleGet<AppleAlbumDetailResponse>(
+    `/catalog/${storefront}/albums/${albumId}?include=tracks,artists`,
     devToken,
   );
 
@@ -194,7 +201,7 @@ async function handleAppleAlbum(args: {
       artist: ta.artistName || artistName,
       album: ta.albumName || a.name || "",
       imageUrl: resolveArtworkUrl(ta.artwork) || coverUrl,
-      uri: t.id ? `apple:song:${t.id}` : "",
+      uri: buildAppleSongUri(t.id),
       durationMs: ta.durationInMillis || 0,
       trackNumber: ta.trackNumber || 0,
     };

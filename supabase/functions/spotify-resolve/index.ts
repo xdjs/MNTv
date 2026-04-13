@@ -1,7 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getSpotifyAppToken, clearSpotifyAppToken } from "../_shared/spotify-token.ts";
 import { getAppleDeveloperToken } from "../_shared/apple-token.ts";
-import { appleGet, resolveArtworkUrl, safeStorefront } from "../_shared/apple-utils.ts";
+import {
+  appleGet,
+  isAppleService,
+  pickBestArtistMatch,
+  resolveArtworkUrl,
+  safeStorefront,
+} from "../_shared/apple-utils.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,9 +34,8 @@ serve(async (req) => {
     }
 
     const batch = artists.slice(0, 20);
-    const isApple = service === "apple" || service === "apple-music";
 
-    if (isApple) {
+    if (isAppleService(service)) {
       const devToken = await getAppleDeveloperToken();
       const storefront = safeStorefront(rawStorefront);
 
@@ -46,10 +51,7 @@ serve(async (req) => {
             devToken,
           );
           const candidates = data?.results?.artists?.data || [];
-          const target = name.trim().toLowerCase();
-          const artist = candidates.find(
-            (a) => (a.attributes?.name || "").toLowerCase() === target,
-          ) || candidates[0];
+          const artist = pickBestArtistMatch(candidates, name, (a) => a.attributes?.name);
           if (!artist?.id) return { name, id: null as string | null, imageUrl: null as string | null };
           return {
             name,
@@ -95,8 +97,7 @@ serve(async (req) => {
         if (!res.ok) return { name, id: null, imageUrl: null };
         const data = await res.json();
         const candidates = data.artists?.items || [];
-        const artist = candidates.find((a: any) => a.name.toLowerCase() === name.trim().toLowerCase())
-          || candidates[0];
+        const artist = pickBestArtistMatch(candidates as Array<{ name?: string; id?: string; images?: Array<{ url?: string }> }>, name, (a) => a.name);
         if (!artist) return { name, id: null, imageUrl: null };
         return {
           name,
