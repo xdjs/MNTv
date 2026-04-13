@@ -143,7 +143,18 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
    *  requires a valid Music User Token).
    *
    *  Only booleans are logged for any token field — the Music User Token
-   *  is a short-lived credential and must never be logged in full. */
+   *  is a short-lived credential and must never be logged in full.
+   *
+   *  TODO: This diagnostic is intentionally always-on to investigate a
+   *  live preview-playback bug on staging. Once that's resolved, either
+   *  gate behind `import.meta.env.DEV` or a `debug` option in
+   *  AppleMusicPlaybackEngineOptions, or remove entirely.
+   *
+   *  The `as unknown as {...}` cast below bypasses the MusicKit JS v3
+   *  type definitions to read fields the official types don't expose
+   *  (e.g. `storefrontId`, `musicUserToken`). Verified against MusicKit
+   *  JS v3. If Apple renames/moves these, the optional chaining below
+   *  will silently log `undefined` instead of throwing. */
   private async logSubscriptionStatus(): Promise<void> {
     if (!this.music) return;
     const m = this.music as unknown as {
