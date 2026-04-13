@@ -51,3 +51,4 @@ scripts/pipeline-comparison/
 # Supabase local CLI state
 supabase/.temp/
 .vercel
+.gstack/
