@@ -26,6 +26,11 @@ const corsHeaders = {
 //   - /me/recent/played/tracks?limit  — recent plays, frequency becomes the
 //                                       signal we rank artists by
 //
+// Apple enforces strict per-endpoint limit caps that aren't documented in
+// the same place as the endpoint itself: heavy-rotation maxes at 10,
+// recent-played-tracks maxes at 30. Exceed those and Apple 400s with
+// "Invalid Parameter Value" error code 40005. Don't bump these.
+//
 // Artists are weighted: +1 per recent play, +3 per heavy-rotation hit.
 // The ranking logic lives in _shared/apple-utils.ts for unit test coverage.
 
@@ -91,15 +96,17 @@ serve(async (req) => {
     const storefront = safeStorefront(rawStorefront);
     const devToken = await getAppleDeveloperToken();
 
-    // Parallel: heavy-rotation resources + recent played tracks
+    // Parallel: heavy-rotation resources + recent played tracks.
+    // Limits are at Apple's hard caps (10 and 30) — exceeding them returns
+    // 400 "Invalid Parameter Value" 40005, see header doc.
     const [rotation, recent] = await Promise.all([
       appleGet<{ data?: AppleResource[] }>(
-        "/me/history/heavy-rotation?limit=20",
+        "/me/history/heavy-rotation?limit=10",
         devToken,
         musicUserToken,
       ),
       appleGet<{ data?: AppleResource[] }>(
-        "/me/recent/played/tracks?limit=50",
+        "/me/recent/played/tracks?limit=30",
         devToken,
         musicUserToken,
       ),

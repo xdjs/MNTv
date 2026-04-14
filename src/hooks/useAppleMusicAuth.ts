@@ -92,7 +92,21 @@ export async function fetchAppleMusicTaste(musicUserToken: string): Promise<Appl
       body: { musicUserToken, storefront: readAppleStorefront() },
     });
     if (error) {
-      console.error("[AppleMusic] fetchAppleMusicTaste failed:", error);
+      // supabase-js wraps non-2xx as FunctionsHttpError with the raw
+      // Response on .context. Extract the JSON body so any diagnostic
+      // payload from the edge function (e.g. apple-taste's appleStatus
+      // / appleBody) lands in the console instead of being swallowed.
+      const ctx = (error as { context?: Response }).context;
+      if (ctx && typeof ctx.clone === "function") {
+        try {
+          const body = await ctx.clone().json();
+          console.error("[AppleMusic] fetchAppleMusicTaste failed:", error, body);
+        } catch {
+          console.error("[AppleMusic] fetchAppleMusicTaste failed:", error);
+        }
+      } else {
+        console.error("[AppleMusic] fetchAppleMusicTaste failed:", error);
+      }
       return null;
     }
     // Shape check: Array.isArray alone is insufficient because a
