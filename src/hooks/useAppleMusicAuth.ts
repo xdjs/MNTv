@@ -95,17 +95,27 @@ export async function fetchAppleMusicTaste(musicUserToken: string): Promise<Appl
       console.error("[AppleMusic] fetchAppleMusicTaste failed:", error);
       return null;
     }
-    if (!data || !Array.isArray(data.topArtists)) {
+    // Shape check: Array.isArray alone is insufficient because a
+    // `[1, 2, 3]` payload passes but breaks every downstream string
+    // consumer. Verify the element type too. Same for trackImages
+    // (downstream code reads .title / .artist / .imageUrl).
+    if (
+      !data ||
+      !Array.isArray(data.topArtists) ||
+      !data.topArtists.every((a: unknown) => typeof a === "string") ||
+      !Array.isArray(data.topTracks ?? []) ||
+      !Array.isArray(data.trackImages ?? [])
+    ) {
       console.warn("[AppleMusic] fetchAppleMusicTaste returned unexpected shape:", data);
       return null;
     }
     return {
-      topArtists: data.topArtists,
-      topTracks: data.topTracks ?? [],
-      artistImages: data.artistImages ?? {},
-      artistIds: data.artistIds ?? {},
-      trackImages: data.trackImages ?? [],
-      displayName: data.displayName ?? null,
+      topArtists: data.topArtists as string[],
+      topTracks: (data.topTracks ?? []) as string[],
+      artistImages: (data.artistImages ?? {}) as Record<string, string>,
+      artistIds: (data.artistIds ?? {}) as Record<string, string>,
+      trackImages: (data.trackImages ?? []) as AppleMusicTaste["trackImages"],
+      displayName: (data.displayName ?? null) as string | null,
     };
   } catch (err) {
     console.error("[AppleMusic] fetchAppleMusicTaste exception:", err);

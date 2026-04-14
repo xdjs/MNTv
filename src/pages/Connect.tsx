@@ -50,6 +50,12 @@ export default function Connect() {
   const [appleMusicConnecting, setAppleMusicConnecting] = useState(false);
   const [appleMusicConnected, setAppleMusicConnected] = useState(() => hasMusicToken);
   const [appleMusicError, setAppleMusicError] = useState<string | null>(null);
+  // Non-blocking notice when the Apple taste fetch returns null. Shown on
+  // the tier picker step so the user understands why Browse will look
+  // sparse on first load. Apple's heavy-rotation + recent/played combo is
+  // softer than Spotify's explicit top-artists endpoint and more likely
+  // to fail on new accounts with little listening history.
+  const [appleTasteWarning, setAppleTasteWarning] = useState<string | null>(null);
   // Keep local state in sync when the hook detects a stored token.
   useEffect(() => {
     if (hasMusicToken) setAppleMusicConnected(true);
@@ -114,8 +120,11 @@ export default function Connect() {
         // edge function. Stored under the same pending* state Spotify
         // uses — the legacy field names (pendingSpotifyArtists etc.)
         // carry the active service's taste data. A null return means
-        // Apple returned an error or the user has no history; the user
-        // proceeds with empty taste data rather than blocking onboarding.
+        // Apple returned an error, the MUT is invalid, or the user has
+        // no listening history yet. In all cases we proceed to the
+        // tier picker rather than blocking onboarding — but we set a
+        // warning state so the user sees an inline note explaining why
+        // Browse will show only demo tracks on first load.
         const taste = await fetchAppleMusicTaste(musicUserToken);
         if (taste) {
           setPendingSpotifyArtists(taste.topArtists);
@@ -124,6 +133,10 @@ export default function Connect() {
           setPendingArtistImages(taste.artistImages);
           setPendingArtistIds(taste.artistIds);
           if (taste.trackImages.length) setPendingTrackImages(taste.trackImages);
+        } else {
+          setAppleTasteWarning(
+            "We couldn't pull your Apple Music library yet — Browse will start with demo tracks. Play a few and personalized rows will fill in."
+          );
         }
         // Jump to tier picker once the taste fetch resolves — matches
         // the Spotify post-OAuth handler in the sessionStorage useEffect
@@ -302,6 +315,11 @@ export default function Connect() {
                     <h1 className="text-2xl md:text-3xl font-black text-foreground tracking-tight">Choose your vibe</h1>
                     <p className="mt-2 text-muted-foreground">This shapes how deep your music insights go.</p>
                   </div>
+                  {appleTasteWarning && (
+                    <div className="w-full rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-200/90">
+                      {appleTasteWarning}
+                    </div>
+                  )}
                   <div className="flex flex-col gap-3 w-full">
                     {tiers.map((t) => (
                       <button key={t.id} onClick={() => handleTierSelect(t.id)} className={`flex items-start gap-3 md:gap-4 w-full rounded-2xl border bg-foreground/5 px-4 md:px-5 py-3 md:py-4 text-left transition-all duration-200 ${t.color}`}>

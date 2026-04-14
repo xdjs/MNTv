@@ -274,13 +274,16 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
 
     // ── 2. "Your Top Artists" ────────────────────────────────────────
     if (topArtistNames.length > 0) {
-      const spotifyIds = profile.spotifyArtistIds || {};
+      // cachedArtistIds holds catalog IDs from the active service's
+      // taste data (legacy-named spotifyArtistIds field). Falls back
+      // to the runtime-resolved map when a given name wasn't in taste.
+      const cachedArtistIds = profile.spotifyArtistIds || {};
       const topArtistTiles: BrowseTile[] = topArtistNames.slice(0, 20).map((name) => ({
         id: `artist-${name}`,
         imageUrl: artistImageUrl(name, spotifyArtistImgs, resolvedImages),
         title: name,
         subtitle: "Artist",
-        href: artistHref(name, spotifyIds[name] || resolvedIds.get(name), activeService),
+        href: artistHref(name, cachedArtistIds[name] || resolvedIds.get(name), activeService),
       }));
       allRows.push({ label: "Your Top Artists", items: topArtistTiles, size: "lg" });
     }

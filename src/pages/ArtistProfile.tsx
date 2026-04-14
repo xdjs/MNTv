@@ -253,6 +253,12 @@ function RealArtistProfile({
     const catalogAlbumId = a.uri?.startsWith(uriPrefix)
       ? a.uri.slice(uriPrefix.length)
       : "";
+    if (!catalogAlbumId && a.uri) {
+      // Backend returned an album with an unexpected URI shape. The
+      // tile silently falls back to "#" below; the warn surfaces the
+      // misfire in dev so it can be caught before shipping.
+      console.warn(`[ArtistProfile] unexpected ${service} album URI format:`, a.uri);
+    }
     return {
       id: `real-album-${i}`,
       imageUrl: a.imageUrl,
