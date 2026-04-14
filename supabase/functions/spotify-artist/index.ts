@@ -481,9 +481,14 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
+    // Log full error server-side but return a generic message. Apple
+    // path additions now bubble errors through this same catch — an
+    // unhandled failure in getAppleDeveloperToken (e.g. missing
+    // APPLE_MUSIC_* env vars) must not leak internal config names to
+    // unauthenticated clients.
     console.error("spotify-artist error:", err);
     return new Response(
-      JSON.stringify({ error: (err as Error).message }),
+      JSON.stringify({ error: "Service temporarily unavailable" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
