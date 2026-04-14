@@ -368,9 +368,15 @@ export function useAINuggets(
       }
 
       // ── Generate fresh nuggets via AI ─────────────────────────────
-      // Extract Spotify track ID from trackId (format: real::Artist::Title::Album::spotify:track:XXXXX)
+      // Extract the catalog track ID from trackId. The route embeds a URI
+      // in the format `real::Artist::Title::Album::{uri}` where {uri} is
+      // either `spotify:track:XXX` (Spotify) or `apple:song:XXX` (Apple
+      // Music). Pass both fields so the edge function can fall back —
+      // older deployments only read spotifyTrackId and ignore appleTrackId.
       const spotifyUriMatch = trackId.match(/spotify:track:([a-zA-Z0-9]{22})/);
+      const appleUriMatch = trackId.match(/apple:song:(\d+)/);
       const spotifyTrackIdValue = spotifyUriMatch?.[1];
+      const appleTrackIdValue = appleUriMatch?.[1];
 
       // ── SSE streaming: fetch nuggets as they individually resolve ──
       const requestBody = {
@@ -384,6 +390,7 @@ export function useAINuggets(
         userTopTracks: topTracks?.slice(0, 10),
         spotifyArtistImageUrl: artistImageUrl,
         spotifyTrackId: spotifyTrackIdValue,
+        appleTrackId: appleTrackIdValue,
       };
 
       // Get auth token for the request
