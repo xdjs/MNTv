@@ -7,7 +7,7 @@ import { useUserProfile, getStoredProfile } from "@/hooks/useMusicNerdState";
 import type { UserProfile } from "@/mock/types";
 import spotifyLogo from "@/assets/spotify-logo.png";
 import { initiateSpotifyAuth } from "@/hooks/useSpotifyAuth";
-import { initiateAppleMusicAuth } from "@/hooks/useAppleMusicAuth";
+import { initiateAppleMusicAuth, fetchAppleMusicTaste } from "@/hooks/useAppleMusicAuth";
 import { useAppleMusicToken } from "@/hooks/useAppleMusicToken";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -42,7 +42,7 @@ export default function Connect() {
   const [pendingSpotifyTracks, setPendingSpotifyTracks] = useState<string[] | null>(null);
   const [pendingArtistImages, setPendingArtistImages] = useState<Record<string, string>>({});
   const [pendingArtistIds, setPendingArtistIds] = useState<Record<string, string>>({});
-  const [pendingTrackImages, setPendingTrackImages] = useState<{ title: string; artist: string; imageUrl: string }[]>([]);
+  const [pendingTrackImages, setPendingTrackImages] = useState<{ title: string; artist: string; imageUrl: string; uri?: string }[]>([]);
   const [pendingDisplayName, setPendingDisplayName] = useState<string | null>(null);
   // hasMusicToken is live from localStorage so it survives the Spotify OAuth
   // redirect (React state is wiped on remount, but the token persists).
@@ -109,8 +109,25 @@ export default function Connect() {
       const musicUserToken = await initiateAppleMusicAuth();
       if (musicUserToken) {
         setAppleMusicConnected(true);
-        // Phase 5 will wire fetchAppleMusicTaste here. For now, the Music User
-        // Token is already stored in localStorage by initiateAppleMusicAuth.
+
+        // Fetch the user's Apple Music taste profile via the apple-taste
+        // edge function. Stored under the same pending* state Spotify
+        // uses — the legacy field names (pendingSpotifyArtists etc.)
+        // carry the active service's taste data. A null return means
+        // Apple returned an error or the user has no history; the user
+        // proceeds with empty taste data rather than blocking onboarding.
+        const taste = await fetchAppleMusicTaste(musicUserToken);
+        if (taste) {
+          setPendingSpotifyArtists(taste.topArtists);
+          setPendingSpotifyTracks(taste.topTracks);
+          if (taste.displayName) setPendingDisplayName(taste.displayName);
+          setPendingArtistImages(taste.artistImages);
+          setPendingArtistIds(taste.artistIds);
+          if (taste.trackImages.length) setPendingTrackImages(taste.trackImages);
+        }
+        // Jump to tier picker once the taste fetch resolves — matches
+        // the Spotify post-OAuth flow on line 83.
+        setStep(1);
       } else {
         // Null return = popup cancelled, SDK load failure, or dev token fetch failed.
         // initiateAppleMusicAuth logs the specific cause; surface a generic hint here.

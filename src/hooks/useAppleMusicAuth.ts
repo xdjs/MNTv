@@ -12,6 +12,7 @@
  * revokes access, the app must prompt them to re-authorize.
  */
 
+import { supabase } from "@/integrations/supabase/client";
 import { loadMusicKitSDK } from "@/lib/musickitLoader";
 import { fetchAppleDeveloperToken, saveAppleMusicToken } from "./useAppleMusicToken";
 
@@ -62,6 +63,19 @@ export async function initiateAppleMusicAuth(): Promise<string | null> {
   }
 }
 
+/** Try to read the user's current storefront from a configured MusicKit
+ *  instance. Returns "us" if MusicKit isn't initialized yet (e.g. in a
+ *  test environment). */
+function readStorefront(): string {
+  try {
+    const music = window.MusicKit?.getInstance?.();
+    const code = (music as unknown as { storefrontCountryCode?: string })?.storefrontCountryCode;
+    return typeof code === "string" && code.length === 2 ? code.toLowerCase() : "us";
+  } catch {
+    return "us";
+  }
+}
+
 // ── Taste profile fetch (mirrors useSpotifyAuth.fetchSpotifyTaste) ────
 
 export interface AppleMusicTaste {
@@ -77,11 +91,38 @@ export interface AppleMusicTaste {
 /**
  * Fetch a taste profile from the user's Apple Music library.
  *
- * TODO(Phase 5): implement the `apple-taste` edge function. Apple Music has
- * no `/me/top/artists` equivalent, so Phase 5 will combine `heavy-rotation`
- * + `recent/played/tracks` into a best-effort profile marked `partial: true`.
+ * Calls the `apple-taste` edge function which combines
+ * `/me/history/heavy-rotation` with `/me/recent/played/tracks` into a
+ * weighted-frequency ranking. Response matches `spotify-taste` shape
+ * plus `partial: true` so callers can treat Apple taste as softer signal.
+ *
+ * Returns null on any failure — the caller (Connect.tsx) continues
+ * onboarding with empty taste data rather than blocking the flow.
  */
-export async function fetchAppleMusicTaste(_musicUserToken: string): Promise<AppleMusicTaste | null> {
-  console.warn("[AppleMusic] fetchAppleMusicTaste: apple-taste edge function not yet deployed (Phase 5)");
-  return null;
+export async function fetchAppleMusicTaste(musicUserToken: string): Promise<AppleMusicTaste | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke("apple-taste", {
+      body: { musicUserToken, storefront: readStorefront() },
+    });
+    if (error) {
+      console.error("[AppleMusic] fetchAppleMusicTaste failed:", error);
+      return null;
+    }
+    if (!data || !Array.isArray(data.topArtists)) {
+      console.warn("[AppleMusic] fetchAppleMusicTaste returned unexpected shape:", data);
+      return null;
+    }
+    return {
+      topArtists: data.topArtists,
+      topTracks: data.topTracks ?? [],
+      artistImages: data.artistImages ?? {},
+      artistIds: data.artistIds ?? {},
+      trackImages: data.trackImages ?? [],
+      displayName: data.displayName ?? null,
+      partial: data.partial === true,
+    };
+  } catch (err) {
+    console.error("[AppleMusic] fetchAppleMusicTaste exception:", err);
+    return null;
+  }
 }
