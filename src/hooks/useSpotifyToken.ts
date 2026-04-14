@@ -23,6 +23,13 @@ function writeToken(token: StoredToken) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(token));
 }
 
+/** Clear the Spotify playback token from localStorage. Top-level helper
+ *  so `useSignOut` and other callers outside a React tree can invalidate
+ *  the token without mounting the `useSpotifyToken` hook. */
+export function clearSpotifyToken(): void {
+  localStorage.removeItem(STORAGE_KEY);
+}
+
 export function useSpotifyToken() {
   const [hasSpotifyToken, setHasSpotifyToken] = useState(() => !!readToken());
 
@@ -64,7 +71,7 @@ export function useSpotifyToken() {
   }, []);
 
   const clearToken = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
+    clearSpotifyToken();
     setHasSpotifyToken(false);
   }, []);
 
