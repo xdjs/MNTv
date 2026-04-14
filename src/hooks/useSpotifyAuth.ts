@@ -10,8 +10,11 @@ import { supabase } from "@/integrations/supabase/client";
 const SPOTIFY_CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID as string;
 const SPOTIFY_SCOPES = "user-top-read user-read-recently-played user-read-private streaming user-read-playback-state user-modify-playback-state";
 
-const PKCE_STATE_KEY = "spotify_pkce_state";
-const PKCE_VERIFIER_KEY = "spotify_pkce_verifier";
+// Exported so useSignOut can clear them on logout without hardcoding the
+// strings. Drift safety: if these keys ever rename, all writers and
+// clearers update via this single export.
+export const PKCE_STATE_KEY = "spotify_pkce_state";
+export const PKCE_VERIFIER_KEY = "spotify_pkce_verifier";
 
 // ── PKCE helpers ──────────────────────────────────────────────────────────────
 

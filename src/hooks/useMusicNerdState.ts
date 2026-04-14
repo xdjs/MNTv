@@ -15,6 +15,16 @@ function notifyProfileUpdated(): void {
   window.dispatchEvent(new Event(PROFILE_UPDATED_EVENT));
 }
 
+/** Clear the stored profile from localStorage and notify all
+ *  `useUserProfile` hook instances to flip their state to null. Top-level
+ *  helper so `useSignOut` can wipe profile state without mounting the
+ *  full `useUserProfile` hook (which carries a DB-sync useEffect and
+ *  event listeners). Mirrors `clearSpotifyToken` / `clearAppleMusicToken`. */
+export function clearStoredProfile(): void {
+  localStorage.removeItem(PROFILE_KEY);
+  if (typeof window !== "undefined") notifyProfileUpdated();
+}
+
 // ── DB profile sync ───────────────────────────────────────────────────────────
 // Accept userId as a param — callers obtain it from AuthContext (no extra getSession() calls).
 
@@ -207,8 +217,7 @@ export function useUserProfile() {
   }, [user?.id]);
 
   const clearProfile = useCallback(() => {
-    localStorage.removeItem(PROFILE_KEY);
-    notifyProfileUpdated();
+    clearStoredProfile();
   }, []);
 
   return { profile, saveProfile, clearProfile };
