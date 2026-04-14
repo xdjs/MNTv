@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getAppleDeveloperToken } from "../_shared/apple-token.ts";
 import {
   appleGet,
@@ -39,10 +38,15 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Belt-and-suspenders auth: verify the Supabase session inside the
-  // function rather than trusting the gateway default alone. Matches the
-  // pattern in apple-dev-token — a single config.toml edit shouldn't be
-  // able to expose this endpoint.
+  // Auth model: this project has no real users in auth.users — every
+  // client authenticates as anonymous via the Supabase publishable key,
+  // which the gateway accepts as a valid JWT (verify_jwt = true).
+  // Calling supabase.auth.getUser() would always return null and 401
+  // the request, even though the caller is exactly who we expect.
+  // The Music User Token below IS the auth signal: only a real Apple
+  // Music subscriber can produce one (popup-driven MusicKit.authorize),
+  // and it's bound to that subscriber's library by Apple. See issue #52
+  // for the broader auth-vs-anonymous discussion.
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) {
     return new Response(
@@ -52,23 +56,6 @@ serve(async (req) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
-    if (!supabaseUrl || !supabaseAnonKey) {
-      throw new Error("Supabase environment not configured");
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
-    const { data: userData, error: userError } = await supabase.auth.getUser(
-      authHeader.replace(/^Bearer\s+/i, ""),
-    );
-    if (userError || !userData?.user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
-
     let body: unknown;
     try {
       body = await req.json();
