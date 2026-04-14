@@ -69,8 +69,12 @@ function realTrackHref(artist: string, title: string, album?: string, trackUri?:
   return `/listen/${parts.join("::")}`;
 }
 
-function artistHref(name: string, spotifyId?: string): string {
-  if (spotifyId) return `/artist/spotify::${spotifyId}::${encodeURIComponent(name)}`;
+function artistHref(
+  name: string,
+  catalogId?: string,
+  service: "spotify" | "apple" = "spotify",
+): string {
+  if (catalogId) return `/artist/${service}::${catalogId}::${encodeURIComponent(name)}`;
   return `/artist/real::${encodeURIComponent(name)}`;
 }
 
@@ -164,12 +168,13 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
     return () => { cancelled = true; };
   }, [topArtistNames]);
 
-  // Resolve artist images + IDs via Spotify for artists without Spotify images
+  // Resolve artist images + IDs for artists that don't have them cached.
+  // Routes to Apple Music or Spotify catalog based on active service.
   useEffect(() => {
     if (!profile) return;
     let cancelled = false;
-    const spotifyImages = profile.spotifyArtistImages || {};
-    const spotifyIds = profile.spotifyArtistIds || {};
+    const cachedImages = profile.spotifyArtistImages || {};
+    const cachedIds = profile.spotifyArtistIds || {};
     const artistNames = [
       ...(profile.spotifyTopArtists || []),
       ...(lastFmData?.topArtists?.map((a) => a.name) || []),
@@ -178,8 +183,8 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
     const unique = [...new Set(artistNames)];
     const toFetch = unique.filter(
       (name) =>
-        !spotifyImages[name] &&
-        !spotifyIds[name] &&
+        !cachedImages[name] &&
+        !cachedIds[name] &&
         !artistImageCache.has(name) &&
         !pendingFetches.current.has(name)
     );
@@ -187,11 +192,13 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
 
     toFetch.forEach((name) => pendingFetches.current.add(name));
 
+    const service = profile.streamingService === "Apple Music" ? "apple" : "spotify";
+
     // Resolve all artists in batches of 20 (spotify-resolve caps at 20 per call)
     for (let i = 0; i < toFetch.length; i += 20) {
       const batch = toFetch.slice(i, i + 20);
       supabase.functions
-        .invoke("spotify-resolve", { body: { artists: batch } })
+        .invoke("spotify-resolve", { body: { artists: batch, service } })
         .then(({ data }) => {
           if (cancelled || !data?.resolved) return;
           setResolvedImages((prev) => {
@@ -229,6 +236,12 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
     const spotifyTracks = profile.spotifyTopTracks || [];
     const spotifyTrackImgs = profile.spotifyTrackImages;
     const spotifyArtistImgs = profile.spotifyArtistImages;
+    // Active-service prefix for all artist links in the Browse rows.
+    // spotifyTrackImages / spotifyArtistImages are legacy-named fields
+    // populated from the active service's taste data, so "spotify" is
+    // just the default fallback when no explicit service is set.
+    const activeService: "spotify" | "apple" =
+      profile.streamingService === "Apple Music" ? "apple" : "spotify";
 
     // ── 1. "Jump Back In" — recent tracks or top tracks ──────────────
     const recentTiles: BrowseTile[] = [];
@@ -266,7 +279,7 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
         imageUrl: artistImageUrl(name, spotifyArtistImgs, resolvedImages),
         title: name,
         subtitle: "Artist",
-        href: artistHref(name, spotifyIds[name] || resolvedIds.get(name)),
+        href: artistHref(name, spotifyIds[name] || resolvedIds.get(name), activeService),
       }));
       allRows.push({ label: "Your Top Artists", items: topArtistTiles, size: "lg" });
     }
@@ -286,7 +299,7 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
         imageUrl: artistImageUrl(a.name, spotifyArtistImgs, resolvedImages),
         title: a.name,
         subtitle: a.tags.slice(0, 2).join(", ") || "Artist",
-        href: artistHref(a.name, resolvedIds.get(a.name)),
+        href: artistHref(a.name, resolvedIds.get(a.name), activeService),
       }));
       allRows.push({ label: "Recommended For You", items: recTiles, size: "lg" });
     }
@@ -323,7 +336,7 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
             imageUrl: artistImageUrl(a.name, spotifyArtistImgs, resolvedImages),
             title: a.name,
             subtitle: a.tags.slice(0, 2).join(", ") || "Artist",
-            href: artistHref(a.name, resolvedIds.get(a.name)),
+            href: artistHref(a.name, resolvedIds.get(a.name), activeService),
           }));
           const label = topTag.charAt(0).toUpperCase() + topTag.slice(1);
           allRows.push({ label: `More ${label}`, items: genreTiles, size: "lg" });
