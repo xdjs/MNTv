@@ -14,6 +14,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { loadMusicKitSDK } from "@/lib/musickitLoader";
+import { readAppleStorefront } from "@/lib/appleStorefront";
 import { fetchAppleDeveloperToken, saveAppleMusicToken } from "./useAppleMusicToken";
 
 // ── Auth flow ─────────────────────────────────────────────────────────
@@ -63,19 +64,6 @@ export async function initiateAppleMusicAuth(): Promise<string | null> {
   }
 }
 
-/** Try to read the user's current storefront from a configured MusicKit
- *  instance. Returns "us" if MusicKit isn't initialized yet (e.g. in a
- *  test environment). */
-function readStorefront(): string {
-  try {
-    const music = window.MusicKit?.getInstance?.();
-    const code = (music as unknown as { storefrontCountryCode?: string })?.storefrontCountryCode;
-    return typeof code === "string" && code.length === 2 ? code.toLowerCase() : "us";
-  } catch {
-    return "us";
-  }
-}
-
 // ── Taste profile fetch (mirrors useSpotifyAuth.fetchSpotifyTaste) ────
 
 export interface AppleMusicTaste {
@@ -85,7 +73,6 @@ export interface AppleMusicTaste {
   artistIds: Record<string, string>;
   trackImages: { title: string; artist: string; imageUrl: string; uri?: string }[];
   displayName: string | null;
-  partial?: boolean;   // true = weaker signal than Spotify's user-top-read
 }
 
 /**
@@ -102,7 +89,7 @@ export interface AppleMusicTaste {
 export async function fetchAppleMusicTaste(musicUserToken: string): Promise<AppleMusicTaste | null> {
   try {
     const { data, error } = await supabase.functions.invoke("apple-taste", {
-      body: { musicUserToken, storefront: readStorefront() },
+      body: { musicUserToken, storefront: readAppleStorefront() },
     });
     if (error) {
       console.error("[AppleMusic] fetchAppleMusicTaste failed:", error);
@@ -119,7 +106,6 @@ export async function fetchAppleMusicTaste(musicUserToken: string): Promise<Appl
       artistIds: data.artistIds ?? {},
       trackImages: data.trackImages ?? [],
       displayName: data.displayName ?? null,
-      partial: data.partial === true,
     };
   } catch (err) {
     console.error("[AppleMusic] fetchAppleMusicTaste exception:", err);

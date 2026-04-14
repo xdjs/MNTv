@@ -12,6 +12,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { UserProfile } from "@/mock/types";
+import { serviceParamFromProfile, withAppleStorefront } from "@/lib/appleStorefront";
 
 // ── Artist image cache (persists across re-renders, cleared on page reload) ──
 const artistImageCache = new Map<string, string>();
@@ -192,13 +193,14 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
 
     toFetch.forEach((name) => pendingFetches.current.add(name));
 
-    const service = profile.streamingService === "Apple Music" ? "apple" : "spotify";
+    const service = serviceParamFromProfile(profile.streamingService);
 
     // Resolve all artists in batches of 20 (spotify-resolve caps at 20 per call)
     for (let i = 0; i < toFetch.length; i += 20) {
       const batch = toFetch.slice(i, i + 20);
+      const body = withAppleStorefront({ artists: batch, service }, service);
       supabase.functions
-        .invoke("spotify-resolve", { body: { artists: batch, service } })
+        .invoke("spotify-resolve", { body })
         .then(({ data }) => {
           if (cancelled || !data?.resolved) return;
           setResolvedImages((prev) => {
@@ -240,8 +242,7 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
     // spotifyTrackImages / spotifyArtistImages are legacy-named fields
     // populated from the active service's taste data, so "spotify" is
     // just the default fallback when no explicit service is set.
-    const activeService: "spotify" | "apple" =
-      profile.streamingService === "Apple Music" ? "apple" : "spotify";
+    const activeService = serviceParamFromProfile(profile.streamingService);
 
     // ── 1. "Jump Back In" — recent tracks or top tracks ──────────────
     const recentTiles: BrowseTile[] = [];

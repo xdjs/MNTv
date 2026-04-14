@@ -126,7 +126,9 @@ export default function Connect() {
           if (taste.trackImages.length) setPendingTrackImages(taste.trackImages);
         }
         // Jump to tier picker once the taste fetch resolves — matches
-        // the Spotify post-OAuth flow on line 83.
+        // the Spotify post-OAuth handler in the sessionStorage useEffect
+        // above, which does the same setStep(1) after piping Spotify
+        // taste data into the pending state.
         setStep(1);
       } else {
         // Null return = popup cancelled, SDK load failure, or dev token fetch failed.

@@ -23,6 +23,7 @@ import { useSpotifyToken } from "@/hooks/useSpotifyToken";
 import { initiateSpotifyAuth } from "@/hooks/useSpotifyAuth";
 import { usePlayer } from "@/contexts/PlayerContext";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
+import { withAppleStorefront } from "@/lib/appleStorefront";
 import { useTierAccent } from "@/hooks/useTierAccent";
 import PageTransition from "@/components/PageTransition";
 import type { Nugget, Source, AnimationStyle } from "@/mock/types";
@@ -113,9 +114,10 @@ export default function Listen() {
   const [trackUri, setTrackUri] = useState<string | null>(null);
   const isAppleMusicUser = profile?.streamingService === "Apple Music";
 
-  // Resolve track URI — from route (real tracks) or by searching Spotify.
-  // Apple Music users rely on the URI being baked into the route; there's
-  // no apple-search edge function yet (Phase 5).
+  // Resolve track URI — from route (real tracks) or by searching the
+  // active service's catalog. Spotify-search now handles both services
+  // via the service param (Phase 6b), so Apple users can resolve URIs
+  // by {artist, title} the same way Spotify users can.
   useEffect(() => {
     setTrackUri(null);
 
@@ -131,7 +133,7 @@ export default function Listen() {
     if (!track) return;
     if (!isAppleMusicUser && !hasSpotifyToken) return;
 
-    const service = isAppleMusicUser ? "apple" : "spotify";
+    const service: "apple" | "spotify" = isAppleMusicUser ? "apple" : "spotify";
 
     let cancelled = false;
     async function findCatalogUri() {
@@ -139,9 +141,14 @@ export default function Listen() {
         // Pass artist + title separately so the Spotify path can use its
         // field filters. The Apple path concatenates them into a free-form
         // term — both return the same normalized { tracks } shape.
-        const { data, error } = await supabase.functions.invoke("spotify-search", {
-          body: { artist: track!.artist, title: track!.title, service },
-        });
+        // withAppleStorefront attaches the current MusicKit storefront
+        // when service === "apple" so non-US users get region-correct
+        // catalog IDs.
+        const body = withAppleStorefront(
+          { artist: track!.artist, title: track!.title, service },
+          service,
+        );
+        const { data, error } = await supabase.functions.invoke("spotify-search", { body });
         if (cancelled) return;
         if (error) { console.error(`[Listen] ${service} search error:`, error); return; }
 
@@ -292,64 +299,75 @@ export default function Listen() {
     };
     const notPlayed = (a: string, t: string) => !player.isInSessionHistory(a, t);
 
-    const service = isAppleMusicUser ? "apple" : "spotify";
+    const service: "apple" | "spotify" = isAppleMusicUser ? "apple" : "spotify";
 
     try {
       // P1-P4 cascade: album continuation → recommendations → same-artist
       // top tracks → user catalog. Each P-level naturally falls through
       // when the signal isn't available for the active service.
-      //   P1 is Spotify-only (depends on spotifyStateTrack which Apple
-      //     users don't populate — the check short-circuits on null).
-      //   P2 recommend is Spotify-only functionally; the Apple branch of
-      //     spotify-search returns an empty tracks array so Apple falls
-      //     through to P3 with a cheap no-op round trip.
+      //   P1 is Spotify-only (reads player.spotifyStateTrack which only
+      //     the Spotify playback engine populates — skipped for Apple).
+      //   P2 recommend fires only for Spotify users; the Apple catalog
+      //     has no seed-based recommendations endpoint, so firing it
+      //     would be a wasted ~200ms round trip that always returns
+      //     {tracks:[]}.
       //   P3 and P4 work for both services via the service param.
 
-      // P1: Album continuation — play next track on the same album
-      const albumUri = player.spotifyStateTrack?.spotifyAlbumUri;
-      if (albumUri) {
-        const albumId = albumUri.replace("spotify:album:", "");
-        if (/^[a-zA-Z0-9]{20,25}$/.test(albumId)) {
-          const { data: albumData } = await supabase.functions.invoke("spotify-album", {
-            body: { albumId, service: "spotify" },
-          });
-          if (albumData?.tracks?.length) {
-            const currentIdx = albumData.tracks.findIndex(
-              (t: any) => t.uri === trackUri
-            );
-            if (currentIdx >= 0 && currentIdx < albumData.tracks.length - 1) {
-              const next = albumData.tracks[currentIdx + 1];
-              if (notPlayed(next.artist, next.title)) {
-                navigateTo(next);
-                return;
+      // P1: Album continuation — play next track on the same album.
+      // Gated on !isAppleMusicUser in addition to the spotifyStateTrack
+      // null check so a future PlayerContext change can't accidentally
+      // route Apple users through the Spotify catalog.
+      if (!isAppleMusicUser) {
+        const albumUri = player.spotifyStateTrack?.spotifyAlbumUri;
+        if (albumUri) {
+          const albumId = albumUri.replace("spotify:album:", "");
+          if (/^[a-zA-Z0-9]{20,25}$/.test(albumId)) {
+            const { data: albumData } = await supabase.functions.invoke("spotify-album", {
+              body: { albumId, service: "spotify" },
+            });
+            if (albumData?.tracks?.length) {
+              const currentIdx = albumData.tracks.findIndex(
+                (t: any) => t.uri === trackUri
+              );
+              if (currentIdx >= 0 && currentIdx < albumData.tracks.length - 1) {
+                const next = albumData.tracks[currentIdx + 1];
+                if (notPlayed(next.artist, next.title)) {
+                  navigateTo(next);
+                  return;
+                }
               }
             }
           }
         }
-      }
 
-      // P2: Recommendations (taste-weighted — prefer user's top artists).
-      // Apple path returns {tracks:[]} per Phase 5 design; this falls
-      // through to P3 without navigating.
-      if (trackUri) {
-        const { data: recData } = await supabase.functions.invoke("spotify-search", {
-          body: { recommend: trackUri, service },
-        });
-        const recs = ((recData?.tracks || []) as SpotifyTrackResult[]).filter(
-          (t) => t.title.toLowerCase() !== titleLower && notPlayed(t.artist, t.title)
-        );
-        if (recs.length > 0) {
-          const topArtists = new Set((profile?.spotifyTopArtists || []).map((a: string) => a.toLowerCase()));
-          const boosted = recs.filter((t) => topArtists.has(t.artist.toLowerCase()));
-          const pool = boosted.length > 0 ? boosted : recs;
-          navigateTo(pool[Math.floor(Math.random() * Math.min(pool.length, 3))]);
-          return;
+        // P2: Spotify recommendations (taste-weighted — prefer user's
+        // top artists). Skipped for Apple users because Apple has no
+        // seed-based recommendations endpoint.
+        if (trackUri) {
+          const { data: recData } = await supabase.functions.invoke("spotify-search", {
+            body: { recommend: trackUri, service: "spotify" },
+          });
+          const recs = ((recData?.tracks || []) as SpotifyTrackResult[]).filter(
+            (t) => t.title.toLowerCase() !== titleLower && notPlayed(t.artist, t.title)
+          );
+          if (recs.length > 0) {
+            const topArtists = new Set((profile?.spotifyTopArtists || []).map((a: string) => a.toLowerCase()));
+            const boosted = recs.filter((t) => topArtists.has(t.artist.toLowerCase()));
+            const pool = boosted.length > 0 ? boosted : recs;
+            navigateTo(pool[Math.floor(Math.random() * Math.min(pool.length, 3))]);
+            return;
+          }
         }
       }
 
-      // P3: Same-artist top tracks (via spotify-artist, which caches)
+      // P3: Same-artist top tracks (via spotify-artist, which caches).
+      // Works for both services via service + storefront.
+      const artistBody = withAppleStorefront(
+        { artistName: track.artist, service },
+        service,
+      );
       const { data: artistData } = await supabase.functions.invoke("spotify-artist", {
-        body: { artistName: track.artist, service },
+        body: artistBody,
       });
       if (artistData?.topTracks?.length) {
         const candidates = (artistData.topTracks as SpotifyTrackResult[]).filter(
@@ -1346,15 +1364,17 @@ export default function Listen() {
           )}
         </motion.div>
 
-        {/* URI resolving indicator (Spotify users only — Apple Music users
-            need a baked-in URI from the route since apple-search isn't wired) */}
-        {hasSpotifyToken && !isAppleMusicUser && !trackUri && !isExternalListenMode && (
+        {/* URI resolving indicator — shown while the active service's
+            catalog search is resolving the track URI. Apple Music
+            users now resolve through the same spotify-search path
+            (Phase 6b), so both paths show the indicator. */}
+        {(isAppleMusicUser || hasSpotifyToken) && !trackUri && !isExternalListenMode && (
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="relative z-10 mx-10 mt-2 text-xs text-foreground/40 animate-pulse"
           >
-            Connecting to Spotify...
+            Connecting to {isAppleMusicUser ? "Apple Music" : "Spotify"}...
           </motion.p>
         )}
 

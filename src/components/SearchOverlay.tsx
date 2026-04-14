@@ -4,6 +4,7 @@ import { Search, X, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
+import { serviceParamFromProfile, withAppleStorefront } from "@/lib/appleStorefront";
 
 interface SearchArtist { id: string; name: string; imageUrl: string }
 interface SearchTrack { title: string; artist: string; album: string; imageUrl: string; uri: string }
@@ -23,7 +24,7 @@ export default function SearchOverlay({ open, onClose }: Props) {
   const navigate = useNavigate();
   const { profile } = useUserProfile();
   const isAppleMusicUser = profile?.streamingService === "Apple Music";
-  const serviceParam = isAppleMusicUser ? "apple" : "spotify";
+  const serviceParam = serviceParamFromProfile(profile?.streamingService);
   const sourceLabel = isAppleMusicUser ? "Apple Music" : "Spotify";
 
   const hasResults = searchResults && (searchResults.artists.length + searchResults.tracks.length > 0);
@@ -38,9 +39,8 @@ export default function SearchOverlay({ open, onClose }: Props) {
     }
     setSearchLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("spotify-search", {
-        body: { query: q.trim(), service: serviceParam },
-      });
+      const body = withAppleStorefront({ query: q.trim(), service: serviceParam }, serviceParam);
+      const { data, error } = await supabase.functions.invoke("spotify-search", { body });
       if (error) throw error;
       setSearchResults(data as SearchResults);
     } catch (err) {

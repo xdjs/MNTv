@@ -371,8 +371,9 @@ export function useAINuggets(
       // Extract the catalog track ID from trackId. The route embeds a URI
       // in the format `real::Artist::Title::Album::{uri}` where {uri} is
       // either `spotify:track:XXX` (Spotify) or `apple:song:XXX` (Apple
-      // Music). Pass both fields so the edge function can fall back —
-      // older deployments only read spotifyTrackId and ignore appleTrackId.
+      // Music). spotifyTrackId is currently the only field generate-nuggets
+      // reads; appleTrackId is forward-prep for a follow-up that teaches
+      // the edge function to enrich prompts via Apple's catalog API.
       const spotifyUriMatch = trackId.match(/spotify:track:([a-zA-Z0-9]{22})/);
       const appleUriMatch = trackId.match(/apple:song:(\d+)/);
       const spotifyTrackIdValue = spotifyUriMatch?.[1];

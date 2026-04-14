@@ -4,13 +4,13 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { getAlbumById, getTracksForAlbum, getArtistById } from "@/mock/tracks";
 import { supabase } from "@/integrations/supabase/client";
 import PageTransition from "@/components/PageTransition";
-import { useUserProfile } from "@/hooks/useMusicNerdState";
 import {
   isSpotifyPrefix,
   isApplePrefix,
   parseSpotifyAlbum,
   parseAppleAlbum,
 } from "@/lib/routeParsing";
+import { withAppleStorefront } from "@/lib/appleStorefront";
 
 type Service = "spotify" | "apple";
 
@@ -45,10 +45,11 @@ interface SpotifyAlbumData {
 
 export default function AlbumDetail() {
   const { albumId: rawAlbumId } = useParams<{ albumId: string }>();
-  // Profile is read here so components that depend on it stay wired; the
-  // route prefix itself drives which service we query.
-  useUserProfile();
 
+  // Route prefix drives service selection — the apple::/spotify:: tag
+  // in the URL is authoritative, independent of the active profile. A
+  // user can deep-link to either service's album regardless of which
+  // one they authenticated with.
   const isSpotifyAlbum = isSpotifyPrefix(rawAlbumId);
   const isAppleAlbum = isApplePrefix(rawAlbumId);
 
@@ -135,8 +136,12 @@ function CatalogAlbumDetail({
 
     // service routes to spotify-album's Apple branch on the backend.
     // Response shape is identical so SpotifyAlbumData stays accurate.
+    // withAppleStorefront attaches the current MusicKit storefront for
+    // Apple users so album detail matches the user's region. Without
+    // this, a UK user viewing a UK-exclusive album would 404.
+    const body = withAppleStorefront({ albumId, service }, service);
     supabase.functions
-      .invoke("spotify-album", { body: { albumId, service } })
+      .invoke("spotify-album", { body })
       .then(({ data: d, error: e }) => {
         if (cancelled) return;
         if (e || !d?.found) {

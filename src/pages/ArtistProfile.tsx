@@ -15,6 +15,7 @@ import {
   parseAppleArtist,
   parseRealArtist,
 } from "@/lib/routeParsing";
+import { serviceParamFromProfile, withAppleStorefront } from "@/lib/appleStorefront";
 
 type Service = "spotify" | "apple";
 
@@ -91,7 +92,7 @@ export default function ArtistProfile() {
   // Spotify (e.g. an Apple artist tile they clicked through from a
   // cached page). The active service falls back when the route is bare
   // (`real::` or mock) and we need to pick a backend to ask.
-  const activeService: Service = profile?.streamingService === "Apple Music" ? "apple" : "spotify";
+  const activeService: Service = serviceParamFromProfile(profile?.streamingService);
 
   if (isAppleArtist && parsedApple?.appleId) {
     return (
@@ -196,9 +197,12 @@ function RealArtistProfile({
     // The edge function takes `artistId` for direct lookups and falls
     // back to `artistName` search. `service` routes to the Spotify or
     // Apple Music catalog on the backend — response shape is identical.
-    const body: Record<string, string> = { service };
-    if (catalogId) body.artistId = catalogId;
-    else body.artistName = artistName;
+    // withAppleStorefront attaches the current MusicKit storefront for
+    // Apple users so non-US catalogs return region-correct results.
+    const baseBody: Record<string, string> = { service };
+    if (catalogId) baseBody.artistId = catalogId;
+    else baseBody.artistName = artistName;
+    const body = withAppleStorefront(baseBody, service);
 
     supabase.functions
       .invoke("spotify-artist", { body })
@@ -245,8 +249,7 @@ function RealArtistProfile({
     // Album URI formats: spotify:album:XYZ / apple:album:123.
     // Extract the ID per-service so the album-detail route uses the
     // right prefix and the downstream call hits the right catalog.
-    const uriPrefix = service === "apple" ? "apple:album:" : "spotify:album:";
-    const routePrefix = service === "apple" ? "apple" : "spotify";
+    const uriPrefix = `${service}:album:`;
     const catalogAlbumId = a.uri?.startsWith(uriPrefix)
       ? a.uri.slice(uriPrefix.length)
       : "";
@@ -256,23 +259,22 @@ function RealArtistProfile({
       title: a.name,
       subtitle: a.releaseDate.slice(0, 4),
       href: catalogAlbumId
-        ? `/album/${routePrefix}::${catalogAlbumId}::${encodeURIComponent(stableName)}::${stableId}`
+        ? `/album/${service}::${catalogAlbumId}::${encodeURIComponent(stableName)}::${stableId}`
         : "#",
     };
   }), [albums, stableName, stableId, service]);
 
-  const relatedTiles = useMemo(() => {
-    const routePrefix = service === "apple" ? "apple" : "spotify";
-    return relatedArtists.map((a, i) => ({
+  const relatedTiles = useMemo(() =>
+    relatedArtists.map((a, i) => ({
       id: `related-${i}`,
       imageUrl: a.imageUrl,
       title: a.name,
       subtitle: a.genres.join(", ") || "Artist",
       href: a.id
-        ? `/artist/${routePrefix}::${a.id}::${encodeURIComponent(a.name)}`
+        ? `/artist/${service}::${a.id}::${encodeURIComponent(a.name)}`
         : `/artist/real::${encodeURIComponent(a.name)}`,
-    }));
-  }, [relatedArtists, service]);
+    })),
+  [relatedArtists, service]);
 
   if (loading) {
     return (
