@@ -4,11 +4,19 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { getArtistById, getAlbumsForArtist, getTracksForArtist, artists } from "@/mock/tracks";
 import { supabase } from "@/integrations/supabase/client";
 import PageTransition from "@/components/PageTransition";
-import AppleMusicComingSoon from "@/components/AppleMusicComingSoon";
 import TileRow from "@/components/TileRow";
 import { useArtistImage } from "@/hooks/useArtistImage";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
-import { isSpotifyPrefix, isRealPrefix, parseSpotifyArtist, parseRealArtist } from "@/lib/routeParsing";
+import {
+  isSpotifyPrefix,
+  isApplePrefix,
+  isRealPrefix,
+  parseSpotifyArtist,
+  parseAppleArtist,
+  parseRealArtist,
+} from "@/lib/routeParsing";
+
+type Service = "spotify" | "apple";
 
 // ── Types for real (Spotify) artist data ─────────────────────────────
 
@@ -60,6 +68,7 @@ export default function ArtistProfile() {
   const { profile } = useUserProfile();
 
   const isSpotifyArtist = isSpotifyPrefix(rawArtistId);
+  const isAppleArtist = isApplePrefix(rawArtistId);
   const isRealArtist = isRealPrefix(rawArtistId);
 
   const parsedSpotify = useMemo(() => {
@@ -67,28 +76,43 @@ export default function ArtistProfile() {
     return parseSpotifyArtist(rawArtistId);
   }, [rawArtistId]);
 
+  const parsedApple = useMemo(() => {
+    if (!rawArtistId) return null;
+    return parseAppleArtist(rawArtistId);
+  }, [rawArtistId]);
+
   const realArtistName = useMemo(() => {
     if (!rawArtistId) return null;
     return parseRealArtist(rawArtistId);
   }, [rawArtistId]);
 
-  // Apple Music: artist detail requires the extended spotify-artist edge
-  // function (Phase 5). Show a placeholder until that lands.
-  // Must be checked AFTER all hook calls to satisfy rules of hooks.
-  if (profile?.streamingService === "Apple Music") {
+  // Prefix-scoped routes take precedence: a user who navigates to an
+  // `apple::` URL gets the Apple detail even if their active profile is
+  // Spotify (e.g. an Apple artist tile they clicked through from a
+  // cached page). The active service falls back when the route is bare
+  // (`real::` or mock) and we need to pick a backend to ask.
+  const activeService: Service = profile?.streamingService === "Apple Music" ? "apple" : "spotify";
+
+  if (isAppleArtist && parsedApple?.appleId) {
     return (
-      <AppleMusicComingSoon
-        emoji="🎵"
-        title="Artist pages are coming soon"
-        description="Artist profiles for Apple Music aren't wired up yet. For now, head back to Browse and explore the demo tracks."
-      />
+      <PageTransition>
+        <RealArtistProfile
+          artistName={parsedApple.artistName}
+          catalogId={parsedApple.appleId}
+          service="apple"
+        />
+      </PageTransition>
     );
   }
 
   if (isSpotifyArtist && parsedSpotify?.spotifyId) {
     return (
       <PageTransition>
-        <RealArtistProfile artistName={parsedSpotify.artistName} spotifyId={parsedSpotify.spotifyId} />
+        <RealArtistProfile
+          artistName={parsedSpotify.artistName}
+          catalogId={parsedSpotify.spotifyId}
+          service="spotify"
+        />
       </PageTransition>
     );
   }
@@ -96,7 +120,7 @@ export default function ArtistProfile() {
   if (isRealArtist && realArtistName) {
     return (
       <PageTransition>
-        <RealArtistProfile artistName={realArtistName} />
+        <RealArtistProfile artistName={realArtistName} service={activeService} />
       </PageTransition>
     );
   }
@@ -148,9 +172,17 @@ export default function ArtistProfile() {
   );
 }
 
-// ── Real Spotify artist ──────────────────────────────────────────────
+// ── Real catalog artist (Spotify or Apple Music) ─────────────────────
 
-function RealArtistProfile({ artistName, spotifyId }: { artistName: string; spotifyId?: string }) {
+function RealArtistProfile({
+  artistName,
+  catalogId,
+  service,
+}: {
+  artistName: string;
+  catalogId?: string;
+  service: Service;
+}) {
   const navigate = useNavigate();
   const [data, setData] = useState<RealArtistData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -161,13 +193,20 @@ function RealArtistProfile({ artistName, spotifyId }: { artistName: string; spot
     setLoading(true);
     setError(null);
 
-    const body = spotifyId ? { artistId: spotifyId } : { artistName };
+    // The edge function takes `artistId` for direct lookups and falls
+    // back to `artistName` search. `service` routes to the Spotify or
+    // Apple Music catalog on the backend — response shape is identical.
+    const body: Record<string, string> = { service };
+    if (catalogId) body.artistId = catalogId;
+    else body.artistName = artistName;
+
     supabase.functions
       .invoke("spotify-artist", { body })
       .then(({ data: d, error: e }) => {
         if (cancelled) return;
         if (e || !d?.found || !d?.artist) {
-          setError("Couldn't find this artist on Spotify.");
+          const label = service === "apple" ? "Apple Music" : "Spotify";
+          setError(`Couldn't find this artist on ${label}.`);
           setLoading(false);
           return;
         }
@@ -182,7 +221,7 @@ function RealArtistProfile({ artistName, spotifyId }: { artistName: string; spot
       });
 
     return () => { cancelled = true; };
-  }, [artistName, spotifyId]);
+  }, [artistName, catalogId, service]);
 
   // All hooks must be called unconditionally (Rules of Hooks)
   const artist = data?.artist;
@@ -203,27 +242,37 @@ function RealArtistProfile({ artistName, spotifyId }: { artistName: string; spot
   })), [topTracks]);
 
   const albumTiles = useMemo(() => albums.map((a, i) => {
-    const spotifyAlbumId = a.uri?.replace("spotify:album:", "") || "";
+    // Album URI formats: spotify:album:XYZ / apple:album:123.
+    // Extract the ID per-service so the album-detail route uses the
+    // right prefix and the downstream call hits the right catalog.
+    const uriPrefix = service === "apple" ? "apple:album:" : "spotify:album:";
+    const routePrefix = service === "apple" ? "apple" : "spotify";
+    const catalogAlbumId = a.uri?.startsWith(uriPrefix)
+      ? a.uri.slice(uriPrefix.length)
+      : "";
     return {
       id: `real-album-${i}`,
       imageUrl: a.imageUrl,
       title: a.name,
       subtitle: a.releaseDate.slice(0, 4),
-      href: spotifyAlbumId
-        ? `/album/spotify::${spotifyAlbumId}::${encodeURIComponent(stableName)}::${stableId}`
+      href: catalogAlbumId
+        ? `/album/${routePrefix}::${catalogAlbumId}::${encodeURIComponent(stableName)}::${stableId}`
         : "#",
     };
-  }), [albums, stableName, stableId]);
+  }), [albums, stableName, stableId, service]);
 
-  const relatedTiles = useMemo(() => relatedArtists.map((a, i) => ({
-    id: `related-${i}`,
-    imageUrl: a.imageUrl,
-    title: a.name,
-    subtitle: a.genres.join(", ") || "Artist",
-    href: a.id
-      ? `/artist/spotify::${a.id}::${encodeURIComponent(a.name)}`
-      : `/artist/real::${encodeURIComponent(a.name)}`,
-  })), [relatedArtists]);
+  const relatedTiles = useMemo(() => {
+    const routePrefix = service === "apple" ? "apple" : "spotify";
+    return relatedArtists.map((a, i) => ({
+      id: `related-${i}`,
+      imageUrl: a.imageUrl,
+      title: a.name,
+      subtitle: a.genres.join(", ") || "Artist",
+      href: a.id
+        ? `/artist/${routePrefix}::${a.id}::${encodeURIComponent(a.name)}`
+        : `/artist/real::${encodeURIComponent(a.name)}`,
+    }));
+  }, [relatedArtists, service]);
 
   if (loading) {
     return (
