@@ -43,7 +43,21 @@ serve(async (req) => {
     ]);
 
     if (!artistsMediumRes.ok) {
-      throw new Error(`Spotify API error: ${artistsMediumRes.status}`);
+      // Capture the actual Spotify response body + status so we can see
+      // *why* the call failed (401 expired token vs 403 missing scope vs
+      // dev-mode deprecation). Without this, the client sees a generic 500.
+      const body = await artistsMediumRes.text().catch(() => "<unreadable>");
+      console.error(
+        `[spotify-taste] /me/top/artists failed: status=${artistsMediumRes.status} body=${body.slice(0, 500)}`,
+      );
+      return new Response(
+        JSON.stringify({
+          error: "Spotify API error",
+          spotifyStatus: artistsMediumRes.status,
+          spotifyBody: body.slice(0, 500),
+        }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     const [artistsMedium, artistsShort, tracksData, profileData] = await Promise.all([
