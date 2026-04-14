@@ -4,9 +4,15 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { getAlbumById, getTracksForAlbum, getArtistById } from "@/mock/tracks";
 import { supabase } from "@/integrations/supabase/client";
 import PageTransition from "@/components/PageTransition";
-import AppleMusicComingSoon from "@/components/AppleMusicComingSoon";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
-import { isSpotifyPrefix, parseSpotifyAlbum } from "@/lib/routeParsing";
+import {
+  isSpotifyPrefix,
+  isApplePrefix,
+  parseSpotifyAlbum,
+  parseAppleAlbum,
+} from "@/lib/routeParsing";
+
+type Service = "spotify" | "apple";
 
 // ── Types for Spotify album data ─────────────────────────────────────
 
@@ -39,35 +45,44 @@ interface SpotifyAlbumData {
 
 export default function AlbumDetail() {
   const { albumId: rawAlbumId } = useParams<{ albumId: string }>();
-  const { profile } = useUserProfile();
+  // Profile is read here so components that depend on it stay wired; the
+  // route prefix itself drives which service we query.
+  useUserProfile();
 
   const isSpotifyAlbum = isSpotifyPrefix(rawAlbumId);
+  const isAppleAlbum = isApplePrefix(rawAlbumId);
 
   const parsedSpotify = useMemo(() => {
     if (!rawAlbumId) return null;
     return parseSpotifyAlbum(rawAlbumId);
   }, [rawAlbumId]);
 
-  // Apple Music: album detail requires the extended spotify-album edge
-  // function (Phase 5). Show a placeholder until that lands.
-  // Must be checked AFTER all hook calls to satisfy rules of hooks.
-  if (profile?.streamingService === "Apple Music") {
+  const parsedApple = useMemo(() => {
+    if (!rawAlbumId) return null;
+    return parseAppleAlbum(rawAlbumId);
+  }, [rawAlbumId]);
+
+  if (isAppleAlbum && parsedApple?.appleAlbumId) {
     return (
-      <AppleMusicComingSoon
-        emoji="💿"
-        title="Album pages are coming soon"
-        description="Album detail for Apple Music isn't wired up yet. For now, head back to Browse and explore the demo tracks."
-      />
+      <PageTransition>
+        <CatalogAlbumDetail
+          albumId={parsedApple.appleAlbumId}
+          artistName={parsedApple.artistName}
+          artistCatalogId={parsedApple.artistAppleId}
+          service="apple"
+        />
+      </PageTransition>
     );
   }
 
   if (isSpotifyAlbum && parsedSpotify?.spotifyAlbumId) {
     return (
       <PageTransition>
-        <SpotifyAlbumDetail
+        <CatalogAlbumDetail
           albumId={parsedSpotify.spotifyAlbumId}
           artistName={parsedSpotify.artistName}
-          artistSpotifyId={parsedSpotify.artistSpotifyId}
+          artistCatalogId={parsedSpotify.artistSpotifyId}
+          service="spotify"
         />
       </PageTransition>
     );
@@ -95,16 +110,18 @@ export default function AlbumDetail() {
   );
 }
 
-// ── Spotify album detail ─────────────────────────────────────────────
+// ── Catalog album detail (Spotify or Apple Music) ────────────────────
 
-function SpotifyAlbumDetail({
+function CatalogAlbumDetail({
   albumId,
   artistName,
-  artistSpotifyId,
+  artistCatalogId,
+  service,
 }: {
   albumId: string;
   artistName: string;
-  artistSpotifyId: string;
+  artistCatalogId: string;
+  service: Service;
 }) {
   const navigate = useNavigate();
   const [data, setData] = useState<SpotifyAlbumData | null>(null);
@@ -116,12 +133,15 @@ function SpotifyAlbumDetail({
     setLoading(true);
     setError(null);
 
+    // service routes to spotify-album's Apple branch on the backend.
+    // Response shape is identical so SpotifyAlbumData stays accurate.
     supabase.functions
-      .invoke("spotify-album", { body: { albumId } })
+      .invoke("spotify-album", { body: { albumId, service } })
       .then(({ data: d, error: e }) => {
         if (cancelled) return;
         if (e || !d?.found) {
-          setError("Couldn't load this album from Spotify.");
+          const label = service === "apple" ? "Apple Music" : "Spotify";
+          setError(`Couldn't load this album from ${label}.`);
           setLoading(false);
           return;
         }
@@ -136,7 +156,7 @@ function SpotifyAlbumDetail({
       });
 
     return () => { cancelled = true; };
-  }, [albumId]);
+  }, [albumId, service]);
 
   if (loading) {
     return (
@@ -160,30 +180,33 @@ function SpotifyAlbumDetail({
 
   const { album, tracks } = data;
   const resolvedArtistName = album.artist.name || artistName;
-  const resolvedArtistId = album.artist.id || artistSpotifyId;
+  const resolvedArtistId = album.artist.id || artistCatalogId;
 
   return (
-    <SpotifyAlbumInner
+    <CatalogAlbumInner
       album={album}
       tracks={tracks}
       artistName={resolvedArtistName}
-      artistSpotifyId={resolvedArtistId}
+      artistCatalogId={resolvedArtistId}
+      service={service}
     />
   );
 }
 
-// ── Spotify album inner (keyboard nav) ───────────────────────────────
+// ── Catalog album inner (keyboard nav) ───────────────────────────────
 
-function SpotifyAlbumInner({
+function CatalogAlbumInner({
   album,
   tracks,
   artistName,
-  artistSpotifyId,
+  artistCatalogId,
+  service,
 }: {
   album: SpotifyAlbumData["album"];
   tracks: SpotifyTrack[];
   artistName: string;
-  artistSpotifyId: string;
+  artistCatalogId: string;
+  service: Service;
 }) {
   const navigate = useNavigate();
   const trackRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -194,10 +217,17 @@ function SpotifyAlbumInner({
 
   const zoneOrder = useMemo((): ZoneType[] => {
     const z: ZoneType[] = ["back"];
-    if (artistSpotifyId) z.push("artist");
+    if (artistCatalogId) z.push("artist");
     if (tracks.length > 0) z.push("tracks");
     return z;
-  }, [artistSpotifyId, tracks.length]);
+  }, [artistCatalogId, tracks.length]);
+
+  // The artist link preserves the current service so the user stays in
+  // their catalog when drilling up from album → artist.
+  const artistHref = useMemo(() => {
+    if (!artistCatalogId) return "";
+    return `/artist/${service}::${artistCatalogId}::${encodeURIComponent(artistName)}`;
+  }, [service, artistCatalogId, artistName]);
 
   const clampCol = useCallback(
     (z: ZoneType, col: number) => {
@@ -252,8 +282,8 @@ function SpotifyAlbumInner({
         e.preventDefault();
         if (zone === "back") {
           navigate(-1);
-        } else if (zone === "artist") {
-          navigate(`/artist/spotify::${artistSpotifyId}::${encodeURIComponent(artistName)}`);
+        } else if (zone === "artist" && artistHref) {
+          navigate(artistHref);
         } else if (zone === "tracks") {
           const t = tracks[colIndex];
           if (t?.uri) {
@@ -269,7 +299,7 @@ function SpotifyAlbumInner({
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [zone, colIndex, zoneOrder, clampCol, navigate, tracks, artistName, artistSpotifyId]);
+  }, [zone, colIndex, zoneOrder, clampCol, navigate, tracks, artistHref]);
 
   const formatDuration = (ms: number) => {
     const s = Math.floor(ms / 1000);
@@ -314,9 +344,9 @@ function SpotifyAlbumInner({
             >
               {album.name}
             </h1>
-            {artistSpotifyId && (
+            {artistHref && (
               <button
-                onClick={() => navigate(`/artist/spotify::${artistSpotifyId}::${encodeURIComponent(artistName)}`)}
+                onClick={() => navigate(artistHref)}
                 className={`mt-2 text-sm font-bold text-primary transition-all ${
                   zone === "artist" ? "tv-focus-glow underline" : "hover:underline"
                 }`}
