@@ -207,6 +207,14 @@ type AppleListeningAttributes = {
  *  rotation. +1 per recent play, +3 per heavy-rotation hit. Returns the
  *  top `maxArtists` names plus the image/id maps keyed by artist name.
  *
+ *  NOTE: all three maps are keyed on the raw `artistName` string, so
+ *  unrelated artists who happen to share a name (e.g. two acts called
+ *  "Nirvana") have their scores merged and the first image wins.
+ *  Apple's catalog IDs in `artistIds` would disambiguate but Apple's
+ *  heavy-rotation almost never returns `artists`-typed resources, so
+ *  that map is usually empty. Acceptable for a top-N taste signal;
+ *  don't use this for authoritative artist identity.
+ *
  *  This is pure: it takes parsed Apple resource arrays and returns plain
  *  objects. Apple-taste calls it; unit tests cover it directly from
  *  Vitest without Deno globals. */
@@ -329,7 +337,11 @@ export async function appleGet<T = unknown>(
   devToken: string,
   musicUserTokenOrOptions?: string | AppleGetOptions,
 ): Promise<T | null> {
-  if (path.startsWith("http")) {
+  // Reject absolute URLs (http:// or https://) AND protocol-relative
+  // URLs (//host/path) — both would bypass the APPLE_API_BASE prefix
+  // and could leak the developer token to an attacker-controlled host
+  // if a future caller misused the helper.
+  if (path.startsWith("http") || path.startsWith("//")) {
     console.warn(`[apple-utils] rejecting absolute URL: ${path}`);
     return null;
   }

@@ -210,7 +210,17 @@ async function findCrossServiceBio(
   callerGenres: string[],
 ): Promise<{ bio: string; grounded: boolean } | null> {
   if (!canonicalName) return null;
-  if (!callerGenres.length) return null;
+  if (!callerGenres.length) {
+    // No caller genres means we can't safely disambiguate homonymous
+    // artists. Skip cross-service reuse and regenerate the bio.
+    // Unusual — both Spotify and Apple return genres for known artists —
+    // but worth logging so a cold-miss surge on a specific artist is
+    // traceable.
+    console.info(
+      `[spotify-artist] cross-service bio skipped for "${canonicalName}" — caller has no genres`,
+    );
+    return null;
+  }
   const { data, error } = await db
     .from("artist_cache")
     .select("data")
@@ -261,12 +271,12 @@ async function writeArtistCache(
       .upsert({ ...row, created_at: new Date().toISOString() });
     if (error) {
       console.error(
-        `[spotify-artist] ${row.service} cache write failed:`,
+        `[spotify-artist/${row.service}] cache write failed:`,
         (error as { message?: string }).message,
       );
     }
   } catch (err) {
-    console.error(`[spotify-artist] ${row.service} cache write exception:`, err);
+    console.error(`[spotify-artist/${row.service}] cache write exception:`, err);
   }
 }
 
@@ -291,7 +301,10 @@ serve(async (req) => {
     const db = getSupabaseAdmin();
 
     if (isAppleService(service)) {
-      return handleAppleArtist({
+      // Await so a rejection from handleAppleArtist flows through the
+      // outer try/catch. Returning the Promise unawaited would escape
+      // to Deno's default error handler instead of the custom JSON 500.
+      return await handleAppleArtist({
         db,
         providedId: typeof providedId === "string" ? providedId : undefined,
         artistName: typeof artistName === "string" ? artistName : undefined,
@@ -636,7 +649,7 @@ async function handleAppleArtist(args: {
     });
   } else {
     console.warn(
-      `[spotify-artist] skipping Apple cache write for ${artistId} — albums fetch failed`,
+      `[spotify-artist/apple] skipping cache write for ${artistId} — albums fetch failed`,
     );
   }
 

@@ -24,7 +24,10 @@ serve(async (req) => {
     const { query, artist, title, recommend, service, storefront: rawStorefront } = await req.json();
 
     if (isAppleService(service)) {
-      return handleAppleSearch({ query, artist, title, recommend, storefront: rawStorefront });
+      // Await so a rejection from handleAppleSearch flows through the
+      // outer try/catch. Returning the Promise unawaited would escape
+      // to Deno's default error handler instead of the custom JSON 500.
+      return await handleAppleSearch({ query, artist, title, recommend, storefront: rawStorefront });
     }
 
     // ── Spotify path (default) ───────────────────────────────────────
