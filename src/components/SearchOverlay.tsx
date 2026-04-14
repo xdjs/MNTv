@@ -5,9 +5,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
 
-interface SpotifyArtist { id: string; name: string; imageUrl: string }
-interface SpotifyTrack { title: string; artist: string; album: string; imageUrl: string; uri: string }
-interface SpotifyResults { artists: SpotifyArtist[]; tracks: SpotifyTrack[] }
+interface SearchArtist { id: string; name: string; imageUrl: string }
+interface SearchTrack { title: string; artist: string; album: string; imageUrl: string; uri: string }
+interface SearchResults { artists: SearchArtist[]; tracks: SearchTrack[] }
 
 interface Props {
   open: boolean;
@@ -16,56 +16,57 @@ interface Props {
 
 export default function SearchOverlay({ open, onClose }: Props) {
   const [query, setQuery] = useState("");
-  const [spotifyResults, setSpotifyResults] = useState<SpotifyResults | null>(null);
-  const [spotifyLoading, setSpotifyLoading] = useState(false);
+  const [searchResults, setSearchResults] = useState<SearchResults | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const navigate = useNavigate();
   const { profile } = useUserProfile();
   const isAppleMusicUser = profile?.streamingService === "Apple Music";
+  const serviceParam = isAppleMusicUser ? "apple" : "spotify";
+  const sourceLabel = isAppleMusicUser ? "Apple Music" : "Spotify";
 
-  const hasSpotifyResults = spotifyResults && (spotifyResults.artists.length + spotifyResults.tracks.length > 0);
+  const hasResults = searchResults && (searchResults.artists.length + searchResults.tracks.length > 0);
 
-  // Debounced Spotify search
-  const searchSpotify = useCallback(async (q: string) => {
+  // Debounced catalog search — service param routes to Spotify or Apple Music
+  // inside the shared edge function.
+  const runSearch = useCallback(async (q: string) => {
     if (q.trim().length < 2) {
-      setSpotifyResults(null);
-      setSpotifyLoading(false);
+      setSearchResults(null);
+      setSearchLoading(false);
       return;
     }
-    setSpotifyLoading(true);
+    setSearchLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("spotify-search", {
-        body: { query: q.trim() },
+        body: { query: q.trim(), service: serviceParam },
       });
       if (error) throw error;
-      setSpotifyResults(data as SpotifyResults);
+      setSearchResults(data as SearchResults);
     } catch (err) {
-      console.error("Spotify search error:", err);
-      setSpotifyResults(null);
+      console.error(`[search] ${serviceParam} search error:`, err);
+      setSearchResults(null);
     } finally {
-      setSpotifyLoading(false);
+      setSearchLoading(false);
     }
-  }, []);
+  }, [serviceParam]);
 
   useEffect(() => {
-    // Apple Music users: search isn't wired yet (Phase 5). Skip the debounce.
-    if (isAppleMusicUser) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!query.trim()) {
-      setSpotifyResults(null);
-      setSpotifyLoading(false);
+      setSearchResults(null);
+      setSearchLoading(false);
       return;
     }
-    setSpotifyLoading(true);
-    debounceRef.current = setTimeout(() => searchSpotify(query), 300);
+    setSearchLoading(true);
+    debounceRef.current = setTimeout(() => runSearch(query), 300);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [query, searchSpotify, isAppleMusicUser]);
+  }, [query, runSearch]);
 
   useEffect(() => {
     if (open) {
       setQuery("");
-      setSpotifyResults(null);
+      setSearchResults(null);
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [open]);
@@ -80,7 +81,26 @@ export default function SearchOverlay({ open, onClose }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  const noResults = query.length > 0 && !hasSpotifyResults && !spotifyLoading;
+  const noResults = query.length > 0 && !hasResults && !searchLoading;
+
+  // Artist routes: use the active service's prefix so the downstream
+  // detail page fetches from the right catalog. `real::` remains the
+  // fallback for bare names with no catalog ID.
+  const buildArtistRoute = (a: SearchArtist): string => {
+    if (!a.id) return `/artist/real::${encodeURIComponent(a.name)}`;
+    return isAppleMusicUser
+      ? `/artist/apple::${a.id}::${encodeURIComponent(a.name)}`
+      : `/artist/spotify::${a.id}::${encodeURIComponent(a.name)}`;
+  };
+
+  // Track routes encode the URI directly — `apple:song:XXX` vs
+  // `spotify:track:XXX` both flow through the same `real::` handler in
+  // Listen.tsx and PlayerContext picks the engine based on
+  // getServiceFromUri(uri).
+  const buildTrackRoute = (t: SearchTrack): string => {
+    const base = `/listen/real::${encodeURIComponent(t.artist)}::${encodeURIComponent(t.title)}::${encodeURIComponent(t.album)}::${encodeURIComponent(t.uri || "")}`;
+    return t.imageUrl ? `${base}?art=${encodeURIComponent(t.imageUrl)}` : base;
+  };
 
   return (
     <AnimatePresence>
@@ -99,9 +119,8 @@ export default function SearchOverlay({ open, onClose }: Props) {
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder={isAppleMusicUser ? "Search coming soon for Apple Music" : "Search artists, albums, tracks…"}
-              disabled={isAppleMusicUser}
-              className="flex-1 bg-transparent text-xl md:text-3xl font-bold text-foreground placeholder:text-muted-foreground/50 outline-none disabled:cursor-not-allowed"
+              placeholder="Search artists, albums, tracks…"
+              className="flex-1 bg-transparent text-xl md:text-3xl font-bold text-foreground placeholder:text-muted-foreground/50 outline-none"
               style={{ fontFamily: "'Nunito Sans', sans-serif" }}
             />
             <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
@@ -111,42 +130,32 @@ export default function SearchOverlay({ open, onClose }: Props) {
 
           {/* Results */}
           <div className="flex-1 overflow-y-auto px-4 md:px-10 pt-6 md:pt-8 pb-20">
-            {isAppleMusicUser && (
-              <div className="flex flex-col items-center justify-center text-center mt-20 px-6">
-                <p className="text-4xl mb-4">🎵</p>
-                <p className="text-xl font-bold text-foreground mb-2">Search is coming soon</p>
-                <p className="text-sm text-muted-foreground max-w-sm">
-                  Apple Music search isn't wired up yet. For now, use the demo tracks on the Browse page to explore MusicNerd TV.
-                </p>
-              </div>
-            )}
-            {!isAppleMusicUser && noResults && (
+            {noResults && (
               <p className="text-muted-foreground text-lg">No results for "{query}"</p>
             )}
 
-            {/* === Spotify results === */}
-            {!isAppleMusicUser && query.trim().length >= 2 && (
+            {query.trim().length >= 2 && (
               <>
-                {spotifyLoading && !hasSpotifyResults && (
+                {searchLoading && !hasResults && (
                   <div className="flex items-center gap-2 text-muted-foreground mt-4">
                     <Loader2 size={16} className="animate-spin" />
-                    <span className="text-sm">Searching Spotify…</span>
+                    <span className="text-sm">Searching {sourceLabel}…</span>
                   </div>
                 )}
 
-                {hasSpotifyResults && (
+                {hasResults && (
                   <>
                     <div className="border-t border-foreground/10 mt-4 mb-6" />
-                    <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-4">From Spotify</h2>
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-4">From {sourceLabel}</h2>
 
-                    {spotifyResults!.artists.length > 0 && (
+                    {searchResults!.artists.length > 0 && (
                       <section className="mb-8">
                         <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3">Artists</h3>
                         <div className="flex flex-wrap gap-4">
-                          {spotifyResults!.artists.map((a) => (
+                          {searchResults!.artists.map((a) => (
                             <button
                               key={a.id || a.name}
-                              onClick={() => { onClose(); navigate(a.id ? `/artist/spotify::${a.id}::${encodeURIComponent(a.name)}` : `/artist/real::${encodeURIComponent(a.name)}`); }}
+                              onClick={() => { onClose(); navigate(buildArtistRoute(a)); }}
                               className="flex items-center gap-3 rounded-xl bg-foreground/5 p-3 pr-6 transition-colors hover:bg-foreground/10"
                             >
                               {a.imageUrl ? (
@@ -163,14 +172,14 @@ export default function SearchOverlay({ open, onClose }: Props) {
                       </section>
                     )}
 
-                    {spotifyResults!.tracks.length > 0 && (
+                    {searchResults!.tracks.length > 0 && (
                       <section className="mb-8">
                         <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3">Tracks</h3>
                         <div className="space-y-2">
-                          {spotifyResults!.tracks.map((t, i) => (
+                          {searchResults!.tracks.map((t, i) => (
                             <button
                               key={`${t.artist}-${t.title}-${i}`}
-                              onClick={() => { onClose(); navigate(`/listen/real::${encodeURIComponent(t.artist)}::${encodeURIComponent(t.title)}::${encodeURIComponent(t.album)}::${encodeURIComponent(t.uri || "")}${t.imageUrl ? `?art=${encodeURIComponent(t.imageUrl)}` : ""}`); }}
+                              onClick={() => { onClose(); navigate(buildTrackRoute(t)); }}
                               className="flex w-full items-center gap-4 rounded-xl p-3 transition-colors hover:bg-foreground/5 text-left"
                             >
                               {t.imageUrl ? (
