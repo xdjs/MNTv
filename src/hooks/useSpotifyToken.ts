@@ -2,6 +2,7 @@ import { useCallback, useState, useEffect } from "react";
 import { refreshSpotifyToken } from "./useSpotifyAuth";
 
 const STORAGE_KEY = "spotify_playback_token";
+const TOKEN_CHANGED_EVENT = "spotify-token-changed";
 
 interface StoredToken {
   accessToken: string;
@@ -21,29 +22,49 @@ function readToken(): StoredToken | null {
 
 function writeToken(token: StoredToken) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(token));
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(TOKEN_CHANGED_EVENT));
+  }
 }
 
 /** Clear the Spotify playback token from localStorage. Top-level helper
  *  so `useSignOut` and other callers outside a React tree can invalidate
- *  the token without mounting the `useSpotifyToken` hook. */
+ *  the token without mounting the `useSpotifyToken` hook. Dispatches
+ *  TOKEN_CHANGED_EVENT so sibling hook instances flip hasSpotifyToken to
+ *  false reactively, mirroring useAppleMusicToken's pattern. */
 export function clearSpotifyToken(): void {
   localStorage.removeItem(STORAGE_KEY);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(TOKEN_CHANGED_EVENT));
+  }
 }
 
 export function useSpotifyToken() {
   const [hasSpotifyToken, setHasSpotifyToken] = useState(() => !!readToken());
 
-  // Keep checking until the token appears (covers OAuth redirect storing token after mount)
+  // Sync hasSpotifyToken with localStorage writes from outside this hook —
+  //  • same tab: writeToken / clearSpotifyToken dispatch TOKEN_CHANGED_EVENT
+  //  • cross-tab: the native `storage` event fires when localStorage
+  //    changes in another tab (add, update, or remove the key)
+  // Event-driven instead of polling so cross-tab sign-out (Tab A signs
+  // out → Tab B's Spotify SDK should stop) propagates immediately, and
+  // we don't burn CPU forever after a clearSpotifyToken if the user
+  // never re-authorizes.
   useEffect(() => {
-    if (hasSpotifyToken) return;
-    const id = setInterval(() => {
-      if (readToken()) {
-        setHasSpotifyToken(true);
-        clearInterval(id);
-      }
-    }, 500);
-    return () => clearInterval(id);
-  }, [hasSpotifyToken]);
+    const sync = () => {
+      const present = !!readToken();
+      setHasSpotifyToken((prev) => (prev === present ? prev : present));
+    };
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY) sync();
+    };
+    window.addEventListener("storage", onStorage);
+    window.addEventListener(TOKEN_CHANGED_EVENT, sync);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener(TOKEN_CHANGED_EVENT, sync);
+    };
+  }, []);
 
   const getValidToken = useCallback(async (): Promise<string | null> => {
     const token = readToken();

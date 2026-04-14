@@ -15,7 +15,7 @@ export default function Browse() {
   const [searchOpen, setSearchOpen] = useState(false);
   const navigate = useNavigate();
   const { profile, saveProfile } = useUserProfile();
-  const signOut = useSignOut();
+  const { signOut } = useSignOut();
   const tier = profile?.calculatedTier;
   const { currentTrack, isPlaying, nowPlayingFocused, setNowPlayingFocused, setNowPlayingFocusIndex } = usePlayer();
 
@@ -111,8 +111,15 @@ export default function Browse() {
   // (this button, future settings menu, session-expired flows) ends the
   // Supabase session, clears every per-user storage key, and hard-reloads
   // through the same code path. See src/hooks/useSignOut.ts for why each
-  // step exists.
-  const handleSignOut = () => { void signOut(); };
+  // step exists. The .catch fallback guarantees the user lands on / even
+  // if a synchronous throw inside the hook (e.g. QuotaExceededError on
+  // localStorage in Safari private mode) bypasses the hook's own reload.
+  const handleSignOut = () => {
+    signOut().catch((err) => {
+      console.error("[Browse] signOut failed, forcing reload:", err);
+      window.location.href = "/";
+    });
+  };
 
   // Focus state: rowIndex (-1 = header), colIndex
   const [rowIndex, setRowIndex] = useState(-1);
