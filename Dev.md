@@ -26,9 +26,9 @@ MusicNerd TV transforms passive music listening into an engaged discovery experi
 | Routing | React Router v6 |
 | Animation | Framer Motion |
 | State | React local state + localStorage (no Redux/Zustand) |
-| Backend | Lovable Cloud (Supabase under the hood) |
+| Backend | Supabase (originally provisioned via Lovable; now managed directly) |
 | AI | Google Gemini via `GOOGLE_AI_API_KEY` (no client-side key) |
-| Auth | Supabase Auth (email/password + Google OAuth via `lovable.auth`) |
+| Auth | Anonymous — no Supabase auth flow is wired up; `auth.users` is empty |
 | DB | Supabase Postgres with RLS |
 | Edge Functions | Deno (deployed via Supabase Functions) |
 
@@ -67,7 +67,6 @@ src/
   integrations/
     supabase/client.ts  # Auto-generated — DO NOT EDIT
     supabase/types.ts   # Auto-generated — DO NOT EDIT
-    lovable/index.ts    # Lovable Cloud auth helper
 supabase/
   functions/      # Edge functions (Deno)
   config.toml     # Function JWT config
@@ -209,9 +208,13 @@ On Browse:
 ## 9. Security Posture
 
 ### Authentication
-- Email/password auth with email confirmation required (no auto-confirm)
-- Google OAuth via `lovable.auth.signInWithOAuth`
-- All sensitive edge functions validate JWT before processing
+- No user auth flow is currently wired up. `auth.users` is empty in
+  prod. All client requests authenticate as anonymous via the
+  Supabase publishable key.
+- Edge functions with `verify_jwt = true` accept the anon key as a
+  valid JWT — they do NOT enforce a real user identity. Any
+  function that needs per-user authorization must implement its own
+  in-function `supabase.auth.getUser()` check.
 
 ### RLS Summary
 | Table | SELECT | INSERT | UPDATE | DELETE |
