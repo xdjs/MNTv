@@ -7,9 +7,8 @@ import { useUserProfile, getStoredProfile } from "@/hooks/useMusicNerdState";
 import type { UserProfile } from "@/mock/types";
 import spotifyLogo from "@/assets/spotify-logo.png";
 import { initiateSpotifyAuth } from "@/hooks/useSpotifyAuth";
-import { initiateAppleMusicAuth } from "@/hooks/useAppleMusicAuth";
+import { initiateAppleMusicAuth, fetchAppleMusicTaste } from "@/hooks/useAppleMusicAuth";
 import { useAppleMusicToken } from "@/hooks/useAppleMusicToken";
-import { supabase } from "@/integrations/supabase/client";
 
 type Tier = "casual" | "curious" | "nerd";
 
@@ -42,7 +41,7 @@ export default function Connect() {
   const [pendingSpotifyTracks, setPendingSpotifyTracks] = useState<string[] | null>(null);
   const [pendingArtistImages, setPendingArtistImages] = useState<Record<string, string>>({});
   const [pendingArtistIds, setPendingArtistIds] = useState<Record<string, string>>({});
-  const [pendingTrackImages, setPendingTrackImages] = useState<{ title: string; artist: string; imageUrl: string }[]>([]);
+  const [pendingTrackImages, setPendingTrackImages] = useState<{ title: string; artist: string; imageUrl: string; uri?: string }[]>([]);
   const [pendingDisplayName, setPendingDisplayName] = useState<string | null>(null);
   // hasMusicToken is live from localStorage so it survives the Spotify OAuth
   // redirect (React state is wiped on remount, but the token persists).
@@ -50,6 +49,12 @@ export default function Connect() {
   const [appleMusicConnecting, setAppleMusicConnecting] = useState(false);
   const [appleMusicConnected, setAppleMusicConnected] = useState(() => hasMusicToken);
   const [appleMusicError, setAppleMusicError] = useState<string | null>(null);
+  // Non-blocking notice when the Apple taste fetch returns null. Shown on
+  // the tier picker step so the user understands why Browse will look
+  // sparse on first load. Apple's heavy-rotation + recent/played combo is
+  // softer than Spotify's explicit top-artists endpoint and more likely
+  // to fail on new accounts with little listening history.
+  const [appleTasteWarning, setAppleTasteWarning] = useState<string | null>(null);
   // Keep local state in sync when the hook detects a stored token.
   useEffect(() => {
     if (hasMusicToken) setAppleMusicConnected(true);
@@ -97,20 +102,44 @@ export default function Connect() {
     setAppleMusicConnecting(true);
     setAppleMusicError(null);
     try {
-      // The apple-dev-token edge function requires a Supabase session and
-      // returns 401 otherwise. Pre-flight the check so we surface an
-      // actionable message instead of a generic "couldn't connect" loop.
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setAppleMusicError("Sign in to MusicNerd before connecting Apple Music.");
-        return;
-      }
-
+      // No Supabase session required: the deployed apple-dev-token edge
+      // function authenticates on the anon key alone (no in-function
+      // user check, no rows in auth.users). The earlier pre-flight gate
+      // here was based on a documented-but-not-enforced JWT requirement
+      // and blocked all Apple Music sign-ins after a real logout cleared
+      // the leftover Lovable broker session that nobody had explicitly
+      // provisioned.
       const musicUserToken = await initiateAppleMusicAuth();
       if (musicUserToken) {
         setAppleMusicConnected(true);
-        // Phase 5 will wire fetchAppleMusicTaste here. For now, the Music User
-        // Token is already stored in localStorage by initiateAppleMusicAuth.
+
+        // Fetch the user's Apple Music taste profile via the apple-taste
+        // edge function. Stored under the same pending* state Spotify
+        // uses — the legacy field names (pendingSpotifyArtists etc.)
+        // carry the active service's taste data. A null return means
+        // Apple returned an error, the MUT is invalid, or the user has
+        // no listening history yet. In all cases we proceed to the
+        // tier picker rather than blocking onboarding — but we set a
+        // warning state so the user sees an inline note explaining why
+        // Browse will show only demo tracks on first load.
+        const taste = await fetchAppleMusicTaste(musicUserToken);
+        if (taste) {
+          setPendingSpotifyArtists(taste.topArtists);
+          setPendingSpotifyTracks(taste.topTracks);
+          if (taste.displayName) setPendingDisplayName(taste.displayName);
+          setPendingArtistImages(taste.artistImages);
+          setPendingArtistIds(taste.artistIds);
+          if (taste.trackImages.length) setPendingTrackImages(taste.trackImages);
+        } else {
+          setAppleTasteWarning(
+            "We couldn't pull your Apple Music library yet — Browse will start with demo tracks. Play a few and personalized rows will fill in."
+          );
+        }
+        // Jump to tier picker once the taste fetch resolves — matches
+        // the Spotify post-OAuth handler in the sessionStorage useEffect
+        // above, which does the same setStep(1) after piping Spotify
+        // taste data into the pending state.
+        setStep(1);
       } else {
         // Null return = popup cancelled, SDK load failure, or dev token fetch failed.
         // initiateAppleMusicAuth logs the specific cause; surface a generic hint here.
@@ -283,6 +312,11 @@ export default function Connect() {
                     <h1 className="text-2xl md:text-3xl font-black text-foreground tracking-tight">Choose your vibe</h1>
                     <p className="mt-2 text-muted-foreground">This shapes how deep your music insights go.</p>
                   </div>
+                  {appleTasteWarning && (
+                    <div className="w-full rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-200/90">
+                      {appleTasteWarning}
+                    </div>
+                  )}
                   <div className="flex flex-col gap-3 w-full">
                     {tiers.map((t) => (
                       <button key={t.id} onClick={() => handleTierSelect(t.id)} className={`flex items-start gap-3 md:gap-4 w-full rounded-2xl border bg-foreground/5 px-4 md:px-5 py-3 md:py-4 text-left transition-all duration-200 ${t.color}`}>

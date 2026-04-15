@@ -69,6 +69,17 @@ export function saveAppleMusicToken(musicUserToken: string, developerToken: stri
   }
 }
 
+/** Clear the Apple Music token pair from localStorage and notify all
+ *  `useAppleMusicToken` hook instances to flip `hasMusicToken` to false.
+ *  Top-level helper so `useSignOut` can invalidate tokens without needing
+ *  to call the hook itself. */
+export function clearAppleMusicToken(): void {
+  localStorage.removeItem(STORAGE_KEY);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(TOKEN_CHANGED_EVENT));
+  }
+}
+
 export function useAppleMusicToken() {
   const [hasMusicToken, setHasMusicToken] = useState(() => !!readToken());
 
@@ -129,13 +140,8 @@ export function useAppleMusicToken() {
   }, []);
 
   const clearToken = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
+    clearAppleMusicToken();
     setHasMusicToken(false);
-    // Mirror saveAppleMusicToken — notify same-tab listeners so sibling hook
-    // instances flip to hasMusicToken=false without waiting for a reload.
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new Event(TOKEN_CHANGED_EVENT));
-    }
   }, []);
 
   return { hasMusicToken, getMusicUserToken, getDeveloperToken, clearToken };

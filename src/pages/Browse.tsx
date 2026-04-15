@@ -8,12 +8,14 @@ import PageTransition from "@/components/PageTransition";
 import { useUserProfile, tierGreeting, tierBadgeLabel, tierBadgeColor, tierGlowClass } from "@/hooks/useMusicNerdState";
 import { usePersonalizedCatalog } from "@/hooks/usePersonalizedCatalog";
 import { useTierAccent } from "@/hooks/useTierAccent";
+import { useSignOut } from "@/hooks/useSignOut";
 import { usePlayer } from "@/contexts/PlayerContext";
 
 export default function Browse() {
   const [searchOpen, setSearchOpen] = useState(false);
   const navigate = useNavigate();
-  const { profile, saveProfile, clearProfile } = useUserProfile();
+  const { profile, saveProfile } = useUserProfile();
+  const { signOut } = useSignOut();
   const tier = profile?.calculatedTier;
   const { currentTrack, isPlaying, nowPlayingFocused, setNowPlayingFocused, setNowPlayingFocusIndex } = usePlayer();
 
@@ -105,16 +107,18 @@ export default function Browse() {
     };
   }, [isPlaying, listenUrl, navigate]);
 
+  // Sign-out goes through the shared useSignOut hook so every caller
+  // (this button, future settings menu, session-expired flows) ends the
+  // Supabase session, clears every per-user storage key, and hard-reloads
+  // through the same code path. See src/hooks/useSignOut.ts for why each
+  // step exists. The .catch fallback guarantees the user lands on / even
+  // if a synchronous throw inside the hook (e.g. QuotaExceededError on
+  // localStorage in Safari private mode) bypasses the hook's own reload.
   const handleSignOut = () => {
-    clearProfile();
-    localStorage.removeItem("spotify_playback_token");
-    localStorage.removeItem("apple_music_token");
-    sessionStorage.removeItem("musicnerd_redirect");
-    sessionStorage.removeItem("spotify_pending_taste");
-    // Hard navigate to avoid ProtectedRoute redirect race — clearProfile()
-    // triggers a re-render where ProtectedRoute redirects to /connect before
-    // React Router's navigate("/") takes effect.
-    window.location.href = "/";
+    signOut().catch((err) => {
+      console.error("[Browse] signOut failed, forcing reload:", err);
+      window.location.href = "/";
+    });
   };
 
   // Focus state: rowIndex (-1 = header), colIndex

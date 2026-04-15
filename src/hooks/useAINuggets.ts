@@ -44,23 +44,35 @@ export function makeTimestamp(index: number, totalNuggets: number, durationSec: 
   return Math.min(Math.floor(earlyStart + spacing * (index + 1)), durationSec - 10);
 }
 
-export function makeNugget(n: AINuggetData, nuggetId: string, sourceId: string, trackId: string, timestampSec: number): Nugget {
-  // Client-side headline guard — if server sent an empty headline,
-  // derive one from the text (same logic as server-side generateHeadlineFromText).
-  let headline = n.headline;
-  if (!headline.trim() && n.text.trim()) {
-    const first = n.text.split(/[.!?]\s+/)[0].trim().replace(/[.!?]+$/, "");
-    headline = first && first.length > 10
+/**
+ * Headline guard — derive a non-empty headline from the nugget's text when the
+ * server/cache sent an empty one. Mirrors server-side generateHeadlineFromText.
+ * Exported so callers can sanitize nuggets that bypass makeNugget (cache reads,
+ * seed data, poll results) without duplicating the derivation logic.
+ */
+export function deriveHeadline(headline: string | undefined, text: string | undefined): string {
+  let result = headline ?? "";
+  const body = text ?? "";
+  if (!result.trim() && body.trim()) {
+    const first = body.split(/[.!?]\s+/)[0].trim().replace(/[.!?]+$/, "");
+    result = first && first.length > 10
       ? (first.length > 80 ? first.slice(0, 77) + "..." : first)
-      : (n.text.length > 80 ? n.text.slice(0, 77) + "..." : n.text);
+      : (body.length > 80 ? body.slice(0, 77) + "..." : body);
   }
-  // Last resort — both headline and text empty (malformed server response)
-  if (!headline.trim()) {
-    headline = "Music Fact";
-  }
+  if (!result.trim()) result = "Music Fact";
+  return result;
+}
+
+/** Apply deriveHeadline to an already-formed Nugget (cache/seed/poll paths). */
+export function sanitizeNugget(n: Nugget): Nugget {
+  const headline = deriveHeadline(n.headline, n.text);
+  return headline === n.headline ? n : { ...n, headline };
+}
+
+export function makeNugget(n: AINuggetData, nuggetId: string, sourceId: string, trackId: string, timestampSec: number): Nugget {
   return {
     id: nuggetId, trackId, timestampSec, durationMs: 7000,
-    headline, text: n.text, kind: n.kind,
+    headline: deriveHeadline(n.headline, n.text), text: n.text, kind: n.kind,
     listenFor: n.listenFor || false, sourceId,
     imageUrl: n.imageUrl, imageCaption: n.imageCaption,
   };
@@ -93,7 +105,7 @@ async function pollForReadyNuggets(
       .maybeSingle();
 
     if (data?.status === "ready" && (data.nuggets as Nugget[] | null)?.length) {
-      const nuggs = data.nuggets as Nugget[];
+      const nuggs = (data.nuggets as Nugget[]).map(sanitizeNugget);
       const srcs = new Map<string, Source>();
       for (const [key, val] of Object.entries(data.sources as Record<string, Source>)) {
         srcs.set(key, val);
@@ -236,7 +248,7 @@ export function useAINuggets(
             trackId,
             timestampSec: Math.min(timestampSec, durationSec - 10),
             durationMs: 7000,
-            headline: n.headline,
+            headline: deriveHeadline(n.headline, n.text),
             text: n.text,
             kind: n.kind,
             listenFor: n.listenFor || false,
@@ -300,7 +312,9 @@ export function useAINuggets(
 
         if (cached?.status === "ready" && (cached.nuggets as Nugget[] | null)?.length) {
           if (import.meta.env.DEV) console.log("[NuggetCache] Serving cached nuggets for", dbCacheKey);
-          const cachedNuggets = cached.nuggets as Nugget[];
+          // Sanitize — older cache entries may have empty headlines that
+          // predate the server-side/makeNugget headline guard.
+          const cachedNuggets = (cached.nuggets as Nugget[]).map(sanitizeNugget);
           const cachedSources = new Map<string, Source>();
           const rawSources = cached.sources as Record<string, Source>;
           for (const [key, val] of Object.entries(rawSources)) {
@@ -368,9 +382,16 @@ export function useAINuggets(
       }
 
       // ── Generate fresh nuggets via AI ─────────────────────────────
-      // Extract Spotify track ID from trackId (format: real::Artist::Title::Album::spotify:track:XXXXX)
+      // Extract the catalog track ID from trackId. The route embeds a URI
+      // in the format `real::Artist::Title::Album::{uri}` where {uri} is
+      // either `spotify:track:XXX` (Spotify) or `apple:song:XXX` (Apple
+      // Music). spotifyTrackId is currently the only field generate-nuggets
+      // reads; appleTrackId is forward-prep for a follow-up that teaches
+      // the edge function to enrich prompts via Apple's catalog API.
       const spotifyUriMatch = trackId.match(/spotify:track:([a-zA-Z0-9]{22})/);
+      const appleUriMatch = trackId.match(/apple:song:(\d+)/);
       const spotifyTrackIdValue = spotifyUriMatch?.[1];
+      const appleTrackIdValue = appleUriMatch?.[1];
 
       // ── SSE streaming: fetch nuggets as they individually resolve ──
       const requestBody = {
@@ -384,6 +405,7 @@ export function useAINuggets(
         userTopTracks: topTracks?.slice(0, 10),
         spotifyArtistImageUrl: artistImageUrl,
         spotifyTrackId: spotifyTrackIdValue,
+        appleTrackId: appleTrackIdValue,
       };
 
       // Get auth token for the request

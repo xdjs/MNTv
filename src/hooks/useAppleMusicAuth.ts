@@ -12,7 +12,9 @@
  * revokes access, the app must prompt them to re-authorize.
  */
 
+import { supabase } from "@/integrations/supabase/client";
 import { loadMusicKitSDK } from "@/lib/musickitLoader";
+import { readAppleStorefront } from "@/lib/appleStorefront";
 import { fetchAppleDeveloperToken, saveAppleMusicToken } from "./useAppleMusicToken";
 
 // ── Auth flow ─────────────────────────────────────────────────────────
@@ -71,17 +73,52 @@ export interface AppleMusicTaste {
   artistIds: Record<string, string>;
   trackImages: { title: string; artist: string; imageUrl: string; uri?: string }[];
   displayName: string | null;
-  partial?: boolean;   // true = weaker signal than Spotify's user-top-read
 }
 
 /**
  * Fetch a taste profile from the user's Apple Music library.
  *
- * TODO(Phase 5): implement the `apple-taste` edge function. Apple Music has
- * no `/me/top/artists` equivalent, so Phase 5 will combine `heavy-rotation`
- * + `recent/played/tracks` into a best-effort profile marked `partial: true`.
+ * Calls the `apple-taste` edge function which combines
+ * `/me/history/heavy-rotation` with `/me/recent/played/tracks` into a
+ * weighted-frequency ranking. Response matches `spotify-taste` shape
+ * plus `partial: true` so callers can treat Apple taste as softer signal.
+ *
+ * Returns null on any failure — the caller (Connect.tsx) continues
+ * onboarding with empty taste data rather than blocking the flow.
  */
-export async function fetchAppleMusicTaste(_musicUserToken: string): Promise<AppleMusicTaste | null> {
-  console.warn("[AppleMusic] fetchAppleMusicTaste: apple-taste edge function not yet deployed (Phase 5)");
-  return null;
+export async function fetchAppleMusicTaste(musicUserToken: string): Promise<AppleMusicTaste | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke("apple-taste", {
+      body: { musicUserToken, storefront: readAppleStorefront() },
+    });
+    if (error) {
+      console.error("[AppleMusic] fetchAppleMusicTaste failed:", error);
+      return null;
+    }
+    // Shape check: Array.isArray alone is insufficient because a
+    // `[1, 2, 3]` payload passes but breaks every downstream string
+    // consumer. Verify the element type too. Same for trackImages
+    // (downstream code reads .title / .artist / .imageUrl).
+    if (
+      !data ||
+      !Array.isArray(data.topArtists) ||
+      !data.topArtists.every((a: unknown) => typeof a === "string") ||
+      !Array.isArray(data.topTracks ?? []) ||
+      !Array.isArray(data.trackImages ?? [])
+    ) {
+      console.warn("[AppleMusic] fetchAppleMusicTaste returned unexpected shape:", data);
+      return null;
+    }
+    return {
+      topArtists: data.topArtists as string[],
+      topTracks: (data.topTracks ?? []) as string[],
+      artistImages: (data.artistImages ?? {}) as Record<string, string>,
+      artistIds: (data.artistIds ?? {}) as Record<string, string>,
+      trackImages: (data.trackImages ?? []) as AppleMusicTaste["trackImages"],
+      displayName: (data.displayName ?? null) as string | null,
+    };
+  } catch (err) {
+    console.error("[AppleMusic] fetchAppleMusicTaste exception:", err);
+    return null;
+  }
 }
