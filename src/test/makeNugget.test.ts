@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { makeNugget } from "@/hooks/useAINuggets";
+import { makeNugget, sanitizeNugget, deriveHeadline } from "@/hooks/useAINuggets";
+import type { Nugget } from "@/mock/types";
 
 const baseSource = {
   type: "article" as const,
@@ -97,5 +98,91 @@ describe("makeNugget headline derivation", () => {
     expect(result.timestampSec).toBe(123);
     expect(result.text).toBe("Body.");
     expect(result.kind).toBe("artist");
+  });
+});
+
+describe("sanitizeNugget (cache/seed/poll bypass paths)", () => {
+  const baseNugget: Nugget = {
+    id: "cached-nug-1",
+    trackId: "track-1",
+    timestampSec: 60,
+    durationMs: 7000,
+    headline: "",
+    text: "",
+    kind: "artist",
+    listenFor: false,
+    sourceId: "src-1",
+  };
+
+  it("fills in 'Music Fact' when a cached nugget has empty headline + empty text", () => {
+    const result = sanitizeNugget(baseNugget);
+    expect(result.headline).toBe("Music Fact");
+  });
+
+  it("derives headline from text when a cached nugget has empty headline but valid text", () => {
+    const input = { ...baseNugget, text: "She produced the entire album. Released in 2023." };
+    const result = sanitizeNugget(input);
+    expect(result.headline).toBe("She produced the entire album");
+  });
+
+  it("returns the same object (reference equality) when headline is already valid", () => {
+    const input = { ...baseNugget, headline: "Real headline", text: "Body." };
+    const result = sanitizeNugget(input);
+    expect(result).toBe(input);
+  });
+
+  it("preserves all other nugget fields when repairing", () => {
+    const input = { ...baseNugget, text: "Some fact here.", imageUrl: "x.jpg", imageCaption: "cap" };
+    const result = sanitizeNugget(input);
+    expect(result.id).toBe(input.id);
+    expect(result.trackId).toBe(input.trackId);
+    expect(result.timestampSec).toBe(input.timestampSec);
+    expect(result.sourceId).toBe(input.sourceId);
+    expect(result.imageUrl).toBe("x.jpg");
+    expect(result.imageCaption).toBe("cap");
+    expect(result.kind).toBe("artist");
+  });
+});
+
+describe("regression: poisoned nugget_cache row (KIKI / Cherele bug)", () => {
+  // Reproduces the production bug: a nugget_cache row written for a
+  // lesser-known artist before the server-side headline guard landed. The
+  // `.map(sanitizeNugget)` call at the DB cache read site (useAINuggets.ts
+  // line 317) must repair every nugget so the UI never renders blank cards.
+  it("repairs all nuggets returned from a poisoned nugget_cache row", () => {
+    // Shape mirrors what `supabase.from('nugget_cache').select('nuggets')`
+    // would hand back for a broken cache entry.
+    const poisonedCacheRow = {
+      nuggets: [
+        { id: "n-0", trackId: "real::Cherele::KIKI", timestampSec: 30, durationMs: 7000, headline: "", text: "Cherele recorded KIKI in late 2024.", kind: "track", listenFor: false, sourceId: "s-0" },
+        { id: "n-1", trackId: "real::Cherele::KIKI", timestampSec: 80, durationMs: 7000, headline: "", text: "", kind: "artist", listenFor: false, sourceId: "s-1" },
+        { id: "n-2", trackId: "real::Cherele::KIKI", timestampSec: 130, durationMs: 7000, headline: "Pete Rango features on the second verse", text: "Verified via credits.", kind: "discovery", listenFor: false, sourceId: "s-2" },
+      ] as Nugget[],
+    };
+
+    const repaired = poisonedCacheRow.nuggets.map(sanitizeNugget);
+
+    expect(repaired).toHaveLength(3);
+    expect(repaired[0].headline).toBe("Cherele recorded KIKI in late 2024");
+    expect(repaired[1].headline).toBe("Music Fact");
+    expect(repaired[2].headline).toBe("Pete Rango features on the second verse");
+
+    for (const n of repaired) {
+      expect(n.headline.trim().length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("deriveHeadline (shared helper)", () => {
+  it("tolerates undefined headline + undefined text", () => {
+    expect(deriveHeadline(undefined, undefined)).toBe("Music Fact");
+  });
+
+  it("tolerates undefined headline + valid text", () => {
+    expect(deriveHeadline(undefined, "Only sentence.")).toBe("Only sentence");
+  });
+
+  it("returns the provided headline unchanged when non-empty", () => {
+    expect(deriveHeadline("Existing", "Body.")).toBe("Existing");
   });
 });
