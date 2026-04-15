@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getAppleDeveloperToken } from "../_shared/apple-token.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -197,6 +198,119 @@ async function fetchSpotifyArtistInfo(artistName: string, spotifyTrackId?: strin
     };
   } catch (e) {
     console.error("[Spotify] Artist info fetch failed:", e);
+    return null;
+  }
+}
+
+// ── Apple Music artist data (mirrors fetchSpotifyArtistInfo for Apple users) ──
+//
+// Apple Music users reach this path because the frontend sends an `appleTrackId`
+// extracted from `apple:song:XXX` URIs. We use Apple's catalog API to resolve
+// the track's canonical artist (avoiding name collisions the way the Spotify
+// path uses /v1/tracks/:id) then fetch the artist's genre + top-songs view.
+//
+// Returns the same `SpotifyArtistInfo` shape so downstream prompt-building
+// code (line ~1529 and Exa strategy selection) doesn't have to branch on
+// service. Apple exposes no direct follower count, so `followers` is set
+// to 0 — downstream popularity logic will treat Apple artists as SPARSE
+// (conservative strategy) until we add a cross-service popularity signal.
+async function fetchAppleArtistInfo(
+  artistName: string,
+  appleTrackId?: string,
+): Promise<SpotifyArtistInfo | null> {
+  try {
+    const devToken = await getAppleDeveloperToken();
+    if (!devToken) return null;
+
+    const headers = { Authorization: `Bearer ${devToken}` };
+
+    // Track ID route: Apple's song endpoint exposes the canonical artist
+    // relationship, which we use to pick the exact artist page. Prevents
+    // name collisions between homonymous artists (e.g. two bands called
+    // "Nirvana"). Also captures the song's genreNames so downstream code
+    // can merge them with the artist-level genre list.
+    let appleArtistId: string | null = null;
+    let songGenres: string[] = [];
+    if (appleTrackId) {
+      const songRes = await fetch(
+        `https://api.music.apple.com/v1/catalog/us/songs/${appleTrackId}?include=artists`,
+        { headers },
+      );
+      if (songRes.ok) {
+        const songData = await songRes.json();
+        const song = songData?.data?.[0];
+        songGenres = song?.attributes?.genreNames || [];
+        appleArtistId = song?.relationships?.artists?.data?.[0]?.id || null;
+        if (appleArtistId) {
+          console.log(`[Apple Music] Resolved artist from track ID: ${artistName} (${appleArtistId})`);
+        }
+      }
+    }
+
+    // Name-search fallback: if the track-based resolution failed (track id
+    // invalid, song unavailable, relationship missing), fall back to the
+    // catalog search endpoint. Matches the Spotify path's fallback.
+    if (!appleArtistId) {
+      const q = encodeURIComponent(artistName.trim());
+      const searchRes = await fetch(
+        `https://api.music.apple.com/v1/catalog/us/search?types=artists&limit=1&term=${q}`,
+        { headers },
+      );
+      if (!searchRes.ok) return null;
+      const searchData = await searchRes.json();
+      appleArtistId = searchData?.results?.artists?.data?.[0]?.id || null;
+    }
+    if (!appleArtistId) return null;
+
+    // Fetch the artist page with views=top-songs so we get the top tracks
+    // the same way Spotify's /artists/:id/top-tracks gives us a priority
+    // list. `featured-release` surfaces the most recent album — Apple
+    // doesn't expose a paginated "all albums" view in a single call, so
+    // this is intentionally narrower than the Spotify albums fetch.
+    const artistRes = await fetch(
+      `https://api.music.apple.com/v1/catalog/us/artists/${appleArtistId}?views=top-songs,featured-release`,
+      { headers },
+    );
+    if (!artistRes.ok) return null;
+    const artistData = await artistRes.json();
+    const artist = artistData?.data?.[0];
+    if (!artist) return null;
+
+    // Merge artist-level + song-level genres and strip Apple's "Music"
+    // catch-all label — it appears on every catalog item and adds no
+    // signal to the Gemini prompt.
+    const mergedGenres = new Set<string>();
+    for (const g of (artist.attributes?.genreNames || []) as string[]) {
+      if (g && g !== "Music") mergedGenres.add(g);
+    }
+    for (const g of songGenres) {
+      if (g && g !== "Music") mergedGenres.add(g);
+    }
+    const genres: string[] = Array.from(mergedGenres);
+
+    const topSongs = (artist.views?.["top-songs"]?.data || []) as Array<{ attributes?: { name?: string } }>;
+    const topTrackNames: string[] = topSongs
+      .slice(0, 10)
+      .map((s) => s?.attributes?.name)
+      .filter((n): n is string => typeof n === "string" && n.length > 0);
+
+    const featuredAlbums = (artist.views?.["featured-release"]?.data || []) as Array<{ attributes?: { name?: string } }>;
+    const albumNames: string[] = featuredAlbums
+      .slice(0, 10)
+      .map((a) => a?.attributes?.name)
+      .filter((n): n is string => typeof n === "string" && n.length > 0);
+
+    console.log(`[Apple Music] ${artistName}: ${genres.length} genres, ${topTrackNames.length} tracks, ${albumNames.length} albums`);
+
+    return {
+      genres,
+      relatedArtists: [],
+      topTrackNames,
+      albumNames,
+      followers: 0, // Apple exposes no direct follower count — see header comment
+    };
+  } catch (e) {
+    console.error("[Apple Music] Artist info fetch failed:", e);
     return null;
   }
 }
@@ -2147,7 +2261,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, imageCaption, imageQuery, listenCount, previousNuggets, tier: rawTier, userTopArtists: rawTopArtists, userTopTracks: rawTopTracks, spotifyArtistImageUrl: rawSpotifyArtistImageUrl, spotifyTrackId: rawSpotifyTrackId } = body;
+    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, imageCaption, imageQuery, listenCount, previousNuggets, tier: rawTier, userTopArtists: rawTopArtists, userTopTracks: rawTopTracks, spotifyArtistImageUrl: rawSpotifyArtistImageUrl, spotifyTrackId: rawSpotifyTrackId, appleTrackId: rawAppleTrackId } = body;
     const tier: Tier = (rawTier === "casual" || rawTier === "curious" || rawTier === "nerd") ? rawTier : "casual";
 
     // ── Input validation ────────────────────────────────────────────
@@ -2189,6 +2303,14 @@ serve(async (req) => {
     const safeSpotifyTrackId: string | undefined =
       typeof rawSpotifyTrackId === "string" && /^[a-zA-Z0-9]{22}$/.test(rawSpotifyTrackId)
         ? rawSpotifyTrackId
+        : undefined;
+    // Apple Music catalog ID for Apple users (e.g., "1109715168").
+    // Apple catalog IDs are numeric strings (songs are typically 9-10 digits
+    // but albums/compilations can be longer, so accept 5-15). When set, we
+    // route to fetchAppleArtistInfo instead of the Spotify enrichment path.
+    const safeAppleTrackId: string | undefined =
+      typeof rawAppleTrackId === "string" && /^\d{5,15}$/.test(rawAppleTrackId)
+        ? rawAppleTrackId
         : undefined;
 
     const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY");
@@ -2301,9 +2423,14 @@ Return ONLY valid JSON:
     let trackSearchSkipped = false;
     let discoverySearchSkipped = false;
 
-    // Fetch Spotify + Last.fm artist info in parallel with Exa Phase 1
-    // Pass track ID for precise artist resolution (prevents name collisions)
-    const spotifyInfoPromise = fetchSpotifyArtistInfo(artist, safeSpotifyTrackId);
+    // Fetch artist info in parallel with Exa Phase 1. Apple users route
+    // through fetchAppleArtistInfo (which uses Apple's catalog API);
+    // everyone else falls through to the Spotify path. The returned shape
+    // is identical so downstream code (prompt building, Exa strategy
+    // selection via `followers`) doesn't need to branch on service.
+    const spotifyInfoPromise = safeAppleTrackId
+      ? fetchAppleArtistInfo(artist, safeAppleTrackId)
+      : fetchSpotifyArtistInfo(artist, safeSpotifyTrackId);
     const lastFmSimilarPromise = fetchLastFmSimilarArtists(artist);
     const lastFmTagsPromise = fetchLastFmArtistTags(artist);
 
