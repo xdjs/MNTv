@@ -123,6 +123,10 @@ async function getSpotifyAppToken(): Promise<string | null> {
   } catch { return null; }
 }
 
+// NAMING DEBT: this interface is now populated by both Spotify and Apple
+// Music paths. The "Spotify" prefix is legacy from the single-service era.
+// Rename to `ArtistEnrichmentInfo` or similar when touching the broader
+// spotify* → catalog-agnostic rename tracked in #51.
 interface SpotifyArtistInfo {
   genres: string[];
   relatedArtists: string[];
@@ -236,6 +240,30 @@ function sanitizeForLog(raw: string): string {
   return raw.replace(/[\r\n\t]+/g, " ").slice(0, 200);
 }
 
+// Apple catalog calls run on the user-blocking critical path (racing Exa in
+// Promise.all). Cap each at this budget so a stuck Apple API response can't
+// hang the entire nugget generation.
+const APPLE_TIMEOUT_MS = 3000;
+
+// Single fetch helper for all Apple Music calls — wraps the manual
+// AbortController + setTimeout pattern (matching _shared/apple-utils.ts:360)
+// so individual call sites stay terse and adding a new call site in the
+// future can't accidentally skip the timeout or leak the timer. Propagates
+// the Response; callers check .ok or catch AbortError at the outer boundary.
+async function fetchWithAppleTimeout(
+  url: string,
+  headers: Record<string, string>,
+  timeoutMs: number = APPLE_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { headers, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function fetchAppleArtistInfo(
   artistName: string,
   appleTrackId?: string,
@@ -244,21 +272,11 @@ async function fetchAppleArtistInfo(
     const devToken = await getAppleDeveloperToken();
     if (!devToken) return null;
 
+    // TODO(#51): storefront is hardcoded to 'us'. Artists prominent in other
+    // storefronts (Japan, Korea, LatAm) may not surface cleanly in US catalog
+    // name search. Track alongside the cross-service popularity signal
+    // follow-up — both want a per-request catalog-locale parameter.
     const headers = { Authorization: `Bearer ${devToken}` };
-
-    // Apple catalog calls run on the user-blocking critical path (racing Exa
-    // in Promise.all). Cap each at 3s so a stuck Apple API response can't
-    // hang the entire nugget generation. On abort, the catch at the bottom
-    // returns null and downstream gracefully falls back to SPARSE Exa.
-    // Uses the manual AbortController+setTimeout pattern (matching
-    // _shared/apple-utils.ts:360) rather than AbortSignal.timeout, which
-    // is newer and not used elsewhere in this codebase.
-    const APPLE_TIMEOUT_MS = 3000;
-    function timeoutSignal(): { signal: AbortSignal; clear: () => void } {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), APPLE_TIMEOUT_MS);
-      return { signal: controller.signal, clear: () => clearTimeout(timer) };
-    }
 
     // Track ID route: Apple's song endpoint exposes the canonical artist
     // relationship, which we use to pick the exact artist page. Prevents
@@ -270,16 +288,10 @@ async function fetchAppleArtistInfo(
     let songGenres: string[] = [];
 
     if (appleTrackId) {
-      const t = timeoutSignal();
-      let songRes: Response;
-      try {
-        songRes = await fetch(
-          `https://api.music.apple.com/v1/catalog/us/songs/${appleTrackId}?include=artists`,
-          { headers, signal: t.signal },
-        );
-      } finally {
-        t.clear();
-      }
+      const songRes = await fetchWithAppleTimeout(
+        `https://api.music.apple.com/v1/catalog/us/songs/${appleTrackId}?include=artists`,
+        headers,
+      );
       if (songRes.ok) {
         const songData = await songRes.json();
         const song = songData?.data?.[0];
@@ -301,16 +313,10 @@ async function fetchAppleArtistInfo(
     // catalog search endpoint. Matches the Spotify path's fallback.
     if (!appleArtistId) {
       const q = encodeURIComponent(artistName.trim());
-      const t = timeoutSignal();
-      let searchRes: Response;
-      try {
-        searchRes = await fetch(
-          `https://api.music.apple.com/v1/catalog/us/search?types=artists&limit=1&term=${q}`,
-          { headers, signal: t.signal },
-        );
-      } finally {
-        t.clear();
-      }
+      const searchRes = await fetchWithAppleTimeout(
+        `https://api.music.apple.com/v1/catalog/us/search?types=artists&limit=1&term=${q}`,
+        headers,
+      );
       if (!searchRes.ok) {
         console.warn(`[Apple Music] search returned ${searchRes.status} for "${safeArtistNameLog}"`);
         return null;
@@ -322,19 +328,15 @@ async function fetchAppleArtistInfo(
 
     // Fetch the artist page with views=top-songs so we get the top tracks
     // the same way Spotify's /artists/:id/top-tracks gives us a priority
-    // list. `featured-release` surfaces the most recent album — Apple
-    // doesn't expose a paginated "all albums" view in a single call, so
-    // this is intentionally narrower than the Spotify albums fetch.
-    const t = timeoutSignal();
-    let artistRes: Response;
-    try {
-      artistRes = await fetch(
-        `https://api.music.apple.com/v1/catalog/us/artists/${appleArtistId}?views=top-songs,featured-release`,
-        { headers, signal: t.signal },
-      );
-    } finally {
-      t.clear();
-    }
+    // list. `featured-release` surfaces the SINGLE most recent album —
+    // Apple doesn't expose a paginated "all albums" view in a single call,
+    // so Apple users get much narrower album context than Spotify (which
+    // fetches up to 20). Acceptable for the first pass; exploring
+    // `views=latest-release,full-albums` is a follow-up on #51.
+    const artistRes = await fetchWithAppleTimeout(
+      `https://api.music.apple.com/v1/catalog/us/artists/${appleArtistId}?views=top-songs,featured-release`,
+      headers,
+    );
     if (!artistRes.ok) {
       console.warn(`[Apple Music] artists/${appleArtistId} returned ${artistRes.status}`);
       return null;
@@ -369,10 +371,11 @@ async function fetchAppleArtistInfo(
       .map((s) => sanitizeCatalogField(s?.attributes?.name))
       .filter((n): n is string => n.length > 0);
 
+    // featured-release returns a single promoted album, so no slice needed —
+    // the Array.isArray guard is the meaningful protection here.
     const rawFeaturedAlbums = artist.views?.["featured-release"]?.data;
     const featuredAlbums: Array<{ attributes?: { name?: unknown } }> = Array.isArray(rawFeaturedAlbums) ? rawFeaturedAlbums : [];
     const albumNames: string[] = featuredAlbums
-      .slice(0, 10)
       .map((a) => sanitizeCatalogField(a?.attributes?.name))
       .filter((n): n is string => n.length > 0);
 
@@ -2388,11 +2391,15 @@ serve(async (req) => {
         ? rawSpotifyTrackId
         : undefined;
     // Apple Music catalog ID for Apple users (e.g., "1109715168").
-    // Apple catalog IDs are numeric strings (songs are typically 9-10 digits
-    // but albums/compilations can be longer, so accept 5-15). When set, we
-    // route to fetchAppleArtistInfo instead of the Spotify enrichment path.
+    // Apple song catalog IDs are numeric strings 7-15 digits. Songs are
+    // typically 9-10; the upper bound accommodates longer IDs seen on some
+    // legacy/compilation tracks. Anything shorter than 7 is almost certainly
+    // an artist or album ID passed in error and would 404 the /songs/:id
+    // lookup, wasting a round-trip to Apple before falling through to
+    // name-search. When set, we route to fetchAppleArtistInfo instead of
+    // the Spotify enrichment path.
     const safeAppleTrackId: string | undefined =
-      typeof rawAppleTrackId === "string" && /^\d{5,15}$/.test(rawAppleTrackId)
+      typeof rawAppleTrackId === "string" && /^\d{7,15}$/.test(rawAppleTrackId)
         ? rawAppleTrackId
         : undefined;
 
@@ -2511,7 +2518,14 @@ Return ONLY valid JSON:
     // everyone else falls through to the Spotify path. The returned shape
     // is identical so downstream code (prompt building, Exa strategy
     // selection via `followers`) doesn't need to branch on service.
-    const spotifyInfoPromise = safeAppleTrackId
+    //
+    // If the frontend ever sends BOTH a Spotify and Apple track ID, Apple
+    // takes priority — the track ID for the active service matches the
+    // running playback engine, so Apple winning is the correct default.
+    // The frontend currently sends only one URI per request (mutually
+    // exclusive in useAINuggets.ts), so this branch is never exercised in
+    // production, but the precedence is documented for future robustness.
+    const artistInfoPromise = safeAppleTrackId
       ? fetchAppleArtistInfo(artist, safeAppleTrackId)
       : fetchSpotifyArtistInfo(artist, safeSpotifyTrackId);
     const lastFmSimilarPromise = fetchLastFmSimilarArtists(artist);
@@ -2531,7 +2545,7 @@ Return ONLY valid JSON:
 
       const [artistSearchResult, phase1SpotifyInfo] = await Promise.all([
         artistSearchPromise,
-        spotifyInfoPromise,
+        artistInfoPromise,
       ]);
       console.timeEnd("[Timing] Exa Phase 1"); _te("exaPhase1");
       checkTimeout();
@@ -2721,7 +2735,7 @@ Return ONLY valid JSON:
     // Step 3: Generate nuggets with Gemini + Google Search grounding
     const [imageCandidates, resolvedSpotifyInfo, resolvedLastFmSimilar, resolvedLastFmTags] = await Promise.all([
       imageCandidatesPromise,
-      spotifyInfoPromise,
+      artistInfoPromise,
       lastFmSimilarPromise,
       lastFmTagsPromise,
     ]);
