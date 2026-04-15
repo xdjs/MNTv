@@ -19,6 +19,10 @@ interface ImmersiveNuggetViewProps {
   onClose: () => void;
   onPrev?: () => void;
   onNext?: () => void;
+  // When true, streamed nuggets are unlocked immediately on arrival instead of
+  // waiting for playback to reach each timestampSec — parity with desktop's
+  // fresh-SSE bypass so the first headline lands the moment the stream emits it.
+  isFresh?: boolean;
 }
 
 // Module-level so it persists across unmount/remount cycles (e.g. navigating
@@ -44,6 +48,7 @@ export default function ImmersiveNuggetView({
   onPrev,
   onNext,
   spotifyAlbumArt,
+  isFresh = false,
 }: ImmersiveNuggetViewProps) {
   const { isPlaying, currentTime, duration, toggle, seek } = usePlayer();
   const mountedRef = useRef(true);
@@ -92,10 +97,22 @@ export default function ImmersiveNuggetView({
   }, [trackTitle, artist]);
 
   // ── Unlock nuggets ─────────────────────────────────────────────────
-  // Only runs when currentTime crosses the next nugget's timestamp,
-  // not on every ~4 Hz playback tick (~720 skipped invocations per track).
+  // Fresh SSE: unlock every streamed nugget immediately so swipes work
+  // while the stream is still arriving (parity with desktop queue behavior).
+  // Cached: only unlock when currentTime crosses each timestamp, not on every
+  // ~4 Hz playback tick (~720 skipped invocations per track).
   useEffect(() => {
     if (nuggets.length === 0) return;
+
+    if (isFresh) {
+      setUnlockedIds((prev) => {
+        if (prev.size === nuggets.length) return prev;
+        return new Set(nuggets.map((n) => n.id));
+      });
+      nextUnlockTimeRef.current = Infinity;
+      return;
+    }
+
     if (currentTime < nextUnlockTimeRef.current) return;
 
     setUnlockedIds((prev) => {
@@ -115,7 +132,7 @@ export default function ImmersiveNuggetView({
       .filter((n) => n.timestampSec > currentTime)
       .sort((a, b) => a.timestampSec - b.timestampSec);
     nextUnlockTimeRef.current = upcoming.length > 0 ? upcoming[0].timestampSec : Infinity;
-  }, [currentTime, nuggets]);
+  }, [currentTime, nuggets, isFresh]);
 
   // ── Auto-show new nuggets ──────────────────────────────────────────
   useEffect(() => {
@@ -250,7 +267,7 @@ export default function ImmersiveNuggetView({
             <img
               src={imgUrl}
               alt=""
-              className={`absolute inset-0 w-full h-full object-cover ${!isNuggetImage ? "scale-110 blur-sm" : ""}`}
+              className="absolute inset-0 w-full h-full object-cover"
               onError={() => {
                 if (isNuggetImage && activeNugget?.imageUrl) {
                   setFailedImages((prev) => new Set(prev).add(activeNugget.imageUrl!));
@@ -261,35 +278,36 @@ export default function ImmersiveNuggetView({
           <div className="absolute inset-0" style={{
             background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.6) 25%, rgba(0,0,0,0.15) 55%, transparent 80%)",
           }} />
-          <div className="absolute bottom-0 inset-x-0 px-5 pb-4 z-20">
-            <span className="text-[10px] uppercase tracking-[0.2em] text-white/60 mb-2 block" style={{ textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>
-              {activeNugget ? (KIND_LABELS[activeNugget.kind] || activeNugget.kind) : ""}
-            </span>
-            {activeNugget && (
-              isTypewriterDone ? (
-                <h2 className="text-xl font-bold leading-tight text-white" style={{ textShadow: "0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.5)" }}>
-                  {activeNugget.headline || activeNugget.text}
-                </h2>
-              ) : (
-                <TypewriterText
-                  text={activeNugget.headline || activeNugget.text}
-                  speed={35}
-                  paused={false}
-                  onComplete={handleTypewriterComplete}
-                  as="h2"
-                  className="text-xl font-bold leading-tight text-white"
-                  style={{ textShadow: "0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.5)" }}
-                />
-              )
-            )}
-          </div>
         </div>
 
-        {/* Body scrolls over the sticky image. Solid black bg-black ensures
-            no gap is visible when scrolling past the gradient overlap zone. */}
-        <div className="px-5 pb-5 -mt-32 relative z-10 pt-36 bg-black" style={{
-          backgroundImage: "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.6) 20%, rgba(0,0,0,0.85) 40%, rgba(0,0,0,0.95) 60%, rgb(0,0,0) 100%)",
+        {/* Body overlaps the bottom of the sticky image just enough to show
+            the headline on initial view — the paragraph stays below the fold
+            until the user scrolls. Headline sits at the top of this scrolling
+            block so it travels up with the paragraph when scrolling. No
+            bg-black — the transparent gradient lets the hero show through. */}
+        <div className="px-5 pb-5 -mt-36 relative z-10 pt-16" style={{
+          backgroundImage: "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.55) 25%, rgba(0,0,0,0.85) 50%, rgb(0,0,0) 75%)",
         }}>
+          <span className="text-[10px] uppercase tracking-[0.2em] text-white/60 mb-2 block" style={{ textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>
+            {activeNugget ? (KIND_LABELS[activeNugget.kind] || activeNugget.kind) : ""}
+          </span>
+          {activeNugget && (
+            isTypewriterDone ? (
+              <h2 className="text-xl font-bold leading-tight text-white mb-4" style={{ textShadow: "0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.5)" }}>
+                {activeNugget.headline || activeNugget.text}
+              </h2>
+            ) : (
+              <TypewriterText
+                text={activeNugget.headline || activeNugget.text}
+                speed={35}
+                paused={false}
+                onComplete={handleTypewriterComplete}
+                as="h2"
+                className="text-xl font-bold leading-tight text-white mb-4 block"
+                style={{ textShadow: "0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.5)" }}
+              />
+            )
+          )}
           <p className="text-sm leading-relaxed text-white/60 mb-4">
             {activeNugget?.text}
           </p>
