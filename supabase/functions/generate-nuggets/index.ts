@@ -2881,9 +2881,15 @@ Return ONLY valid JSON:
           (async () => {
             try {
               // Pipeline: resolve image → assemble → validate → stream.
-              // Sequential to prevent duplicate usedImageUrls. Skipped nuggets
-              // (hallucinated sources) don't get streamed, so we track a separate
-              // streamedIndex for contiguous client-side indices.
+              // Wikipedia lookups fire in parallel so late nuggets don't wait
+              // behind early ones; dedup + assemble + stream still happen
+              // sequentially to keep usedImageUrls correct and preserve order.
+              const imageLookups = rawNuggets.map((n) =>
+                !n._resolvedImageUrl && isValidImageQuery(n.imageSearchQuery)
+                  ? resolveNuggetImage(n.imageSearchQuery!).catch(() => null)
+                  : null
+              );
+
               let streamedIndex = 0;
               const streamedNuggets: any[] = []; // for cache write consistency
 
@@ -2891,9 +2897,9 @@ Return ONLY valid JSON:
                 const n = rawNuggets[i];
 
                 // ── Image resolution ──
-                if (!n._resolvedImageUrl && isValidImageQuery(n.imageSearchQuery)) {
+                if (!n._resolvedImageUrl && imageLookups[i]) {
                   try {
-                    const wikiResult = await resolveNuggetImage(n.imageSearchQuery!);
+                    const wikiResult = await imageLookups[i];
                     if (wikiResult && !usedImageUrls.has(wikiResult.url)) {
                       n._resolvedImageUrl = wikiResult.url;
                       n._resolvedImageTitle = wikiResult.title;
