@@ -214,6 +214,28 @@ async function fetchSpotifyArtistInfo(artistName: string, spotifyTrackId?: strin
 // service. Apple exposes no direct follower count, so `followers` is set
 // to 0 — downstream popularity logic will treat Apple artists as SPARSE
 // (conservative strategy) until we add a cross-service popularity signal.
+// Apple catalog free-text fields (genre names, track names, album names) flow
+// into the Gemini prompt. They're user-controllable at the Apple catalog level
+// (artists self-submit release metadata), so a crafted entry could inject
+// prompt instructions via newlines or break prompt structure via control chars.
+// Strip anything that isn't a safe printable character. Cap length as a second
+// line of defense against prompt stuffing.
+function sanitizeCatalogField(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  return raw
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/[\x00-\x1f\x7f]/g, "")
+    .slice(0, 200)
+    .trim();
+}
+
+// Used for console.log / console.warn interpolation of user-supplied strings
+// (artist names). Prevents log forgery via embedded newlines that would forge
+// log lines that look like legitimate events from other subsystems.
+function sanitizeForLog(raw: string): string {
+  return raw.replace(/[\r\n\t]+/g, " ").slice(0, 200);
+}
+
 async function fetchAppleArtistInfo(
   artistName: string,
   appleTrackId?: string,
@@ -224,26 +246,53 @@ async function fetchAppleArtistInfo(
 
     const headers = { Authorization: `Bearer ${devToken}` };
 
+    // Apple catalog calls run on the user-blocking critical path (racing Exa
+    // in Promise.all). Cap each at 3s so a stuck Apple API response can't
+    // hang the entire nugget generation. On abort, the catch at the bottom
+    // returns null and downstream gracefully falls back to SPARSE Exa.
+    // Uses the manual AbortController+setTimeout pattern (matching
+    // _shared/apple-utils.ts:360) rather than AbortSignal.timeout, which
+    // is newer and not used elsewhere in this codebase.
+    const APPLE_TIMEOUT_MS = 3000;
+    function timeoutSignal(): { signal: AbortSignal; clear: () => void } {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), APPLE_TIMEOUT_MS);
+      return { signal: controller.signal, clear: () => clearTimeout(timer) };
+    }
+
     // Track ID route: Apple's song endpoint exposes the canonical artist
     // relationship, which we use to pick the exact artist page. Prevents
     // name collisions between homonymous artists (e.g. two bands called
     // "Nirvana"). Also captures the song's genreNames so downstream code
     // can merge them with the artist-level genre list.
+    const safeArtistNameLog = sanitizeForLog(artistName);
     let appleArtistId: string | null = null;
     let songGenres: string[] = [];
+
     if (appleTrackId) {
-      const songRes = await fetch(
-        `https://api.music.apple.com/v1/catalog/us/songs/${appleTrackId}?include=artists`,
-        { headers },
-      );
+      const t = timeoutSignal();
+      let songRes: Response;
+      try {
+        songRes = await fetch(
+          `https://api.music.apple.com/v1/catalog/us/songs/${appleTrackId}?include=artists`,
+          { headers, signal: t.signal },
+        );
+      } finally {
+        t.clear();
+      }
       if (songRes.ok) {
         const songData = await songRes.json();
         const song = songData?.data?.[0];
-        songGenres = song?.attributes?.genreNames || [];
+        const rawSongGenres = song?.attributes?.genreNames;
+        songGenres = Array.isArray(rawSongGenres) ? rawSongGenres : [];
         appleArtistId = song?.relationships?.artists?.data?.[0]?.id || null;
         if (appleArtistId) {
-          console.log(`[Apple Music] Resolved artist from track ID: ${artistName} (${appleArtistId})`);
+          console.log(`[Apple Music] Resolved artist from track ID: ${safeArtistNameLog} (${appleArtistId})`);
         }
+      } else {
+        // Log so Apple rate-limits (429) and upstream 5xx are distinguishable
+        // from legitimate "track not found" in edge function logs.
+        console.warn(`[Apple Music] songs/${appleTrackId} returned ${songRes.status}`);
       }
     }
 
@@ -252,11 +301,20 @@ async function fetchAppleArtistInfo(
     // catalog search endpoint. Matches the Spotify path's fallback.
     if (!appleArtistId) {
       const q = encodeURIComponent(artistName.trim());
-      const searchRes = await fetch(
-        `https://api.music.apple.com/v1/catalog/us/search?types=artists&limit=1&term=${q}`,
-        { headers },
-      );
-      if (!searchRes.ok) return null;
+      const t = timeoutSignal();
+      let searchRes: Response;
+      try {
+        searchRes = await fetch(
+          `https://api.music.apple.com/v1/catalog/us/search?types=artists&limit=1&term=${q}`,
+          { headers, signal: t.signal },
+        );
+      } finally {
+        t.clear();
+      }
+      if (!searchRes.ok) {
+        console.warn(`[Apple Music] search returned ${searchRes.status} for "${safeArtistNameLog}"`);
+        return null;
+      }
       const searchData = await searchRes.json();
       appleArtistId = searchData?.results?.artists?.data?.[0]?.id || null;
     }
@@ -267,40 +325,58 @@ async function fetchAppleArtistInfo(
     // list. `featured-release` surfaces the most recent album — Apple
     // doesn't expose a paginated "all albums" view in a single call, so
     // this is intentionally narrower than the Spotify albums fetch.
-    const artistRes = await fetch(
-      `https://api.music.apple.com/v1/catalog/us/artists/${appleArtistId}?views=top-songs,featured-release`,
-      { headers },
-    );
-    if (!artistRes.ok) return null;
+    const t = timeoutSignal();
+    let artistRes: Response;
+    try {
+      artistRes = await fetch(
+        `https://api.music.apple.com/v1/catalog/us/artists/${appleArtistId}?views=top-songs,featured-release`,
+        { headers, signal: t.signal },
+      );
+    } finally {
+      t.clear();
+    }
+    if (!artistRes.ok) {
+      console.warn(`[Apple Music] artists/${appleArtistId} returned ${artistRes.status}`);
+      return null;
+    }
     const artistData = await artistRes.json();
     const artist = artistData?.data?.[0];
     if (!artist) return null;
 
-    // Merge artist-level + song-level genres and strip Apple's "Music"
-    // catch-all label — it appears on every catalog item and adds no
-    // signal to the Gemini prompt.
+    // Merge artist-level + song-level genres, strip Apple's "Music" catch-all
+    // label (appears on every catalog item, zero signal), and sanitize each
+    // value because these flow into the Gemini prompt where a crafted newline
+    // could inject instructions. Array.isArray guard protects against
+    // malformed Apple responses (null, string, object).
     const mergedGenres = new Set<string>();
-    for (const g of (artist.attributes?.genreNames || []) as string[]) {
-      if (g && g !== "Music") mergedGenres.add(g);
+    const rawArtistGenres = artist.attributes?.genreNames;
+    if (Array.isArray(rawArtistGenres)) {
+      for (const g of rawArtistGenres) {
+        const clean = sanitizeCatalogField(g);
+        if (clean && clean !== "Music") mergedGenres.add(clean);
+      }
     }
     for (const g of songGenres) {
-      if (g && g !== "Music") mergedGenres.add(g);
+      const clean = sanitizeCatalogField(g);
+      if (clean && clean !== "Music") mergedGenres.add(clean);
     }
     const genres: string[] = Array.from(mergedGenres);
 
-    const topSongs = (artist.views?.["top-songs"]?.data || []) as Array<{ attributes?: { name?: string } }>;
+    const rawTopSongs = artist.views?.["top-songs"]?.data;
+    const topSongs: Array<{ attributes?: { name?: unknown } }> = Array.isArray(rawTopSongs) ? rawTopSongs : [];
     const topTrackNames: string[] = topSongs
       .slice(0, 10)
-      .map((s) => s?.attributes?.name)
-      .filter((n): n is string => typeof n === "string" && n.length > 0);
+      .map((s) => sanitizeCatalogField(s?.attributes?.name))
+      .filter((n): n is string => n.length > 0);
 
-    const featuredAlbums = (artist.views?.["featured-release"]?.data || []) as Array<{ attributes?: { name?: string } }>;
+    const rawFeaturedAlbums = artist.views?.["featured-release"]?.data;
+    const featuredAlbums: Array<{ attributes?: { name?: unknown } }> = Array.isArray(rawFeaturedAlbums) ? rawFeaturedAlbums : [];
     const albumNames: string[] = featuredAlbums
       .slice(0, 10)
-      .map((a) => a?.attributes?.name)
-      .filter((n): n is string => typeof n === "string" && n.length > 0);
+      .map((a) => sanitizeCatalogField(a?.attributes?.name))
+      .filter((n): n is string => n.length > 0);
 
-    console.log(`[Apple Music] ${artistName}: ${genres.length} genres, ${topTrackNames.length} tracks, ${albumNames.length} albums`);
+    console.log(`[Apple Music] ${safeArtistNameLog}: ${genres.length} genres, ${topTrackNames.length} tracks, ${albumNames.length} albums`);
 
     return {
       genres,
@@ -1241,9 +1317,11 @@ async function curateResearch(
     warningsForWriter: ["Curation unavailable — writer should rely on its own knowledge"],
   };
 
-  // Build discography context for artist disambiguation
+  // Build discography context for artist disambiguation. The source may be
+  // Spotify OR Apple Music depending on which service the user is on — the
+  // generic "music catalog" phrasing keeps Gemini honest about origin.
   const discographySection = spotifyInfo && (spotifyInfo.albumNames.length > 0 || spotifyInfo.topTrackNames.length > 0)
-    ? `\nVERIFIED DISCOGRAPHY (from Spotify — use this to identify the CORRECT "${artist}"):
+    ? `\nVERIFIED DISCOGRAPHY (from music catalog — use this to identify the CORRECT "${artist}"):
 ${spotifyInfo.genres.length > 0 ? `Genres: ${spotifyInfo.genres.join(", ")}` : ""}
 ${spotifyInfo.albumNames.length > 0 ? `Albums/Singles: ${spotifyInfo.albumNames.join(", ")}` : ""}
 ${spotifyInfo.topTrackNames.length > 0 ? `Top tracks: ${spotifyInfo.topTrackNames.join(", ")}` : ""}
@@ -1626,9 +1704,11 @@ Use this to:
   const hasLastFmTags = lastFmTags && lastFmTags.length > 0;
 
   let musicDataContext = `\nMUSIC DATA for "${artist}":`;
-  // Spotify catalog data
+  // Catalog data — source may be Spotify OR Apple Music. Prompt labels stay
+  // service-agnostic because Gemini copies source names verbatim into nugget
+  // text (see the Last.fm comment below for prior burn on this exact issue).
   if (hasSpotifyGenres) {
-    musicDataContext += `\nSpotify genres: ${spotifyInfo!.genres.join(", ")}`;
+    musicDataContext += `\nGenres: ${spotifyInfo!.genres.join(", ")}`;
   }
   if (hasLastFmTags) {
     musicDataContext += `\nGenre tags: ${lastFmTags!.join(", ")}`;
@@ -1639,7 +1719,10 @@ Use this to:
   if (spotifyInfo && spotifyInfo.albumNames.length > 0) {
     musicDataContext += `\nAlbums/Singles: ${spotifyInfo!.albumNames.join(", ")}`;
   }
-  if (spotifyInfo) {
+  // Omit the Followers line when the value is 0 — Apple Music has no direct
+  // follower count (fetchAppleArtistInfo returns 0), and sending
+  // "Followers: 0" to Gemini falsely signals the artist is brand-new/obscure.
+  if (spotifyInfo && spotifyInfo.followers > 0) {
     musicDataContext += `\nFollowers: ${spotifyInfo.followers.toLocaleString()}`;
   }
   // Similar artists from listener data — key data for discovery recommendations
