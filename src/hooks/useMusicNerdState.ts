@@ -38,7 +38,8 @@ interface TasteData {
 
 /** Legacy localStorage payload shape. Pre-rename profiles used `spotify*`
  *  prefixed keys even after Apple Music support landed. `parseStoredProfile`
- *  promotes these to the unprefixed keys on read. Drop after soak. */
+ *  promotes these to the unprefixed keys on read.
+ *  @deprecated Drop after soak — tracked in #51 P3.11. */
 interface LegacyProfileShape {
   spotifyTopArtists?: string[];
   spotifyTopTracks?: string[];

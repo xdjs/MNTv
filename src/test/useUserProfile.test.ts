@@ -146,6 +146,22 @@ describe("getStoredProfile legacy-key migration", () => {
     expect(profile?.topArtists).toEqual(["Björk"]);
   });
 
+  it("promotes a partial legacy profile, leaving absent fields undefined", () => {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify({
+      streamingService: "Apple Music",
+      calculatedTier: "casual",
+      spotifyTopArtists: ["Beach House"],
+      // no topTracks, no image maps, no artist ids
+    }));
+
+    const profile = getStoredProfile();
+    expect(profile?.topArtists).toEqual(["Beach House"]);
+    expect(profile?.topTracks).toBeUndefined();
+    expect(profile?.artistImages).toBeUndefined();
+    expect(profile?.artistIds).toBeUndefined();
+    expect(profile?.trackImages).toBeUndefined();
+  });
+
   it("returns null for missing or malformed payload", () => {
     expect(getStoredProfile()).toBeNull();
 
