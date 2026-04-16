@@ -8,6 +8,7 @@ import MusicNerdLogo from "@/components/MusicNerdLogo";
 import TypewriterText from "./TypewriterText";
 import SwipeableNuggetStack from "./SwipeableNuggetStack";
 import MiniPlayer from "./MiniPlayer";
+import { useNuggetPacer } from "./useNuggetPacer";
 
 interface ImmersiveNuggetViewProps {
   nuggets: Nugget[];
@@ -75,17 +76,18 @@ export default function ImmersiveNuggetView({
   // Next nugget timestamp to unlock — avoids running the unlock effect on
   // every ~4 Hz playback tick (only runs when currentTime crosses this threshold).
   const nextUnlockTimeRef = useRef(0);
-  const prevUnlockedCountRef = useRef(0);
   const prevTrackKeyRef = useRef(`${trackTitle}::${artist}`);
   const currentTimeRef = useRef(currentTime);
   useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
   const initialUnlockDoneRef = useRef(false);
+  const trackKey = `${trackTitle}::${artist}`;
 
   // ── Reset on track change ──────────────────────────────────────────
+  // Pacer state (queue, timer, prevUnlockedCount) is reset by useNuggetPacer
+  // when trackKey changes — not duplicated here.
   useEffect(() => {
-    const key = `${trackTitle}::${artist}`;
-    if (key !== prevTrackKeyRef.current) {
-      prevTrackKeyRef.current = key;
+    if (trackKey !== prevTrackKeyRef.current) {
+      prevTrackKeyRef.current = trackKey;
       setUnlockedIds(new Set());
       setActiveIndex(0);
       setNuggetDismissed(false);
@@ -93,18 +95,12 @@ export default function ImmersiveNuggetView({
       setDeepDiveFollowUp(null);
       setDeepDiveLoading(false);
       deepDiveLoadingRef.current = false;
-      prevUnlockedCountRef.current = 0;
       setTypewriterDoneIds(new Set());
       userDismissedRef.current = false;
       initialUnlockDoneRef.current = false;
       nextUnlockTimeRef.current = 0;
-      pendingQueueRef.current = [];
-      if (advanceTimerRef.current) {
-        clearTimeout(advanceTimerRef.current);
-        advanceTimerRef.current = null;
-      }
     }
-  }, [trackTitle, artist]);
+  }, [trackKey]);
 
   // ── Unlock nuggets ─────────────────────────────────────────────────
   // Fresh SSE: unlock every streamed nugget immediately so swipes work
@@ -144,70 +140,22 @@ export default function ImmersiveNuggetView({
     nextUnlockTimeRef.current = upcoming.length > 0 ? upcoming[0].timestampSec : Infinity;
   }, [currentTime, nuggets, isFresh]);
 
-  // Track when the current nugget was first shown — used by auto-show
-  // to enforce minimum read time before auto-advancing.
-  const nuggetShownAtRef = useRef(Date.now());
-
-  // ── Auto-show new nuggets ──────────────────────────────────────────
-  // Proper queue: when multiple nuggets arrive within MIN_DISPLAY_MS, each
-  // one is shown in turn rather than the older one being silently replaced.
-  // A React effect-cleanup-based timer would cancel the pending nugget
-  // whenever unlockedIds changed again, dropping intermediate entries.
-  const pendingQueueRef = useRef<number[]>([]);
-  const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  // ── Auto-show new nuggets (via pacer hook) ─────────────────────────
+  // See useNuggetPacer for queueing behavior. The hook calls showNugget
+  // one index at a time, with at least MIN_DISPLAY_MS between calls.
   const showNugget = useCallback((idx: number) => {
     setActiveIndex(idx);
-    nuggetShownAtRef.current = Date.now();
     if (!userDismissedRef.current) setNuggetDismissed(false);
     setDeepDiveText(null);
   }, []);
 
-  const scheduleNextFromQueue = useCallback(() => {
-    if (advanceTimerRef.current) return;
-    if (pendingQueueRef.current.length === 0) return;
-    const elapsed = Date.now() - nuggetShownAtRef.current;
-    const wait = Math.max(0, MIN_DISPLAY_MS - elapsed);
-    advanceTimerRef.current = setTimeout(() => {
-      advanceTimerRef.current = null;
-      const next = pendingQueueRef.current.shift();
-      if (next !== undefined) {
-        showNugget(next);
-        scheduleNextFromQueue();
-      }
-    }, wait);
-  }, [showNugget]);
-
-  useEffect(() => {
-    // Compute the ordered list of unlocked indices (stable by array position).
-    const unlockedIndices: number[] = [];
-    for (let i = 0; i < nuggets.length; i++) {
-      if (unlockedIds.has(nuggets[i].id)) unlockedIndices.push(i);
-    }
-    const newCount = unlockedIndices.length;
-    const oldCount = prevUnlockedCountRef.current;
-    if (newCount <= oldCount) {
-      prevUnlockedCountRef.current = newCount;
-      return;
-    }
-
-    const newlyAdded = unlockedIndices.slice(oldCount);
-    prevUnlockedCountRef.current = newCount;
-
-    if (oldCount === 0) {
-      // First unlock: show the first immediately, queue the rest.
-      const [first, ...rest] = newlyAdded;
-      showNugget(first);
-      pendingQueueRef.current.push(...rest);
-    } else {
-      pendingQueueRef.current.push(...newlyAdded);
-    }
-    scheduleNextFromQueue();
-  }, [unlockedIds, nuggets, showNugget, scheduleNextFromQueue]);
-
-  useEffect(() => () => {
-    if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
-  }, []);
+  useNuggetPacer({
+    nuggets,
+    unlockedIds,
+    trackKey,
+    onShow: showNugget,
+    minDisplayMs: MIN_DISPLAY_MS,
+  });
 
   // ── Initial unlock ─────────────────────────────────────────────────
   // Runs once when nuggets first arrive. Uses currentTimeRef to avoid

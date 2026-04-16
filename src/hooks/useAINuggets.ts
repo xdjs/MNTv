@@ -504,6 +504,14 @@ export function useAINuggets(
         // Write to cache + history, then return
         if (cancelledRef.current) return;
 
+        // Defensive: if all server-side Gemini retries failed, the stream
+        // closes with zero nuggets. Treat that as an error so the catch
+        // block clears the "generating" sentinel and the next listen retries,
+        // rather than caching an empty result and starving future listeners.
+        if (aiNuggets.length === 0) {
+          throw new Error("SSE stream returned no nuggets");
+        }
+
         // Enrich SSE nuggets with Spotify fallback images (server resolves
         // Wikipedia/Exa but may miss lesser-known artists — same logic as
         // the JSON path's image-assignment block).
