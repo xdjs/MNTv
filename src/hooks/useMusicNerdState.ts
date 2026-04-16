@@ -85,11 +85,8 @@ async function loadProfileFromDB(userId: string): Promise<UserProfile | null> {
   const service = (data.streaming_service as UserProfile["streamingService"]) || "";
   const serviceKey = service === "Spotify" ? "spotify" : service === "Apple Music" ? "apple" : null;
 
-  // Read taste from music_taste (new, keyed by service) → fall back to spotify_taste (legacy)
   const musicTaste = data.music_taste as Record<string, TasteData> | null;
-  const taste: TasteData | null =
-    (serviceKey && musicTaste?.[serviceKey]) ||
-    (data.spotify_taste as TasteData | null);
+  const taste: TasteData | null = serviceKey ? (musicTaste?.[serviceKey] ?? null) : null;
 
   return {
     streamingService: service,
@@ -125,7 +122,6 @@ export function resolveStreamingService(
 }
 
 async function saveProfileToDB(p: UserProfile, userId: string): Promise<void> {
-  // Build taste data from profile fields
   const tasteData: TasteData | null =
     p.topArtists || p.topTracks
       ? {
@@ -137,18 +133,15 @@ async function saveProfileToDB(p: UserProfile, userId: string): Promise<void> {
         }
       : null;
 
-  // Determine service key for music_taste JSONB
   const serviceKey = p.streamingService === "Spotify" ? "spotify"
     : p.streamingService === "Apple Music" ? "apple" : null;
 
-  // Dual-write: spotify_taste (legacy) + music_taste (new, keyed by service)
   await supabase.from("profiles").upsert(
     {
       user_id: userId,
       tier: p.calculatedTier,
       streaming_service: p.streamingService,
       last_fm_username: p.lastFmUsername || null,
-      spotify_taste: tasteData,
       music_taste: serviceKey && tasteData ? { [serviceKey]: tasteData } : null,
     },
     { onConflict: "user_id" }
