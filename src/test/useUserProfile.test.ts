@@ -17,7 +17,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-import { useUserProfile } from "@/hooks/useMusicNerdState";
+import { useUserProfile, getStoredProfile } from "@/hooks/useMusicNerdState";
 import type { UserProfile } from "@/mock/types";
 
 const PROFILE_KEY = "musicnerd_profile";
@@ -104,5 +104,52 @@ describe("useUserProfile cross-instance sync", () => {
     // Apple Music playback: PlayerProvider needs to see the new service
     // to create the correct engine.
     expect(b.current.profile?.streamingService).toBe("Apple Music");
+  });
+});
+
+// Locks the localStorage read-compat that lets profiles written before the
+// spotify* → unprefixed rename (tracked in #51 P3.11) keep working. Drop
+// these tests when the compat shim is removed after soak.
+describe("getStoredProfile legacy-key migration", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("promotes all five legacy spotify* keys to their unprefixed counterparts", () => {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify({
+      streamingService: "Apple Music",
+      calculatedTier: "nerd",
+      spotifyTopArtists: ["Radiohead"],
+      spotifyTopTracks: ["Karma Police"],
+      spotifyArtistImages: { Radiohead: "radiohead.jpg" },
+      spotifyArtistIds: { Radiohead: "sp-1" },
+      spotifyTrackImages: [{ title: "Karma Police", artist: "Radiohead", imageUrl: "kp.jpg" }],
+    }));
+
+    const profile = getStoredProfile();
+    expect(profile?.topArtists).toEqual(["Radiohead"]);
+    expect(profile?.topTracks).toEqual(["Karma Police"]);
+    expect(profile?.artistImages).toEqual({ Radiohead: "radiohead.jpg" });
+    expect(profile?.artistIds).toEqual({ Radiohead: "sp-1" });
+    expect(profile?.trackImages).toEqual([{ title: "Karma Police", artist: "Radiohead", imageUrl: "kp.jpg" }]);
+    // Legacy keys are dropped from the in-memory profile
+    expect((profile as Record<string, unknown>)?.spotifyTopArtists).toBeUndefined();
+  });
+
+  it("prefers new keys when both legacy and new are present", () => {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify({
+      streamingService: "Spotify",
+      calculatedTier: "casual",
+      topArtists: ["Björk"],
+      spotifyTopArtists: ["Radiohead"],
+    }));
+
+    const profile = getStoredProfile();
+    expect(profile?.topArtists).toEqual(["Björk"]);
+  });
+
+  it("returns null for missing or malformed payload", () => {
+    expect(getStoredProfile()).toBeNull();
+
+    localStorage.setItem(PROFILE_KEY, "{not valid json");
+    expect(getStoredProfile()).toBeNull();
   });
 });

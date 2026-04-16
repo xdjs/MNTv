@@ -192,7 +192,7 @@ User enters Last.fm username
   → On Browse load: lastfm-sync called again (uses cache)
 
 On Companion/Generate:
-  → generate-companion receives: lastFmUsername, spotifyTopArtists, spotifyTopTracks, streamingService
+  → generate-companion receives: lastFmUsername, topArtists, topTracks, streamingService
   → Internally calls lastfm-sync to get taste context
   → Merges all signals into a RAG prompt context block
   → Gemini uses context to tailor "Explore Next" category

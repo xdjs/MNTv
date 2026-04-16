@@ -82,16 +82,16 @@ export default function Listen() {
     if (!realTrackMeta) return null;
     // Try URL query param first (demo tiles pass ?art=), then profile, then DiceBear
     let coverArtUrl = urlArt;
-    if (!coverArtUrl && profile?.spotifyTrackImages) {
-      const match = profile.spotifyTrackImages.find(
+    if (!coverArtUrl && profile?.trackImages) {
+      const match = profile.trackImages.find(
         (t) =>
           t.title.toLowerCase() === realTrackMeta.title.toLowerCase() &&
           t.artist.toLowerCase() === realTrackMeta.artist.toLowerCase()
       );
       if (match?.imageUrl) coverArtUrl = match.imageUrl;
     }
-    if (!coverArtUrl && profile?.spotifyArtistImages?.[realTrackMeta.artist]) {
-      coverArtUrl = profile.spotifyArtistImages[realTrackMeta.artist];
+    if (!coverArtUrl && profile?.artistImages?.[realTrackMeta.artist]) {
+      coverArtUrl = profile.artistImages[realTrackMeta.artist];
     }
     if (!coverArtUrl) {
       coverArtUrl = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(realTrackMeta.artist + realTrackMeta.title)}&backgroundColor=111827&textColor=ffffff&fontSize=30`;
@@ -107,7 +107,7 @@ export default function Listen() {
       coverArtUrl,
       trackNumber: 1,
     };
-  }, [realTrackMeta, trackId, urlArt, profile?.spotifyTrackImages, profile?.spotifyArtistImages]);
+  }, [realTrackMeta, trackId, urlArt, profile?.trackImages, profile?.artistImages]);
 
   // ── Playback source resolution ───────────────────────────────────────
   const { hasSpotifyToken } = useSpotifyToken();
@@ -351,7 +351,7 @@ export default function Listen() {
             (t) => t.title.toLowerCase() !== titleLower && notPlayed(t.artist, t.title)
           );
           if (recs.length > 0) {
-            const topArtists = new Set((profile?.spotifyTopArtists || []).map((a: string) => a.toLowerCase()));
+            const topArtists = new Set((profile?.topArtists || []).map((a: string) => a.toLowerCase()));
             const boosted = recs.filter((t) => topArtists.has(t.artist.toLowerCase()));
             const pool = boosted.length > 0 ? boosted : recs;
             navigateTo(pool[Math.floor(Math.random() * Math.min(pool.length, 3))]);
@@ -380,13 +380,13 @@ export default function Listen() {
       }
 
       // P4: User's catalog (prefer different artist, relax if needed).
-      // spotifyTrackImages is legacy-named but populated from the active
-      // service's taste data (Spotify or Apple via apple-taste).
-      const userTracks = (profile?.spotifyTrackImages || []).filter(
+      // trackImages is populated from the active service's taste data
+      // (Spotify or Apple via apple-taste).
+      const userTracks = (profile?.trackImages || []).filter(
         (t) => t.uri && notPlayed(t.artist, t.title) && t.artist.toLowerCase() !== artistLower
       );
       const relaxed = userTracks.length > 0 ? userTracks
-        : (profile?.spotifyTrackImages || []).filter((t) => t.uri && notPlayed(t.artist, t.title));
+        : (profile?.trackImages || []).filter((t) => t.uri && notPlayed(t.artist, t.title));
       if (relaxed.length > 0) {
         const pick = relaxed[Math.floor(Math.random() * relaxed.length)];
         navigateTo({ artist: pick.artist, title: pick.title, album: "", uri: pick.uri });
@@ -601,7 +601,7 @@ export default function Listen() {
   // AI-generated nuggets with real sources
   const tier = (profile?.calculatedTier as "casual" | "curious" | "nerd") || "casual";
   useTierAccent(tier);
-  const artistImageUrl = (track?.artist && profile?.spotifyArtistImages?.[track.artist]) || track?.coverArtUrl || "";
+  const artistImageUrl = (track?.artist && profile?.artistImages?.[track.artist]) || track?.coverArtUrl || "";
   const { nuggets: aiNuggets, sources: aiSources, loading: aiLoading, error: aiError, listenCount, artistSummary, fromCache: aiFromCache } = useAINuggets(
     trackId,
     track?.artist || "",
@@ -612,8 +612,8 @@ export default function Listen() {
     track?.coverArtUrl,
     artistImageUrl,
     tier,
-    profile?.spotifyTopArtists,
-    profile?.spotifyTopTracks
+    profile?.topArtists,
+    profile?.topTracks
   );
 
   // Log AI nugget errors for debugging

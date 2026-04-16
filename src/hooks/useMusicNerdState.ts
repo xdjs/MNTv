@@ -36,6 +36,42 @@ interface TasteData {
   trackImages?: { title: string; artist: string; imageUrl: string }[];
 }
 
+/** Legacy localStorage payload shape. Pre-rename profiles used `spotify*`
+ *  prefixed keys even after Apple Music support landed. `parseStoredProfile`
+ *  promotes these to the unprefixed keys on read. Drop after soak. */
+interface LegacyProfileShape {
+  spotifyTopArtists?: string[];
+  spotifyTopTracks?: string[];
+  spotifyArtistImages?: Record<string, string>;
+  spotifyArtistIds?: Record<string, string>;
+  spotifyTrackImages?: UserProfile["trackImages"];
+}
+
+function parseStoredProfile(raw: string | null): UserProfile | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as UserProfile & LegacyProfileShape;
+    const {
+      spotifyTopArtists,
+      spotifyTopTracks,
+      spotifyArtistImages,
+      spotifyArtistIds,
+      spotifyTrackImages,
+      ...rest
+    } = parsed;
+    return {
+      ...rest,
+      topArtists: rest.topArtists ?? spotifyTopArtists,
+      topTracks: rest.topTracks ?? spotifyTopTracks,
+      artistImages: rest.artistImages ?? spotifyArtistImages,
+      artistIds: rest.artistIds ?? spotifyArtistIds,
+      trackImages: rest.trackImages ?? spotifyTrackImages,
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function loadProfileFromDB(userId: string): Promise<UserProfile | null> {
   const { data } = await supabase
     .from("profiles")
@@ -57,11 +93,11 @@ async function loadProfileFromDB(userId: string): Promise<UserProfile | null> {
   return {
     streamingService: service,
     lastFmUsername: data.last_fm_username || undefined,
-    spotifyTopArtists: taste?.topArtists ?? undefined,
-    spotifyTopTracks: taste?.topTracks ?? undefined,
-    spotifyArtistImages: taste?.artistImages ?? undefined,
-    spotifyArtistIds: taste?.artistIds ?? undefined,
-    spotifyTrackImages: taste?.trackImages ?? undefined,
+    topArtists: taste?.topArtists ?? undefined,
+    topTracks: taste?.topTracks ?? undefined,
+    artistImages: taste?.artistImages ?? undefined,
+    artistIds: taste?.artistIds ?? undefined,
+    trackImages: taste?.trackImages ?? undefined,
     calculatedTier: (data.tier as UserProfile["calculatedTier"]) || "casual",
   };
 }
@@ -71,31 +107,32 @@ async function loadProfileFromDB(userId: string): Promise<UserProfile | null> {
  *
  * Priority:
  *  1. Preserve an explicit streamingService on whichever source is the base
- *  2. Fall back to "Spotify" only if spotifyTopArtists is populated (legacy
- *     profile rows from before streaming_service was persisted)
+ *  2. Fall back to "Spotify" only if topArtists is populated (legacy
+ *     profile rows from before streaming_service was persisted; all such
+ *     rows predate Apple Music support and are Spotify by construction)
  *  3. Otherwise empty string (guest-like state)
  *
  * Exported for unit testing. Used by useUserProfile's hydrate effect.
  */
 export function resolveStreamingService(
   baseService: UserProfile["streamingService"] | undefined,
-  spotifyTopArtistsCount: number
+  topArtistsCount: number
 ): UserProfile["streamingService"] {
   if (baseService) return baseService;
-  if (spotifyTopArtistsCount > 0) return "Spotify";
+  if (topArtistsCount > 0) return "Spotify";
   return "";
 }
 
 async function saveProfileToDB(p: UserProfile, userId: string): Promise<void> {
   // Build taste data from profile fields
   const tasteData: TasteData | null =
-    p.spotifyTopArtists || p.spotifyTopTracks
+    p.topArtists || p.topTracks
       ? {
-          topArtists: p.spotifyTopArtists ?? [],
-          topTracks: p.spotifyTopTracks ?? [],
-          artistImages: p.spotifyArtistImages ?? {},
-          artistIds: p.spotifyArtistIds ?? {},
-          trackImages: p.spotifyTrackImages ?? [],
+          topArtists: p.topArtists ?? [],
+          topTracks: p.topTracks ?? [],
+          artistImages: p.artistImages ?? {},
+          artistIds: p.artistIds ?? {},
+          trackImages: p.trackImages ?? [],
         }
       : null;
 
@@ -122,14 +159,9 @@ async function saveProfileToDB(p: UserProfile, userId: string): Promise<void> {
 export function useUserProfile() {
   const { user } = useAuth();
 
-  const [profile, setProfileState] = useState<UserProfile | null>(() => {
-    try {
-      const raw = localStorage.getItem(PROFILE_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [profile, setProfileState] = useState<UserProfile | null>(() =>
+    parseStoredProfile(localStorage.getItem(PROFILE_KEY))
+  );
 
   // Sync across hook instances: every call to useUserProfile has its own
   // independent useState slot, so when Connect.tsx saves a profile, other
@@ -137,15 +169,7 @@ export function useUserProfile() {
   // event fired by saveProfile/clearProfile and re-read from localStorage.
   // Also listens to the native `storage` event for cross-tab sync.
   useEffect(() => {
-    const sync = () => {
-      try {
-        const raw = localStorage.getItem(PROFILE_KEY);
-        const next = raw ? (JSON.parse(raw) as UserProfile) : null;
-        setProfileState(next);
-      } catch {
-        setProfileState(null);
-      }
-    };
+    const sync = () => setProfileState(parseStoredProfile(localStorage.getItem(PROFILE_KEY)));
     const onStorage = (e: StorageEvent) => {
       if (e.key === PROFILE_KEY) sync();
     };
@@ -165,23 +189,21 @@ export function useUserProfile() {
     let cancelled = false;
     loadProfileFromDB(user.id).then((dbProfile) => {
       if (cancelled || !dbProfile) return;
-      const local = (() => {
-        try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || "null"); } catch { return null; }
-      })() as UserProfile | null;
+      const local = parseStoredProfile(localStorage.getItem(PROFILE_KEY));
 
-      // If local already has Spotify taste data, it's fresher — don't overwrite it with stale DB.
+      // If local already has taste data, it's fresher — don't overwrite it with stale DB.
       // Preserve local's streamingService if set (handles Apple Music users who previously
       // had Spotify data in the same profile row).
-      if (local?.spotifyTopArtists?.length && local.spotifyArtistImages
-          && Object.keys(local.spotifyArtistImages).length > 0) {
-        // Only pull non-Spotify fields from DB (tier, lastFm) if local is missing them
+      if (local?.topArtists?.length && local.artistImages
+          && Object.keys(local.artistImages).length > 0) {
+        // Only pull non-taste fields from DB (tier, lastFm) if local is missing them
         const merged: UserProfile = {
           ...local,
           calculatedTier: local.calculatedTier || dbProfile.calculatedTier,
           lastFmUsername: local.lastFmUsername || dbProfile.lastFmUsername,
           streamingService: resolveStreamingService(
             local.streamingService,
-            local.spotifyTopArtists?.length ?? 0
+            local.topArtists?.length ?? 0
           ),
         };
         localStorage.setItem(PROFILE_KEY, JSON.stringify(merged));
@@ -189,16 +211,16 @@ export function useUserProfile() {
         return;
       }
 
-      // No local Spotify data — use DB profile (e.g. new device sign-in).
+      // No local taste data — use DB profile (e.g. new device sign-in).
       const merged: UserProfile = {
         ...dbProfile,
         streamingService: resolveStreamingService(
           dbProfile.streamingService,
-          dbProfile.spotifyTopArtists?.length ?? 0
+          dbProfile.topArtists?.length ?? 0
         ),
-        spotifyArtistImages: dbProfile.spotifyArtistImages ?? local?.spotifyArtistImages,
-        spotifyArtistIds: dbProfile.spotifyArtistIds ?? local?.spotifyArtistIds,
-        spotifyTrackImages: dbProfile.spotifyTrackImages ?? local?.spotifyTrackImages,
+        artistImages: dbProfile.artistImages ?? local?.artistImages,
+        artistIds: dbProfile.artistIds ?? local?.artistIds,
+        trackImages: dbProfile.trackImages ?? local?.trackImages,
       };
       localStorage.setItem(PROFILE_KEY, JSON.stringify(merged));
       notifyProfileUpdated();
@@ -224,12 +246,7 @@ export function useUserProfile() {
 }
 
 export function getStoredProfile(): UserProfile | null {
-  try {
-    const raw = localStorage.getItem(PROFILE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
+  return parseStoredProfile(localStorage.getItem(PROFILE_KEY));
 }
 
 // ── Tier helpers ──────────────────────────────────────────────────────────────

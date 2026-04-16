@@ -166,11 +166,11 @@ export default function Connect() {
     const profile: UserProfile = {
       streamingService,
       spotifyDisplayName: pendingDisplayName || undefined,
-      spotifyTopArtists: pendingSpotifyArtists || undefined,
-      spotifyTopTracks: pendingSpotifyTracks || undefined,
-      spotifyArtistImages: Object.keys(pendingArtistImages).length ? pendingArtistImages : undefined,
-      spotifyArtistIds: Object.keys(pendingArtistIds).length ? pendingArtistIds : undefined,
-      spotifyTrackImages: pendingTrackImages.length ? pendingTrackImages : undefined,
+      topArtists: pendingSpotifyArtists || undefined,
+      topTracks: pendingSpotifyTracks || undefined,
+      artistImages: Object.keys(pendingArtistImages).length ? pendingArtistImages : undefined,
+      artistIds: Object.keys(pendingArtistIds).length ? pendingArtistIds : undefined,
+      trackImages: pendingTrackImages.length ? pendingTrackImages : undefined,
       lastFmUsername: lastFmUsername.trim() || undefined,
       calculatedTier: t,
     };

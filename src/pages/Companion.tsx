@@ -62,16 +62,16 @@ export default function Companion() {
     if (realTrackMeta) {
       // Try to get cover art: cached from companion data > profile > DiceBear fallback
       let coverArtUrl = data?.coverArtUrl || "";
-      if (!coverArtUrl && profile?.spotifyTrackImages) {
-        const match = profile.spotifyTrackImages.find(
+      if (!coverArtUrl && profile?.trackImages) {
+        const match = profile.trackImages.find(
           (t) =>
             t.title.toLowerCase() === realTrackMeta.title.toLowerCase() &&
             t.artist.toLowerCase() === realTrackMeta.artist.toLowerCase()
         );
         if (match?.imageUrl) coverArtUrl = match.imageUrl;
       }
-      if (!coverArtUrl && profile?.spotifyArtistImages?.[realTrackMeta.artist]) {
-        coverArtUrl = profile.spotifyArtistImages[realTrackMeta.artist];
+      if (!coverArtUrl && profile?.artistImages?.[realTrackMeta.artist]) {
+        coverArtUrl = profile.artistImages[realTrackMeta.artist];
       }
       if (!coverArtUrl) {
         coverArtUrl = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(realTrackMeta.artist + realTrackMeta.title)}&backgroundColor=111827&textColor=ffffff&fontSize=30`;
@@ -84,10 +84,10 @@ export default function Companion() {
       };
     }
     return null;
-  }, [realTrackMeta, data?.coverArtUrl, profile?.spotifyTrackImages, profile?.spotifyArtistImages]);
+  }, [realTrackMeta, data?.coverArtUrl, profile?.trackImages, profile?.artistImages]);
 
   const artistName = trackInfo?.artist || "";
-  const artistFallbackImage = data?.artistImage || profile?.spotifyArtistImages?.[artistName] || "";
+  const artistFallbackImage = data?.artistImage || profile?.artistImages?.[artistName] || "";
   const artistImage = useArtistImage(artistName, artistFallbackImage);
 
   const artistGenres: string[] = [];
