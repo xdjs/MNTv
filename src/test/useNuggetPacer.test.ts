@@ -226,6 +226,97 @@ describe("useNuggetPacer", () => {
     expect(onShow).not.toHaveBeenCalled();
   });
 
+  it("cancelPending drops queued nuggets and stops auto-advance for the rest of the track", () => {
+    const onShow = vi.fn();
+    const nuggets = [{ id: "a" }, { id: "b" }, { id: "c" }];
+
+    const { result, rerender } = renderHook(
+      ({ unlockedIds }) =>
+        useNuggetPacer({
+          nuggets,
+          unlockedIds,
+          trackKey: "t1",
+          onShow,
+          minDisplayMs: 10_000,
+        }),
+      { initialProps: { unlockedIds: new Set<string>(["a", "b"]) } }
+    );
+    // Index 0 shown immediately, index 1 queued.
+    expect(onShow.mock.calls.map((c) => c[0])).toEqual([0]);
+
+    // User swipes — cancel the queue.
+    act(() => {
+      result.current.cancelPending();
+    });
+
+    // Pending advance to "b" should never fire.
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(onShow).toHaveBeenCalledTimes(1);
+
+    // Nugget "c" arrives — pacer should NOT auto-advance now that the user
+    // has taken over.
+    act(() => {
+      rerender({ unlockedIds: new Set(["a", "b", "c"]) });
+    });
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(onShow).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancelPending's takeover resets on track change", () => {
+    const onShow = vi.fn();
+    const nuggetsT1 = [{ id: "a" }, { id: "b" }];
+    const nuggetsT2 = [{ id: "x" }, { id: "y" }];
+
+    const { result, rerender } = renderHook(
+      ({ unlockedIds, trackKey, nuggets }) =>
+        useNuggetPacer({
+          nuggets,
+          unlockedIds,
+          trackKey,
+          onShow,
+          minDisplayMs: 10_000,
+        }),
+      {
+        initialProps: {
+          unlockedIds: new Set<string>(["a"]),
+          trackKey: "t1",
+          nuggets: nuggetsT1,
+        },
+      }
+    );
+    act(() => {
+      result.current.cancelPending();
+    });
+
+    // Switch track and add nuggets — pacer should resume normally for the
+    // new track even though the previous track was paused.
+    act(() => {
+      rerender({
+        unlockedIds: new Set(["x"]),
+        trackKey: "t2",
+        nuggets: nuggetsT2,
+      });
+    });
+    expect(onShow.mock.calls.filter(([i]) => i === 0).length).toBeGreaterThanOrEqual(1);
+
+    onShow.mockClear();
+    act(() => {
+      rerender({
+        unlockedIds: new Set(["x", "y"]),
+        trackKey: "t2",
+        nuggets: nuggetsT2,
+      });
+    });
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(onShow).toHaveBeenCalledWith(1);
+  });
+
   it("is idempotent on unlockedIds re-renders that don't grow the set", () => {
     const onShow = vi.fn();
     const nuggets = [mkNugget("a"), mkNugget("b")];

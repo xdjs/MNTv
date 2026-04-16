@@ -552,7 +552,7 @@ const WRITER_BASE_RULES = [
   (artist: string) => `NO VAGUE FILLER. If a sentence could apply to any artist (e.g., "promoting messages of love and hope", "unique blend of genres", "committed to authentic artistry"), it's worthless. Every sentence must contain a detail that ONLY applies to THIS artist.
    SWAP TEST: if you can replace "${artist}" with any other artist's name and the sentence still works, DELETE IT. It means you wrote nothing specific.`,
   (artist: string) => `Do NOT recommend artists who share ANY part of ${artist}'s name.`,
-  (_artist: string) => `Do NOT use fabricated publisher names. Use the artist's real website, Bandcamp, Spotify, or a real music publication.`,
+  (_artist: string) => `Do NOT use fabricated publisher names like "General Knowledge" or "Music Analysis". Use the artist's real website, Bandcamp, Spotify, or a real music publication.`,
 ];
 
 function buildWriterNonNegotiables(artist: string, extras: string[] = []): string {
@@ -3125,7 +3125,11 @@ Return ONLY valid JSON:
                 }
 
                 // ── Assemble + validate ──
-                const assembled = assembleNugget(nuggetData, nuggetIndex);
+                // streamedIndex matches the `index` field of the SSE event below,
+                // keeping emitted IDs contiguous even when earlier defs were
+                // skipped. (assembleNugget doesn't read the index today, but any
+                // reader of the emitted nugget should see a coherent position.)
+                const assembled = assembleNugget(nuggetData, streamedIndex);
                 const sourceType = (assembled.source?.type || "").toLowerCase();
                 const publisher = (assembled.source?.publisher || "").toLowerCase();
                 if (

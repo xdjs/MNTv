@@ -149,7 +149,7 @@ export default function ImmersiveNuggetView({
     setDeepDiveText(null);
   }, []);
 
-  useNuggetPacer({
+  const { cancelPending: cancelPacerQueue } = useNuggetPacer({
     nuggets,
     unlockedIds,
     trackKey,
@@ -204,11 +204,14 @@ export default function ImmersiveNuggetView({
 
   // ── Handlers ───────────────────────────────────────────────────────
   const handleSwipe = useCallback((newIndex: number) => {
+    // User took manual control — stop the pacer so a pending auto-advance
+    // (or a nugget that arrives later) can't yank them off this card.
+    cancelPacerQueue();
     setActiveIndex(newIndex);
     setNuggetDismissed(false);
     setDeepDiveText(null);
     setDeepDiveFollowUp(null);
-  }, []);
+  }, [cancelPacerQueue]);
 
   const handleTypewriterComplete = useCallback(() => {
     if (activeNugget) setTypewriterDoneIds((prev) => new Set(prev).add(activeNugget.id));
