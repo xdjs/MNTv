@@ -67,11 +67,11 @@ export default function SpotifyCallback() {
           ...profile,
           streamingService: "Spotify",
           spotifyDisplayName: taste.displayName || profile.spotifyDisplayName,
-          spotifyTopArtists: taste.topArtists,
-          spotifyTopTracks: taste.topTracks,
-          spotifyArtistImages: taste.artistImages,
-          spotifyArtistIds: taste.artistIds,
-          spotifyTrackImages: taste.trackImages,
+          topArtists: taste.topArtists,
+          topTracks: taste.topTracks,
+          artistImages: taste.artistImages,
+          artistIds: taste.artistIds,
+          trackImages: taste.trackImages,
         });
       }
       // If no profile exists yet (direct OAuth before setup), store data in sessionStorage

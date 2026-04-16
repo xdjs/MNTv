@@ -95,12 +95,12 @@ export interface UserProfile {
   /** Service-agnostic display name (populated from Spotify or user input for Apple Music) */
   displayName?: string;
   spotifyDisplayName?: string;    // e.g. "Peter Rango" — from Spotify OAuth
-  // Spotify taste profile — populated after OAuth, stored as serialised top artists/tracks
-  spotifyTopArtists?: string[];   // e.g. ["Radiohead", "Björk", "Portishead"]
-  spotifyTopTracks?: string[];    // e.g. ["Karma Police", "Hyperballad"]
-  // Spotify image maps — artist name → image URL, track "title — artist" → album art URL
-  spotifyArtistImages?: Record<string, string>;
-  spotifyArtistIds?: Record<string, string>;   // artist name → Spotify artist ID
-  spotifyTrackImages?: { title: string; artist: string; imageUrl: string; uri?: string }[];
+  // Service-agnostic taste profile — populated from the active streaming service
+  topArtists?: string[];          // e.g. ["Radiohead", "Björk", "Portishead"]
+  topTracks?: string[];           // e.g. ["Karma Police", "Hyperballad"]
+  // Image maps — artist name → image URL, track "title — artist" → album art URL
+  artistImages?: Record<string, string>;
+  artistIds?: Record<string, string>;   // artist name → service-specific artist ID
+  trackImages?: { title: string; artist: string; imageUrl: string; uri?: string }[];
   calculatedTier: "casual" | "curious" | "nerd";
 }

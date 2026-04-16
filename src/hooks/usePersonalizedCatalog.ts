@@ -40,10 +40,10 @@ interface RealArtist { name: string; imageUrl: string; tags: string[]; }
 
 function artistImageUrl(
   name: string,
-  spotifyImages?: Record<string, string>,
+  artistImages?: Record<string, string>,
   resolved?: Map<string, string>,
 ): string {
-  if (spotifyImages?.[name]) return spotifyImages[name];
+  if (artistImages?.[name]) return artistImages[name];
   const cached = resolved?.get(name) || artistImageCache.get(name);
   if (cached) return cached;
   return `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}&backgroundColor=1a1a2e&textColor=ffffff&fontSize=38`;
@@ -52,10 +52,10 @@ function artistImageUrl(
 function trackCoverUrl(
   trackName: string,
   artistName: string,
-  spotifyTrackImages?: { title: string; artist: string; imageUrl: string; uri?: string }[],
+  trackImages?: { title: string; artist: string; imageUrl: string; uri?: string }[],
 ): string {
-  if (spotifyTrackImages) {
-    const match = spotifyTrackImages.find(
+  if (trackImages) {
+    const match = trackImages.find(
       (t) =>
         t.title.toLowerCase() === trackName.toLowerCase() &&
         t.artist.toLowerCase() === artistName.toLowerCase()
@@ -87,15 +87,15 @@ function parseTrackString(t: string): { trackTitle: string; artistName: string }
 function trackTile(
   t: string,
   idPrefix: string,
-  spotifyTrackImages?: { title: string; artist: string; imageUrl: string; uri?: string }[],
+  trackImages?: { title: string; artist: string; imageUrl: string; uri?: string }[],
 ): BrowseTile {
   const { trackTitle, artistName } = parseTrackString(t);
-  const trackInfo = spotifyTrackImages?.find(
+  const trackInfo = trackImages?.find(
     (img) => img.title.toLowerCase() === trackTitle.toLowerCase() && img.artist.toLowerCase() === artistName.toLowerCase()
   );
   return {
     id: `${idPrefix}-${t}`,
-    imageUrl: trackCoverUrl(trackTitle, artistName, spotifyTrackImages),
+    imageUrl: trackCoverUrl(trackTitle, artistName, trackImages),
     title: trackTitle,
     subtitle: artistName,
     href: realTrackHref(artistName, trackTitle, undefined, trackInfo?.uri),
@@ -123,14 +123,14 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
   // Merged top-artist list
   const topArtistNames = useMemo<string[]>(() => {
     const names: string[] = [];
-    if (profile?.spotifyTopArtists?.length) names.push(...profile.spotifyTopArtists);
+    if (profile?.topArtists?.length) names.push(...profile.topArtists);
     if (lastFmData?.topArtists?.length) {
       lastFmData.topArtists.forEach((a) => {
         if (!names.includes(a.name)) names.push(a.name);
       });
     }
     return names;
-  }, [profile?.spotifyTopArtists, lastFmData?.topArtists]);
+  }, [profile?.topArtists, lastFmData?.topArtists]);
 
   // Fetch Last.fm data
   useEffect(() => {
@@ -174,10 +174,10 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
   useEffect(() => {
     if (!profile) return;
     let cancelled = false;
-    const cachedImages = profile.spotifyArtistImages || {};
-    const cachedIds = profile.spotifyArtistIds || {};
+    const cachedImages = profile.artistImages || {};
+    const cachedIds = profile.artistIds || {};
     const artistNames = [
-      ...(profile.spotifyTopArtists || []),
+      ...(profile.topArtists || []),
       ...(lastFmData?.topArtists?.map((a) => a.name) || []),
       ...recommendations.map((a) => a.name),
     ];
@@ -235,13 +235,13 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
     if (!profile) return [];
 
     const allRows: BrowseRow[] = [];
-    const spotifyTracks = profile.spotifyTopTracks || [];
-    const spotifyTrackImgs = profile.spotifyTrackImages;
-    const spotifyArtistImgs = profile.spotifyArtistImages;
+    const topTracks = profile.topTracks || [];
+    const trackImgs = profile.trackImages;
+    const artistImgs = profile.artistImages;
     // Active-service prefix for all artist links in the Browse rows.
-    // spotifyTrackImages / spotifyArtistImages are legacy-named fields
-    // populated from the active service's taste data, so "spotify" is
-    // just the default fallback when no explicit service is set.
+    // trackImages / artistImages are populated from the active service's
+    // taste data; "spotify" is just the default fallback when no explicit
+    // service is set.
     const activeService = serviceParamFromProfile(profile.streamingService);
 
     // ── 1. "Jump Back In" — recent tracks or top tracks ──────────────
@@ -249,8 +249,8 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
 
       if (lastFmData?.recentTracks?.length) {
         lastFmData.recentTracks.slice(0, 10).forEach((t) => {
-          const image = t.imageUrl || trackCoverUrl(t.name, t.artist, spotifyTrackImgs);
-          const spotifyMatch = spotifyTrackImgs?.find(
+          const image = t.imageUrl || trackCoverUrl(t.name, t.artist, trackImgs);
+          const trackMatch = trackImgs?.find(
             (img) => img.title.toLowerCase() === t.name.toLowerCase() && img.artist.toLowerCase() === t.artist.toLowerCase()
           );
           recentTiles.push({
@@ -258,13 +258,13 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
             imageUrl: image,
             title: t.name,
             subtitle: t.artist,
-            href: realTrackHref(t.artist, t.name, t.album, spotifyMatch?.uri),
+            href: realTrackHref(t.artist, t.name, t.album, trackMatch?.uri),
             isRealTrack: true,
           });
         });
-    } else if (spotifyTracks.length) {
-      spotifyTracks.slice(0, 8).forEach((t) => {
-        recentTiles.push(trackTile(t, "recent", spotifyTrackImgs));
+    } else if (topTracks.length) {
+      topTracks.slice(0, 8).forEach((t) => {
+        recentTiles.push(trackTile(t, "recent", trackImgs));
       });
     }
 
@@ -275,12 +275,12 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
     // ── 2. "Your Top Artists" ────────────────────────────────────────
     if (topArtistNames.length > 0) {
       // cachedArtistIds holds catalog IDs from the active service's
-      // taste data (legacy-named spotifyArtistIds field). Falls back
-      // to the runtime-resolved map when a given name wasn't in taste.
-      const cachedArtistIds = profile.spotifyArtistIds || {};
+      // taste data. Falls back to the runtime-resolved map when a given
+      // name wasn't in taste.
+      const cachedArtistIds = profile.artistIds || {};
       const topArtistTiles: BrowseTile[] = topArtistNames.slice(0, 20).map((name) => ({
         id: `artist-${name}`,
-        imageUrl: artistImageUrl(name, spotifyArtistImgs, resolvedImages),
+        imageUrl: artistImageUrl(name, artistImgs, resolvedImages),
         title: name,
         subtitle: "Artist",
         href: artistHref(name, cachedArtistIds[name] || resolvedIds.get(name), activeService),
@@ -289,9 +289,9 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
     }
 
     // ── 3. "Your Top Tracks" ─────────────────────────────────────────
-    if (spotifyTracks.length > 0) {
-      const trackTiles = spotifyTracks.slice(0, 15).map((t) =>
-        trackTile(t, "track", spotifyTrackImgs)
+    if (topTracks.length > 0) {
+      const trackTiles = topTracks.slice(0, 15).map((t) =>
+        trackTile(t, "track", trackImgs)
       );
       allRows.push({ label: "Your Top Tracks", items: trackTiles, size: "md" });
     }
@@ -300,7 +300,7 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
     if (recommendations.length > 0) {
       const recTiles: BrowseTile[] = recommendations.slice(0, 15).map((a) => ({
         id: `rec-${a.name}`,
-        imageUrl: artistImageUrl(a.name, spotifyArtistImgs, resolvedImages),
+        imageUrl: artistImageUrl(a.name, artistImgs, resolvedImages),
         title: a.name,
         subtitle: a.tags.slice(0, 2).join(", ") || "Artist",
         href: artistHref(a.name, resolvedIds.get(a.name), activeService),
@@ -308,10 +308,10 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
       allRows.push({ label: "Recommended For You", items: recTiles, size: "lg" });
     }
 
-    // ── 5. "Deep Cuts" — later Spotify top tracks (positions 8–15) ───
-    if (spotifyTracks.length > 8) {
-      const deepCuts = spotifyTracks.slice(8, 15).map((t) =>
-        trackTile(t, "deep", spotifyTrackImgs)
+    // ── 5. "Deep Cuts" — later top tracks (positions 8–15) ───────────
+    if (topTracks.length > 8) {
+      const deepCuts = topTracks.slice(8, 15).map((t) =>
+        trackTile(t, "deep", trackImgs)
       );
       allRows.push({ label: "Deep Cuts", items: deepCuts, size: "sm" });
     }
@@ -337,7 +337,7 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
         if (genreArtists.length >= 3) {
           const genreTiles: BrowseTile[] = genreArtists.map((a) => ({
             id: `genre-${a.name}`,
-            imageUrl: artistImageUrl(a.name, spotifyArtistImgs, resolvedImages),
+            imageUrl: artistImageUrl(a.name, artistImgs, resolvedImages),
             title: a.name,
             subtitle: a.tags.slice(0, 2).join(", ") || "Artist",
             href: artistHref(a.name, resolvedIds.get(a.name), activeService),
