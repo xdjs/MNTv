@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getAppleDeveloperToken } from "../_shared/apple-token.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -122,6 +123,10 @@ async function getSpotifyAppToken(): Promise<string | null> {
   } catch { return null; }
 }
 
+// NAMING DEBT: this interface is now populated by both Spotify and Apple
+// Music paths. The "Spotify" prefix is legacy from the single-service era.
+// Rename to `ArtistEnrichmentInfo` or similar when touching the broader
+// spotify* → catalog-agnostic rename tracked in #51.
 interface SpotifyArtistInfo {
   genres: string[];
   relatedArtists: string[];
@@ -197,6 +202,194 @@ async function fetchSpotifyArtistInfo(artistName: string, spotifyTrackId?: strin
     };
   } catch (e) {
     console.error("[Spotify] Artist info fetch failed:", e);
+    return null;
+  }
+}
+
+// ── Apple Music artist data (mirrors fetchSpotifyArtistInfo for Apple users) ──
+//
+// Apple Music users reach this path because the frontend sends an `appleTrackId`
+// extracted from `apple:song:XXX` URIs. We use Apple's catalog API to resolve
+// the track's canonical artist (avoiding name collisions the way the Spotify
+// path uses /v1/tracks/:id) then fetch the artist's genre + top-songs view.
+//
+// Returns the same `SpotifyArtistInfo` shape so downstream prompt-building
+// code (line ~1529 and Exa strategy selection) doesn't have to branch on
+// service. Apple exposes no direct follower count, so `followers` is set
+// to 0 — downstream popularity logic will treat Apple artists as SPARSE
+// (conservative strategy) until we add a cross-service popularity signal.
+// Apple catalog free-text fields (genre names, track names, album names) flow
+// into the Gemini prompt. They're user-controllable at the Apple catalog level
+// (artists self-submit release metadata), so a crafted entry could inject
+// prompt instructions via newlines or break prompt structure via control chars.
+// Strip anything that isn't a safe printable character. Cap length as a second
+// line of defense against prompt stuffing.
+function sanitizeCatalogField(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  return raw
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/[\x00-\x1f\x7f]/g, "")
+    .slice(0, 200)
+    .trim();
+}
+
+// Used for console.log / console.warn interpolation of user-supplied strings
+// (artist names). Prevents log forgery via embedded newlines that would forge
+// log lines that look like legitimate events from other subsystems.
+function sanitizeForLog(raw: string): string {
+  return raw.replace(/[\r\n\t]+/g, " ").slice(0, 200);
+}
+
+// Apple catalog calls run on the user-blocking critical path (racing Exa in
+// Promise.all). Cap each at this budget so a stuck Apple API response can't
+// hang the entire nugget generation.
+const APPLE_TIMEOUT_MS = 3000;
+
+// Single fetch helper for all Apple Music calls — wraps the manual
+// AbortController + setTimeout pattern (matching _shared/apple-utils.ts:360)
+// so individual call sites stay terse and adding a new call site in the
+// future can't accidentally skip the timeout or leak the timer. Propagates
+// the Response; callers check .ok or catch AbortError at the outer boundary.
+async function fetchWithAppleTimeout(
+  url: string,
+  headers: Record<string, string>,
+  timeoutMs: number = APPLE_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { headers, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchAppleArtistInfo(
+  artistName: string,
+  appleTrackId?: string,
+): Promise<SpotifyArtistInfo | null> {
+  try {
+    const devToken = await getAppleDeveloperToken();
+    if (!devToken) return null;
+
+    // TODO(#51): storefront is hardcoded to 'us'. Artists prominent in other
+    // storefronts (Japan, Korea, LatAm) may not surface cleanly in US catalog
+    // name search. Track alongside the cross-service popularity signal
+    // follow-up — both want a per-request catalog-locale parameter.
+    const headers = { Authorization: `Bearer ${devToken}` };
+
+    // Track ID route: Apple's song endpoint exposes the canonical artist
+    // relationship, which we use to pick the exact artist page. Prevents
+    // name collisions between homonymous artists (e.g. two bands called
+    // "Nirvana"). Also captures the song's genreNames so downstream code
+    // can merge them with the artist-level genre list.
+    const safeArtistNameLog = sanitizeForLog(artistName);
+    let appleArtistId: string | null = null;
+    let songGenres: string[] = [];
+
+    if (appleTrackId) {
+      const songRes = await fetchWithAppleTimeout(
+        `https://api.music.apple.com/v1/catalog/us/songs/${appleTrackId}?include=artists`,
+        headers,
+      );
+      if (songRes.ok) {
+        const songData = await songRes.json();
+        const song = songData?.data?.[0];
+        const rawSongGenres = song?.attributes?.genreNames;
+        songGenres = Array.isArray(rawSongGenres) ? rawSongGenres : [];
+        appleArtistId = song?.relationships?.artists?.data?.[0]?.id || null;
+        if (appleArtistId) {
+          console.log(`[Apple Music] Resolved artist from track ID: ${safeArtistNameLog} (${appleArtistId})`);
+        }
+      } else {
+        // Log so Apple rate-limits (429) and upstream 5xx are distinguishable
+        // from legitimate "track not found" in edge function logs.
+        console.warn(`[Apple Music] songs/${appleTrackId} returned ${songRes.status}`);
+      }
+    }
+
+    // Name-search fallback: if the track-based resolution failed (track id
+    // invalid, song unavailable, relationship missing), fall back to the
+    // catalog search endpoint. Matches the Spotify path's fallback.
+    if (!appleArtistId) {
+      const q = encodeURIComponent(artistName.trim());
+      const searchRes = await fetchWithAppleTimeout(
+        `https://api.music.apple.com/v1/catalog/us/search?types=artists&limit=1&term=${q}`,
+        headers,
+      );
+      if (!searchRes.ok) {
+        console.warn(`[Apple Music] search returned ${searchRes.status} for "${safeArtistNameLog}"`);
+        return null;
+      }
+      const searchData = await searchRes.json();
+      appleArtistId = searchData?.results?.artists?.data?.[0]?.id || null;
+    }
+    if (!appleArtistId) return null;
+
+    // Fetch the artist page with views=top-songs so we get the top tracks
+    // the same way Spotify's /artists/:id/top-tracks gives us a priority
+    // list. `featured-release` surfaces the SINGLE most recent album —
+    // Apple doesn't expose a paginated "all albums" view in a single call,
+    // so Apple users get much narrower album context than Spotify (which
+    // fetches up to 20). Acceptable for the first pass; exploring
+    // `views=latest-release,full-albums` is a follow-up on #51.
+    const artistRes = await fetchWithAppleTimeout(
+      `https://api.music.apple.com/v1/catalog/us/artists/${appleArtistId}?views=top-songs,featured-release`,
+      headers,
+    );
+    if (!artistRes.ok) {
+      console.warn(`[Apple Music] artists/${appleArtistId} returned ${artistRes.status}`);
+      return null;
+    }
+    const artistData = await artistRes.json();
+    const artist = artistData?.data?.[0];
+    if (!artist) return null;
+
+    // Merge artist-level + song-level genres, strip Apple's "Music" catch-all
+    // label (appears on every catalog item, zero signal), and sanitize each
+    // value because these flow into the Gemini prompt where a crafted newline
+    // could inject instructions. Array.isArray guard protects against
+    // malformed Apple responses (null, string, object).
+    const mergedGenres = new Set<string>();
+    const rawArtistGenres = artist.attributes?.genreNames;
+    if (Array.isArray(rawArtistGenres)) {
+      for (const g of rawArtistGenres) {
+        const clean = sanitizeCatalogField(g);
+        if (clean && clean !== "Music") mergedGenres.add(clean);
+      }
+    }
+    for (const g of songGenres) {
+      const clean = sanitizeCatalogField(g);
+      if (clean && clean !== "Music") mergedGenres.add(clean);
+    }
+    const genres: string[] = Array.from(mergedGenres);
+
+    const rawTopSongs = artist.views?.["top-songs"]?.data;
+    const topSongs: Array<{ attributes?: { name?: unknown } }> = Array.isArray(rawTopSongs) ? rawTopSongs : [];
+    const topTrackNames: string[] = topSongs
+      .slice(0, 10)
+      .map((s) => sanitizeCatalogField(s?.attributes?.name))
+      .filter((n): n is string => n.length > 0);
+
+    // featured-release returns a single promoted album, so no slice needed —
+    // the Array.isArray guard is the meaningful protection here.
+    const rawFeaturedAlbums = artist.views?.["featured-release"]?.data;
+    const featuredAlbums: Array<{ attributes?: { name?: unknown } }> = Array.isArray(rawFeaturedAlbums) ? rawFeaturedAlbums : [];
+    const albumNames: string[] = featuredAlbums
+      .map((a) => sanitizeCatalogField(a?.attributes?.name))
+      .filter((n): n is string => n.length > 0);
+
+    console.log(`[Apple Music] ${safeArtistNameLog}: ${genres.length} genres, ${topTrackNames.length} tracks, ${albumNames.length} albums`);
+
+    return {
+      genres,
+      relatedArtists: [],
+      topTrackNames,
+      albumNames,
+      followers: 0, // Apple exposes no direct follower count — see header comment
+    };
+  } catch (e) {
+    console.error("[Apple Music] Artist info fetch failed:", e);
     return null;
   }
 }
@@ -1208,9 +1401,11 @@ async function curateResearch(
     warningsForWriter: ["Curation unavailable — writer should rely on its own knowledge"],
   };
 
-  // Build discography context for artist disambiguation
+  // Build discography context for artist disambiguation. The source may be
+  // Spotify OR Apple Music depending on which service the user is on — the
+  // generic "music catalog" phrasing keeps Gemini honest about origin.
   const discographySection = spotifyInfo && (spotifyInfo.albumNames.length > 0 || spotifyInfo.topTrackNames.length > 0)
-    ? `\nVERIFIED DISCOGRAPHY (from Spotify — use this to identify the CORRECT "${artist}"):
+    ? `\nVERIFIED DISCOGRAPHY (from music catalog — use this to identify the CORRECT "${artist}"):
 ${spotifyInfo.genres.length > 0 ? `Genres: ${spotifyInfo.genres.join(", ")}` : ""}
 ${spotifyInfo.albumNames.length > 0 ? `Albums/Singles: ${spotifyInfo.albumNames.join(", ")}` : ""}
 ${spotifyInfo.topTrackNames.length > 0 ? `Top tracks: ${spotifyInfo.topTrackNames.join(", ")}` : ""}
@@ -1593,9 +1788,11 @@ Use this to:
   const hasLastFmTags = lastFmTags && lastFmTags.length > 0;
 
   let musicDataContext = `\nMUSIC DATA for "${artist}":`;
-  // Spotify catalog data
+  // Catalog data — source may be Spotify OR Apple Music. Prompt labels stay
+  // service-agnostic because Gemini copies source names verbatim into nugget
+  // text (see the Last.fm comment below for prior burn on this exact issue).
   if (hasSpotifyGenres) {
-    musicDataContext += `\nSpotify genres: ${spotifyInfo!.genres.join(", ")}`;
+    musicDataContext += `\nGenres: ${spotifyInfo!.genres.join(", ")}`;
   }
   if (hasLastFmTags) {
     musicDataContext += `\nGenre tags: ${lastFmTags!.join(", ")}`;
@@ -1606,7 +1803,10 @@ Use this to:
   if (spotifyInfo && spotifyInfo.albumNames.length > 0) {
     musicDataContext += `\nAlbums/Singles: ${spotifyInfo!.albumNames.join(", ")}`;
   }
-  if (spotifyInfo) {
+  // Omit the Followers line when the value is 0 — Apple Music has no direct
+  // follower count (fetchAppleArtistInfo returns 0), and sending
+  // "Followers: 0" to Gemini falsely signals the artist is brand-new/obscure.
+  if (spotifyInfo && spotifyInfo.followers > 0) {
     musicDataContext += `\nFollowers: ${spotifyInfo.followers.toLocaleString()}`;
   }
   // Similar artists from listener data — key data for discovery recommendations
@@ -2202,7 +2402,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, imageCaption, imageQuery, listenCount, previousNuggets, tier: rawTier, userTopArtists: rawTopArtists, userTopTracks: rawTopTracks, spotifyArtistImageUrl: rawSpotifyArtistImageUrl, spotifyTrackId: rawSpotifyTrackId } = body;
+    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, imageCaption, imageQuery, listenCount, previousNuggets, tier: rawTier, userTopArtists: rawTopArtists, userTopTracks: rawTopTracks, spotifyArtistImageUrl: rawSpotifyArtistImageUrl, spotifyTrackId: rawSpotifyTrackId, appleTrackId: rawAppleTrackId } = body;
     const tier: Tier = (rawTier === "casual" || rawTier === "curious" || rawTier === "nerd") ? rawTier : "casual";
 
     // ── Input validation ────────────────────────────────────────────
@@ -2244,6 +2444,18 @@ serve(async (req) => {
     const safeSpotifyTrackId: string | undefined =
       typeof rawSpotifyTrackId === "string" && /^[a-zA-Z0-9]{22}$/.test(rawSpotifyTrackId)
         ? rawSpotifyTrackId
+        : undefined;
+    // Apple Music catalog ID for Apple users (e.g., "1109715168").
+    // Apple song catalog IDs are numeric strings 7-15 digits. Songs are
+    // typically 9-10; the upper bound accommodates longer IDs seen on some
+    // legacy/compilation tracks. Anything shorter than 7 is almost certainly
+    // an artist or album ID passed in error and would 404 the /songs/:id
+    // lookup, wasting a round-trip to Apple before falling through to
+    // name-search. When set, we route to fetchAppleArtistInfo instead of
+    // the Spotify enrichment path.
+    const safeAppleTrackId: string | undefined =
+      typeof rawAppleTrackId === "string" && /^\d{7,15}$/.test(rawAppleTrackId)
+        ? rawAppleTrackId
         : undefined;
 
     const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY");
@@ -2356,9 +2568,21 @@ Return ONLY valid JSON:
     let trackSearchSkipped = false;
     let discoverySearchSkipped = false;
 
-    // Fetch Spotify + Last.fm artist info in parallel with Exa Phase 1
-    // Pass track ID for precise artist resolution (prevents name collisions)
-    const spotifyInfoPromise = fetchSpotifyArtistInfo(artist, safeSpotifyTrackId);
+    // Fetch artist info in parallel with Exa Phase 1. Apple users route
+    // through fetchAppleArtistInfo (which uses Apple's catalog API);
+    // everyone else falls through to the Spotify path. The returned shape
+    // is identical so downstream code (prompt building, Exa strategy
+    // selection via `followers`) doesn't need to branch on service.
+    //
+    // If the frontend ever sends BOTH a Spotify and Apple track ID, Apple
+    // takes priority — the track ID for the active service matches the
+    // running playback engine, so Apple winning is the correct default.
+    // The frontend currently sends only one URI per request (mutually
+    // exclusive in useAINuggets.ts), so this branch is never exercised in
+    // production, but the precedence is documented for future robustness.
+    const artistInfoPromise = safeAppleTrackId
+      ? fetchAppleArtistInfo(artist, safeAppleTrackId)
+      : fetchSpotifyArtistInfo(artist, safeSpotifyTrackId);
     const lastFmSimilarPromise = fetchLastFmSimilarArtists(artist);
     const lastFmTagsPromise = fetchLastFmArtistTags(artist);
 
@@ -2376,7 +2600,7 @@ Return ONLY valid JSON:
 
       const [artistSearchResult, phase1SpotifyInfo] = await Promise.all([
         artistSearchPromise,
-        spotifyInfoPromise,
+        artistInfoPromise,
       ]);
       console.timeEnd("[Timing] Exa Phase 1"); _te("exaPhase1");
       checkTimeout();
@@ -2566,7 +2790,7 @@ Return ONLY valid JSON:
     // Step 3: Generate nuggets with Gemini + Google Search grounding
     const [imageCandidates, resolvedSpotifyInfo, resolvedLastFmSimilar, resolvedLastFmTags] = await Promise.all([
       imageCandidatesPromise,
-      spotifyInfoPromise,
+      artistInfoPromise,
       lastFmSimilarPromise,
       lastFmTagsPromise,
     ]);
