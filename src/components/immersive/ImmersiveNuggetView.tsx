@@ -31,6 +31,11 @@ interface ImmersiveNuggetViewProps {
 let deepDiveSessionCount = 0;
 const MAX_DEEP_DIVES_PER_SESSION = 10;
 
+// Minimum time a nugget stays on-screen before auto-advance can swap it out.
+// Tuning knob for the streaming pacing — keeps freshly-streamed nuggets
+// readable without yanking the user mid-sentence.
+const MIN_DISPLAY_MS = 10_000;
+
 const KIND_LABELS: Record<string, string> = {
   artist: "The Artist",
   track: "The Track",
@@ -93,6 +98,11 @@ export default function ImmersiveNuggetView({
       userDismissedRef.current = false;
       initialUnlockDoneRef.current = false;
       nextUnlockTimeRef.current = 0;
+      pendingQueueRef.current = [];
+      if (advanceTimerRef.current) {
+        clearTimeout(advanceTimerRef.current);
+        advanceTimerRef.current = null;
+      }
     }
   }, [trackTitle, artist]);
 
@@ -139,42 +149,65 @@ export default function ImmersiveNuggetView({
   const nuggetShownAtRef = useRef(Date.now());
 
   // ── Auto-show new nuggets ──────────────────────────────────────────
-  // Enforces a minimum display time (10 s) so freshly-streamed nuggets
-  // don't yank the user away mid-read. If the timer hasn't elapsed the
-  // swipe dots still update — user can swipe manually.
-  const MIN_DISPLAY_MS = 10_000;
-  useEffect(() => {
-    const count = unlockedIds.size;
-    if (count > prevUnlockedCountRef.current && count > 0) {
-      const arr = nuggets.filter((n) => unlockedIds.has(n.id));
-      const idx = nuggets.indexOf(arr[arr.length - 1]);
-      if (idx >= 0) {
-        const elapsed = Date.now() - nuggetShownAtRef.current;
-        if (prevUnlockedCountRef.current === 0 || elapsed >= MIN_DISPLAY_MS) {
-          setActiveIndex(idx);
-          nuggetShownAtRef.current = Date.now();
-          if (!userDismissedRef.current) {
-            setNuggetDismissed(false);
-          }
-          setDeepDiveText(null);
-        } else {
-          const remaining = MIN_DISPLAY_MS - elapsed;
-          const timer = setTimeout(() => {
-            setActiveIndex(idx);
-            nuggetShownAtRef.current = Date.now();
-            if (!userDismissedRef.current) {
-              setNuggetDismissed(false);
-            }
-            setDeepDiveText(null);
-          }, remaining);
-          // Don't update prevUnlockedCountRef yet — the timer handles it
-          prevUnlockedCountRef.current = count;
-          return () => clearTimeout(timer);
-        }
+  // Proper queue: when multiple nuggets arrive within MIN_DISPLAY_MS, each
+  // one is shown in turn rather than the older one being silently replaced.
+  // A React effect-cleanup-based timer would cancel the pending nugget
+  // whenever unlockedIds changed again, dropping intermediate entries.
+  const pendingQueueRef = useRef<number[]>([]);
+  const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showNugget = useCallback((idx: number) => {
+    setActiveIndex(idx);
+    nuggetShownAtRef.current = Date.now();
+    if (!userDismissedRef.current) setNuggetDismissed(false);
+    setDeepDiveText(null);
+  }, []);
+
+  const scheduleNextFromQueue = useCallback(() => {
+    if (advanceTimerRef.current) return;
+    if (pendingQueueRef.current.length === 0) return;
+    const elapsed = Date.now() - nuggetShownAtRef.current;
+    const wait = Math.max(0, MIN_DISPLAY_MS - elapsed);
+    advanceTimerRef.current = setTimeout(() => {
+      advanceTimerRef.current = null;
+      const next = pendingQueueRef.current.shift();
+      if (next !== undefined) {
+        showNugget(next);
+        scheduleNextFromQueue();
       }
+    }, wait);
+  }, [showNugget]);
+
+  useEffect(() => {
+    // Compute the ordered list of unlocked indices (stable by array position).
+    const unlockedIndices: number[] = [];
+    for (let i = 0; i < nuggets.length; i++) {
+      if (unlockedIds.has(nuggets[i].id)) unlockedIndices.push(i);
     }
-    prevUnlockedCountRef.current = count;
-  }, [unlockedIds, nuggets]);
+    const newCount = unlockedIndices.length;
+    const oldCount = prevUnlockedCountRef.current;
+    if (newCount <= oldCount) {
+      prevUnlockedCountRef.current = newCount;
+      return;
+    }
+
+    const newlyAdded = unlockedIndices.slice(oldCount);
+    prevUnlockedCountRef.current = newCount;
+
+    if (oldCount === 0) {
+      // First unlock: show the first immediately, queue the rest.
+      const [first, ...rest] = newlyAdded;
+      showNugget(first);
+      pendingQueueRef.current.push(...rest);
+    } else {
+      pendingQueueRef.current.push(...newlyAdded);
+    }
+    scheduleNextFromQueue();
+  }, [unlockedIds, nuggets, showNugget, scheduleNextFromQueue]);
+
+  useEffect(() => () => {
+    if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
+  }, []);
 
   // ── Initial unlock ─────────────────────────────────────────────────
   // Runs once when nuggets first arrive. Uses currentTimeRef to avoid

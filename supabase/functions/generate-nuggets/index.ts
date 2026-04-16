@@ -513,6 +513,38 @@ function isActualImageUrl(url: string): boolean {
   }
 }
 
+// Exa citations are bucketed by nugget: each nugget owns a contiguous
+// window of citIndex values. Keep in sync with the citation-builder.
+const CITATION_GROUP_SIZE = 10;
+const NUGGET_COUNT = 3;
+
+// Picks an unused Exa citation image for a nugget, preferring the nugget's
+// own citation group and falling back to any unused image. Mutates the
+// target with _resolvedImageUrl / _resolvedImageTitle and records the URL
+// in usedImageUrls. Returns the chosen citation (for logging) or null.
+function resolveExaImageForNugget(
+  target: { _resolvedImageUrl?: string; _resolvedImageTitle?: string },
+  nuggetIndex: number,
+  exaCitationsStrict: ExaCitation[],
+  usedImageUrls: Set<string>,
+): ExaCitation | null {
+  if (target._resolvedImageUrl) return null;
+  const groupStart = nuggetIndex * CITATION_GROUP_SIZE;
+  const groupEnd = groupStart + CITATION_GROUP_SIZE;
+  const usable = (c: ExaCitation) =>
+    !!c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl);
+  const match =
+    exaCitationsStrict.find((c) => c.citIndex >= groupStart && c.citIndex < groupEnd && usable(c)) ??
+    exaCitationsStrict.find(usable);
+  if (match?.imageUrl) {
+    target._resolvedImageUrl = match.imageUrl;
+    target._resolvedImageTitle = match.title;
+    usedImageUrls.add(match.imageUrl);
+    return match;
+  }
+  return null;
+}
+
 // ── Word-boundary matching helper ─────────────────────────────────────
 // Uses regex \b to prevent "pete" matching inside "peter" or "cornelia" matching "Cornelia Murr"
 function wordBoundaryMatch(haystack: string, needle: string): boolean {
@@ -3010,7 +3042,7 @@ Return ONLY valid JSON:
                     if (!res.ok) {
                       if (res.status === 429 && attempt < 2) {
                         console.log(`[SSE] 429 for ${def.kind}, retrying in 2s...`);
-                        await new Promise(r => setTimeout(r, 2000));
+                        await new Promise((resolve) => setTimeout(resolve, 2000));
                         continue;
                       }
                       throw new Error(`Gemini returned ${res.status} for ${def.kind}`);
@@ -3018,7 +3050,7 @@ Return ONLY valid JSON:
                     const data = await res.json();
                     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
                     if (!text.trim()) {
-                      if (attempt < 2) { await new Promise(r => setTimeout(r, 1000)); continue; }
+                      if (attempt < 2) { await new Promise((resolve) => setTimeout(resolve, 1000)); continue; }
                       throw new Error(`Empty Gemini response for ${def.kind}`);
                     }
                     const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
@@ -3043,24 +3075,7 @@ Return ONLY valid JSON:
 
                 // ── Image: Exa first (instant), Wikipedia fallback ──
                 const nuggetIndex = streamedIndex;
-                if (!nuggetData._resolvedImageUrl) {
-                  const groupStart = nuggetIndex * 10;
-                  const groupEnd = groupStart + 10;
-                  let exaCit = exaCitationsStrict.find((c) =>
-                    c.citIndex >= groupStart && c.citIndex < groupEnd &&
-                    c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
-                  );
-                  if (!exaCit) {
-                    exaCit = exaCitationsStrict.find((c) =>
-                      c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
-                    );
-                  }
-                  if (exaCit?.imageUrl) {
-                    nuggetData._resolvedImageUrl = exaCit.imageUrl;
-                    nuggetData._resolvedImageTitle = exaCit.title;
-                    usedImageUrls.add(exaCit.imageUrl);
-                  }
-                }
+                resolveExaImageForNugget(nuggetData, nuggetIndex, exaCitationsStrict, usedImageUrls);
                 if (!nuggetData._resolvedImageUrl && isValidImageQuery(nuggetData.imageSearchQuery)) {
                   try {
                     const wikiResult = await resolveNuggetImage(nuggetData.imageSearchQuery!);
@@ -3094,7 +3109,7 @@ Return ONLY valid JSON:
                   type: "nugget",
                   index: streamedIndex,
                   nugget: assembled,
-                  totalExpected: 3,
+                  totalExpected: NUGGET_COUNT,
                 })}\n\n`;
                 try { streamController.enqueue(encoder.encode(event)); } catch { /* stream closed */ }
                 console.log(`[SSE] Streamed ${def.kind} nugget ${streamedIndex}: "${assembled.headline?.slice(0, 40)}"`);
@@ -3103,9 +3118,11 @@ Return ONLY valid JSON:
 
               // ── Done ──
               artistSummary = sseArtistSummary;
-              noTrackData = false;
-              rawNuggets = streamedNuggets.map((n: any) => n);
-              const doneEvent = `data: ${JSON.stringify({ type: "done", artistSummary: sseArtistSummary, externalLinks: buildExternalLinks(), noTrackData: false })}\n\n`;
+              // Match batch path: sparse/missing track facts + skipped track search
+              // signal "no track data" so the client can adjust downstream UI.
+              noTrackData = !curatedFacts?.trackFacts?.length && trackSearchSkipped;
+              rawNuggets = streamedNuggets;
+              const doneEvent = `data: ${JSON.stringify({ type: "done", artistSummary: sseArtistSummary, externalLinks: buildExternalLinks(), noTrackData })}\n\n`;
               try {
                 streamController.enqueue(encoder.encode(doneEvent));
                 streamController.close();
@@ -3138,24 +3155,12 @@ Return ONLY valid JSON:
     // Exa citation images first (instant — data already in memory)
     if (exaCitationsStrict.length) {
       for (let i = 0; i < rawNuggets.length; i++) {
-        if (rawNuggets[i]._resolvedImageUrl) continue;
-        const groupStart = i * 10;
-        const groupEnd = groupStart + 10;
-        let exaCit = exaCitationsStrict.find((c) =>
-          c.citIndex >= groupStart && c.citIndex < groupEnd &&
-          c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
-        );
-        if (!exaCit) {
-          exaCit = exaCitationsStrict.find((c) =>
-            c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
-          );
-        }
-        if (exaCit?.imageUrl) {
-          rawNuggets[i]._resolvedImageUrl = exaCit.imageUrl;
-          rawNuggets[i]._resolvedImageTitle = exaCit.title;
-          usedImageUrls.add(exaCit.imageUrl);
-          const crossGroup = exaCit.citIndex < groupStart || exaCit.citIndex >= groupEnd;
-          console.log(`[Image] Exa${crossGroup ? " (cross-group)" : ""} for nugget ${i}: ${exaCit.imageUrl}`);
+        const picked = resolveExaImageForNugget(rawNuggets[i], i, exaCitationsStrict, usedImageUrls);
+        if (picked) {
+          const groupStart = i * CITATION_GROUP_SIZE;
+          const groupEnd = groupStart + CITATION_GROUP_SIZE;
+          const crossGroup = picked.citIndex < groupStart || picked.citIndex >= groupEnd;
+          console.log(`[Image] Exa${crossGroup ? " (cross-group)" : ""} for nugget ${i}: ${picked.imageUrl}`);
         }
       }
     }
