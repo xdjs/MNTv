@@ -2625,7 +2625,13 @@ Return ONLY valid JSON:
     }
     console.timeEnd("[Timing] Gemini (Curator + Writer)"); _te("gemini");
     } else {
-      // SSE path: rawNuggets populated inside the streaming IIFE below
+      // SSE path: rawNuggets populated inside the streaming IIFE below.
+      // groundingChunks stays empty on this path — the per-nugget Writer
+      // calls happen inside the IIFE and the resulting grounding metadata
+      // isn't aggregated here. assembleNugget's realChunks fallback
+      // therefore only resolves against Exa citations on SSE requests;
+      // the Google-search grounding fallback is batch-only. If this
+      // becomes load-bearing, thread chunks out of the IIFE.
       rawNuggets = [];
       groundingChunks = [];
     }
@@ -3042,7 +3048,7 @@ Return ONLY valid JSON:
       "type": "youtube|article|interview",
       "title": "Source title",
       "publisher": "Real publisher name",
-      "citIndex": 0,
+      "citIndex": "<integer — the [CIT N] index of the research item backing this nugget>",
       "quoteSnippet": "Key quote or paraphrase"
     }
   }
@@ -3164,6 +3170,21 @@ Return ONLY valid JSON:
               artistSummary = sseArtistSummary;
               noTrackData = !curatedFacts?.trackFacts?.length && trackSearchSkipped;
               rawNuggets = streamedNuggets;
+
+              // If every Writer call failed, emit an explicit error event
+              // instead of done(nuggets=[]) — saves the client from briefly
+              // entering the "success but empty" path before noticing the
+              // zero-nugget guard, which caused a visible flicker.
+              if (streamedNuggets.length === 0) {
+                const errorEvent = `data: ${JSON.stringify({ type: "error", message: "No nuggets generated — all Writer attempts failed" })}\n\n`;
+                try {
+                  streamController.enqueue(encoder.encode(errorEvent));
+                  streamController.close();
+                } catch { /* stream closed */ }
+                console.warn("[SSE] All Writer calls failed — emitted error event");
+                return;
+              }
+
               const doneEvent = `data: ${JSON.stringify({ type: "done", artistSummary: sseArtistSummary, externalLinks: buildExternalLinks(), noTrackData })}\n\n`;
               try {
                 streamController.enqueue(encoder.encode(doneEvent));

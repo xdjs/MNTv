@@ -294,6 +294,7 @@ describe("useNuggetPacer", () => {
 
     // Switch track and add nuggets — pacer should resume normally for the
     // new track even though the previous track was paused.
+    onShow.mockClear();
     act(() => {
       rerender({
         unlockedIds: new Set(["x"]),
@@ -301,7 +302,8 @@ describe("useNuggetPacer", () => {
         nuggets: nuggetsT2,
       });
     });
-    expect(onShow.mock.calls.filter(([i]) => i === 0).length).toBeGreaterThanOrEqual(1);
+    expect(onShow).toHaveBeenCalledTimes(1);
+    expect(onShow).toHaveBeenCalledWith(0);
 
     onShow.mockClear();
     act(() => {

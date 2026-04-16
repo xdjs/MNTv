@@ -40,11 +40,16 @@ export function useNuggetPacer<T extends NuggetIdentity>({
   const userTookOverRef = useRef(false);
 
   // Keep onShow in a ref so the effect doesn't re-run each render as the
-  // parent recreates the callback.
+  // parent recreates the callback. Same treatment for minDisplayMs so a
+  // timer scheduled on an old closure still honors the latest value.
   const onShowRef = useRef(onShow);
   useEffect(() => {
     onShowRef.current = onShow;
   }, [onShow]);
+  const minDisplayMsRef = useRef(minDisplayMs);
+  useEffect(() => {
+    minDisplayMsRef.current = minDisplayMs;
+  }, [minDisplayMs]);
 
   const clearAdvanceTimer = () => {
     if (advanceTimerRef.current) {
@@ -58,7 +63,7 @@ export function useNuggetPacer<T extends NuggetIdentity>({
     if (advanceTimerRef.current) return;
     if (pendingQueueRef.current.length === 0) return;
     const elapsed = Date.now() - nuggetShownAtRef.current;
-    const wait = Math.max(0, minDisplayMs - elapsed);
+    const wait = Math.max(0, minDisplayMsRef.current - elapsed);
     advanceTimerRef.current = setTimeout(() => {
       advanceTimerRef.current = null;
       if (userTookOverRef.current) return;

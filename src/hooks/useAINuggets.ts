@@ -467,36 +467,46 @@ export function useAINuggets(
           for (const event of events) {
             const dataLine = event.split("\n").find((l) => l.startsWith("data: "));
             if (!dataLine) continue;
+            let payload: any;
             try {
-              const payload = JSON.parse(dataLine.slice(6));
-              if (payload.type === "nugget") {
-                aiNuggets.push(payload.nugget);
-                const n = payload.nugget as AINuggetData;
-                const { sourceId, nuggetId } = makeIds(trackId, currentListenCount, payload.index);
-                const source = makeSource(sourceId, n.source);
-                // Use provisional timestamp during streaming; recalculated after done
-                const ts = makeTimestamp(payload.index, payload.totalExpected || aiNuggets.length, durationSec);
-                const nugget = makeNugget(n, nuggetId, sourceId, trackId, ts);
+              payload = JSON.parse(dataLine.slice(6));
+            } catch (e) {
+              console.warn("[SSE] Malformed event:", dataLine, e);
+              continue;
+            }
+            if (payload.type === "nugget") {
+              aiNuggets.push(payload.nugget);
+              const n = payload.nugget as AINuggetData;
+              const { sourceId, nuggetId } = makeIds(trackId, currentListenCount, payload.index);
+              const source = makeSource(sourceId, n.source);
+              // Use provisional timestamp during streaming; recalculated after done
+              const ts = makeTimestamp(payload.index, payload.totalExpected || aiNuggets.length, durationSec);
+              const nugget = makeNugget(n, nuggetId, sourceId, trackId, ts);
 
-                setSources((prev) => new Map(prev).set(sourceId, source));
-                setNuggets((prev) => [...prev, nugget]);
-                if (import.meta.env.DEV) console.log(`[SSE] Received nugget ${payload.index}: "${n.headline?.slice(0, 40)}"`);
+              setSources((prev) => new Map(prev).set(sourceId, source));
+              setNuggets((prev) => [...prev, nugget]);
+              if (import.meta.env.DEV) console.log(`[SSE] Received nugget ${payload.index}: "${n.headline?.slice(0, 40)}"`);
 
-              } else if (payload.type === "done") {
-                aiArtistSummary = payload.artistSummary || "";
-                aiExternalLinks = payload.externalLinks || [];
-                aiNoTrackData = !!payload.noTrackData;
-                setArtistSummary(aiArtistSummary);
+            } else if (payload.type === "done") {
+              aiArtistSummary = payload.artistSummary || "";
+              aiExternalLinks = payload.externalLinks || [];
+              aiNoTrackData = !!payload.noTrackData;
+              setArtistSummary(aiArtistSummary);
 
-                // Recalculate all timestamps now that we know the true total count
-                const totalCount = aiNuggets.length;
-                setNuggets((prev) => prev.map((nugget, i) => ({
-                  ...nugget,
-                  timestampSec: makeTimestamp(i, totalCount, durationSec),
-                })));
-                if (import.meta.env.DEV) console.log(`[SSE] All ${totalCount} nuggets received — timestamps recalculated`);
-              }
-            } catch (e) { console.warn("[SSE] Malformed event:", dataLine, e); }
+              // Recalculate all timestamps now that we know the true total count
+              const totalCount = aiNuggets.length;
+              setNuggets((prev) => prev.map((nugget, i) => ({
+                ...nugget,
+                timestampSec: makeTimestamp(i, totalCount, durationSec),
+              })));
+              if (import.meta.env.DEV) console.log(`[SSE] All ${totalCount} nuggets received — timestamps recalculated`);
+
+            } else if (payload.type === "error") {
+              // Server signals all Writer attempts failed — propagate so we
+              // hit the catch block without touching the success path
+              // (cache writes, history updates).
+              throw new Error(payload.message || "SSE server reported error");
+            }
           }
         }
 
@@ -504,12 +514,12 @@ export function useAINuggets(
         // Write to cache + history, then return
         if (cancelledRef.current) return;
 
-        // Defensive: if all server-side Gemini retries failed, the stream
-        // closes with zero nuggets. Treat that as an error so the catch
-        // block clears the "generating" sentinel and the next listen retries,
-        // rather than caching an empty result and starving future listeners.
+        // Defensive: the server should have sent an explicit "error" event
+        // when no nuggets were generated. This guard catches any lingering
+        // paths (e.g. stream closed without a terminal event) and prevents
+        // caching an empty result.
         if (aiNuggets.length === 0) {
-          throw new Error("SSE stream returned no nuggets");
+          throw new Error("SSE stream closed with no nuggets");
         }
 
         // Enrich SSE nuggets with Spotify fallback images (server resolves
