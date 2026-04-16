@@ -513,6 +513,87 @@ function isActualImageUrl(url: string): boolean {
   }
 }
 
+// Each nugget owns a contiguous window of Exa citIndex values. Search
+// call sites must derive their citIndexStart from CITATION_GROUP below —
+// not from the literal 10 — so the grouping stays consistent with
+// resolveExaImageForNugget.
+const CITATION_GROUP_SIZE = 10;
+// Number of nuggets streamed per SSE response (artist, track|context, discovery).
+const NUGGET_COUNT = 3;
+const CITATION_GROUP = {
+  ARTIST: 0,
+  TRACK: CITATION_GROUP_SIZE,
+  DISCOVERY: CITATION_GROUP_SIZE * 2,
+} as const;
+
+// Canonical voice + non-negotiable writing rules. Shared by all three Writer
+// prompts (batch-curated, batch-direct, SSE per-nugget). Having one source
+// of truth for the voice/rules prevents silent drift between the paths —
+// previously a tone change would need to be mirrored manually in three
+// places and often wasn't.
+//
+// Path-specific extras (e.g. "Prefer birthplace" for the direct path, where
+// no curated origin is available) are appended as rules 9+ via the `extras`
+// argument.
+type WriterRule = string | ((artist: string) => string);
+
+const WRITER_BASE_RULES: WriterRule[] = [
+  `The listener can HEAR the music. Tell them what they CAN'T know from listening — stories, history, people, places, creative context.`,
+  `Dig like Nardwuar — find the specific detail nobody else would. Prioritize "almost didn't happen" stories, unlikely origins, specific people who changed the trajectory.`,
+  `VOICE GUARD: Never hedge ("likely", "suggests", "perhaps") — state facts or skip them. Never describe sound ("sonic landscape", "soundscape") — the listener can hear it. Write with the confidence of someone who KNOWS this, not someone guessing.`,
+  `If uncertain about a fact, OMIT IT. One confident true sentence beats three hedged guesses.`,
+  (artist) => `Headlines must CREATE A CURIOSITY GAP — say just enough to intrigue, withhold enough that the reader MUST read the body. If someone can skip the body after reading your headline, you failed.
+   SAME FACT, TWO WAYS:
+   - SUMMARY (bad): "A scrapped Gucci Mane beat became 'HUMBLE.'" → gives away the whole story, nothing left to read
+   - CURIOSITY (good): "HUMBLE. was never meant for Kendrick" → wait, whose beat was it? I need to read more
+   MORE GOOD: "the bedroom demo that almost got deleted" / "they only met because of a wrong phone number" / "a scrapped beat turned ${artist}'s biggest hit into an accident"
+   MORE BAD: "He recorded his first EP in a closet at 16" / "Aaron Doh's Early Digital Footprint Takes Shape" / "The Creative Evolution Behind the Music" / "this artist's creative path"
+   The test: does the headline make you ask "wait, what?" or "tell me more"? If it just states a fact, rewrite it.
+   Use "${artist}" by name in headlines — never say "this artist" or "he"/"she" without naming them.
+   NEVER use title case. NEVER use "[Name]'s [Abstract Noun]".`,
+  (artist) => `NO VAGUE FILLER. If a sentence could apply to any artist (e.g., "promoting messages of love and hope", "unique blend of genres", "committed to authentic artistry"), it's worthless. Every sentence must contain a detail that ONLY applies to THIS artist.
+   SWAP TEST: if you can replace "${artist}" with any other artist's name and the sentence still works, DELETE IT. It means you wrote nothing specific.`,
+  (artist) => `Do NOT recommend artists who share ANY part of ${artist}'s name.`,
+  `Do NOT use fabricated publisher names like "General Knowledge" or "Music Analysis". Use the artist's real website, Bandcamp, Spotify, or a real music publication.`,
+];
+
+function buildWriterNonNegotiables(artist: string, extras: string[] = []): string {
+  const renderRule = (r: WriterRule) => typeof r === "function" ? r(artist) : r;
+  const base = WRITER_BASE_RULES.map((r, i) => `${i + 1}. ${renderRule(r)}`).join("\n");
+  const extraBlock = extras.length
+    ? "\n" + extras.map((e, i) => `${WRITER_BASE_RULES.length + 1 + i}. ${e}`).join("\n")
+    : "";
+  return `WRITING RULES — NON-NEGOTIABLE:\n${base}${extraBlock}`;
+}
+
+// Picks an unused Exa citation image for a nugget, preferring the nugget's
+// own citation group and falling back to any unused image. Mutates the
+// target with _resolvedImageUrl / _resolvedImageTitle and records the URL
+// in usedImageUrls. Returns the chosen citation (for logging), or null if
+// the target already had an image resolved or no unused image was available.
+function resolveExaImageForNugget(
+  target: { _resolvedImageUrl?: string; _resolvedImageTitle?: string },
+  nuggetIndex: number,
+  exaCitationsStrict: ExaCitation[],
+  usedImageUrls: Set<string>,
+): ExaCitation | null {
+  if (target._resolvedImageUrl) return null;
+  const groupStart = nuggetIndex * CITATION_GROUP_SIZE;
+  const groupEnd = groupStart + CITATION_GROUP_SIZE;
+  const usable = (c: ExaCitation) =>
+    !!c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl);
+  const match =
+    exaCitationsStrict.find((c) => c.citIndex >= groupStart && c.citIndex < groupEnd && usable(c)) ??
+    exaCitationsStrict.find(usable);
+  if (match?.imageUrl) {
+    target._resolvedImageUrl = match.imageUrl;
+    target._resolvedImageTitle = match.title;
+    usedImageUrls.add(match.imageUrl);
+    return match;
+  }
+  return null;
+}
+
 // ── Word-boundary matching helper ─────────────────────────────────────
 // Uses regex \b to prevent "pete" matching inside "peter" or "cornelia" matching "Cornelia Murr"
 function wordBoundaryMatch(haystack: string, needle: string): boolean {
@@ -1789,24 +1870,7 @@ ${tasteContext}
 VOICE: ${tierConfig.tone}
 ${tierConfig.assumedKnowledge}
 
-WRITING RULES — NON-NEGOTIABLE:
-1. The listener can HEAR the music. Tell them what they CAN'T know from listening — stories, history, people, places, creative context.
-2. Dig like Nardwuar — find the specific detail nobody else would. Prioritize "almost didn't happen" stories, unlikely origins, specific people who changed the trajectory.
-3. VOICE GUARD: Never hedge ("likely", "suggests", "perhaps") — state facts or skip them. Never describe sound ("sonic landscape", "soundscape") — the listener can hear it. Write with the confidence of someone who KNOWS this, not someone guessing.
-4. If uncertain about a fact, OMIT IT. One confident true sentence beats three hedged guesses.
-5. Headlines must CREATE A CURIOSITY GAP — say just enough to intrigue, withhold enough that the reader MUST read the body. If someone can skip the body after reading your headline, you failed.
-   SAME FACT, TWO WAYS:
-   - SUMMARY (bad): "A scrapped Gucci Mane beat became 'HUMBLE.'" → gives away the whole story, nothing left to read
-   - CURIOSITY (good): "HUMBLE. was never meant for Kendrick" → wait, whose beat was it? I need to read more
-   MORE GOOD: "the bedroom demo that almost got deleted" / "they only met because of a wrong phone number" / "a scrapped beat turned ${artist}'s biggest hit into an accident"
-   MORE BAD: "He recorded his first EP in a closet at 16" / "Aaron Doh's Early Digital Footprint Takes Shape" / "The Creative Evolution Behind the Music" / "this artist's creative path"
-   The test: does the headline make you ask "wait, what?" or "tell me more"? If it just states a fact, rewrite it.
-   Use "${artist}" by name in headlines — never say "this artist" or "he"/"she" without naming them.
-   NEVER use title case. NEVER use "[Name]'s [Abstract Noun]".
-6. NO VAGUE FILLER. If a sentence could apply to any artist (e.g., "promoting messages of love and hope", "unique blend of genres", "committed to authentic artistry"), it's worthless. Every sentence must contain a detail that ONLY applies to THIS artist.
-   SWAP TEST: if you can replace "${artist}" with any other artist's name and the sentence still works, DELETE IT. It means you wrote nothing specific.
-7. Do NOT recommend artists who share ANY part of ${artist}'s name.
-8. Do NOT use fabricated publisher names like "General Knowledge" or "Music Analysis". Use the artist's real website, Bandcamp, Spotify, or a real music publication.
+${buildWriterNonNegotiables(artist)}
 
 STRUCTURE — exactly 3 nuggets:
 1. **artist** (kind: "artist"): ${applyCollabBias
@@ -1875,19 +1939,10 @@ ${transcriptContext ? `YOUTUBE TRANSCRIPTS:\n${videoListContext}\n${transcriptCo
 VOICE: ${tierConfig.tone}
 ${tierConfig.assumedKnowledge}
 
-WRITING RULES — NON-NEGOTIABLE:
-1. Tell stories, not descriptions. Never describe what the music sounds like.
-2. Dig like Nardwuar — find the specific detail nobody else would. Prioritize "almost didn't happen" stories, unlikely origins, specific people who changed the trajectory.
-3. VOICE GUARD: Never hedge ("likely", "suggests", "perhaps") — state facts or skip them. Never describe sound ("sonic landscape", "soundscape") — the listener can hear it. Write with the confidence of someone who KNOWS this, not someone guessing.
-4. If uncertain, OMIT IT rather than hedging.
-5. Headlines must CREATE A CURIOSITY GAP — say just enough to intrigue, withhold enough that the reader MUST read the body. If someone can skip the body after reading the headline, you failed.
-   Use "${artist}" by name in headlines — never say "this artist" or "he"/"she" without naming them.
-   NEVER use title case. NEVER use "[Name]'s [Abstract Noun]". Never summarize — tease.
-6. NO VAGUE FILLER. If a sentence could apply to any artist (e.g., "promoting messages of love and hope", "unique blend of genres"), it's worthless. Every sentence must contain a detail that ONLY applies to THIS artist.
-   SWAP TEST: if you can replace "${artist}" with any other artist's name and the sentence still works, DELETE IT. It means you wrote nothing specific.
-7. NEVER fabricate collaborations with famous people unless verifiable.
-8. Prefer birthplace over current city as the artist's origin.
-9. Do NOT recommend artists sharing ANY part of ${artist}'s name.
+${buildWriterNonNegotiables(artist, [
+  "NEVER fabricate collaborations with famous people unless verifiable.",
+  "Prefer birthplace over current city as the artist's origin.",
+])}
 
 STRUCTURE — exactly 3 nuggets:
 1. **artist** (kind: "artist"): ${applyCollabBias
@@ -2317,7 +2372,7 @@ Return ONLY valid JSON:
 
       // ── Phase 1: Scout — artist search + Spotify in parallel ──────
       console.time("[Timing] Exa Phase 1"); _ts("exaPhase1");
-      const artistSearchPromise = searchExaPages(questions.artistQ, "artist", EXA_API_KEY, 0, [artist]);
+      const artistSearchPromise = searchExaPages(questions.artistQ, "artist", EXA_API_KEY, CITATION_GROUP.ARTIST, [artist]);
 
       const [artistSearchResult, phase1SpotifyInfo] = await Promise.all([
         artistSearchPromise,
@@ -2348,7 +2403,7 @@ Return ONLY valid JSON:
 
         if (!mentionsAlbum && !mentionsTitle && !mentionsKnown) {
           console.log(`[Exa] Name collision detected — Phase 1 results don't mention album "${album}" or any known tracks. Retrying with album filter.`);
-          artistAnswer = await searchExaPages(questions.artistQ, "artist", EXA_API_KEY, 0, [artist, album]);
+          artistAnswer = await searchExaPages(questions.artistQ, "artist", EXA_API_KEY, CITATION_GROUP.ARTIST, [artist, album]);
           nameCollisionDetected = true;
         }
       }
@@ -2372,8 +2427,8 @@ Return ONLY valid JSON:
         // STANDARD: well-known artist — run track + discovery searches in parallel
         console.log(`[Exa] Strategy: STANDARD (${followers.toLocaleString()} followers > 20K)`);
         const [trackResult, discoveryResult] = await Promise.allSettled([
-          searchExaPages(questions.trackQ, "track", EXA_API_KEY, 10, [artist]),
-          searchExaPages(questions.discoveryQ, "discovery", EXA_API_KEY, 20),
+          searchExaPages(questions.trackQ, "track", EXA_API_KEY, CITATION_GROUP.TRACK, [artist]),
+          searchExaPages(questions.discoveryQ, "discovery", EXA_API_KEY, CITATION_GROUP.DISCOVERY),
         ]);
         for (const r of [trackResult, discoveryResult]) {
           if (r.status === "fulfilled" && r.value.answer) {
@@ -2384,7 +2439,7 @@ Return ONLY valid JSON:
       } else if (artistStrictCount >= 2 && trackMentioned) {
         // SEMI-STANDARD: artist has coverage and track is mentioned — track search may find more
         console.log(`[Exa] Strategy: SEMI-STANDARD (${artistStrictCount} strict cites, track "${title}" mentioned in artist results)`);
-        const trackResult = await searchExaPages(questions.trackQ, "track", EXA_API_KEY, 10, [artist]);
+        const trackResult = await searchExaPages(questions.trackQ, "track", EXA_API_KEY, CITATION_GROUP.TRACK, [artist]);
         if (trackResult.answer) {
           answers.push(trackResult);
           totalCost += trackResult.costDollars;
@@ -2396,9 +2451,9 @@ Return ONLY valid JSON:
         console.log(`[Exa] Strategy: ARTIST-HEAVY (${artistStrictCount} strict cites, track "${title}" NOT mentioned)`);
         const broadQuery = buildBroadArtistQuery(artist);
         const broadInclude = nameCollisionDetected && album ? [artist, album] : [artist];
-        // Use citIndex 10-19 (track range) so image grouping treats this as "track" group
-        // More results (8) to maximize coverage for mid-tier artists
-        const broadResult = await searchExaPages(broadQuery, "artist-broad", EXA_API_KEY, 10, broadInclude, undefined, { numResults: 8 });
+        // Use the TRACK citIndex range so image grouping treats this as the track group.
+        // More results (8) to maximize coverage for mid-tier artists.
+        const broadResult = await searchExaPages(broadQuery, "artist-broad", EXA_API_KEY, CITATION_GROUP.TRACK, broadInclude, undefined, { numResults: 8 });
         if (broadResult.answer) {
           answers.push(broadResult);
           totalCost += broadResult.costDollars;
@@ -2416,8 +2471,8 @@ Return ONLY valid JSON:
         const keywordQuery = `"${artist}" musician OR artist OR producer OR rapper OR singer`;
 
         const [broadSettled, keywordSettled] = await Promise.allSettled([
-          searchExaPages(broadQuery, "artist-broad", EXA_API_KEY, 10, sparseInclude, undefined, { numResults: 8 }),
-          searchExaPages(keywordQuery, "artist-keyword", EXA_API_KEY, 20, undefined, undefined, { numResults: 5, searchType: "keyword" }),
+          searchExaPages(broadQuery, "artist-broad", EXA_API_KEY, CITATION_GROUP.TRACK, sparseInclude, undefined, { numResults: 8 }),
+          searchExaPages(keywordQuery, "artist-keyword", EXA_API_KEY, CITATION_GROUP.DISCOVERY, undefined, undefined, { numResults: 5, searchType: "keyword" }),
         ]);
 
         // Strategy A: Broader auto search with more results (catches interview/profile pages)
@@ -2531,10 +2586,18 @@ Return ONLY valid JSON:
     if (isSparseData) {
       console.log(`[SparseData] Only ${exaCitationsStrict.length} strict citations — enabling conservative mode`);
     }
+
+    // Check SSE early — if the client wants SSE, we skip the batch Writer and
+    // generate nuggets one-at-a-time inside the streaming response instead.
+    const wantsSSE = (req.headers.get("accept") || "").includes("text/event-stream");
+
     let rawNuggets: any[];
     let groundingChunks: any[];
     let artistSummary = "";
     let noTrackData = false;
+
+    if (!wantsSSE) {
+    // ── Batch path (non-SSE JSON response) — unchanged ──────────────
     console.time("[Timing] Gemini (Curator + Writer)"); _ts("gemini");
     try {
       const _tracker = { ts: _ts, te: _te };
@@ -2564,6 +2627,17 @@ Return ONLY valid JSON:
       }
     }
     console.timeEnd("[Timing] Gemini (Curator + Writer)"); _te("gemini");
+    } else {
+      // SSE path: rawNuggets populated inside the streaming IIFE below.
+      // groundingChunks stays empty on this path — the per-nugget Writer
+      // calls happen inside the IIFE and the resulting grounding metadata
+      // isn't aggregated here. assembleNugget's realChunks fallback
+      // therefore only resolves against Exa citations on SSE requests;
+      // the Google-search grounding fallback is batch-only. If this
+      // becomes load-bearing, thread chunks out of the IIFE.
+      rawNuggets = [];
+      groundingChunks = [];
+    }
     checkTimeout();
 
     console.log(`[Grounding] ${groundingChunks.length} chunks for "${artist} - ${title}":`,
@@ -2864,11 +2938,10 @@ Return ONLY valid JSON:
       return links;
     }
 
-    // ── Check if client wants SSE streaming ──────────────────────────────
-    const wantsSSE = (req.headers.get("accept") || "").includes("text/event-stream");
-
+    // ── SSE: progressive per-nugget generation + streaming ─────────────
+    // wantsSSE was checked earlier — batch Writer was skipped.
     if (wantsSSE) {
-      console.log("[SSE] Streaming nuggets as they resolve");
+      console.log("[SSE] Progressive streaming — generating nuggets one at a time");
       const encoder = new TextEncoder();
       let streamController: ReadableStreamDefaultController<Uint8Array>;
 
@@ -2876,87 +2949,258 @@ Return ONLY valid JSON:
         start(controller) {
           streamController = controller;
 
-          // start() is synchronous per spec — wrap async work in an IIFE
-          // so awaits actually execute (Deno silently discards async start).
+          // start() is synchronous per the ReadableStream spec — wrap the
+          // async generation in an IIFE so we can return immediately with
+          // the stream wired up, and emit events as work completes.
           (async () => {
             try {
-              // Pipeline: resolve image → assemble → validate → stream.
-              // Wikipedia lookups fire in parallel so late nuggets don't wait
-              // behind early ones; dedup + assemble + stream still happen
-              // sequentially to keep usedImageUrls correct and preserve order.
-              const imageLookups = rawNuggets.map((n) =>
-                !n._resolvedImageUrl && isValidImageQuery(n.imageSearchQuery)
-                  ? resolveNuggetImage(n.imageSearchQuery!).catch(() => null)
-                  : null
-              );
+              // ── Step 1: Run Curator (same as batch path) ──
+              // Bounded so a slow/hanging Curator can't starve the SSE stream —
+              // if it exceeds the budget, fall through to the direct path.
+              _ts("curator");
+              let curatedFacts: any = null;
+              if (exaPromptContext) {
+                const CURATOR_TIMEOUT_MS = 20_000;
+                try {
+                  curatedFacts = await Promise.race([
+                    curateResearch(artist, title, album, exaPromptContext, "", GOOGLE_AI_API_KEY, resolvedSpotifyInfo),
+                    new Promise<never>((_, reject) =>
+                      setTimeout(() => reject(new Error(`Curator timeout (${CURATOR_TIMEOUT_MS}ms)`)), CURATOR_TIMEOUT_MS)
+                    ),
+                  ]);
+                } catch (e) {
+                  console.warn("[SSE] Curator failed, proceeding with direct path:", e);
+                }
+              }
+              _te("curator");
+
+              // ── Step 2: Build shared research context ──
+              const tierConfig = TIER_CONFIG[tier];
+              const researchBlock = curatedFacts ? [
+                `ARTIST ORIGIN: ${curatedFacts.artistOrigin}`,
+                curatedFacts.artistBio ? `BIO: ${curatedFacts.artistBio}` : "",
+                curatedFacts.artistFacts.length > 0
+                  ? `\nVERIFIED ARTIST FACTS:\n${curatedFacts.artistFacts.map((f: string) => `- ${f}`).join("\n")}`
+                  : "",
+                curatedFacts.trackFacts.length > 0
+                  ? `\nVERIFIED TRACK FACTS ("${title}"):\n${curatedFacts.trackFacts.map((f: string) => `- ${f}`).join("\n")}`
+                  : `\nNo verified facts exist specifically about "${title}".`,
+                curatedFacts.keyCollaborators.length > 0
+                  ? `\nCOLLABORATORS:\n${curatedFacts.keyCollaborators.map((c: string) => `- ${c}`).join("\n")}`
+                  : "",
+              ].filter(Boolean).join("\n") : "";
+
+              const researchSection = researchBlock
+                ? `RESEARCH BRIEF (verified):\n${researchBlock}`
+                : (exaPromptContext ? `RESEARCH MATERIAL (cite by [CIT N] index):\n${exaPromptContext}` : "");
+
+              const prevHeadlines = [...safePreviousNuggets];
+              const generatedHeadlines: string[] = [];
+
+              // ── Step 3: Define the 3 nugget kinds ──
+              const nuggetDefs = [
+                { kind: "artist", focus: tierConfig.artistFocus, listenFor: false, includeArtistSummary: true },
+                { kind: "track", focus: tierConfig.trackFocus, listenFor: true, includeArtistSummary: false },
+                { kind: "discovery", focus: tierConfig.discoveryFocus, listenFor: false, includeArtistSummary: false },
+              ];
 
               let streamedIndex = 0;
-              const streamedNuggets: any[] = []; // for cache write consistency
+              const streamedNuggets: any[] = [];
+              let sseArtistSummary = "";
+              const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GOOGLE_AI_API_KEY}`;
 
-              for (let i = 0; i < rawNuggets.length; i++) {
-                const n = rawNuggets[i];
+              // ── Step 4: Generate + stream each nugget ──
+              // defIdx (not streamedIndex) is the stable citation-group index:
+              // if a nugget is skipped by validation, streamedIndex stays put
+              // but defIdx keeps advancing, so the next nugget still maps to
+              // its correct Exa citation window (artist=0, track=1, discovery=2).
+              for (let defIdx = 0; defIdx < nuggetDefs.length; defIdx++) {
+                const def = nuggetDefs[defIdx];
+                _ts(`writer_${def.kind}`);
+                const allPrevHeadlines = [...prevHeadlines, ...generatedHeadlines];
+                const nonRepeat = allPrevHeadlines.length > 0
+                  ? `\nDo NOT repeat or closely rephrase any of these previously shown headlines:\n${allPrevHeadlines.map(h => `- "${h}"`).join("\n")}`
+                  : "";
 
-                // ── Image resolution ──
-                if (!n._resolvedImageUrl && imageLookups[i]) {
+                const singlePrompt = `You are a music journalist. The listener is PLAYING "${title}" by ${artist}${album ? ` from "${album}"` : ""} RIGHT NOW.
+
+${researchSection}
+
+VOICE: ${tierConfig.tone}
+${tierConfig.assumedKnowledge}
+
+${buildWriterNonNegotiables(artist)}
+
+SOURCES: Match facts to [CIT N] citations via "citIndex". Do not invent URLs.
+${nonRepeat}
+
+TASK: Generate exactly ONE "${def.kind}" nugget.
+Focus: ${def.focus}
+listenFor: ${def.listenFor}
+${def.kind === "discovery" ? `HONESTY RULE: Only claim a connection you can verify from the research. Do NOT recommend artists sharing any part of ${artist}'s name.` : ""}
+${def.includeArtistSummary ? `\nAlso generate "artistSummary": 2-3 punchy sentences about ${artist}.` : ""}
+
+Return ONLY valid JSON:
+{
+  ${def.includeArtistSummary ? '"artistSummary": "...",' : ""}
+  "nugget": {
+    "headline": "Tease the story — make them need to read more",
+    "text": "2-3 sentences delivering on the headline",
+    "kind": "${def.kind}",
+    "listenFor": ${def.listenFor},
+    "imageSearchQuery": "specific subject for image search OR omit if not needed",
+    "imageCaption": "6-12 word caption",
+    "source": {
+      "type": "youtube|article|interview",
+      "title": "Source title",
+      "publisher": "Real publisher name",
+      "citIndex": "<integer — the [CIT N] index of the research item backing this nugget>",
+      "quoteSnippet": "Key quote or paraphrase"
+    }
+  }
+}`;
+
+                const effectiveTemp = isSparseData ? Math.min(tierConfig.temperature, 0.75) : tierConfig.temperature;
+                const callBody: any = {
+                  contents: [{ role: "user", parts: [{ text: singlePrompt }] }],
+                  generationConfig: { temperature: effectiveTemp },
+                };
+                if (!exaPromptContext || isSparseData) {
+                  callBody.tools = [{ google_search: {} }];
+                }
+
+                let nuggetData: any = null;
+                const WRITER_CALL_TIMEOUT_MS = 30_000;
+                for (let attempt = 0; attempt < 3; attempt++) {
                   try {
-                    const wikiResult = await imageLookups[i];
+                    // Per-attempt abort guard — a hanging Gemini response
+                    // would otherwise hold the SSE connection open until
+                    // the edge function's hard timeout fires.
+                    const res = await fetch(geminiUrl, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(callBody),
+                      signal: AbortSignal.timeout(WRITER_CALL_TIMEOUT_MS),
+                    });
+                    if (!res.ok) {
+                      if (res.status === 429 && attempt < 2) {
+                        // Prefer server-provided Retry-After; otherwise exponential backoff (2s, 4s).
+                        const retryAfterHeader = res.headers.get("retry-after");
+                        const retryAfterSec = retryAfterHeader ? parseFloat(retryAfterHeader) : NaN;
+                        const delayMs = Number.isFinite(retryAfterSec) && retryAfterSec > 0
+                          ? Math.min(retryAfterSec * 1000, 10_000)
+                          : 2000 * Math.pow(2, attempt);
+                        console.log(`[SSE] 429 for ${def.kind}, retrying in ${Math.round(delayMs)}ms (attempt ${attempt + 1}/3)`);
+                        await new Promise((resolve) => setTimeout(resolve, delayMs));
+                        continue;
+                      }
+                      throw new Error(`Gemini returned ${res.status} for ${def.kind}`);
+                    }
+                    const data = await res.json();
+                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                    if (!text.trim()) {
+                      if (attempt < 2) {
+                        await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+                        continue;
+                      }
+                      throw new Error(`Empty Gemini response for ${def.kind}`);
+                    }
+                    const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+                    const parsed = JSON.parse(cleaned);
+                    nuggetData = parsed.nugget || (parsed.nuggets?.[0]);
+                    if (parsed.artistSummary) sseArtistSummary = parsed.artistSummary;
+                    break;
+                  } catch (e) {
+                    if (attempt >= 2) {
+                      console.error(`[SSE] Failed to generate ${def.kind} nugget after 3 attempts:`, e);
+                    }
+                  }
+                }
+                _te(`writer_${def.kind}`);
+
+                if (!nuggetData) {
+                  console.warn(`[SSE] Skipping ${def.kind} — generation failed`);
+                  continue;
+                }
+
+                const headlineForHistory = nuggetData.headline || nuggetData.text;
+                if (headlineForHistory) generatedHeadlines.push(headlineForHistory);
+
+                // ── Image: Exa first (instant), Wikipedia fallback ──
+                // Use defIdx (not streamedIndex) so citation grouping stays
+                // aligned even when earlier nuggets are skipped by validation.
+                resolveExaImageForNugget(nuggetData, defIdx, exaCitationsStrict, usedImageUrls);
+                if (!nuggetData._resolvedImageUrl && isValidImageQuery(nuggetData.imageSearchQuery)) {
+                  try {
+                    const wikiResult = await resolveNuggetImage(nuggetData.imageSearchQuery!);
                     if (wikiResult && !usedImageUrls.has(wikiResult.url)) {
-                      n._resolvedImageUrl = wikiResult.url;
-                      n._resolvedImageTitle = wikiResult.title;
+                      nuggetData._resolvedImageUrl = wikiResult.url;
+                      nuggetData._resolvedImageTitle = wikiResult.title;
                       usedImageUrls.add(wikiResult.url);
                     }
-                  } catch { /* fall through to Exa fallback */ }
-                }
-                if (!n._resolvedImageUrl) {
-                  const groupStart = i * 10;
-                  const groupEnd = groupStart + 10;
-                  let fallbackCit = exaCitationsStrict.find((c) =>
-                    c.citIndex >= groupStart && c.citIndex < groupEnd &&
-                    c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
-                  );
-                  if (!fallbackCit) {
-                    fallbackCit = exaCitationsStrict.find((c) =>
-                      c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
-                    );
-                  }
-                  if (fallbackCit?.imageUrl) {
-                    n._resolvedImageUrl = fallbackCit.imageUrl;
-                    n._resolvedImageTitle = fallbackCit.title;
-                    usedImageUrls.add(fallbackCit.imageUrl);
-                  }
+                  } catch { /* stream without image */ }
                 }
 
                 // ── Assemble + validate ──
-                const assembled = assembleNugget(n, i);
+                // streamedIndex matches the `index` field of the SSE event below,
+                // keeping emitted IDs contiguous even when earlier defs were
+                // skipped. (assembleNugget doesn't read the index today, but any
+                // reader of the emitted nugget should see a coherent position.)
+                const assembled = assembleNugget(nuggetData, streamedIndex);
                 const sourceType = (assembled.source?.type || "").toLowerCase();
                 const publisher = (assembled.source?.publisher || "").toLowerCase();
                 if (
                   sourceType === "internal-data" || sourceType === "internal_data" ||
                   sourceType === "database" || sourceType === "editorial"
                 ) {
-                  console.log(`[SSE] Skipping hallucinated source type nugget ${i}`);
+                  console.log(`[SSE] Skipping hallucinated source type: ${def.kind}`);
                   continue;
                 }
                 if (HALLUCINATED_PUBLISHERS.some(hp => publisher.includes(hp))) {
-                  console.log(`[SSE] Skipping hallucinated publisher nugget ${i}`);
+                  console.log(`[SSE] Skipping hallucinated publisher: ${def.kind}`);
                   continue;
                 }
 
-                // ── Stream with contiguous index ──
+                // ── Stream immediately ──
                 streamedNuggets.push(assembled);
                 const event = `data: ${JSON.stringify({
                   type: "nugget",
                   index: streamedIndex,
                   nugget: assembled,
-                  totalExpected: rawNuggets.length,
+                  totalExpected: nuggetDefs.length,
                 })}\n\n`;
                 try { streamController.enqueue(encoder.encode(event)); } catch { /* stream closed */ }
-                console.log(`[SSE] Streamed nugget ${streamedIndex}: "${assembled.headline?.slice(0, 40)}"`);
+                console.log(`[SSE] Streamed ${def.kind} nugget ${streamedIndex}: "${assembled.headline?.slice(0, 40)}"`);
                 streamedIndex++;
               }
 
-              // All done — send done event and close
-              const doneEvent = `data: ${JSON.stringify({ type: "done", artistSummary, externalLinks: buildExternalLinks(), noTrackData })}\n\n`;
+              // ── Done ──
+              // Copy stream-local state back to the outer variables so the
+              // post-IIFE path (cache writes, metrics) sees the same values
+              // the SSE client received.
+              artistSummary = sseArtistSummary;
+              // trackSearchSkipped is set earlier, inside the Exa phase 2
+              // strategy block (SEMI-STANDARD / ARTIST-HEAVY / SPARSE paths)
+              // which runs before this IIFE. It tracks whether we skipped
+              // the track-specific Exa search, not whether the Writer ran.
+              noTrackData = !curatedFacts?.trackFacts?.length && trackSearchSkipped;
+              rawNuggets = streamedNuggets;
+
+              // If every Writer call failed, emit an explicit error event
+              // instead of done(nuggets=[]) — saves the client from briefly
+              // entering the "success but empty" path before noticing the
+              // zero-nugget guard, which caused a visible flicker.
+              if (streamedNuggets.length === 0) {
+                const errorEvent = `data: ${JSON.stringify({ type: "error", message: "No nuggets generated — all Writer attempts failed" })}\n\n`;
+                try {
+                  streamController.enqueue(encoder.encode(errorEvent));
+                  streamController.close();
+                } catch { /* stream closed */ }
+                console.warn("[SSE] All Writer calls failed — emitted error event");
+                return;
+              }
+
+              const doneEvent = `data: ${JSON.stringify({ type: "done", artistSummary: sseArtistSummary, externalLinks: buildExternalLinks(), noTrackData })}\n\n`;
               try {
                 streamController.enqueue(encoder.encode(doneEvent));
                 streamController.close();
@@ -2986,6 +3230,20 @@ Return ONLY valid JSON:
 
     // ── Non-SSE path: resolve all images in parallel, return JSON (backward compat) ──
     console.time("[Timing] Wiki image resolution"); _ts("wikiImages");
+    // Exa citation images first (instant — data already in memory)
+    if (exaCitationsStrict.length) {
+      for (let i = 0; i < rawNuggets.length; i++) {
+        const picked = resolveExaImageForNugget(rawNuggets[i], i, exaCitationsStrict, usedImageUrls);
+        if (picked) {
+          const groupStart = i * CITATION_GROUP_SIZE;
+          const groupEnd = groupStart + CITATION_GROUP_SIZE;
+          const crossGroup = picked.citIndex < groupStart || picked.citIndex >= groupEnd;
+          console.log(`[Image] Exa${crossGroup ? " (cross-group)" : ""} for nugget ${i}: ${picked.imageUrl}`);
+        }
+      }
+    }
+
+    // Wikipedia fallback only for nuggets that still have no image
     const wikiSearchNeeded = rawNuggets.map((n) =>
       !n._resolvedImageUrl && isValidImageQuery(n.imageSearchQuery) ? resolveNuggetImage(n.imageSearchQuery!) : Promise.resolve(null)
     );
@@ -2999,34 +3257,9 @@ Return ONLY valid JSON:
         rawNuggets[i]._resolvedImageUrl = result.value.url;
         rawNuggets[i]._resolvedImageTitle = result.value.title;
         usedImageUrls.add(result.value.url);
-        console.log(`[Image] Wikipedia for nugget ${i} "${rawNuggets[i].imageSearchQuery}" → ${result.value.url}`);
-      }
-    }
-
-    // Third pass: Exa citation fallback
-    if (exaCitationsStrict.length) {
-      for (let i = 0; i < rawNuggets.length; i++) {
-        if (rawNuggets[i]._resolvedImageUrl) continue;
-        const groupStart = i * 10;
-        const groupEnd = groupStart + 10;
-        let fallbackCit = exaCitationsStrict.find((c) =>
-          c.citIndex >= groupStart && c.citIndex < groupEnd &&
-          c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
-        );
-        if (!fallbackCit) {
-          fallbackCit = exaCitationsStrict.find((c) =>
-            c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
-          );
-        }
-        if (fallbackCit?.imageUrl) {
-          rawNuggets[i]._resolvedImageUrl = fallbackCit.imageUrl;
-          rawNuggets[i]._resolvedImageTitle = fallbackCit.title;
-          usedImageUrls.add(fallbackCit.imageUrl);
-          const crossGroup = fallbackCit.citIndex < groupStart || fallbackCit.citIndex >= groupEnd;
-          console.log(`[Image] Exa fallback${crossGroup ? " (cross-group)" : ""} for nugget ${i}: ${fallbackCit.imageUrl}`);
-        } else {
-          console.log(`[Image] No image for nugget ${i} — frontend will use album art`);
-        }
+        console.log(`[Image] Wikipedia fallback for nugget ${i} ("${rawNuggets[i].imageSearchQuery}"): ${result.value.url}`);
+      } else if (!rawNuggets[i]._resolvedImageUrl) {
+        console.log(`[Image] No image for nugget ${i} — frontend will use album art`);
       }
     }
 
