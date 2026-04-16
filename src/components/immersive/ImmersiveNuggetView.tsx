@@ -8,6 +8,7 @@ import MusicNerdLogo from "@/components/MusicNerdLogo";
 import TypewriterText from "./TypewriterText";
 import SwipeableNuggetStack from "./SwipeableNuggetStack";
 import MiniPlayer from "./MiniPlayer";
+import { useNuggetPacer } from "./useNuggetPacer";
 
 interface ImmersiveNuggetViewProps {
   nuggets: Nugget[];
@@ -30,6 +31,11 @@ interface ImmersiveNuggetViewProps {
 // A server-side guard in the edge function would be the robust long-term fix.
 let deepDiveSessionCount = 0;
 const MAX_DEEP_DIVES_PER_SESSION = 10;
+
+// Minimum time a nugget stays on-screen before auto-advance can swap it out.
+// Tuning knob for the streaming pacing — keeps freshly-streamed nuggets
+// readable without yanking the user mid-sentence.
+const MIN_DISPLAY_MS = 10_000;
 
 const KIND_LABELS: Record<string, string> = {
   artist: "The Artist",
@@ -70,17 +76,18 @@ export default function ImmersiveNuggetView({
   // Next nugget timestamp to unlock — avoids running the unlock effect on
   // every ~4 Hz playback tick (only runs when currentTime crosses this threshold).
   const nextUnlockTimeRef = useRef(0);
-  const prevUnlockedCountRef = useRef(0);
   const prevTrackKeyRef = useRef(`${trackTitle}::${artist}`);
   const currentTimeRef = useRef(currentTime);
   useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
   const initialUnlockDoneRef = useRef(false);
+  const trackKey = `${trackTitle}::${artist}`;
 
   // ── Reset on track change ──────────────────────────────────────────
+  // Pacer state (queue, timer, prevUnlockedCount) is reset by useNuggetPacer
+  // when trackKey changes — not duplicated here.
   useEffect(() => {
-    const key = `${trackTitle}::${artist}`;
-    if (key !== prevTrackKeyRef.current) {
-      prevTrackKeyRef.current = key;
+    if (trackKey !== prevTrackKeyRef.current) {
+      prevTrackKeyRef.current = trackKey;
       setUnlockedIds(new Set());
       setActiveIndex(0);
       setNuggetDismissed(false);
@@ -88,13 +95,12 @@ export default function ImmersiveNuggetView({
       setDeepDiveFollowUp(null);
       setDeepDiveLoading(false);
       deepDiveLoadingRef.current = false;
-      prevUnlockedCountRef.current = 0;
       setTypewriterDoneIds(new Set());
       userDismissedRef.current = false;
       initialUnlockDoneRef.current = false;
       nextUnlockTimeRef.current = 0;
     }
-  }, [trackTitle, artist]);
+  }, [trackKey]);
 
   // ── Unlock nuggets ─────────────────────────────────────────────────
   // Fresh SSE: unlock every streamed nugget immediately so swipes work
@@ -134,23 +140,22 @@ export default function ImmersiveNuggetView({
     nextUnlockTimeRef.current = upcoming.length > 0 ? upcoming[0].timestampSec : Infinity;
   }, [currentTime, nuggets, isFresh]);
 
-  // ── Auto-show new nuggets ──────────────────────────────────────────
-  useEffect(() => {
-    const count = unlockedIds.size;
-    if (count > prevUnlockedCountRef.current && count > 0) {
-      const arr = nuggets.filter((n) => unlockedIds.has(n.id));
-      const idx = nuggets.indexOf(arr[arr.length - 1]);
-      if (idx >= 0) {
-        setActiveIndex(idx);
-        // Only auto-show if user hasn't manually dismissed to now-playing
-        if (!userDismissedRef.current) {
-          setNuggetDismissed(false);
-        }
-        setDeepDiveText(null);
-      }
-    }
-    prevUnlockedCountRef.current = count;
-  }, [unlockedIds, nuggets]);
+  // ── Auto-show new nuggets (via pacer hook) ─────────────────────────
+  // See useNuggetPacer for queueing behavior. The hook calls showNugget
+  // one index at a time, with at least MIN_DISPLAY_MS between calls.
+  const showNugget = useCallback((idx: number) => {
+    setActiveIndex(idx);
+    if (!userDismissedRef.current) setNuggetDismissed(false);
+    setDeepDiveText(null);
+  }, []);
+
+  const { cancelPending: cancelPacerQueue } = useNuggetPacer({
+    nuggets,
+    unlockedIds,
+    trackKey,
+    onShow: showNugget,
+    minDisplayMs: MIN_DISPLAY_MS,
+  });
 
   // ── Initial unlock ─────────────────────────────────────────────────
   // Runs once when nuggets first arrive. Uses currentTimeRef to avoid
@@ -199,11 +204,14 @@ export default function ImmersiveNuggetView({
 
   // ── Handlers ───────────────────────────────────────────────────────
   const handleSwipe = useCallback((newIndex: number) => {
+    // User took manual control — stop the pacer so a pending auto-advance
+    // (or a nugget that arrives later) can't yank them off this card.
+    cancelPacerQueue();
     setActiveIndex(newIndex);
     setNuggetDismissed(false);
     setDeepDiveText(null);
     setDeepDiveFollowUp(null);
-  }, []);
+  }, [cancelPacerQueue]);
 
   const handleTypewriterComplete = useCallback(() => {
     if (activeNugget) setTypewriterDoneIds((prev) => new Set(prev).add(activeNugget.id));
@@ -291,9 +299,10 @@ export default function ImmersiveNuggetView({
           <span className="text-[10px] uppercase tracking-[0.2em] text-white/60 mb-2 block" style={{ textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>
             {activeNugget ? (KIND_LABELS[activeNugget.kind] || activeNugget.kind) : ""}
           </span>
+          <div className="min-h-[3.5rem] mb-4">
           {activeNugget && (
             isTypewriterDone ? (
-              <h2 className="text-xl font-bold leading-tight text-white mb-4" style={{ textShadow: "0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.5)" }}>
+              <h2 className="text-xl font-bold leading-tight text-white" style={{ textShadow: "0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.5)" }}>
                 {activeNugget.headline || activeNugget.text}
               </h2>
             ) : (
@@ -303,11 +312,12 @@ export default function ImmersiveNuggetView({
                 paused={false}
                 onComplete={handleTypewriterComplete}
                 as="h2"
-                className="text-xl font-bold leading-tight text-white mb-4 block"
+                className="text-xl font-bold leading-tight text-white block"
                 style={{ textShadow: "0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.5)" }}
               />
             )
           )}
+          </div>
           <p className="text-sm leading-relaxed text-white/60 mb-4">
             {activeNugget?.text}
           </p>
