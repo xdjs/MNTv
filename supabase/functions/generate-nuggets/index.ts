@@ -513,10 +513,51 @@ function isActualImageUrl(url: string): boolean {
   }
 }
 
-// Exa citations are bucketed by nugget: each nugget owns a contiguous
-// window of citIndex values. Keep in sync with the citation-builder.
+// Each nugget owns a contiguous window of Exa citIndex values. Search
+// call sites must derive their citIndexStart from CITATION_GROUP below —
+// not from the literal 10 — so the grouping stays consistent with
+// resolveExaImageForNugget.
 const CITATION_GROUP_SIZE = 10;
+// Number of nuggets streamed per SSE response (artist, track|context, discovery).
 const NUGGET_COUNT = 3;
+const CITATION_GROUP = {
+  ARTIST: 0,
+  TRACK: CITATION_GROUP_SIZE,
+  DISCOVERY: CITATION_GROUP_SIZE * 2,
+} as const;
+
+// Canonical voice + non-negotiable writing rules. Shared by all three Writer
+// prompts (batch-curated, batch-direct, SSE per-nugget). Having one source
+// of truth for the voice/rules prevents silent drift between the paths —
+// previously a tone change would need to be mirrored manually in three
+// places and often wasn't.
+//
+// Path-specific extras (e.g. "Prefer birthplace" for the direct path, where
+// no curated origin is available) are appended as rules 9+ via the `extras`
+// argument.
+function buildWriterNonNegotiables(artist: string, extras: string[] = []): string {
+  const extraBlock = extras.length
+    ? "\n" + extras.map((e, i) => `${9 + i}. ${e}`).join("\n")
+    : "";
+  return `WRITING RULES — NON-NEGOTIABLE:
+1. The listener can HEAR the music. Tell them what they CAN'T know from listening — stories, history, people, places, creative context.
+2. Dig like Nardwuar — find the specific detail nobody else would. Prioritize "almost didn't happen" stories, unlikely origins, specific people who changed the trajectory.
+3. VOICE GUARD: Never hedge ("likely", "suggests", "perhaps") — state facts or skip them. Never describe sound ("sonic landscape", "soundscape") — the listener can hear it. Write with the confidence of someone who KNOWS this, not someone guessing.
+4. If uncertain about a fact, OMIT IT. One confident true sentence beats three hedged guesses.
+5. Headlines must CREATE A CURIOSITY GAP — say just enough to intrigue, withhold enough that the reader MUST read the body. If someone can skip the body after reading your headline, you failed.
+   SAME FACT, TWO WAYS:
+   - SUMMARY (bad): "A scrapped Gucci Mane beat became 'HUMBLE.'" → gives away the whole story, nothing left to read
+   - CURIOSITY (good): "HUMBLE. was never meant for Kendrick" → wait, whose beat was it? I need to read more
+   MORE GOOD: "the bedroom demo that almost got deleted" / "they only met because of a wrong phone number" / "a scrapped beat turned ${artist}'s biggest hit into an accident"
+   MORE BAD: "He recorded his first EP in a closet at 16" / "Aaron Doh's Early Digital Footprint Takes Shape" / "The Creative Evolution Behind the Music" / "this artist's creative path"
+   The test: does the headline make you ask "wait, what?" or "tell me more"? If it just states a fact, rewrite it.
+   Use "${artist}" by name in headlines — never say "this artist" or "he"/"she" without naming them.
+   NEVER use title case. NEVER use "[Name]'s [Abstract Noun]".
+6. NO VAGUE FILLER. If a sentence could apply to any artist (e.g., "promoting messages of love and hope", "unique blend of genres", "committed to authentic artistry"), it's worthless. Every sentence must contain a detail that ONLY applies to THIS artist.
+   SWAP TEST: if you can replace "${artist}" with any other artist's name and the sentence still works, DELETE IT. It means you wrote nothing specific.
+7. Do NOT recommend artists who share ANY part of ${artist}'s name.
+8. Do NOT use fabricated publisher names. Use the artist's real website, Bandcamp, Spotify, or a real music publication.${extraBlock}`;
+}
 
 // Picks an unused Exa citation image for a nugget, preferring the nugget's
 // own citation group and falling back to any unused image. Mutates the
@@ -1821,24 +1862,7 @@ ${tasteContext}
 VOICE: ${tierConfig.tone}
 ${tierConfig.assumedKnowledge}
 
-WRITING RULES — NON-NEGOTIABLE:
-1. The listener can HEAR the music. Tell them what they CAN'T know from listening — stories, history, people, places, creative context.
-2. Dig like Nardwuar — find the specific detail nobody else would. Prioritize "almost didn't happen" stories, unlikely origins, specific people who changed the trajectory.
-3. VOICE GUARD: Never hedge ("likely", "suggests", "perhaps") — state facts or skip them. Never describe sound ("sonic landscape", "soundscape") — the listener can hear it. Write with the confidence of someone who KNOWS this, not someone guessing.
-4. If uncertain about a fact, OMIT IT. One confident true sentence beats three hedged guesses.
-5. Headlines must CREATE A CURIOSITY GAP — say just enough to intrigue, withhold enough that the reader MUST read the body. If someone can skip the body after reading your headline, you failed.
-   SAME FACT, TWO WAYS:
-   - SUMMARY (bad): "A scrapped Gucci Mane beat became 'HUMBLE.'" → gives away the whole story, nothing left to read
-   - CURIOSITY (good): "HUMBLE. was never meant for Kendrick" → wait, whose beat was it? I need to read more
-   MORE GOOD: "the bedroom demo that almost got deleted" / "they only met because of a wrong phone number" / "a scrapped beat turned ${artist}'s biggest hit into an accident"
-   MORE BAD: "He recorded his first EP in a closet at 16" / "Aaron Doh's Early Digital Footprint Takes Shape" / "The Creative Evolution Behind the Music" / "this artist's creative path"
-   The test: does the headline make you ask "wait, what?" or "tell me more"? If it just states a fact, rewrite it.
-   Use "${artist}" by name in headlines — never say "this artist" or "he"/"she" without naming them.
-   NEVER use title case. NEVER use "[Name]'s [Abstract Noun]".
-6. NO VAGUE FILLER. If a sentence could apply to any artist (e.g., "promoting messages of love and hope", "unique blend of genres", "committed to authentic artistry"), it's worthless. Every sentence must contain a detail that ONLY applies to THIS artist.
-   SWAP TEST: if you can replace "${artist}" with any other artist's name and the sentence still works, DELETE IT. It means you wrote nothing specific.
-7. Do NOT recommend artists who share ANY part of ${artist}'s name.
-8. Do NOT use fabricated publisher names like "General Knowledge" or "Music Analysis". Use the artist's real website, Bandcamp, Spotify, or a real music publication.
+${buildWriterNonNegotiables(artist)}
 
 STRUCTURE — exactly 3 nuggets:
 1. **artist** (kind: "artist"): ${applyCollabBias
@@ -1907,19 +1931,10 @@ ${transcriptContext ? `YOUTUBE TRANSCRIPTS:\n${videoListContext}\n${transcriptCo
 VOICE: ${tierConfig.tone}
 ${tierConfig.assumedKnowledge}
 
-WRITING RULES — NON-NEGOTIABLE:
-1. Tell stories, not descriptions. Never describe what the music sounds like.
-2. Dig like Nardwuar — find the specific detail nobody else would. Prioritize "almost didn't happen" stories, unlikely origins, specific people who changed the trajectory.
-3. VOICE GUARD: Never hedge ("likely", "suggests", "perhaps") — state facts or skip them. Never describe sound ("sonic landscape", "soundscape") — the listener can hear it. Write with the confidence of someone who KNOWS this, not someone guessing.
-4. If uncertain, OMIT IT rather than hedging.
-5. Headlines must CREATE A CURIOSITY GAP — say just enough to intrigue, withhold enough that the reader MUST read the body. If someone can skip the body after reading the headline, you failed.
-   Use "${artist}" by name in headlines — never say "this artist" or "he"/"she" without naming them.
-   NEVER use title case. NEVER use "[Name]'s [Abstract Noun]". Never summarize — tease.
-6. NO VAGUE FILLER. If a sentence could apply to any artist (e.g., "promoting messages of love and hope", "unique blend of genres"), it's worthless. Every sentence must contain a detail that ONLY applies to THIS artist.
-   SWAP TEST: if you can replace "${artist}" with any other artist's name and the sentence still works, DELETE IT. It means you wrote nothing specific.
-7. NEVER fabricate collaborations with famous people unless verifiable.
-8. Prefer birthplace over current city as the artist's origin.
-9. Do NOT recommend artists sharing ANY part of ${artist}'s name.
+${buildWriterNonNegotiables(artist, [
+  "NEVER fabricate collaborations with famous people unless verifiable.",
+  "Prefer birthplace over current city as the artist's origin.",
+])}
 
 STRUCTURE — exactly 3 nuggets:
 1. **artist** (kind: "artist"): ${applyCollabBias
@@ -2349,7 +2364,7 @@ Return ONLY valid JSON:
 
       // ── Phase 1: Scout — artist search + Spotify in parallel ──────
       console.time("[Timing] Exa Phase 1"); _ts("exaPhase1");
-      const artistSearchPromise = searchExaPages(questions.artistQ, "artist", EXA_API_KEY, 0, [artist]);
+      const artistSearchPromise = searchExaPages(questions.artistQ, "artist", EXA_API_KEY, CITATION_GROUP.ARTIST, [artist]);
 
       const [artistSearchResult, phase1SpotifyInfo] = await Promise.all([
         artistSearchPromise,
@@ -2380,7 +2395,7 @@ Return ONLY valid JSON:
 
         if (!mentionsAlbum && !mentionsTitle && !mentionsKnown) {
           console.log(`[Exa] Name collision detected — Phase 1 results don't mention album "${album}" or any known tracks. Retrying with album filter.`);
-          artistAnswer = await searchExaPages(questions.artistQ, "artist", EXA_API_KEY, 0, [artist, album]);
+          artistAnswer = await searchExaPages(questions.artistQ, "artist", EXA_API_KEY, CITATION_GROUP.ARTIST, [artist, album]);
           nameCollisionDetected = true;
         }
       }
@@ -2404,8 +2419,8 @@ Return ONLY valid JSON:
         // STANDARD: well-known artist — run track + discovery searches in parallel
         console.log(`[Exa] Strategy: STANDARD (${followers.toLocaleString()} followers > 20K)`);
         const [trackResult, discoveryResult] = await Promise.allSettled([
-          searchExaPages(questions.trackQ, "track", EXA_API_KEY, 10, [artist]),
-          searchExaPages(questions.discoveryQ, "discovery", EXA_API_KEY, 20),
+          searchExaPages(questions.trackQ, "track", EXA_API_KEY, CITATION_GROUP.TRACK, [artist]),
+          searchExaPages(questions.discoveryQ, "discovery", EXA_API_KEY, CITATION_GROUP.DISCOVERY),
         ]);
         for (const r of [trackResult, discoveryResult]) {
           if (r.status === "fulfilled" && r.value.answer) {
@@ -2416,7 +2431,7 @@ Return ONLY valid JSON:
       } else if (artistStrictCount >= 2 && trackMentioned) {
         // SEMI-STANDARD: artist has coverage and track is mentioned — track search may find more
         console.log(`[Exa] Strategy: SEMI-STANDARD (${artistStrictCount} strict cites, track "${title}" mentioned in artist results)`);
-        const trackResult = await searchExaPages(questions.trackQ, "track", EXA_API_KEY, 10, [artist]);
+        const trackResult = await searchExaPages(questions.trackQ, "track", EXA_API_KEY, CITATION_GROUP.TRACK, [artist]);
         if (trackResult.answer) {
           answers.push(trackResult);
           totalCost += trackResult.costDollars;
@@ -2428,9 +2443,9 @@ Return ONLY valid JSON:
         console.log(`[Exa] Strategy: ARTIST-HEAVY (${artistStrictCount} strict cites, track "${title}" NOT mentioned)`);
         const broadQuery = buildBroadArtistQuery(artist);
         const broadInclude = nameCollisionDetected && album ? [artist, album] : [artist];
-        // Use citIndex 10-19 (track range) so image grouping treats this as "track" group
-        // More results (8) to maximize coverage for mid-tier artists
-        const broadResult = await searchExaPages(broadQuery, "artist-broad", EXA_API_KEY, 10, broadInclude, undefined, { numResults: 8 });
+        // Use the TRACK citIndex range so image grouping treats this as the track group.
+        // More results (8) to maximize coverage for mid-tier artists.
+        const broadResult = await searchExaPages(broadQuery, "artist-broad", EXA_API_KEY, CITATION_GROUP.TRACK, broadInclude, undefined, { numResults: 8 });
         if (broadResult.answer) {
           answers.push(broadResult);
           totalCost += broadResult.costDollars;
@@ -2448,8 +2463,8 @@ Return ONLY valid JSON:
         const keywordQuery = `"${artist}" musician OR artist OR producer OR rapper OR singer`;
 
         const [broadSettled, keywordSettled] = await Promise.allSettled([
-          searchExaPages(broadQuery, "artist-broad", EXA_API_KEY, 10, sparseInclude, undefined, { numResults: 8 }),
-          searchExaPages(keywordQuery, "artist-keyword", EXA_API_KEY, 20, undefined, undefined, { numResults: 5, searchType: "keyword" }),
+          searchExaPages(broadQuery, "artist-broad", EXA_API_KEY, CITATION_GROUP.TRACK, sparseInclude, undefined, { numResults: 8 }),
+          searchExaPages(keywordQuery, "artist-keyword", EXA_API_KEY, CITATION_GROUP.DISCOVERY, undefined, undefined, { numResults: 5, searchType: "keyword" }),
         ]);
 
         // Strategy A: Broader auto search with more results (catches interview/profile pages)
@@ -2983,16 +2998,9 @@ ${researchSection}
 VOICE: ${tierConfig.tone}
 ${tierConfig.assumedKnowledge}
 
-WRITING RULES — NON-NEGOTIABLE:
-1. Tell stories, not descriptions. Never describe what the music sounds like — the listener can hear it.
-2. Dig like Nardwuar — find the specific detail nobody else would.
-3. VOICE GUARD: Never hedge ("likely", "suggests", "perhaps"). State facts or skip them.
-4. If uncertain, OMIT IT rather than hedging.
-5. Headlines must CREATE A CURIOSITY GAP — tease the story, don't summarize it. Use "${artist}" by name. NEVER use title case.
-6. NO VAGUE FILLER. If a sentence could apply to any artist, it's worthless. Every sentence must be specific to ${artist}.
-   SWAP TEST: if you can replace "${artist}" with any other artist and the sentence still works, DELETE IT.
-7. Do NOT use fabricated publisher names. Use the artist's real website, Bandcamp, Spotify, or a real music publication.
-8. SOURCES: Match facts to [CIT N] citations via "citIndex". Do not invent URLs.
+${buildWriterNonNegotiables(artist)}
+
+SOURCES: Match facts to [CIT N] citations via "citIndex". Do not invent URLs.
 ${nonRepeat}
 
 TASK: Generate exactly ONE "${def.kind}" nugget.
@@ -3041,8 +3049,14 @@ Return ONLY valid JSON:
                     });
                     if (!res.ok) {
                       if (res.status === 429 && attempt < 2) {
-                        console.log(`[SSE] 429 for ${def.kind}, retrying in 2s...`);
-                        await new Promise((resolve) => setTimeout(resolve, 2000));
+                        // Prefer server-provided Retry-After; otherwise exponential backoff (2s, 4s).
+                        const retryAfterHeader = res.headers.get("retry-after");
+                        const retryAfterSec = retryAfterHeader ? parseFloat(retryAfterHeader) : NaN;
+                        const delayMs = Number.isFinite(retryAfterSec) && retryAfterSec > 0
+                          ? Math.min(retryAfterSec * 1000, 10_000)
+                          : 2000 * Math.pow(2, attempt);
+                        console.log(`[SSE] 429 for ${def.kind}, retrying in ${Math.round(delayMs)}ms (attempt ${attempt + 1}/3)`);
+                        await new Promise((resolve) => setTimeout(resolve, delayMs));
                         continue;
                       }
                       throw new Error(`Gemini returned ${res.status} for ${def.kind}`);
@@ -3050,7 +3064,10 @@ Return ONLY valid JSON:
                     const data = await res.json();
                     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
                     if (!text.trim()) {
-                      if (attempt < 2) { await new Promise((resolve) => setTimeout(resolve, 1000)); continue; }
+                      if (attempt < 2) {
+                        await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+                        continue;
+                      }
                       throw new Error(`Empty Gemini response for ${def.kind}`);
                     }
                     const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
@@ -3117,9 +3134,10 @@ Return ONLY valid JSON:
               }
 
               // ── Done ──
+              // Copy stream-local state back to the outer variables so the
+              // post-IIFE path (cache writes, metrics) sees the same values
+              // the SSE client received.
               artistSummary = sseArtistSummary;
-              // Match batch path: sparse/missing track facts + skipped track search
-              // signal "no track data" so the client can adjust downstream UI.
               noTrackData = !curatedFacts?.trackFacts?.length && trackSearchSkipped;
               rawNuggets = streamedNuggets;
               const doneEvent = `data: ${JSON.stringify({ type: "done", artistSummary: sseArtistSummary, externalLinks: buildExternalLinks(), noTrackData })}\n\n`;
@@ -3179,7 +3197,7 @@ Return ONLY valid JSON:
         rawNuggets[i]._resolvedImageUrl = result.value.url;
         rawNuggets[i]._resolvedImageTitle = result.value.title;
         usedImageUrls.add(result.value.url);
-        console.log(`[Image] Wikipedia fallback for nugget ${i}: ${result.value.url}`);
+        console.log(`[Image] Wikipedia fallback for nugget ${i} ("${rawNuggets[i].imageSearchQuery}"): ${result.value.url}`);
       } else if (!rawNuggets[i]._resolvedImageUrl) {
         console.log(`[Image] No image for nugget ${i} — frontend will use album art`);
       }
