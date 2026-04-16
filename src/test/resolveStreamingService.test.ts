@@ -15,8 +15,9 @@ describe("resolveStreamingService", () => {
 
   it("preserves Apple Music even when topArtists is populated (the bug fix)", () => {
     // Scenario: user first connected Spotify, later switched to Apple Music.
-    // Their DB row still has spotify_taste. The old logic clobbered service
-    // back to "Spotify" on the next DB load — this test locks that invariant.
+    // Their row still carries Spotify-origin topArtists. The old logic
+    // clobbered service back to "Spotify" on the next DB load — this test
+    // locks that invariant.
     expect(resolveStreamingService("Apple Music", 20)).toBe("Apple Music");
   });
 
