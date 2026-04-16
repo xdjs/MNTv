@@ -2531,10 +2531,18 @@ Return ONLY valid JSON:
     if (isSparseData) {
       console.log(`[SparseData] Only ${exaCitationsStrict.length} strict citations — enabling conservative mode`);
     }
+
+    // Check SSE early — if the client wants SSE, we skip the batch Writer and
+    // generate nuggets one-at-a-time inside the streaming response instead.
+    const wantsSSE = (req.headers.get("accept") || "").includes("text/event-stream");
+
     let rawNuggets: any[];
     let groundingChunks: any[];
     let artistSummary = "";
     let noTrackData = false;
+
+    if (!wantsSSE) {
+    // ── Batch path (non-SSE JSON response) — unchanged ──────────────
     console.time("[Timing] Gemini (Curator + Writer)"); _ts("gemini");
     try {
       const _tracker = { ts: _ts, te: _te };
@@ -2564,6 +2572,11 @@ Return ONLY valid JSON:
       }
     }
     console.timeEnd("[Timing] Gemini (Curator + Writer)"); _te("gemini");
+    } else {
+      // SSE path: rawNuggets populated inside the streaming IIFE below
+      rawNuggets = [];
+      groundingChunks = [];
+    }
     checkTimeout();
 
     console.log(`[Grounding] ${groundingChunks.length} chunks for "${artist} - ${title}":`,
@@ -2864,11 +2877,10 @@ Return ONLY valid JSON:
       return links;
     }
 
-    // ── Check if client wants SSE streaming ──────────────────────────────
-    const wantsSSE = (req.headers.get("accept") || "").includes("text/event-stream");
-
+    // ── SSE: progressive per-nugget generation + streaming ─────────────
+    // wantsSSE was checked earlier — batch Writer was skipped.
     if (wantsSSE) {
-      console.log("[SSE] Streaming nuggets as they resolve");
+      console.log("[SSE] Progressive streaming — generating nuggets one at a time");
       const encoder = new TextEncoder();
       let streamController: ReadableStreamDefaultController<Uint8Array>;
 
@@ -2876,87 +2888,224 @@ Return ONLY valid JSON:
         start(controller) {
           streamController = controller;
 
-          // start() is synchronous per spec — wrap async work in an IIFE
-          // so awaits actually execute (Deno silently discards async start).
           (async () => {
             try {
-              // Pipeline: resolve image → assemble → validate → stream.
-              // Wikipedia lookups fire in parallel so late nuggets don't wait
-              // behind early ones; dedup + assemble + stream still happen
-              // sequentially to keep usedImageUrls correct and preserve order.
-              const imageLookups = rawNuggets.map((n) =>
-                !n._resolvedImageUrl && isValidImageQuery(n.imageSearchQuery)
-                  ? resolveNuggetImage(n.imageSearchQuery!).catch(() => null)
-                  : null
-              );
+              // ── Step 1: Run Curator (same as batch path) ──
+              _ts("curator");
+              let curatedFacts: any = null;
+              if (exaPromptContext) {
+                try {
+                  curatedFacts = await curateResearch(artist, title, album, exaPromptContext, "", GOOGLE_AI_API_KEY, resolvedSpotifyInfo);
+                } catch (e) {
+                  console.warn("[SSE] Curator failed, proceeding with direct path:", e);
+                }
+              }
+              _te("curator");
+
+              // ── Step 2: Build shared research context ──
+              const tierConfig = TIER_CONFIG[tier];
+              const researchBlock = curatedFacts ? [
+                `ARTIST ORIGIN: ${curatedFacts.artistOrigin}`,
+                curatedFacts.artistBio ? `BIO: ${curatedFacts.artistBio}` : "",
+                curatedFacts.artistFacts.length > 0
+                  ? `\nVERIFIED ARTIST FACTS:\n${curatedFacts.artistFacts.map((f: string) => `- ${f}`).join("\n")}`
+                  : "",
+                curatedFacts.trackFacts.length > 0
+                  ? `\nVERIFIED TRACK FACTS ("${title}"):\n${curatedFacts.trackFacts.map((f: string) => `- ${f}`).join("\n")}`
+                  : `\nNo verified facts exist specifically about "${title}".`,
+                curatedFacts.keyCollaborators.length > 0
+                  ? `\nCOLLABORATORS:\n${curatedFacts.keyCollaborators.map((c: string) => `- ${c}`).join("\n")}`
+                  : "",
+              ].filter(Boolean).join("\n") : "";
+
+              const researchSection = researchBlock
+                ? `RESEARCH BRIEF (verified):\n${researchBlock}`
+                : (exaPromptContext ? `RESEARCH MATERIAL (cite by [CIT N] index):\n${exaPromptContext}` : "");
+
+              const prevHeadlines = [...safePreviousNuggets];
+              const generatedHeadlines: string[] = [];
+
+              // ── Step 3: Define the 3 nugget kinds ──
+              const nuggetDefs = [
+                { kind: "artist", focus: tierConfig.artistFocus, listenFor: false, includeArtistSummary: true },
+                { kind: "track", focus: tierConfig.trackFocus, listenFor: true, includeArtistSummary: false },
+                { kind: "discovery", focus: tierConfig.discoveryFocus, listenFor: false, includeArtistSummary: false },
+              ];
 
               let streamedIndex = 0;
-              const streamedNuggets: any[] = []; // for cache write consistency
+              const streamedNuggets: any[] = [];
+              let sseArtistSummary = "";
 
-              for (let i = 0; i < rawNuggets.length; i++) {
-                const n = rawNuggets[i];
+              // ── Step 4: Generate + stream each nugget ──
+              for (const def of nuggetDefs) {
+                _ts(`writer_${def.kind}`);
+                const allPrevHeadlines = [...prevHeadlines, ...generatedHeadlines];
+                const nonRepeat = allPrevHeadlines.length > 0
+                  ? `\nDo NOT repeat or closely rephrase any of these previously shown headlines:\n${allPrevHeadlines.map(h => `- "${h}"`).join("\n")}`
+                  : "";
 
-                // ── Image resolution ──
-                if (!n._resolvedImageUrl && imageLookups[i]) {
-                  try {
-                    const wikiResult = await imageLookups[i];
-                    if (wikiResult && !usedImageUrls.has(wikiResult.url)) {
-                      n._resolvedImageUrl = wikiResult.url;
-                      n._resolvedImageTitle = wikiResult.title;
-                      usedImageUrls.add(wikiResult.url);
-                    }
-                  } catch { /* fall through to Exa fallback */ }
+                const singlePrompt = `You are a music journalist. The listener is PLAYING "${title}" by ${artist}${album ? ` from "${album}"` : ""} RIGHT NOW.
+
+${researchSection}
+
+VOICE: ${tierConfig.tone}
+${tierConfig.assumedKnowledge}
+
+WRITING RULES — NON-NEGOTIABLE:
+1. Tell stories, not descriptions. Never describe what the music sounds like — the listener can hear it.
+2. Dig like Nardwuar — find the specific detail nobody else would.
+3. VOICE GUARD: Never hedge ("likely", "suggests", "perhaps"). State facts or skip them.
+4. If uncertain, OMIT IT rather than hedging.
+5. Headlines must CREATE A CURIOSITY GAP — tease the story, don't summarize it. Use "${artist}" by name. NEVER use title case.
+6. NO VAGUE FILLER. If a sentence could apply to any artist, it's worthless. Every sentence must be specific to ${artist}.
+   SWAP TEST: if you can replace "${artist}" with any other artist and the sentence still works, DELETE IT.
+7. Do NOT use fabricated publisher names. Use the artist's real website, Bandcamp, Spotify, or a real music publication.
+8. SOURCES: Match facts to [CIT N] citations via "citIndex". Do not invent URLs.
+${nonRepeat}
+
+TASK: Generate exactly ONE "${def.kind}" nugget.
+Focus: ${def.focus}
+listenFor: ${def.listenFor}
+${def.kind === "discovery" ? `HONESTY RULE: Only claim a connection you can verify from the research. Do NOT recommend artists sharing any part of ${artist}'s name.` : ""}
+${def.includeArtistSummary ? `\nAlso generate "artistSummary": 2-3 punchy sentences about ${artist}.` : ""}
+
+Return ONLY valid JSON:
+{
+  ${def.includeArtistSummary ? '"artistSummary": "...",' : ""}
+  "nugget": {
+    "headline": "Tease the story — make them need to read more",
+    "text": "2-3 sentences delivering on the headline",
+    "kind": "${def.kind}",
+    "listenFor": ${def.listenFor},
+    "imageSearchQuery": "specific subject for image search OR omit if not needed",
+    "imageCaption": "6-12 word caption",
+    "source": {
+      "type": "youtube|article|interview",
+      "title": "Source title",
+      "publisher": "Real publisher name",
+      "citIndex": 0,
+      "quoteSnippet": "Key quote or paraphrase"
+    }
+  }
+}`;
+
+                const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GOOGLE_AI_API_KEY}`;
+                const effectiveTemp = isSparseData ? Math.min(tierConfig.temperature, 0.75) : tierConfig.temperature;
+                const callBody: any = {
+                  contents: [{ role: "user", parts: [{ text: singlePrompt }] }],
+                  generationConfig: { temperature: effectiveTemp },
+                };
+                if (!exaPromptContext || isSparseData) {
+                  callBody.tools = [{ google_search: {} }];
                 }
-                if (!n._resolvedImageUrl) {
-                  const groupStart = i * 10;
+
+                let nuggetData: any = null;
+                for (let attempt = 0; attempt < 3; attempt++) {
+                  try {
+                    const res = await fetch(geminiUrl, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(callBody),
+                    });
+                    if (!res.ok) {
+                      if (res.status === 429 && attempt < 2) {
+                        console.log(`[SSE] 429 for ${def.kind}, retrying in 2s...`);
+                        await new Promise(r => setTimeout(r, 2000));
+                        continue;
+                      }
+                      throw new Error(`Gemini returned ${res.status} for ${def.kind}`);
+                    }
+                    const data = await res.json();
+                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                    if (!text.trim()) {
+                      if (attempt < 2) { await new Promise(r => setTimeout(r, 1000)); continue; }
+                      throw new Error(`Empty Gemini response for ${def.kind}`);
+                    }
+                    const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+                    const parsed = JSON.parse(cleaned);
+                    nuggetData = parsed.nugget || (parsed.nuggets?.[0]);
+                    if (parsed.artistSummary) sseArtistSummary = parsed.artistSummary;
+                    break;
+                  } catch (e) {
+                    if (attempt >= 2) {
+                      console.error(`[SSE] Failed to generate ${def.kind} nugget after 3 attempts:`, e);
+                    }
+                  }
+                }
+                _te(`writer_${def.kind}`);
+
+                if (!nuggetData) {
+                  console.warn(`[SSE] Skipping ${def.kind} — generation failed`);
+                  continue;
+                }
+
+                generatedHeadlines.push(nuggetData.headline || nuggetData.text || "");
+
+                // ── Image: Exa first (instant), Wikipedia fallback ──
+                const nuggetIndex = streamedIndex;
+                if (!nuggetData._resolvedImageUrl) {
+                  const groupStart = nuggetIndex * 10;
                   const groupEnd = groupStart + 10;
-                  let fallbackCit = exaCitationsStrict.find((c) =>
+                  let exaCit = exaCitationsStrict.find((c) =>
                     c.citIndex >= groupStart && c.citIndex < groupEnd &&
                     c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
                   );
-                  if (!fallbackCit) {
-                    fallbackCit = exaCitationsStrict.find((c) =>
+                  if (!exaCit) {
+                    exaCit = exaCitationsStrict.find((c) =>
                       c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
                     );
                   }
-                  if (fallbackCit?.imageUrl) {
-                    n._resolvedImageUrl = fallbackCit.imageUrl;
-                    n._resolvedImageTitle = fallbackCit.title;
-                    usedImageUrls.add(fallbackCit.imageUrl);
+                  if (exaCit?.imageUrl) {
+                    nuggetData._resolvedImageUrl = exaCit.imageUrl;
+                    nuggetData._resolvedImageTitle = exaCit.title;
+                    usedImageUrls.add(exaCit.imageUrl);
                   }
+                }
+                if (!nuggetData._resolvedImageUrl && isValidImageQuery(nuggetData.imageSearchQuery)) {
+                  try {
+                    const wikiResult = await resolveNuggetImage(nuggetData.imageSearchQuery!);
+                    if (wikiResult && !usedImageUrls.has(wikiResult.url)) {
+                      nuggetData._resolvedImageUrl = wikiResult.url;
+                      nuggetData._resolvedImageTitle = wikiResult.title;
+                      usedImageUrls.add(wikiResult.url);
+                    }
+                  } catch { /* stream without image */ }
                 }
 
                 // ── Assemble + validate ──
-                const assembled = assembleNugget(n, i);
+                const assembled = assembleNugget(nuggetData, nuggetIndex);
                 const sourceType = (assembled.source?.type || "").toLowerCase();
                 const publisher = (assembled.source?.publisher || "").toLowerCase();
                 if (
                   sourceType === "internal-data" || sourceType === "internal_data" ||
                   sourceType === "database" || sourceType === "editorial"
                 ) {
-                  console.log(`[SSE] Skipping hallucinated source type nugget ${i}`);
+                  console.log(`[SSE] Skipping hallucinated source type: ${def.kind}`);
                   continue;
                 }
                 if (HALLUCINATED_PUBLISHERS.some(hp => publisher.includes(hp))) {
-                  console.log(`[SSE] Skipping hallucinated publisher nugget ${i}`);
+                  console.log(`[SSE] Skipping hallucinated publisher: ${def.kind}`);
                   continue;
                 }
 
-                // ── Stream with contiguous index ──
+                // ── Stream immediately ──
                 streamedNuggets.push(assembled);
                 const event = `data: ${JSON.stringify({
                   type: "nugget",
                   index: streamedIndex,
                   nugget: assembled,
-                  totalExpected: rawNuggets.length,
+                  totalExpected: 3,
                 })}\n\n`;
                 try { streamController.enqueue(encoder.encode(event)); } catch { /* stream closed */ }
-                console.log(`[SSE] Streamed nugget ${streamedIndex}: "${assembled.headline?.slice(0, 40)}"`);
+                console.log(`[SSE] Streamed ${def.kind} nugget ${streamedIndex}: "${assembled.headline?.slice(0, 40)}"`);
                 streamedIndex++;
               }
 
-              // All done — send done event and close
-              const doneEvent = `data: ${JSON.stringify({ type: "done", artistSummary, externalLinks: buildExternalLinks(), noTrackData })}\n\n`;
+              // ── Done ──
+              artistSummary = sseArtistSummary;
+              noTrackData = false;
+              rawNuggets = streamedNuggets.map((n: any) => n);
+              const doneEvent = `data: ${JSON.stringify({ type: "done", artistSummary: sseArtistSummary, externalLinks: buildExternalLinks(), noTrackData: false })}\n\n`;
               try {
                 streamController.enqueue(encoder.encode(doneEvent));
                 streamController.close();
@@ -2986,6 +3135,32 @@ Return ONLY valid JSON:
 
     // ── Non-SSE path: resolve all images in parallel, return JSON (backward compat) ──
     console.time("[Timing] Wiki image resolution"); _ts("wikiImages");
+    // Exa citation images first (instant — data already in memory)
+    if (exaCitationsStrict.length) {
+      for (let i = 0; i < rawNuggets.length; i++) {
+        if (rawNuggets[i]._resolvedImageUrl) continue;
+        const groupStart = i * 10;
+        const groupEnd = groupStart + 10;
+        let exaCit = exaCitationsStrict.find((c) =>
+          c.citIndex >= groupStart && c.citIndex < groupEnd &&
+          c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
+        );
+        if (!exaCit) {
+          exaCit = exaCitationsStrict.find((c) =>
+            c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
+          );
+        }
+        if (exaCit?.imageUrl) {
+          rawNuggets[i]._resolvedImageUrl = exaCit.imageUrl;
+          rawNuggets[i]._resolvedImageTitle = exaCit.title;
+          usedImageUrls.add(exaCit.imageUrl);
+          const crossGroup = exaCit.citIndex < groupStart || exaCit.citIndex >= groupEnd;
+          console.log(`[Image] Exa${crossGroup ? " (cross-group)" : ""} for nugget ${i}: ${exaCit.imageUrl}`);
+        }
+      }
+    }
+
+    // Wikipedia fallback only for nuggets that still have no image
     const wikiSearchNeeded = rawNuggets.map((n) =>
       !n._resolvedImageUrl && isValidImageQuery(n.imageSearchQuery) ? resolveNuggetImage(n.imageSearchQuery!) : Promise.resolve(null)
     );
@@ -2999,34 +3174,9 @@ Return ONLY valid JSON:
         rawNuggets[i]._resolvedImageUrl = result.value.url;
         rawNuggets[i]._resolvedImageTitle = result.value.title;
         usedImageUrls.add(result.value.url);
-        console.log(`[Image] Wikipedia for nugget ${i} "${rawNuggets[i].imageSearchQuery}" → ${result.value.url}`);
-      }
-    }
-
-    // Third pass: Exa citation fallback
-    if (exaCitationsStrict.length) {
-      for (let i = 0; i < rawNuggets.length; i++) {
-        if (rawNuggets[i]._resolvedImageUrl) continue;
-        const groupStart = i * 10;
-        const groupEnd = groupStart + 10;
-        let fallbackCit = exaCitationsStrict.find((c) =>
-          c.citIndex >= groupStart && c.citIndex < groupEnd &&
-          c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
-        );
-        if (!fallbackCit) {
-          fallbackCit = exaCitationsStrict.find((c) =>
-            c.imageUrl && !usedImageUrls.has(c.imageUrl) && !isGarbageImage(c.imageUrl) && isActualImageUrl(c.imageUrl)
-          );
-        }
-        if (fallbackCit?.imageUrl) {
-          rawNuggets[i]._resolvedImageUrl = fallbackCit.imageUrl;
-          rawNuggets[i]._resolvedImageTitle = fallbackCit.title;
-          usedImageUrls.add(fallbackCit.imageUrl);
-          const crossGroup = fallbackCit.citIndex < groupStart || fallbackCit.citIndex >= groupEnd;
-          console.log(`[Image] Exa fallback${crossGroup ? " (cross-group)" : ""} for nugget ${i}: ${fallbackCit.imageUrl}`);
-        } else {
-          console.log(`[Image] No image for nugget ${i} — frontend will use album art`);
-        }
+        console.log(`[Image] Wikipedia fallback for nugget ${i}: ${result.value.url}`);
+      } else if (!rawNuggets[i]._resolvedImageUrl) {
+        console.log(`[Image] No image for nugget ${i} — frontend will use album art`);
       }
     }
 

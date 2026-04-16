@@ -134,19 +134,43 @@ export default function ImmersiveNuggetView({
     nextUnlockTimeRef.current = upcoming.length > 0 ? upcoming[0].timestampSec : Infinity;
   }, [currentTime, nuggets, isFresh]);
 
+  // Track when the current nugget was first shown — used by auto-show
+  // to enforce minimum read time before auto-advancing.
+  const nuggetShownAtRef = useRef(Date.now());
+
   // ── Auto-show new nuggets ──────────────────────────────────────────
+  // Enforces a minimum display time (10 s) so freshly-streamed nuggets
+  // don't yank the user away mid-read. If the timer hasn't elapsed the
+  // swipe dots still update — user can swipe manually.
+  const MIN_DISPLAY_MS = 10_000;
   useEffect(() => {
     const count = unlockedIds.size;
     if (count > prevUnlockedCountRef.current && count > 0) {
       const arr = nuggets.filter((n) => unlockedIds.has(n.id));
       const idx = nuggets.indexOf(arr[arr.length - 1]);
       if (idx >= 0) {
-        setActiveIndex(idx);
-        // Only auto-show if user hasn't manually dismissed to now-playing
-        if (!userDismissedRef.current) {
-          setNuggetDismissed(false);
+        const elapsed = Date.now() - nuggetShownAtRef.current;
+        if (prevUnlockedCountRef.current === 0 || elapsed >= MIN_DISPLAY_MS) {
+          setActiveIndex(idx);
+          nuggetShownAtRef.current = Date.now();
+          if (!userDismissedRef.current) {
+            setNuggetDismissed(false);
+          }
+          setDeepDiveText(null);
+        } else {
+          const remaining = MIN_DISPLAY_MS - elapsed;
+          const timer = setTimeout(() => {
+            setActiveIndex(idx);
+            nuggetShownAtRef.current = Date.now();
+            if (!userDismissedRef.current) {
+              setNuggetDismissed(false);
+            }
+            setDeepDiveText(null);
+          }, remaining);
+          // Don't update prevUnlockedCountRef yet — the timer handles it
+          prevUnlockedCountRef.current = count;
+          return () => clearTimeout(timer);
         }
-        setDeepDiveText(null);
       }
     }
     prevUnlockedCountRef.current = count;
@@ -291,9 +315,10 @@ export default function ImmersiveNuggetView({
           <span className="text-[10px] uppercase tracking-[0.2em] text-white/60 mb-2 block" style={{ textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>
             {activeNugget ? (KIND_LABELS[activeNugget.kind] || activeNugget.kind) : ""}
           </span>
+          <div className="min-h-[3.5rem] mb-4">
           {activeNugget && (
             isTypewriterDone ? (
-              <h2 className="text-xl font-bold leading-tight text-white mb-4" style={{ textShadow: "0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.5)" }}>
+              <h2 className="text-xl font-bold leading-tight text-white" style={{ textShadow: "0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.5)" }}>
                 {activeNugget.headline || activeNugget.text}
               </h2>
             ) : (
@@ -303,11 +328,12 @@ export default function ImmersiveNuggetView({
                 paused={false}
                 onComplete={handleTypewriterComplete}
                 as="h2"
-                className="text-xl font-bold leading-tight text-white mb-4 block"
+                className="text-xl font-bold leading-tight text-white block"
                 style={{ textShadow: "0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.5)" }}
               />
             )
           )}
+          </div>
           <p className="text-sm leading-relaxed text-white/60 mb-4">
             {activeNugget?.text}
           </p>
