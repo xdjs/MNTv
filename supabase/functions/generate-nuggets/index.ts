@@ -535,16 +535,12 @@ const CITATION_GROUP = {
 // Path-specific extras (e.g. "Prefer birthplace" for the direct path, where
 // no curated origin is available) are appended as rules 9+ via the `extras`
 // argument.
-function buildWriterNonNegotiables(artist: string, extras: string[] = []): string {
-  const extraBlock = extras.length
-    ? "\n" + extras.map((e, i) => `${9 + i}. ${e}`).join("\n")
-    : "";
-  return `WRITING RULES — NON-NEGOTIABLE:
-1. The listener can HEAR the music. Tell them what they CAN'T know from listening — stories, history, people, places, creative context.
-2. Dig like Nardwuar — find the specific detail nobody else would. Prioritize "almost didn't happen" stories, unlikely origins, specific people who changed the trajectory.
-3. VOICE GUARD: Never hedge ("likely", "suggests", "perhaps") — state facts or skip them. Never describe sound ("sonic landscape", "soundscape") — the listener can hear it. Write with the confidence of someone who KNOWS this, not someone guessing.
-4. If uncertain about a fact, OMIT IT. One confident true sentence beats three hedged guesses.
-5. Headlines must CREATE A CURIOSITY GAP — say just enough to intrigue, withhold enough that the reader MUST read the body. If someone can skip the body after reading your headline, you failed.
+const WRITER_BASE_RULES = [
+  (artist: string) => `The listener can HEAR the music. Tell them what they CAN'T know from listening — stories, history, people, places, creative context.`,
+  (_artist: string) => `Dig like Nardwuar — find the specific detail nobody else would. Prioritize "almost didn't happen" stories, unlikely origins, specific people who changed the trajectory.`,
+  (_artist: string) => `VOICE GUARD: Never hedge ("likely", "suggests", "perhaps") — state facts or skip them. Never describe sound ("sonic landscape", "soundscape") — the listener can hear it. Write with the confidence of someone who KNOWS this, not someone guessing.`,
+  (_artist: string) => `If uncertain about a fact, OMIT IT. One confident true sentence beats three hedged guesses.`,
+  (artist: string) => `Headlines must CREATE A CURIOSITY GAP — say just enough to intrigue, withhold enough that the reader MUST read the body. If someone can skip the body after reading your headline, you failed.
    SAME FACT, TWO WAYS:
    - SUMMARY (bad): "A scrapped Gucci Mane beat became 'HUMBLE.'" → gives away the whole story, nothing left to read
    - CURIOSITY (good): "HUMBLE. was never meant for Kendrick" → wait, whose beat was it? I need to read more
@@ -552,17 +548,26 @@ function buildWriterNonNegotiables(artist: string, extras: string[] = []): strin
    MORE BAD: "He recorded his first EP in a closet at 16" / "Aaron Doh's Early Digital Footprint Takes Shape" / "The Creative Evolution Behind the Music" / "this artist's creative path"
    The test: does the headline make you ask "wait, what?" or "tell me more"? If it just states a fact, rewrite it.
    Use "${artist}" by name in headlines — never say "this artist" or "he"/"she" without naming them.
-   NEVER use title case. NEVER use "[Name]'s [Abstract Noun]".
-6. NO VAGUE FILLER. If a sentence could apply to any artist (e.g., "promoting messages of love and hope", "unique blend of genres", "committed to authentic artistry"), it's worthless. Every sentence must contain a detail that ONLY applies to THIS artist.
-   SWAP TEST: if you can replace "${artist}" with any other artist's name and the sentence still works, DELETE IT. It means you wrote nothing specific.
-7. Do NOT recommend artists who share ANY part of ${artist}'s name.
-8. Do NOT use fabricated publisher names. Use the artist's real website, Bandcamp, Spotify, or a real music publication.${extraBlock}`;
+   NEVER use title case. NEVER use "[Name]'s [Abstract Noun]".`,
+  (artist: string) => `NO VAGUE FILLER. If a sentence could apply to any artist (e.g., "promoting messages of love and hope", "unique blend of genres", "committed to authentic artistry"), it's worthless. Every sentence must contain a detail that ONLY applies to THIS artist.
+   SWAP TEST: if you can replace "${artist}" with any other artist's name and the sentence still works, DELETE IT. It means you wrote nothing specific.`,
+  (artist: string) => `Do NOT recommend artists who share ANY part of ${artist}'s name.`,
+  (_artist: string) => `Do NOT use fabricated publisher names. Use the artist's real website, Bandcamp, Spotify, or a real music publication.`,
+];
+
+function buildWriterNonNegotiables(artist: string, extras: string[] = []): string {
+  const base = WRITER_BASE_RULES.map((r, i) => `${i + 1}. ${r(artist)}`).join("\n");
+  const extraBlock = extras.length
+    ? "\n" + extras.map((e, i) => `${WRITER_BASE_RULES.length + 1 + i}. ${e}`).join("\n")
+    : "";
+  return `WRITING RULES — NON-NEGOTIABLE:\n${base}${extraBlock}`;
 }
 
 // Picks an unused Exa citation image for a nugget, preferring the nugget's
 // own citation group and falling back to any unused image. Mutates the
 // target with _resolvedImageUrl / _resolvedImageTitle and records the URL
-// in usedImageUrls. Returns the chosen citation (for logging) or null.
+// in usedImageUrls. Returns the chosen citation (for logging), or null if
+// the target already had an image resolved or no unused image was available.
 function resolveExaImageForNugget(
   target: { _resolvedImageUrl?: string; _resolvedImageTitle?: string },
   nuggetIndex: number,
@@ -2938,11 +2943,19 @@ Return ONLY valid JSON:
           (async () => {
             try {
               // ── Step 1: Run Curator (same as batch path) ──
+              // Bounded so a slow/hanging Curator can't starve the SSE stream —
+              // if it exceeds the budget, fall through to the direct path.
               _ts("curator");
               let curatedFacts: any = null;
               if (exaPromptContext) {
+                const CURATOR_TIMEOUT_MS = 20_000;
                 try {
-                  curatedFacts = await curateResearch(artist, title, album, exaPromptContext, "", GOOGLE_AI_API_KEY, resolvedSpotifyInfo);
+                  curatedFacts = await Promise.race([
+                    curateResearch(artist, title, album, exaPromptContext, "", GOOGLE_AI_API_KEY, resolvedSpotifyInfo),
+                    new Promise<never>((_, reject) =>
+                      setTimeout(() => reject(new Error(`Curator timeout (${CURATOR_TIMEOUT_MS}ms)`)), CURATOR_TIMEOUT_MS)
+                    ),
+                  ]);
                 } catch (e) {
                   console.warn("[SSE] Curator failed, proceeding with direct path:", e);
                 }
@@ -2982,9 +2995,15 @@ Return ONLY valid JSON:
               let streamedIndex = 0;
               const streamedNuggets: any[] = [];
               let sseArtistSummary = "";
+              const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GOOGLE_AI_API_KEY}`;
 
               // ── Step 4: Generate + stream each nugget ──
-              for (const def of nuggetDefs) {
+              // defIdx (not streamedIndex) is the stable citation-group index:
+              // if a nugget is skipped by validation, streamedIndex stays put
+              // but defIdx keeps advancing, so the next nugget still maps to
+              // its correct Exa citation window (artist=0, track=1, discovery=2).
+              for (let defIdx = 0; defIdx < nuggetDefs.length; defIdx++) {
+                const def = nuggetDefs[defIdx];
                 _ts(`writer_${def.kind}`);
                 const allPrevHeadlines = [...prevHeadlines, ...generatedHeadlines];
                 const nonRepeat = allPrevHeadlines.length > 0
@@ -3029,7 +3048,6 @@ Return ONLY valid JSON:
   }
 }`;
 
-                const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GOOGLE_AI_API_KEY}`;
                 const effectiveTemp = isSparseData ? Math.min(tierConfig.temperature, 0.75) : tierConfig.temperature;
                 const callBody: any = {
                   contents: [{ role: "user", parts: [{ text: singlePrompt }] }],
@@ -3088,11 +3106,13 @@ Return ONLY valid JSON:
                   continue;
                 }
 
-                generatedHeadlines.push(nuggetData.headline || nuggetData.text || "");
+                const headlineForHistory = nuggetData.headline || nuggetData.text;
+                if (headlineForHistory) generatedHeadlines.push(headlineForHistory);
 
                 // ── Image: Exa first (instant), Wikipedia fallback ──
-                const nuggetIndex = streamedIndex;
-                resolveExaImageForNugget(nuggetData, nuggetIndex, exaCitationsStrict, usedImageUrls);
+                // Use defIdx (not streamedIndex) so citation grouping stays
+                // aligned even when earlier nuggets are skipped by validation.
+                resolveExaImageForNugget(nuggetData, defIdx, exaCitationsStrict, usedImageUrls);
                 if (!nuggetData._resolvedImageUrl && isValidImageQuery(nuggetData.imageSearchQuery)) {
                   try {
                     const wikiResult = await resolveNuggetImage(nuggetData.imageSearchQuery!);
@@ -3126,7 +3146,7 @@ Return ONLY valid JSON:
                   type: "nugget",
                   index: streamedIndex,
                   nugget: assembled,
-                  totalExpected: NUGGET_COUNT,
+                  totalExpected: nuggetDefs.length,
                 })}\n\n`;
                 try { streamController.enqueue(encoder.encode(event)); } catch { /* stream closed */ }
                 console.log(`[SSE] Streamed ${def.kind} nugget ${streamedIndex}: "${assembled.headline?.slice(0, 40)}"`);
