@@ -131,7 +131,11 @@ export function useNuggetPacer<T extends NuggetIdentity>({
       pendingQueueRef.current.push(...newlyAdded);
     }
     scheduleNext();
-  }, [unlockedIds, nuggets, minDisplayMs]);
+    // minDisplayMs intentionally omitted — it's consumed via minDisplayMsRef
+    // inside scheduleNext, and a dedicated ref-sync effect keeps that ref
+    // up to date. Listing minDisplayMs here would trigger a full unlockedIds
+    // pass on every change for no behavioral gain.
+  }, [unlockedIds, nuggets]);
 
   useEffect(() => () => clearAdvanceTimer(), []);
 

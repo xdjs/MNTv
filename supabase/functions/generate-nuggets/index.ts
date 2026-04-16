@@ -535,12 +535,14 @@ const CITATION_GROUP = {
 // Path-specific extras (e.g. "Prefer birthplace" for the direct path, where
 // no curated origin is available) are appended as rules 9+ via the `extras`
 // argument.
-const WRITER_BASE_RULES = [
-  (artist: string) => `The listener can HEAR the music. Tell them what they CAN'T know from listening — stories, history, people, places, creative context.`,
-  (_artist: string) => `Dig like Nardwuar — find the specific detail nobody else would. Prioritize "almost didn't happen" stories, unlikely origins, specific people who changed the trajectory.`,
-  (_artist: string) => `VOICE GUARD: Never hedge ("likely", "suggests", "perhaps") — state facts or skip them. Never describe sound ("sonic landscape", "soundscape") — the listener can hear it. Write with the confidence of someone who KNOWS this, not someone guessing.`,
-  (_artist: string) => `If uncertain about a fact, OMIT IT. One confident true sentence beats three hedged guesses.`,
-  (artist: string) => `Headlines must CREATE A CURIOSITY GAP — say just enough to intrigue, withhold enough that the reader MUST read the body. If someone can skip the body after reading your headline, you failed.
+type WriterRule = string | ((artist: string) => string);
+
+const WRITER_BASE_RULES: WriterRule[] = [
+  `The listener can HEAR the music. Tell them what they CAN'T know from listening — stories, history, people, places, creative context.`,
+  `Dig like Nardwuar — find the specific detail nobody else would. Prioritize "almost didn't happen" stories, unlikely origins, specific people who changed the trajectory.`,
+  `VOICE GUARD: Never hedge ("likely", "suggests", "perhaps") — state facts or skip them. Never describe sound ("sonic landscape", "soundscape") — the listener can hear it. Write with the confidence of someone who KNOWS this, not someone guessing.`,
+  `If uncertain about a fact, OMIT IT. One confident true sentence beats three hedged guesses.`,
+  (artist) => `Headlines must CREATE A CURIOSITY GAP — say just enough to intrigue, withhold enough that the reader MUST read the body. If someone can skip the body after reading your headline, you failed.
    SAME FACT, TWO WAYS:
    - SUMMARY (bad): "A scrapped Gucci Mane beat became 'HUMBLE.'" → gives away the whole story, nothing left to read
    - CURIOSITY (good): "HUMBLE. was never meant for Kendrick" → wait, whose beat was it? I need to read more
@@ -549,14 +551,15 @@ const WRITER_BASE_RULES = [
    The test: does the headline make you ask "wait, what?" or "tell me more"? If it just states a fact, rewrite it.
    Use "${artist}" by name in headlines — never say "this artist" or "he"/"she" without naming them.
    NEVER use title case. NEVER use "[Name]'s [Abstract Noun]".`,
-  (artist: string) => `NO VAGUE FILLER. If a sentence could apply to any artist (e.g., "promoting messages of love and hope", "unique blend of genres", "committed to authentic artistry"), it's worthless. Every sentence must contain a detail that ONLY applies to THIS artist.
+  (artist) => `NO VAGUE FILLER. If a sentence could apply to any artist (e.g., "promoting messages of love and hope", "unique blend of genres", "committed to authentic artistry"), it's worthless. Every sentence must contain a detail that ONLY applies to THIS artist.
    SWAP TEST: if you can replace "${artist}" with any other artist's name and the sentence still works, DELETE IT. It means you wrote nothing specific.`,
-  (artist: string) => `Do NOT recommend artists who share ANY part of ${artist}'s name.`,
-  (_artist: string) => `Do NOT use fabricated publisher names like "General Knowledge" or "Music Analysis". Use the artist's real website, Bandcamp, Spotify, or a real music publication.`,
+  (artist) => `Do NOT recommend artists who share ANY part of ${artist}'s name.`,
+  `Do NOT use fabricated publisher names like "General Knowledge" or "Music Analysis". Use the artist's real website, Bandcamp, Spotify, or a real music publication.`,
 ];
 
 function buildWriterNonNegotiables(artist: string, extras: string[] = []): string {
-  const base = WRITER_BASE_RULES.map((r, i) => `${i + 1}. ${r(artist)}`).join("\n");
+  const renderRule = (r: WriterRule) => typeof r === "function" ? r(artist) : r;
+  const base = WRITER_BASE_RULES.map((r, i) => `${i + 1}. ${renderRule(r)}`).join("\n");
   const extraBlock = extras.length
     ? "\n" + extras.map((e, i) => `${WRITER_BASE_RULES.length + 1 + i}. ${e}`).join("\n")
     : "";
@@ -2946,6 +2949,9 @@ Return ONLY valid JSON:
         start(controller) {
           streamController = controller;
 
+          // start() is synchronous per the ReadableStream spec — wrap the
+          // async generation in an IIFE so we can return immediately with
+          // the stream wired up, and emit events as work completes.
           (async () => {
             try {
               // ── Step 1: Run Curator (same as batch path) ──
@@ -3064,12 +3070,17 @@ Return ONLY valid JSON:
                 }
 
                 let nuggetData: any = null;
+                const WRITER_CALL_TIMEOUT_MS = 30_000;
                 for (let attempt = 0; attempt < 3; attempt++) {
                   try {
+                    // Per-attempt abort guard — a hanging Gemini response
+                    // would otherwise hold the SSE connection open until
+                    // the edge function's hard timeout fires.
                     const res = await fetch(geminiUrl, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify(callBody),
+                      signal: AbortSignal.timeout(WRITER_CALL_TIMEOUT_MS),
                     });
                     if (!res.ok) {
                       if (res.status === 429 && attempt < 2) {
@@ -3168,6 +3179,10 @@ Return ONLY valid JSON:
               // post-IIFE path (cache writes, metrics) sees the same values
               // the SSE client received.
               artistSummary = sseArtistSummary;
+              // trackSearchSkipped is set earlier, inside the Exa phase 2
+              // strategy block (SEMI-STANDARD / ARTIST-HEAVY / SPARSE paths)
+              // which runs before this IIFE. It tracks whether we skipped
+              // the track-specific Exa search, not whether the Writer ran.
               noTrackData = !curatedFacts?.trackFacts?.length && trackSearchSkipped;
               rawNuggets = streamedNuggets;
 
