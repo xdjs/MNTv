@@ -141,16 +141,9 @@ export default function Companion() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawTrackId, tier, retryKey]);
 
-  if (!trackInfo) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6">
-        <p className="text-muted-foreground">Track not found.</p>
-      </div>
-    );
-  }
-
   // Derive effective listen count from the data — the cache may return a higher
   // tier than the URL requested, so use the max across URL param and nugget data.
+  // Must run before the !trackInfo early return to satisfy rules-of-hooks.
   const effectiveListenCount = useMemo(() => {
     if (!data?.nuggets?.length) return urlListenCount;
     const maxFromData = Math.max(...data.nuggets.map((n) => n.listenUnlockLevel || 1));
@@ -176,6 +169,14 @@ export default function Companion() {
       return n;
     });
   }, [data?.nuggets, trackInfo?.coverArtUrl, trackInfo?.title, artistImage, artistName]);
+
+  if (!trackInfo) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <p className="text-muted-foreground">Track not found.</p>
+      </div>
+    );
+  }
 
   // Return nuggets for a section — show all nuggets up to the effective listen count.
   // Newer listens (higher listenUnlockLevel) appear first so fresh content is prominent.
