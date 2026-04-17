@@ -62,16 +62,16 @@ export default function Companion() {
     if (realTrackMeta) {
       // Try to get cover art: cached from companion data > profile > DiceBear fallback
       let coverArtUrl = data?.coverArtUrl || "";
-      if (!coverArtUrl && profile?.spotifyTrackImages) {
-        const match = profile.spotifyTrackImages.find(
+      if (!coverArtUrl && profile?.trackImages) {
+        const match = profile.trackImages.find(
           (t) =>
             t.title.toLowerCase() === realTrackMeta.title.toLowerCase() &&
             t.artist.toLowerCase() === realTrackMeta.artist.toLowerCase()
         );
         if (match?.imageUrl) coverArtUrl = match.imageUrl;
       }
-      if (!coverArtUrl && profile?.spotifyArtistImages?.[realTrackMeta.artist]) {
-        coverArtUrl = profile.spotifyArtistImages[realTrackMeta.artist];
+      if (!coverArtUrl && profile?.artistImages?.[realTrackMeta.artist]) {
+        coverArtUrl = profile.artistImages[realTrackMeta.artist];
       }
       if (!coverArtUrl) {
         coverArtUrl = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(realTrackMeta.artist + realTrackMeta.title)}&backgroundColor=111827&textColor=ffffff&fontSize=30`;
@@ -84,10 +84,10 @@ export default function Companion() {
       };
     }
     return null;
-  }, [realTrackMeta, data?.coverArtUrl, profile?.spotifyTrackImages, profile?.spotifyArtistImages]);
+  }, [realTrackMeta, data?.coverArtUrl, profile?.trackImages, profile?.artistImages]);
 
   const artistName = trackInfo?.artist || "";
-  const artistFallbackImage = data?.artistImage || profile?.spotifyArtistImages?.[artistName] || "";
+  const artistFallbackImage = data?.artistImage || profile?.artistImages?.[artistName] || "";
   const artistImage = useArtistImage(artistName, artistFallbackImage);
 
   const artistGenres: string[] = [];
@@ -141,16 +141,9 @@ export default function Companion() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawTrackId, tier, retryKey]);
 
-  if (!trackInfo) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6">
-        <p className="text-muted-foreground">Track not found.</p>
-      </div>
-    );
-  }
-
   // Derive effective listen count from the data — the cache may return a higher
   // tier than the URL requested, so use the max across URL param and nugget data.
+  // Must run before the !trackInfo early return to satisfy rules-of-hooks.
   const effectiveListenCount = useMemo(() => {
     if (!data?.nuggets?.length) return urlListenCount;
     const maxFromData = Math.max(...data.nuggets.map((n) => n.listenUnlockLevel || 1));
@@ -176,6 +169,14 @@ export default function Companion() {
       return n;
     });
   }, [data?.nuggets, trackInfo?.coverArtUrl, trackInfo?.title, artistImage, artistName]);
+
+  if (!trackInfo) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <p className="text-muted-foreground">Track not found.</p>
+      </div>
+    );
+  }
 
   // Return nuggets for a section — show all nuggets up to the effective listen count.
   // Newer listens (higher listenUnlockLevel) appear first so fresh content is prominent.

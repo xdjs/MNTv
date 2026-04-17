@@ -178,11 +178,17 @@ export class AppleMusicPlaybackEngine implements PlaybackEngine {
     // extracted storefront id rather than the whole response so the
     // diagnostic stays tight — the rest of the payload (supported
     // languages, etc.) is noise for what we're trying to diagnose.
+    //
+    // MusicKit JS v3's api.music() wraps the HTTP response as
+    // { request, response, data }, where `data` is Apple's response body:
+    // { data: Array<{ id, type, attributes }> }. So the storefront entry
+    // lives at response.data.data[0] — NOT response.data[0], which was
+    // the original shape and silently logged `{id: undefined, name: undefined}`.
     try {
       const storefront = await m.api?.music?.("v1/me/storefront") as {
-        data?: Array<{ id?: string; attributes?: { name?: string } }>;
+        data?: { data?: Array<{ id?: string; attributes?: { name?: string } }> };
       } | undefined;
-      const entry = storefront?.data?.[0];
+      const entry = storefront?.data?.data?.[0];
       console.log("[AppleMusic] /v1/me/storefront ok:", {
         id: entry?.id,
         name: entry?.attributes?.name,

@@ -154,7 +154,7 @@ export type Database = {
           created_at: string
           id: string
           last_fm_username: string | null
-          spotify_taste: Json | null
+          music_taste: Json | null
           streaming_service: string | null
           tier: string
           updated_at: string
@@ -164,7 +164,7 @@ export type Database = {
           created_at?: string
           id?: string
           last_fm_username?: string | null
-          spotify_taste?: Json | null
+          music_taste?: Json | null
           streaming_service?: string | null
           tier?: string
           updated_at?: string
@@ -174,7 +174,7 @@ export type Database = {
           created_at?: string
           id?: string
           last_fm_username?: string | null
-          spotify_taste?: Json | null
+          music_taste?: Json | null
           streaming_service?: string | null
           tier?: string
           updated_at?: string

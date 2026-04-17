@@ -37,8 +37,8 @@ export default function Connect() {
   const [direction, setDirection] = useState(1);
   const [spotifyConnecting, setSpotifyConnecting] = useState(false);
   const [spotifyConnected, setSpotifyConnected] = useState(false);
-  const [pendingSpotifyArtists, setPendingSpotifyArtists] = useState<string[] | null>(null);
-  const [pendingSpotifyTracks, setPendingSpotifyTracks] = useState<string[] | null>(null);
+  const [pendingTopArtists, setPendingTopArtists] = useState<string[] | null>(null);
+  const [pendingTopTracks, setPendingTopTracks] = useState<string[] | null>(null);
   const [pendingArtistImages, setPendingArtistImages] = useState<Record<string, string>>({});
   const [pendingArtistIds, setPendingArtistIds] = useState<Record<string, string>>({});
   const [pendingTrackImages, setPendingTrackImages] = useState<{ title: string; artist: string; imageUrl: string; uri?: string }[]>([]);
@@ -77,8 +77,8 @@ export default function Connect() {
       try {
         const { displayName, topArtists, topTracks, artistImages, artistIds, trackImages } = JSON.parse(raw);
         setSpotifyConnected(true);
-        setPendingSpotifyArtists(topArtists);
-        setPendingSpotifyTracks(topTracks);
+        setPendingTopArtists(topArtists);
+        setPendingTopTracks(topTracks);
         if (displayName) setPendingDisplayName(displayName);
         if (artistImages) setPendingArtistImages(artistImages);
         if (artistIds) setPendingArtistIds(artistIds);
@@ -113,19 +113,16 @@ export default function Connect() {
       if (musicUserToken) {
         setAppleMusicConnected(true);
 
-        // Fetch the user's Apple Music taste profile via the apple-taste
-        // edge function. Stored under the same pending* state Spotify
-        // uses — the legacy field names (pendingSpotifyArtists etc.)
-        // carry the active service's taste data. A null return means
-        // Apple returned an error, the MUT is invalid, or the user has
-        // no listening history yet. In all cases we proceed to the
-        // tier picker rather than blocking onboarding — but we set a
-        // warning state so the user sees an inline note explaining why
-        // Browse will show only demo tracks on first load.
+        // Fetch the user's Apple Music taste profile. Both services
+        // populate the same pending* state. A null return means Apple
+        // returned an error, the MUT is invalid, or the user has no
+        // listening history yet — in all cases we proceed to the tier
+        // picker rather than blocking onboarding, but set a warning
+        // state so the user understands why Browse starts sparse.
         const taste = await fetchAppleMusicTaste(musicUserToken);
         if (taste) {
-          setPendingSpotifyArtists(taste.topArtists);
-          setPendingSpotifyTracks(taste.topTracks);
+          setPendingTopArtists(taste.topArtists);
+          setPendingTopTracks(taste.topTracks);
           if (taste.displayName) setPendingDisplayName(taste.displayName);
           setPendingArtistImages(taste.artistImages);
           setPendingArtistIds(taste.artistIds);
@@ -166,11 +163,11 @@ export default function Connect() {
     const profile: UserProfile = {
       streamingService,
       spotifyDisplayName: pendingDisplayName || undefined,
-      spotifyTopArtists: pendingSpotifyArtists || undefined,
-      spotifyTopTracks: pendingSpotifyTracks || undefined,
-      spotifyArtistImages: Object.keys(pendingArtistImages).length ? pendingArtistImages : undefined,
-      spotifyArtistIds: Object.keys(pendingArtistIds).length ? pendingArtistIds : undefined,
-      spotifyTrackImages: pendingTrackImages.length ? pendingTrackImages : undefined,
+      topArtists: pendingTopArtists || undefined,
+      topTracks: pendingTopTracks || undefined,
+      artistImages: Object.keys(pendingArtistImages).length ? pendingArtistImages : undefined,
+      artistIds: Object.keys(pendingArtistIds).length ? pendingArtistIds : undefined,
+      trackImages: pendingTrackImages.length ? pendingTrackImages : undefined,
       lastFmUsername: lastFmUsername.trim() || undefined,
       calculatedTier: t,
     };
@@ -215,7 +212,7 @@ export default function Connect() {
                   <div className="flex flex-col gap-3 w-full">
 
                     {/* Spotify — connect or show connected */}
-                    {!pendingSpotifyArtists ? (
+                    {!pendingTopArtists ? (
                       <button onClick={handleConnectSpotify} disabled={spotifyConnecting} className="flex items-center gap-4 w-full rounded-2xl border bg-foreground/5 px-5 py-4 text-left font-semibold text-foreground transition-all duration-200 disabled:opacity-70 border-green-500/40 hover:border-green-500 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)]">
                         <img src={spotifyLogo} alt="Spotify" className="w-8 h-8 object-contain" />
                         <span className="flex-1">Spotify</span>
@@ -226,7 +223,7 @@ export default function Connect() {
                         <img src={spotifyLogo} alt="Spotify" className="w-8 h-8 object-contain" />
                         <div className="flex-1 min-w-0">
                           <p>Spotify</p>
-                          <p className="text-xs font-normal text-green-400 truncate">Connected · {pendingSpotifyArtists.slice(0, 3).join(", ")}{pendingSpotifyArtists.length > 3 ? "..." : ""}</p>
+                          <p className="text-xs font-normal text-green-400 truncate">Connected · {pendingTopArtists.slice(0, 3).join(", ")}{pendingTopArtists.length > 3 ? "..." : ""}</p>
                         </div>
                         <span className="text-xs font-semibold text-green-400">✓</span>
                       </div>
