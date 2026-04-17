@@ -155,7 +155,7 @@ export async function pickNextTrack(deps: SkipCascadeDeps): Promise<SkipPick | n
     : (profile?.trackImages || []).filter((t) => t.uri && notPlayed(t.artist, t.title));
   if (relaxed.length > 0) {
     const pick = relaxed[Math.floor(Math.random() * relaxed.length)];
-    return { artist: pick.artist, title: pick.title, album: "", uri: pick.uri! };
+    return { artist: pick.artist, title: pick.title, album: "", uri: pick.uri ?? "" };
   }
 
   // P5: Demo track fallback. For Apple users, filter to tracks with an
