@@ -150,6 +150,12 @@ export function useAINuggets(
     if (!artist || !title) return;
     setFromCache(false);
 
+    // Clear stale state from a previous track so SSE appends don't stack
+    // nuggets across track boundaries (the SSE path uses functional
+    // updaters: setNuggets(prev => [...prev, nugget])).
+    setNuggets([]);
+    setSources(new Map());
+
     // ── In-memory cache check ──────────────────────────────────────
     // Include regenerateKey so repeat listens (which bump the key) always
     // miss the cache and trigger fresh generation.

@@ -1056,12 +1056,26 @@ export default function Listen() {
       // handle playback via the Spotify API. Calling resume() too early
       // would briefly play the OLD track. On very slow SDK loads (>2s)
       // this guard expires and resume() acts as a safety net.
-      // TODO: clear trackLoadTimestampRef on Spotify SDK "ready" event
-      // for a more robust handoff instead of a fixed timeout.
       if (Date.now() - trackLoadTimestampRef.current < 2000) return;
       play();
     }
   }, [play, isExternalListenMode, trackUri, player.currentTrackUri]);
+
+  // Delayed safety-net: if the track was loaded but isn't playing after 4s
+  // (autoPlay PUT to Spotify failed silently or the effect above fired
+  // within the 2s guard window), retry play(). This avoids the previous
+  // dead-end where the auto-resume deps didn't re-fire after the guard
+  // expired, leaving the track paused indefinitely.
+  useEffect(() => {
+    if (isExternalListenMode || !trackUri) return;
+    const timer = setTimeout(() => {
+      if (player.currentTrackUri === trackUri && !isPlaying) {
+        console.log("[Listen] Safety-net: track loaded but not playing after 4s — retrying play()");
+        play();
+      }
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [trackUri, isExternalListenMode]);
 
   useEffect(() => {
     if (trackNuggets.length === 0) return;
