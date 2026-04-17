@@ -943,12 +943,34 @@ export default function Listen() {
       // handle playback via the Spotify API. Calling resume() too early
       // would briefly play the OLD track. On very slow SDK loads (>2s)
       // this guard expires and resume() acts as a safety net.
-      // TODO: clear trackLoadTimestampRef on Spotify SDK "ready" event
-      // for a more robust handoff instead of a fixed timeout.
       if (Date.now() - trackLoadTimestampRef.current < 2000) return;
       play();
     }
   }, [play, isExternalListenMode, trackUri, player.currentTrackUri]);
+
+  // Delayed safety-net: if the track was loaded but NEVER started playing
+  // after 4s (autoPlay PUT failed or auto-resume fired in the 2s guard),
+  // retry play(). Skips if the track has played at any point since the URI
+  // changed — so a deliberate pause within 4s won't be force-resumed.
+  const isPlayingRef = useRef(isPlaying);
+  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+  const currentTrackUriRef = useRef(player.currentTrackUri);
+  useEffect(() => { currentTrackUriRef.current = player.currentTrackUri; }, [player.currentTrackUri]);
+  const hasEverPlayedRef = useRef(false);
+  useEffect(() => { hasEverPlayedRef.current = false; }, [trackUri]);
+  useEffect(() => { if (isPlaying) hasEverPlayedRef.current = true; }, [isPlaying]);
+
+  useEffect(() => {
+    if (isExternalListenMode || !trackUri) return;
+    const capturedUri = trackUri;
+    const timer = setTimeout(() => {
+      if (currentTrackUriRef.current === capturedUri && !isPlayingRef.current && !hasEverPlayedRef.current) {
+        console.log("[Listen] Safety-net: track never started after 4s — retrying play()");
+        play();
+      }
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [trackUri, isExternalListenMode, play]);
 
   useEffect(() => {
     if (trackNuggets.length === 0) return;

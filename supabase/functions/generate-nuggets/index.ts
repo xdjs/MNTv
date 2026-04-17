@@ -1587,7 +1587,30 @@ const HALLUCINATED_PUBLISHERS = [
   "music data insights", "internal data", "musicdatainsights",
   "ai music database", "music insights", "artist database",
   "music analytics", "song insights", "track insights",
+  // Domain-pattern hallucinations: Gemini invents plausible-sounding
+  // music databases/platforms that don't exist.
+  "musicmetricsvault", "musicmetrics", "metricsvault",
+  "sonic scroll", "sonicscroll", "the sonic scroll",
+  "music vault", "musicvault", "artist vault",
+  "beat archive", "beatarchive", "sound archive",
+  "track vault", "trackvault", "music archive",
 ];
+
+// Known real music publications — used as a positive signal when deciding
+// whether a publisher is fabricated. NOT a whitelist (unlisted publishers
+// aren't rejected), but an unverified source from a known-real publisher
+// is more trustworthy than one from an unknown domain.
+const KNOWN_REAL_PUBLISHERS = new Set([
+  "spotify", "bandcamp", "soundcloud", "youtube", "apple music",
+  "pitchfork", "rolling stone", "nme", "billboard", "the guardian",
+  "stereogum", "consequence", "the fader", "complex", "xxl",
+  "genius", "allmusic", "discogs", "musicbrainz", "last.fm",
+  "wikipedia", "resident advisor", "ra", "mixmag", "dj mag",
+  "sound on sound", "tape op", "the quietus", "tiny mix tapes",
+  "the wire", "fact", "noisey", "vice", "vulture", "spin",
+  "exclaim", "paste", "under the radar", "clash", "diy",
+  "the line of best fit", "the needle drop", "fantano",
+]);
 
 function validateNuggetQuality(nuggets: GeminiNugget[], artist?: string): { valid: boolean; issues: string[]; hallucinated: boolean; vagueHeadlines: boolean } {
   const issues: string[] = [];
@@ -1846,7 +1869,8 @@ Use this to:
 ACCURACY RULES (non-negotiable):
 - Do NOT fabricate a narrative. If you don't have verified facts, write about what you DO know (even if it's just genre, location, or catalog data).
 - Source type MUST be "youtube", "article", or "interview" — NEVER use "internal-data", "database", or invented types.
-- Publisher MUST be a real publication or platform (e.g., "Bandcamp", "Spotify", "SoundCloud", "YouTube"). NEVER invent publishers like "Music Data Insights".
+- Publisher MUST be a REAL, EXISTING publication or platform (e.g., "Bandcamp", "Spotify", "SoundCloud", "YouTube", "Pitchfork", "Rolling Stone"). NEVER invent publisher names or domains. If you cannot name a real publisher, use "Spotify" (you always have Spotify catalog data).
+- NEVER invent studio names, engineer names, collaborator names, or anecdotes. If you don't know the real studio, don't name one. If you don't know the engineer, don't name one. Fabricated specifics (fake names, fake studios, fake incidents) are worse than honest generality.
 - Do NOT frame lack of information as a deliberate artistic choice (e.g., "operates as a digital ghost", "deliberate anti-persona"). A small artist is not automatically mysterious.
 - For the track nugget: write about the artist's creative context, NOT the track's sound or mood.
 
@@ -2853,12 +2877,8 @@ Return ONLY valid JSON:
     console.timeEnd("[Timing] Gemini (Curator + Writer)"); _te("gemini");
     } else {
       // SSE path: rawNuggets populated inside the streaming IIFE below.
-      // groundingChunks stays empty on this path — the per-nugget Writer
-      // calls happen inside the IIFE and the resulting grounding metadata
-      // isn't aggregated here. assembleNugget's realChunks fallback
-      // therefore only resolves against Exa citations on SSE requests;
-      // the Google-search grounding fallback is batch-only. If this
-      // becomes load-bearing, thread chunks out of the IIFE.
+      // groundingChunks starts empty but is populated incrementally as
+      // each per-nugget Writer call returns grounding metadata.
       rawNuggets = [];
       groundingChunks = [];
     }
@@ -3329,6 +3349,14 @@ Return ONLY valid JSON:
                       }
                       throw new Error(`Empty Gemini response for ${def.kind}`);
                     }
+                    // Capture per-nugget grounding chunks so assembleNugget's
+                    // source-resolution chain can verify URLs against real
+                    // Google Search results (previously SSE-only gap).
+                    const perNuggetChunks = data.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+                    if (perNuggetChunks.length > 0) {
+                      groundingChunks.push(...perNuggetChunks);
+                      console.log(`[SSE] ${def.kind}: ${perNuggetChunks.length} grounding chunks captured`);
+                    }
                     const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
                     const parsed = JSON.parse(cleaned);
                     nuggetData = parsed.nugget || (parsed.nuggets?.[0]);
@@ -3383,6 +3411,17 @@ Return ONLY valid JSON:
                 if (HALLUCINATED_PUBLISHERS.some(hp => publisher.includes(hp))) {
                   console.log(`[SSE] Skipping hallucinated publisher: ${def.kind}`);
                   continue;
+                }
+                // Unverified source + unknown publisher = likely fabricated.
+                // assembleNugget sets verified=false when no Exa citation or
+                // grounding chunk matched — if the publisher also isn't a
+                // known real publication, Gemini almost certainly invented it.
+                if (isSparseData && assembled.source?.verified === false) {
+                  const pubNormalized = publisher.toLowerCase().replace(/^(the |www\.)/, "").replace(/\.(com|net|org|io|xyz)$/, "");
+                  if (!KNOWN_REAL_PUBLISHERS.has(pubNormalized) && !KNOWN_REAL_PUBLISHERS.has(publisher.toLowerCase())) {
+                    console.log(`[SSE] Skipping unverified source from unknown publisher "${assembled.source.publisher}" for sparse artist: ${def.kind}`);
+                    continue;
+                  }
                 }
 
                 // ── Stream immediately ──
