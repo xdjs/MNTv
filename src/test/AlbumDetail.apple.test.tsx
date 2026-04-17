@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, waitFor } from "@testing-library/react";
+import { render, waitFor, act } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 
 // Mock supabase BEFORE importing AlbumDetail so the component picks up
@@ -33,7 +33,7 @@ function fakeAlbumResponse(id: string, name: string, artistId: string, artistNam
       tracks: [],
     },
     error: null,
-  } as unknown as ReturnType<typeof supabase.functions.invoke> extends Promise<infer R> ? R : never;
+  } as any;
 }
 
 function renderAt(path: string) {
@@ -94,7 +94,9 @@ describe("AlbumDetail catalog routing", () => {
   it("bare apple:: with empty album id short-circuits before the edge call", async () => {
     renderAt("/album/apple::");
 
-    await new Promise((r) => setTimeout(r, 10));
+    // Drain pending microtasks/effects deterministically instead of a
+    // timer-based wait, which can race on slow CI runners.
+    await act(async () => {});
     expect(invoke).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, waitFor } from "@testing-library/react";
+import { render, waitFor, act } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 
 // Mock supabase BEFORE importing ArtistProfile so the component picks up
@@ -32,7 +32,7 @@ function fakeArtistResponse(id: string, name: string) {
       relatedArtists: [],
     },
     error: null,
-  } as unknown as ReturnType<typeof supabase.functions.invoke> extends Promise<infer R> ? R : never;
+  } as any;
 }
 
 function renderAt(path: string) {
@@ -90,15 +90,15 @@ describe("ArtistProfile catalog routing", () => {
     });
   });
 
-  it("falls back to artistName when no catalog id is in the route (bare apple:: with empty id)", async () => {
-    // apple:: with an empty id bucket returns null from parseAppleArtist,
-    // so neither the apple nor spotify branch renders. Confirms the
-    // parse-null path short-circuits the edge function call entirely.
+  it("bare apple:: with empty id short-circuits before the edge call", async () => {
+    // parseAppleArtist returns null for an empty id bucket, so neither
+    // the apple nor spotify branch renders RealArtistProfile — the
+    // edge function must not fire at all.
     renderAt("/artist/apple::");
 
-    // No time for the effect to fire — useEffect runs synchronously in
-    // the next tick; waitFor gives it a chance before we assert silence.
-    await new Promise((r) => setTimeout(r, 10));
+    // Drain pending microtasks/effects deterministically instead of a
+    // timer-based wait, which can race on slow CI runners.
+    await act(async () => {});
     expect(invoke).not.toHaveBeenCalled();
   });
 });
