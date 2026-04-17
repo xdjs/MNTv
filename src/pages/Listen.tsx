@@ -1061,22 +1061,24 @@ export default function Listen() {
     }
   }, [play, isExternalListenMode, trackUri, player.currentTrackUri]);
 
-  // Delayed safety-net: if the track was loaded but isn't playing after 4s
-  // (autoPlay PUT to Spotify failed silently or the effect above fired
-  // within the 2s guard window), retry play(). Reads isPlaying and
-  // currentTrackUri through refs so the timer sees fresh values without
-  // adding deps that would recreate the timer on every playback tick.
+  // Delayed safety-net: if the track was loaded but NEVER started playing
+  // after 4s (autoPlay PUT failed or auto-resume fired in the 2s guard),
+  // retry play(). Skips if the track has played at any point since the URI
+  // changed — so a deliberate pause within 4s won't be force-resumed.
   const isPlayingRef = useRef(isPlaying);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
   const currentTrackUriRef = useRef(player.currentTrackUri);
   useEffect(() => { currentTrackUriRef.current = player.currentTrackUri; }, [player.currentTrackUri]);
+  const hasEverPlayedRef = useRef(false);
+  useEffect(() => { hasEverPlayedRef.current = false; }, [trackUri]);
+  useEffect(() => { if (isPlaying) hasEverPlayedRef.current = true; }, [isPlaying]);
 
   useEffect(() => {
     if (isExternalListenMode || !trackUri) return;
     const capturedUri = trackUri;
     const timer = setTimeout(() => {
-      if (currentTrackUriRef.current === capturedUri && !isPlayingRef.current) {
-        console.log("[Listen] Safety-net: track loaded but not playing after 4s — retrying play()");
+      if (currentTrackUriRef.current === capturedUri && !isPlayingRef.current && !hasEverPlayedRef.current) {
+        console.log("[Listen] Safety-net: track never started after 4s — retrying play()");
         play();
       }
     }, 4000);
