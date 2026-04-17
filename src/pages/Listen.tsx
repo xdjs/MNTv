@@ -1063,19 +1063,25 @@ export default function Listen() {
 
   // Delayed safety-net: if the track was loaded but isn't playing after 4s
   // (autoPlay PUT to Spotify failed silently or the effect above fired
-  // within the 2s guard window), retry play(). This avoids the previous
-  // dead-end where the auto-resume deps didn't re-fire after the guard
-  // expired, leaving the track paused indefinitely.
+  // within the 2s guard window), retry play(). Reads isPlaying and
+  // currentTrackUri through refs so the timer sees fresh values without
+  // adding deps that would recreate the timer on every playback tick.
+  const isPlayingRef = useRef(isPlaying);
+  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+  const currentTrackUriRef = useRef(player.currentTrackUri);
+  useEffect(() => { currentTrackUriRef.current = player.currentTrackUri; }, [player.currentTrackUri]);
+
   useEffect(() => {
     if (isExternalListenMode || !trackUri) return;
+    const capturedUri = trackUri;
     const timer = setTimeout(() => {
-      if (player.currentTrackUri === trackUri && !isPlaying) {
+      if (currentTrackUriRef.current === capturedUri && !isPlayingRef.current) {
         console.log("[Listen] Safety-net: track loaded but not playing after 4s — retrying play()");
         play();
       }
     }, 4000);
     return () => clearTimeout(timer);
-  }, [trackUri, isExternalListenMode]);
+  }, [trackUri, isExternalListenMode, play]);
 
   useEffect(() => {
     if (trackNuggets.length === 0) return;

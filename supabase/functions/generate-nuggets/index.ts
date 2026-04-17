@@ -1399,7 +1399,6 @@ const HALLUCINATED_PUBLISHERS = [
   "music vault", "musicvault", "artist vault",
   "beat archive", "beatarchive", "sound archive",
   "track vault", "trackvault", "music archive",
-  "resident advisor", // Gemini confuses with Resident Advisor (RA) but invents non-existent articles
 ];
 
 // Known real music publications — used as a positive signal when deciding
@@ -3194,8 +3193,8 @@ Return ONLY valid JSON:
                 // grounding chunk matched — if the publisher also isn't a
                 // known real publication, Gemini almost certainly invented it.
                 if (isSparseData && assembled.source?.verified === false) {
-                  const pubLower = publisher.replace(/^(the |www\.)/, "").replace(/\.(com|net|org|io|xyz)$/, "");
-                  if (!KNOWN_REAL_PUBLISHERS.has(pubLower) && !KNOWN_REAL_PUBLISHERS.has(publisher)) {
+                  const pubNormalized = publisher.toLowerCase().replace(/^(the |www\.)/, "").replace(/\.(com|net|org|io|xyz)$/, "");
+                  if (!KNOWN_REAL_PUBLISHERS.has(pubNormalized) && !KNOWN_REAL_PUBLISHERS.has(publisher.toLowerCase())) {
                     console.log(`[SSE] Skipping unverified source from unknown publisher "${assembled.source.publisher}" for sparse artist: ${def.kind}`);
                     continue;
                   }
