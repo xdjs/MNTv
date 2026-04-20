@@ -211,11 +211,14 @@ serve(async (req) => {
 
       try {
         // Step 1: Generate nuggets via Gemini
+        // No Authorization header needed — generate-nuggets has
+        // verify_jwt = false and doesn't read the caller's auth.
+        // (The old Bearer header broke with the new sb_secret_* key
+        // format, which isn't a JWT.)
         const generateRes = await fetch(`${SUPABASE_URL}/functions/v1/generate-nuggets`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
           },
           body: JSON.stringify({
             artist: track.artist,
