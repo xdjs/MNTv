@@ -1796,6 +1796,19 @@ async function generateWithGemini(
     .map((v, i) => `[VIDEO ${i}] "${v.title}" by ${v.channelTitle} (videoId: ${v.videoId})`)
     .join("\n");
 
+  // Sparse-data focus overrides: when verified data is thin, the tier-specific
+  // focus prompts (especially nerd) demand specifics Gemini WILL fabricate.
+  // These replacements work with what we actually know.
+  const effectiveArtistFocus = sparseData
+    ? `What do we actually KNOW about ${artist}? Lead with verifiable details: their city, scene, release history, platform presence, genre lineage, or any real collaborators found in the research. Do NOT invent engineer names, studio names, gear models, or anecdotes. If the research is thin, trace their genre lineage — what tradition does their sound come from, what scene or city connects them to other artists?`
+    : tierConfig.artistFocus;
+  const effectiveTrackFocus = sparseData
+    ? `Write about the artist's creative context, NOT the track's production specifics. Do NOT name specific gear, signal chains, engineers, or studio techniques unless they appear in the research. Instead: what's the story of this artist making music? What's their creative setup, their scene, their trajectory?`
+    : tierConfig.trackFocus;
+  const effectiveDiscoveryFocus = sparseData
+    ? `Recommend an artist with a CONCRETE, verifiable link — same city, same label, same micro-genre, shared producer found in the research. NOT "similar vibe." The recommended artist MUST exist on Spotify.`
+    : tierConfig.discoveryFocus;
+
   // Depth tier instructions
   let depthInstruction: string;
   if (listenCount <= 1) {
@@ -2143,12 +2156,12 @@ ${buildWriterNonNegotiables(artist)}
 STRUCTURE — exactly 3 nuggets:
 1. **artist** (kind: "artist"): ${applyCollabBias
       ? `Focus on the collaboration behind this track. Key creative partners: ${collabsForPrompt.join("; ")}. ONLY discuss work on "${title}" — do NOT reference other tracks or albums by ${artist}. Tell the story of their creative relationship — how they connected, what each brought to the table, and how this collaboration shaped the music. ${tier === "nerd" ? "Include specific production roles, studio dynamics, and technical contributions." : "Name specific people and moments."}`
-      : tierConfig.artistFocus}. listenFor: false.
+      : effectiveArtistFocus}. listenFor: false.
 2. **track OR context** — YOUR CHOICE based on what's most interesting:
-   - Use kind "track" (listenFor: true) if you have a specific, surprising story about how "${title}" was made — recording, production, personnel, origin. ${tierConfig.trackFocus}
+   - Use kind "track" (listenFor: true) if you have a specific, surprising story about how "${title}" was made — recording, production, personnel, origin. ${effectiveTrackFocus}
    - Use kind "context" (listenFor: false) if a different artist story would be more compelling — a separate chapter of their career that nugget 1 didn't cover.${curatedFacts.trackFacts.length === 0 ? `\n   No verified track facts exist, so "context" is likely the stronger choice. Pick from VERIFIED ARTIST FACTS — choose the most surprising fact NOT used in nugget 1. Do NOT describe the track's sound/mood/atmosphere.` : ""}
    Pick whichever makes the stronger nugget. If in doubt, pick "track".
-3. **discovery** (kind: "discovery"): ${tierConfig.discoveryFocus}. Be opinionated like a knowledgeable friend. listenFor: false.
+3. **discovery** (kind: "discovery"): ${effectiveDiscoveryFocus}. Be opinionated like a knowledgeable friend. listenFor: false.
    HONESTY RULE: Only claim a connection you can verify from the research. If the source says "had demos with" or "worked on unreleased material," do NOT write "you've already heard their work on X" — that implies released music. State exactly what the source says.
 ${applyCollabBias ? `\nANTI-SATURATION RULE (MANDATORY):
 - Nugget 1 already covers: ${collabNames.join(", ")}.
@@ -2219,12 +2232,12 @@ STRUCTURE — exactly 3 nuggets:
       ? `Focus on the collaboration behind this track. Key creative partners: ${collabsForPrompt.join("; ")}. ONLY discuss work on "${title}" — do NOT reference other tracks or albums by ${artist}. Tell the story of their creative relationship — how they connected, what each brought to the table, and how this collaboration shaped the music. ${tier === "nerd" ? "Include specific production roles, studio dynamics, and technical contributions." : "Name specific people and moments."}`
       : ((tier === "curious" || tier === "nerd") && hasExaResearch
         ? `LEAD WITH COLLABORATORS. If the research mentions collaborators, featured artists, producers, engineers, or creative partners who worked with ${artist}, make THIS nugget about them — name the people, how they connected, what they created together. Collaborators are more interesting than origin stories. Save biography for nugget 2.`
-        : tierConfig.artistFocus)}. listenFor: false.
+        : effectiveArtistFocus)}. listenFor: false.
 2. **track OR context** — YOUR CHOICE based on what's most interesting:
-   - Use kind "track" (listenFor: true) if you have a specific, surprising story about how "${title}" was made — recording, production, personnel, origin. ${tierConfig.trackFocus}
+   - Use kind "track" (listenFor: true) if you have a specific, surprising story about how "${title}" was made — recording, production, personnel, origin. ${effectiveTrackFocus}
    - Use kind "context" (listenFor: false) if a different artist story would be more compelling — a separate chapter of their career that nugget 1 didn't cover.${trackSearchSkipped ? `\n   No track-specific articles exist, so "context" is likely the stronger choice. Pick the most surprising fact NOT used in nugget 1. Do NOT describe the track's sound/mood/atmosphere.` : ""}${(tier === "curious" || tier === "nerd") && hasExaResearch ? `\n   If nugget 1 covers collaborators, use nugget 2 for ${artist}'s origin story or career turning point instead.` : ""}
    Pick whichever makes the stronger nugget. If in doubt, pick "track".
-3. **discovery** (kind: "discovery"): ${tierConfig.discoveryFocus}. listenFor: false.
+3. **discovery** (kind: "discovery"): ${effectiveDiscoveryFocus}. listenFor: false.
    HONESTY RULE: Only claim a connection you can verify from the research. If the source says "had demos with" or "worked on unreleased material," do NOT write "you've already heard their work on X" — that implies released music. State exactly what the source says.${(tier === "curious" || tier === "nerd") ? `\n\nNO-REPEAT RULE: Nugget 3 (discovery) MUST NOT recommend someone already discussed in nuggets 1 or 2. Collaborators and artists in ${artist}'s circle are great picks — just make sure they weren't already the focus of an earlier nugget.` : ""}
 ${applyCollabBias ? `\nANTI-SATURATION RULE (MANDATORY):
 - Nugget 1 already covers: ${collabNames.join(", ")}.
@@ -3288,10 +3301,12 @@ Return ONLY valid JSON:
               const generatedHeadlines: string[] = [];
 
               // ── Step 3: Define the 3 nugget kinds ──
+              // effectiveArtistFocus / effectiveTrackFocus / effectiveDiscoveryFocus
+              // are set earlier — they swap in sparse-safe prompts when data is thin.
               const nuggetDefs = [
-                { kind: "artist", focus: tierConfig.artistFocus, listenFor: false, includeArtistSummary: true },
-                { kind: "track", focus: tierConfig.trackFocus, listenFor: true, includeArtistSummary: false },
-                { kind: "discovery", focus: tierConfig.discoveryFocus, listenFor: false, includeArtistSummary: false },
+                { kind: "artist", focus: effectiveArtistFocus, listenFor: false, includeArtistSummary: true },
+                { kind: "track", focus: effectiveTrackFocus, listenFor: true, includeArtistSummary: false },
+                { kind: "discovery", focus: effectiveDiscoveryFocus, listenFor: false, includeArtistSummary: false },
               ];
 
               let streamedIndex = 0;
