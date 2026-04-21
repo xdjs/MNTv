@@ -19,7 +19,7 @@ export const CONSTITUTION_WRITER_RULES: WriterRule[] = [
   (artist: string) => `SWAP TEST: if you can replace "${artist}" with any other artist and the sentence still works, DELETE IT. Every sentence must contain a detail that ONLY applies to THIS artist.`,
   `Every nugget connects two things: artist↔person, song↔moment, track↔place. An isolated fact is not a nugget.`,
   `If the average fan already knows it, skip it. Wikipedia's first paragraph is not a nugget. Novelty is non-negotiable.`,
-  `Brevity: 1-2 sentences per nugget. Say it once, say it vividly, stop.`,
+  `Brevity with weight: every word must carry meaning. No filler, no soft language. If a sentence doesn't add a specific detail, cut it.`,
   (artist: string) => `Do NOT recommend artists who share ANY part of ${artist}'s name.`,
   `Do NOT use fabricated publisher names like "General Knowledge" or "Music Analysis". Use the artist's real website, Bandcamp, Spotify, or a real music publication.`,
 ];
@@ -28,7 +28,7 @@ export const CONSTITUTION_SCORING_CRITERIA = {
   specificity: 2,   // contains proper noun beyond artist name
   connection: 2,    // links two distinct entities
   novelty: 2,       // not a biography opener pattern
-  brevity: 2,       // text <= 80 words
+  brevity: 2,       // text <= 120 words
   realSource: 1,    // source not hallucinated
   curiosityGap: 1,  // headline passes vague-pattern checks
 } as const;

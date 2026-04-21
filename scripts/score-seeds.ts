@@ -19,7 +19,7 @@ const VAGUE_HEADLINE_NOUNS = ["digital footprint", "artistic journey", "creative
 
 const VAGUE_HEADLINE_VERBS = ["takes shape", "comes to life", "comes alive", "takes flight", "takes center stage", "takes root", "emerges", "unfolds", "evolves", "continues", "begins", "shines through"];
 
-const VAGUE_PATTERNS = [/^the story behind\b/i, /^where .+ meets\b/i, /^a deeper look at\b/i, /^beyond the\b/i, /^inside the\b/i, /^more than just a\b/i, /^how .+ is reshaping\b/i, /\bunique approach\b/i, /^an? emerging voice\b/i, /^the rise of\b/i, /^exploring the\b/i, /^the art of\b/i, /^a journey through\b/i, /^the beauty of\b/i, /^unveiling\b/i, /^the power of\b/i, /^a new chapter\b/i, /\bthis artist\b/i, /\bthis track\b/i, /\bthis song\b/i, /\bthis musician\b/i, /^the (sound|music|art) of\b/i, /\bblending .+ and\b/i, /\bpushes? (?:the )?boundar/i, /\bdefies? (?:easy )?categori/i];
+const VAGUE_PATTERNS = [/^the story behind\b/i, /^where .+ meets\b/i, /^a deeper look at\b/i, /^beyond the\b/i, /^inside the\b/i, /^more than just a\b/i, /^how .+ is reshaping\b/i, /\bunique approach\b/i, /^an? emerging voice\b/i, /^the rise of\b/i, /^exploring the\b/i, /^the art of\b/i, /^a journey through\b/i, /^the beauty of\b/i, /^unveiling\b/i, /^the power of\b/i, /^a new chapter\b/i, /\bthis artist\b/i, /\bthis musician\b/i, /^the (sound|music|art) of\b/i, /\bblending .+ and\b/i, /\bpushes? (?:the )?boundar/i, /\bdefies? (?:easy )?categori/i];
 
 const BIOGRAPHY_OPENERS = [/^(born|raised|grew up|hails from|is a|comes from|was born|originally from)\b/i];
 
@@ -40,7 +40,7 @@ function extractProperNouns(text: string, artistLower: string): string[] {
 function scoreNugget(n: any, artistLower: string): { score: number; failures: string[] } {
   let score = 0;
   const failures: string[] = [];
-  const text = n.text || "";
+  const text = `${n.headline || ""} ${n.text || ""}`;
   const headline = (n.headline || "").toLowerCase();
   const properNouns = extractProperNouns(text, artistLower);
 
@@ -48,7 +48,7 @@ function scoreNugget(n: any, artistLower: string): { score: number; failures: st
   if (properNouns.length >= 2) score += SCORING.connection; else failures.push("connection");
   if (!BIOGRAPHY_OPENERS.some(p => p.test(headline))) score += SCORING.novelty; else failures.push("novelty");
   const wc = text.split(/\s+/).filter(Boolean).length;
-  if (wc <= 80) score += SCORING.brevity; else failures.push(`brevity(${wc}w)`);
+  if (wc <= 120) score += SCORING.brevity; else failures.push(`brevity(${wc}w)`);
 
   const publisher = (n.source?.publisher || "").toLowerCase();
   const sourceType = (n.source?.type || "").toLowerCase();

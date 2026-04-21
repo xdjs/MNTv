@@ -1683,7 +1683,7 @@ function validateNuggetQuality(nuggets: GeminiNugget[], artist?: string): { vali
       /^an? emerging voice\b/i, /^the rise of\b/i, /^exploring the\b/i,
       /^the art of\b/i, /^a journey through\b/i, /^the beauty of\b/i,
       /^unveiling\b/i, /^the power of\b/i, /^a new chapter\b/i,
-      /\bthis artist\b/i, /\bthis track\b/i, /\bthis song\b/i, /\bthis musician\b/i,
+      /\bthis artist\b/i, /\bthis musician\b/i,
       /\byou['\u2019]ve (?:likely |probably )?heard\b/i, /\byou['\u2019]ve already heard\b/i, /\byou already know\b/i,
       /^the (sound|music|art) of\b/i, /\bblending .+ and\b/i,
       /\bpushes? (?:the )?boundar/i, /\bdefies? (?:easy )?categori/i,
@@ -1719,14 +1719,14 @@ function validateNuggetQuality(nuggets: GeminiNugget[], artist?: string): { vali
     }
 
     // ── Constitution scoring (soft checks, logged not blocking) ────────
-    const nuggetText = n.text || "";
+    const nuggetText = `${n.headline || ""} ${n.text || ""}`;
     const properNouns = extractProperNouns(nuggetText);
     if (properNouns.length >= 1) score += CONSTITUTION_SCORING_CRITERIA.specificity;
     if (properNouns.length >= 2) score += CONSTITUTION_SCORING_CRITERIA.connection;
     const isNovel = !BIOGRAPHY_OPENERS.some(pat => pat.test(headlineLower));
     if (isNovel) score += CONSTITUTION_SCORING_CRITERIA.novelty;
     const wordCount = nuggetText.split(/\s+/).filter(Boolean).length;
-    if (wordCount <= 80) score += CONSTITUTION_SCORING_CRITERIA.brevity;
+    if (wordCount <= 120) score += CONSTITUTION_SCORING_CRITERIA.brevity;
     if (!hasHallucinatedSource) score += CONSTITUTION_SCORING_CRITERIA.realSource;
     if (!hasVagueHeadline) score += CONSTITUTION_SCORING_CRITERIA.curiosityGap;
     constitutionScores.push(score);
@@ -3312,7 +3312,9 @@ Return ONLY valid JSON:
                   ? `\nDo NOT repeat or closely rephrase any of these previously shown headlines:\n${allPrevHeadlines.map(h => `- "${h}"`).join("\n")}`
                   : "";
 
-                const singlePrompt = `You are a music journalist. The listener is PLAYING "${title}" by ${artist}${album ? ` from "${album}"` : ""} RIGHT NOW.
+                const singlePrompt = `${CONSTITUTION_PREAMBLE}
+
+You are a music journalist. The listener is PLAYING "${title}" by ${artist}${album ? ` from "${album}"` : ""} RIGHT NOW.
 
 ${researchSection}
 
@@ -3469,6 +3471,11 @@ Return ONLY valid JSON:
                     continue;
                   }
                 }
+
+                // ── Constitution score (soft, logged only) ──
+                const sseValidation = validateNuggetQuality([nuggetData], artist);
+                const cScore = sseValidation.constitutionScores?.[0] ?? 0;
+                console.log(`[SSE] Constitution score for ${def.kind}: ${cScore}/${MAX_CONSTITUTION_SCORE}`);
 
                 // ── Stream immediately ──
                 streamedNuggets.push(assembled);
