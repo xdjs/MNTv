@@ -1,14 +1,51 @@
 /**
- * Spotify PKCE OAuth — fully client-side.
- * Client ID is public by spec; stored as VITE_SPOTIFY_CLIENT_ID.
- * Token exchange is done directly with Spotify (no edge function needed for PKCE).
- * Only the taste-profile fetch hits our edge function (backend needs it for RAG).
+ * Spotify auth helpers.
+ *
+ * `signInWithSpotify` is the Supabase-managed OAuth entry point (new): it
+ * delegates the whole OAuth dance to Supabase's built-in Spotify provider.
+ * After the redirect back to /connect, AuthContext's onAuthStateChange
+ * bridges `session.provider_token` into the existing localStorage shape
+ * so the Web Playback SDK + existing consumers keep working (see
+ * AuthContext.tsx's bridge helper once Task 4 lands).
+ *
+ * `initiateSpotifyAuth` is the legacy client-side PKCE flow. Still used
+ * today; scheduled for deletion in Task 8 once Task 6 wires Connect to
+ * the new helper.
+ *
+ * `refreshSpotifyToken` remains because Supabase doesn't auto-refresh
+ * provider tokens and we still need the Web Playback SDK to hit a valid
+ * token every hour. Task 3.5 adds a server-side refresh path.
  */
 
 import { supabase } from "@/integrations/supabase/client";
 
 const SPOTIFY_CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID as string;
 const SPOTIFY_SCOPES = "user-top-read user-read-recently-played user-read-private streaming user-read-playback-state user-modify-playback-state";
+
+// ── Supabase-managed OAuth (new) ───────────────────────────────────────────────
+
+/**
+ * Trigger Supabase's Spotify OAuth provider. Supabase redirects the user
+ * to accounts.spotify.com, handles the callback at its own URL, exchanges
+ * the code server-side with client_secret, and then redirects back to our
+ * /connect page with a real Supabase session populated.
+ *
+ * Scopes are passed per-call (not configured in the Supabase dashboard)
+ * so rotating scopes doesn't require a dashboard edit.
+ */
+export async function signInWithSpotify(): Promise<void> {
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "spotify",
+    options: {
+      scopes: SPOTIFY_SCOPES,
+      redirectTo: `${window.location.origin}/connect`,
+    },
+  });
+  if (error) {
+    console.error("[signInWithSpotify] failed:", error);
+    throw error;
+  }
+}
 
 // Exported so useSignOut can clear them on logout without hardcoding the
 // strings. Drift safety: if these keys ever rename, all writers and
