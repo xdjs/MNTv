@@ -29,3 +29,24 @@ verify_jwt = false
 
 [functions.youtube-search]
 verify_jwt = false
+
+[functions.spotify-artist]
+verify_jwt = false
+
+[functions.spotify-album]
+verify_jwt = false
+
+[functions.spotify-resolve]
+verify_jwt = false
+
+[functions.apple-dev-token]
+verify_jwt = false
+
+[functions.apple-taste]
+verify_jwt = false
+
+[functions.youtube-taste]
+verify_jwt = false
+
+[functions.bookmark-nugget]
+verify_jwt = false

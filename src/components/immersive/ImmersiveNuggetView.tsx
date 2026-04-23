@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Loader2 } from "lucide-react";
+import { Loader2, Heart } from "lucide-react";
 import { usePlayer } from "@/contexts/PlayerContext";
 import { supabase } from "@/integrations/supabase/client";
 import type { Nugget, Source } from "@/mock/types";
@@ -9,6 +9,7 @@ import TypewriterText from "./TypewriterText";
 import SwipeableNuggetStack from "./SwipeableNuggetStack";
 import MiniPlayer from "./MiniPlayer";
 import { useNuggetPacer } from "./useNuggetPacer";
+import { useBookmarks } from "@/hooks/useBookmarks";
 
 interface ImmersiveNuggetViewProps {
   nuggets: Nugget[];
@@ -81,6 +82,9 @@ export default function ImmersiveNuggetView({
   useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
   const initialUnlockDoneRef = useRef(false);
   const trackKey = `${trackTitle}::${artist}`;
+
+  // Bookmarking — optimistic toggle, server-verified identity via edge fn.
+  const bookmarks = useBookmarks();
 
   // ── Reset on track change ──────────────────────────────────────────
   // Pacer state (queue, timer, prevUnlockedCount) is reset by useNuggetPacer
@@ -347,6 +351,37 @@ export default function ImmersiveNuggetView({
                 : deepDiveRateLimited ? "Limit reached"
                 : deepDiveText ? "Go deeper" : "Tell me more"}
             </button>
+            {activeNugget && bookmarks.signedIn && (() => {
+              const saved = bookmarks.isBookmarked(
+                activeNugget.headline || activeNugget.text,
+                activeNugget.trackId,
+                activeNugget.kind,
+              );
+              return (
+                <button
+                  aria-label={saved ? "Remove bookmark" : "Save nugget"}
+                  className={`text-xs px-3 py-1.5 rounded-full active:scale-95 transition-transform flex items-center gap-1.5 ${
+                    saved ? "bg-rose-500/20 text-rose-400" : "bg-white/10 text-white/60"
+                  }`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    bookmarks.toggle({
+                      trackId: activeNugget.trackId,
+                      artist,
+                      title: trackTitle,
+                      kind: activeNugget.kind,
+                      headline: activeNugget.headline || activeNugget.text,
+                      body: activeNugget.text,
+                      source: activeSource ?? null,
+                      imageUrl: activeNugget.imageUrl ?? undefined,
+                    });
+                  }}
+                >
+                  <Heart className="w-3 h-3" fill={saved ? "currentColor" : "none"} />
+                  {saved ? "Saved" : "Save"}
+                </button>
+              );
+            })()}
           </div>
 
           {activeSource && (
@@ -355,7 +390,7 @@ export default function ImmersiveNuggetView({
         </div>
       </div>
     );
-  }, [getNuggetImage, activeNugget, activeSource, isTypewriterDone, handleTypewriterComplete, deepDiveText, deepDiveFollowUp, deepDiveLoading, deepDiveRateLimited, handleTellMeMore]);
+  }, [getNuggetImage, activeNugget, activeSource, isTypewriterDone, handleTypewriterComplete, deepDiveText, deepDiveFollowUp, deepDiveLoading, deepDiveRateLimited, handleTellMeMore, bookmarks, artist, trackTitle]);
 
   return (
     <motion.div

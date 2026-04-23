@@ -17,6 +17,7 @@ const ArtistProfile = lazy(() => import("./pages/ArtistProfile"));
 const AlbumDetail = lazy(() => import("./pages/AlbumDetail"));
 const Listen = lazy(() => import("./pages/Listen"));
 const SpotifyCallback = lazy(() => import("./pages/SpotifyCallback"));
+const Profile = lazy(() => import("./pages/Profile"));
 import { getStoredProfile } from "./hooks/useMusicNerdState";
 import { AuthProvider } from "./contexts/AuthContext";
 import { PlayerProvider } from "./contexts/PlayerContext";
@@ -75,6 +76,7 @@ function AnimatedRoutes() {
             <Route path="/artist/:artistId" element={<ProtectedRoute><ArtistProfile /></ProtectedRoute>} />
             <Route path="/album/:albumId" element={<ProtectedRoute><AlbumDetail /></ProtectedRoute>} />
             <Route path="/listen/*" element={<ProtectedRoute><Listen /></ProtectedRoute>} />
+            <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
 
             {/* Companion — eagerly loaded (QR-scanned on mobile, must be instant) */}
             <Route path="/companion/:trackId" element={<Companion />} />

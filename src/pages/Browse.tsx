@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, LogOut } from "lucide-react";
+import { Search, LogOut, Heart } from "lucide-react";
+import { Link } from "react-router-dom";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import TileRow from "@/components/TileRow";
 import SearchOverlay from "@/components/SearchOverlay";
@@ -258,6 +259,14 @@ export default function Browse() {
               <Search size={16} />
               <span className="hidden md:inline" style={{ fontFamily: "'Nunito Sans', sans-serif" }}>Search</span>
             </button>
+            <Link
+              to="/profile"
+              title="Saved nuggets"
+              aria-label="Saved nuggets"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-foreground/5 text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground"
+            >
+              <Heart size={16} />
+            </Link>
             <button
               onClick={handleSignOut}
               title="Sign out"
