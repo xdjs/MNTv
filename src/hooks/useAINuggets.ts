@@ -137,6 +137,9 @@ export function useAINuggets(
   const [nuggets, setNuggets] = useState<Nugget[]>([]);
   const [sources, setSources] = useState<Map<string, Source>>(new Map());
   const [loading, setLoading] = useState(true);
+  // Sync the two state slices into refs (below, after the state declarations
+  // and their refs are created) — see nuggetsRef / sourcesRef usage in the
+  // wave 2/3 upsert.
   const [error, setError] = useState<string | null>(null);
   const [listenCount, setListenCount] = useState(1);
   const [artistSummary, setArtistSummary] = useState<string | null>(null);
@@ -160,6 +163,10 @@ export function useAINuggets(
   // previousNuggets for dedup across waves.
   const currentWaveRef = useRef(1);
   const waveInFlightRef = useRef(false);
+  // Cooldown timestamp — when a wave attempt fails we hold off retrying for
+  // 30 s so a transient server error doesn't fire a new request every 500 ms
+  // (the effect re-evaluates on every currentTime tick).
+  const waveCooldownUntilRef = useRef(0);
   // Mirror waveInFlightRef as state so the UI can surface a "more coming" pill.
   const [waveLoading, setWaveLoading] = useState(false);
   // Track the current trackId via ref so in-flight wave generations can
@@ -167,10 +174,19 @@ export function useAINuggets(
   // a different track's nuggets.
   const currentTrackIdRef = useRef(trackId);
   currentTrackIdRef.current = trackId;
+  // Sync nuggets + sources into refs so the wave 2/3 upsert sees the
+  // latest arrays even if an SSE chunk lands between effect-fire and the
+  // post-request cache upsert (previously the upsert closed over stale
+  // state and could drop those SSE-delivered sources from the cache row).
+  const nuggetsRef = useRef<Nugget[]>([]);
+  const sourcesRef = useRef<Map<string, Source>>(new Map());
+  nuggetsRef.current = nuggets;
+  sourcesRef.current = sources;
   // Reset wave state when the track changes.
   useEffect(() => {
     currentWaveRef.current = 1;
     waveInFlightRef.current = false;
+    waveCooldownUntilRef.current = 0;
   }, [trackId, regenerateKey]);
 
   const generate = useCallback(async () => {
@@ -784,6 +800,7 @@ export function useAINuggets(
     if (!isPlaying) return;                         // paused — wait
     if (cancelledRef.current) return;               // track changed / unmount
     if (fromCache) return;                          // cached tracks don't wave-extend
+    if (Date.now() < waveCooldownUntilRef.current) return;  // recent failure, cooldown
 
     const lastTimestamp = Math.max(...nuggets.map((n) => n.timestampSec));
     if (currentTime < lastTimestamp + 5) return;    // user still consuming
@@ -791,7 +808,10 @@ export function useAINuggets(
 
     const nextWave = currentWaveRef.current + 1;
     const waveTrackId = trackId;
-    currentWaveRef.current = nextWave;
+    // Hold off bumping currentWaveRef until we actually get nuggets back —
+    // that way a transient failure on wave 2 doesn't permanently lock the
+    // user out of wave 2 content for the rest of the session.
+    let advancedWaveRef = false;
     waveInFlightRef.current = true;
     setWaveLoading(true);
     if (import.meta.env.DEV) console.log(`[NuggetWave ${nextWave}] firing — ${Math.floor(durationSec - currentTime)}s remaining, ${nuggets.length} nuggets so far`);
@@ -856,13 +876,20 @@ export function useAINuggets(
           newSources.forEach((v, k) => next.set(k, v));
           return next;
         });
+        // Only advance the wave counter now that we have new nuggets landed —
+        // see the `let advancedWaveRef` comment above.
+        currentWaveRef.current = nextWave;
+        advancedWaveRef = true;
         if (import.meta.env.DEV) console.log(`[NuggetWave ${nextWave}] appended ${newNuggets.length} nuggets`);
 
-        // Non-fatal: persist the accumulated set for future replays.
+        // Non-fatal: persist the accumulated set for future replays. Read
+        // current state from refs rather than closures so we include any
+        // sources/nuggets that arrived via SSE while this request was in
+        // flight.
         try {
           const dbCacheKey = `${trackId}::${tier}`;
-          const allNuggets = [...nuggets, ...newNuggets];
-          const allSources = new Map(sources);
+          const allNuggets = [...nuggetsRef.current, ...newNuggets];
+          const allSources = new Map(sourcesRef.current);
           newSources.forEach((v, k) => allSources.set(k, v));
           const cacheSourcesObj: Record<string, Source> = {};
           allSources.forEach((src, key) => { cacheSourcesObj[key] = src; });
@@ -879,6 +906,12 @@ export function useAINuggets(
       } finally {
         waveInFlightRef.current = false;
         setWaveLoading(false);
+        // If we exited without advancing the wave counter, the attempt
+        // either errored or came back empty. Apply the cooldown so the
+        // effect doesn't re-fire immediately on the next currentTime tick.
+        if (!advancedWaveRef) {
+          waveCooldownUntilRef.current = Date.now() + 30_000;
+        }
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- nuggets/sources read at trigger time, not subscribed

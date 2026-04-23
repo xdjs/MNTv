@@ -1,6 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getAppleDeveloperToken } from "../_shared/apple-token.ts";
 import { CONSTITUTION_PREAMBLE, CONSTITUTION_WRITER_RULES, CONSTITUTION_SCORING_CRITERIA, MAX_CONSTITUTION_SCORE } from "./constitution.ts";
+
+// Admin client for the server-side nugget_cache upsert. Module-level so we
+// don't pay import + client construction on every request. The key fallback
+// covers the legacy SUPABASE_SERVICE_ROLE_KEY name used by older deployments.
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_ADMIN_KEY =
+  Deno.env.get("SUPABASE_SECRET_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const cacheAdminClient = SUPABASE_ADMIN_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_ADMIN_KEY)
+  : null;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -3668,18 +3679,18 @@ Return ONLY valid JSON:
         cacheSources.artistSummary = artistSummary;
         cacheSources.externalLinks = externalLinks;
 
-        const cacheUrl = Deno.env.get("SUPABASE_URL")!;
-        const cacheKey = Deno.env.get("SUPABASE_SECRET_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-        const { createClient: createCacheClient } = await import("https://esm.sh/@supabase/supabase-js@2.49.1");
-        const cacheClient = createCacheClient(cacheUrl, cacheKey);
-        const { error: cacheErr } = await cacheClient.from("nugget_cache").upsert(
-          { track_id: dbCacheKey, nuggets: cacheNuggets, sources: cacheSources, status: "ready" },
-          { onConflict: "track_id" },
-        );
-        if (cacheErr) {
-          console.warn(`[NuggetCache] server upsert failed (non-fatal):`, cacheErr.message);
+        if (!cacheAdminClient) {
+          console.warn("[NuggetCache] server upsert skipped — no admin key configured");
         } else {
-          console.log(`[NuggetCache] server upserted ${cacheNuggets.length} nuggets for ${dbCacheKey.slice(0, 80)}`);
+          const { error: cacheErr } = await cacheAdminClient.from("nugget_cache").upsert(
+            { track_id: dbCacheKey, nuggets: cacheNuggets, sources: cacheSources, status: "ready" },
+            { onConflict: "track_id" },
+          );
+          if (cacheErr) {
+            console.warn(`[NuggetCache] server upsert failed (non-fatal):`, cacheErr.message);
+          } else {
+            console.log(`[NuggetCache] server upserted ${cacheNuggets.length} nuggets for ${dbCacheKey.slice(0, 80)}`);
+          }
         }
       } catch (e) {
         console.warn("[NuggetCache] server upsert threw (non-fatal):", e);

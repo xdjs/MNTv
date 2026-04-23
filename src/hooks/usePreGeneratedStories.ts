@@ -116,13 +116,17 @@ export function usePreGeneratedStories(
 
     (async () => {
       // 1. Bulk-check cache status for all stories in one query.
-      const trackIds = seeded.map((s) => {
-        const uriPart = s.uri ? `::${s.uri}` : "";
-        return `real::${s.artist}::${s.title}::${uriPart}::${tier}`;
-      });
-      // The actual cache key format varies by how Listen constructs it — use a
-      // prefix match (ILIKE) on artist+title+tier to catch existing rows.
-      const likePatterns = seeded.map((s) => `%${s.artist}::${s.title}%::${tier}`);
+      //
+      // The actual cache key format varies by how Listen constructs it — use
+      // a prefix match (ILIKE) on artist+title+tier to catch existing rows.
+      // ILIKE treats `%` and `_` as wildcards, so escape any that appear in
+      // artist/title (Spotify artist names like "50% Off" or "hi_top" would
+      // otherwise match the wrong rows).
+      const escapeIlike = (s: string) =>
+        s.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+      const likePatterns = seeded.map(
+        (s) => `%${escapeIlike(s.artist)}::${escapeIlike(s.title)}%::${tier}`,
+      );
 
       try {
         const { data: rows } = await supabase

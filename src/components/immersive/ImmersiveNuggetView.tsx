@@ -35,21 +35,26 @@ const MAX_DEEP_DIVES_PER_SESSION = 10;
 
 // Pulled out of the nugget-card JSX so the saved-state computation isn't
 // an IIFE inside useCallback's return value (fewer closures to reason about
-// in the memo dep array, easier to read, no perf difference either way).
+// in the memo dep array, easier to read). Takes only the two functions
+// it needs from useBookmarks rather than the whole hook return value, so
+// the component doesn't re-render on unrelated bookmark state changes.
+type BookmarksApi = ReturnType<typeof useBookmarks>;
 function BookmarkButton({
   activeNugget,
   activeSource,
   artist,
   trackTitle,
-  bookmarks,
+  isBookmarked,
+  toggle,
 }: {
   activeNugget: Nugget;
   activeSource: Source | null | undefined;
   artist: string;
   trackTitle: string;
-  bookmarks: ReturnType<typeof useBookmarks>;
+  isBookmarked: BookmarksApi["isBookmarked"];
+  toggle: BookmarksApi["toggle"];
 }) {
-  const saved = bookmarks.isBookmarked(
+  const saved = isBookmarked(
     activeNugget.headline || activeNugget.text,
     activeNugget.trackId,
     activeNugget.kind,
@@ -62,7 +67,7 @@ function BookmarkButton({
       }`}
       onClick={(e) => {
         e.stopPropagation();
-        bookmarks.toggle({
+        toggle({
           trackId: activeNugget.trackId,
           artist,
           title: trackTitle,
@@ -404,7 +409,8 @@ export default function ImmersiveNuggetView({
                 activeSource={activeSource}
                 artist={artist}
                 trackTitle={trackTitle}
-                bookmarks={bookmarks}
+                isBookmarked={bookmarks.isBookmarked}
+                toggle={bookmarks.toggle}
               />
             )}
           </div>
