@@ -1,22 +1,37 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import type { Story } from "@/hooks/usePreGeneratedStories";
+import { usePlayer } from "@/contexts/PlayerContext";
 
-// Per-session visited set so tapped stories go dim (Instagram-style "seen"
-// treatment). Survives page navigation but not a full reload — intentional,
-// since the user may want to revisit a story for its nugget.
+// Persisted visited set: Instagram-style "watched" state. Stories the user
+// has tapped (or is currently playing) get dimmed and move to the end of
+// the rail. Persists across reload for 24h so reopening the app doesn't
+// reset the visual hierarchy.
 const VISITED_KEY = "musicnerd_visited_stories";
-function readVisited(): Set<string> {
+const VISITED_TTL_MS = 24 * 60 * 60 * 1000;
+
+function readVisited(): Map<string, number> {
   try {
-    const raw = sessionStorage.getItem(VISITED_KEY);
-    return new Set(raw ? JSON.parse(raw) : []);
+    const raw = localStorage.getItem(VISITED_KEY);
+    if (!raw) return new Map();
+    const parsed = JSON.parse(raw) as Record<string, number>;
+    const now = Date.now();
+    const out = new Map<string, number>();
+    for (const [k, ts] of Object.entries(parsed)) {
+      if (typeof ts === "number" && now - ts < VISITED_TTL_MS) out.set(k, ts);
+    }
+    return out;
   } catch {
-    return new Set();
+    return new Map();
   }
 }
-function writeVisited(s: Set<string>): void {
-  try { sessionStorage.setItem(VISITED_KEY, JSON.stringify([...s])); } catch { /* noop */ }
+function writeVisited(m: Map<string, number>): void {
+  try {
+    const obj: Record<string, number> = {};
+    m.forEach((v, k) => { obj[k] = v; });
+    localStorage.setItem(VISITED_KEY, JSON.stringify(obj));
+  } catch { /* noop */ }
 }
 
 /**
@@ -45,11 +60,43 @@ function listenHrefForStory(s: Story): string {
 
 export default function StoriesRail({ stories }: StoriesRailProps) {
   const navigate = useNavigate();
-  const [visited, setVisited] = useState<Set<string>>(() => readVisited());
+  const { currentTrack } = usePlayer();
+  const [visited, setVisited] = useState<Map<string, number>>(() => readVisited());
   // Track which stories have JUST flipped to ready so we can pulse them once.
   // Previous-ready state persists in a ref so we don't pulse on every render.
   const prevReadyRef = useRef<Set<string>>(new Set());
   const [justReadyIds, setJustReadyIds] = useState<Set<string>>(new Set());
+
+  // Auto-mark any story as visited if it matches the currently-playing track.
+  // Catches the case where the user navigated to the Listen page via Browse
+  // tiles or search (not the story tap), so the story's visual state still
+  // reflects "you've engaged with this track."
+  useEffect(() => {
+    if (!currentTrack) return;
+    const match = stories.find(
+      (s) =>
+        s.artist.toLowerCase() === currentTrack.artist.toLowerCase() &&
+        s.title.toLowerCase() === currentTrack.title.toLowerCase(),
+    );
+    if (!match) return;
+    setVisited((prev) => {
+      if (prev.has(match.trackKey)) return prev;
+      const next = new Map(prev);
+      next.set(match.trackKey, Date.now());
+      writeVisited(next);
+      return next;
+    });
+  }, [currentTrack?.artist, currentTrack?.title, stories]);
+
+  // Sort unwatched first, watched last — mirrors Instagram's visual hierarchy
+  // where new stories crowd the front and seen ones trail behind.
+  const sorted = useMemo(() => {
+    return [...stories].sort((a, b) => {
+      const av = visited.has(a.trackKey) ? 1 : 0;
+      const bv = visited.has(b.trackKey) ? 1 : 0;
+      return av - bv;
+    });
+  }, [stories, visited]);
 
   useEffect(() => {
     const nowReady = new Set(stories.filter((s) => s.ready).map((s) => s.trackKey));
@@ -78,8 +125,8 @@ export default function StoriesRail({ stories }: StoriesRailProps) {
 
   const handleTap = (s: Story) => {
     setVisited((prev) => {
-      const next = new Set(prev);
-      next.add(s.trackKey);
+      const next = new Map(prev);
+      next.set(s.trackKey, Date.now());
       writeVisited(next);
       return next;
     });
@@ -98,7 +145,7 @@ export default function StoriesRail({ stories }: StoriesRailProps) {
           msOverflowStyle: "none",
         }}
       >
-        {stories.map((s) => {
+        {sorted.map((s) => {
           const isVisited = visited.has(s.trackKey);
           const justReady = justReadyIds.has(s.trackKey);
           return (

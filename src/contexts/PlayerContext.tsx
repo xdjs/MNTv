@@ -339,19 +339,28 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // ── Engine-init safety net ─────────────────────────────────────────
   // Rarely the engine-init effect above fires before profile+token have
   // both settled (race on initial mount), leaving service+token both true
-  // but no engine created. Symptom: Spotify SDK never loads, "track never
-  // started after 4s — retrying play()" logs loop. This poke fires the
-  // token-changed event once after mount so the useSpotifyToken hook
-  // re-syncs and the effect re-runs.
+  // but the Spotify SDK script never loaded. Symptom: "track never started
+  // after 4s — retrying play()" logs loop. Guard checks actual SDK state
+  // because engineRef.current can be truthy while its internal init()
+  // never reached the sdk.scdn.co script append. Pokes the token-changed
+  // events which force useSpotifyToken to re-sync hasSpotifyToken and
+  // re-run the engine-init effect.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const t = setTimeout(() => {
-      if (!engineRef.current && (hasSpotifyToken || hasMusicToken)) {
-        if (import.meta.env.DEV) console.log("[Player] Engine-init safety-net poking token events");
+      const sdkScriptPresent = !!document.querySelector('script[src*="sdk.scdn.co"]');
+      const sdkReady = typeof (window as unknown as { Spotify?: unknown }).Spotify !== "undefined";
+      // Only the Spotify path loads that SDK; Apple MusicKit loads its own
+      // script via a different URL, so check those independently.
+      if (hasSpotifyToken && !sdkScriptPresent && !sdkReady) {
+        if (import.meta.env.DEV) console.log("[Player] Engine-init safety-net poking spotify token");
         window.dispatchEvent(new Event("spotify-token-changed"));
+      }
+      if (hasMusicToken && !(window as unknown as { MusicKit?: unknown }).MusicKit) {
+        if (import.meta.env.DEV) console.log("[Player] Engine-init safety-net poking apple token");
         window.dispatchEvent(new Event("apple-music-token-changed"));
       }
-    }, 1500);
+    }, 1800);
     return () => clearTimeout(t);
   }, [hasSpotifyToken, hasMusicToken]);
 
