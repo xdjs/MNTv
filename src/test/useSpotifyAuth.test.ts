@@ -28,7 +28,7 @@ describe("signInWithSpotify", () => {
     });
   });
 
-  it("calls supabase.auth.signInWithOAuth with Spotify + scopes + redirectTo", async () => {
+  it("calls supabase.auth.signInWithOAuth with Spotify + scopes + redirectTo + show_dialog", async () => {
     await signInWithSpotify();
     expect(supabase.auth.signInWithOAuth).toHaveBeenCalledWith({
       provider: "spotify",
@@ -36,6 +36,12 @@ describe("signInWithSpotify", () => {
         scopes:
           "user-top-read user-read-recently-played user-read-private streaming user-read-playback-state user-modify-playback-state",
         redirectTo: "http://127.0.0.1:8080/connect",
+        // Regression guard: show_dialog must be forwarded so Spotify
+        // re-prompts on every sign-in and scope upgrades take effect.
+        // The original PR #75 migration dropped this and would have
+        // stranded returning users on their pre-migration narrower
+        // grant — Claude's review caught it.
+        queryParams: { show_dialog: "true" },
       },
     });
   });
