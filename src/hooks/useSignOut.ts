@@ -1,11 +1,22 @@
 /**
  * useSignOut — single source of truth for ending a user's session.
  *
+ * Since the Spotify-Supabase OAuth migration landed, `supabase.auth.signOut()`
+ * actually invalidates the JWT server-side — under the legacy anon-only flow
+ * it was a soft no-op because there was nothing to revoke. The local-
+ * storage sweep below remains belt-and-suspenders for the case where the
+ * /auth/v1/logout network call fails (see nukeSupabaseAuthTokens).
+ *
  * Hard reload at the end is intentional: it tears down the Spotify Web
  * Playback SDK + MusicKit JS singletons (which would otherwise keep
  * playing audio into an unauthenticated session) and avoids the
  * ProtectedRoute re-render race that React Router navigate("/") hits
  * when clearProfile fires mid-render.
+ *
+ * The PKCE_STATE_KEY / PKCE_VERIFIER_KEY cleanup is now vestigial — the
+ * new flow doesn't create those sessionStorage entries. Keeping the
+ * sweep covers tabs that had PKCE state in flight at cutover time; Task
+ * 8 removes the imports once the migration settles.
  */
 
 import { useCallback } from "react";
