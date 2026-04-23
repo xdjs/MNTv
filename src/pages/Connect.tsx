@@ -6,9 +6,10 @@ import MusicNerdLogo from "@/components/MusicNerdLogo";
 import { useUserProfile, getStoredProfile } from "@/hooks/useMusicNerdState";
 import type { UserProfile } from "@/mock/types";
 import spotifyLogo from "@/assets/spotify-logo.png";
-import { initiateSpotifyAuth } from "@/hooks/useSpotifyAuth";
+import { signInWithSpotify } from "@/hooks/useSpotifyAuth";
 import { initiateAppleMusicAuth, fetchAppleMusicTaste } from "@/hooks/useAppleMusicAuth";
 import { useAppleMusicToken } from "@/hooks/useAppleMusicToken";
+import { useSpotifyPostSigninSync } from "@/hooks/useSpotifyPostSigninSync";
 
 type Tier = "casual" | "curious" | "nerd";
 
@@ -62,6 +63,11 @@ export default function Connect() {
   const [lastFmUsername, setLastFmUsername] = useState("");
   const [lastFmSaved, setLastFmSaved] = useState(false);
   const [showLastFm, setShowLastFm] = useState(false);
+  // Mount the post-signin sync so a Supabase Spotify-provider session
+  // landing on this page kicks off a taste fetch and writes the ephemeral
+  // patch to sessionStorage. Read side lives in the existing useEffect
+  // below that reads `spotify_pending_taste`.
+  useSpotifyPostSigninSync();
 
   // If already onboarded, redirect to browse
   useEffect(() => {
@@ -94,7 +100,7 @@ export default function Connect() {
 
   const handleConnectSpotify = async () => {
     setSpotifyConnecting(true);
-    try { await initiateSpotifyAuth(); }
+    try { await signInWithSpotify(); }
     catch (e) { console.error("Spotify auth error:", e); setSpotifyConnecting(false); }
   };
 

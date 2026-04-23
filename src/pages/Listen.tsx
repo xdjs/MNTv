@@ -20,7 +20,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import { useAINuggets } from "@/hooks/useAINuggets";
 import { getSeedCompanion, getDemoTrackById, getDemoTrackUri } from "@/data/seedNuggets";
 import { useSpotifyToken } from "@/hooks/useSpotifyToken";
-import { initiateSpotifyAuth } from "@/hooks/useSpotifyAuth";
+import { signInWithSpotify } from "@/hooks/useSpotifyAuth";
 import { usePlayer } from "@/contexts/PlayerContext";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
 import { withAppleStorefront } from "@/lib/appleStorefront";
@@ -1299,7 +1299,7 @@ export default function Listen() {
                 Spotify session expired
               </p>
               <button
-                onClick={() => initiateSpotifyAuth()}
+                onClick={() => signInWithSpotify()}
                 className="px-3 py-1 rounded-full text-xs font-semibold bg-primary/20 text-primary hover:bg-primary/30 transition-colors"
               >
                 Reconnect
