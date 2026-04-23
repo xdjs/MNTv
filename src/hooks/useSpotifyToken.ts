@@ -1,4 +1,5 @@
 import { useCallback, useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { refreshSpotifyToken } from "./useSpotifyAuth";
 
 const STORAGE_KEY = "spotify_playback_token";
@@ -8,6 +9,34 @@ interface StoredToken {
   accessToken: string;
   refreshToken: string;
   expiresAt: number;
+}
+
+// Call the server-side spotify-refresh edge function. Returns null if the
+// function is missing (not yet deployed) or if Spotify rejected the refresh
+// token; caller falls back to the legacy client-side path in that case.
+async function refreshViaEdgeFunction(refreshToken: string): Promise<{
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+} | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke("spotify-refresh", {
+      body: { refreshToken },
+    });
+    if (error) {
+      // 404 (function not deployed) and 401 (no Supabase session yet) both
+      // land here as soft errors — let the caller try the client-side path.
+      return null;
+    }
+    if (!data?.accessToken) return null;
+    return {
+      accessToken: data.accessToken,
+      refreshToken: data.refreshToken ?? refreshToken,
+      expiresIn: data.expiresIn ?? 3600,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function readToken(): StoredToken | null {
@@ -89,8 +118,14 @@ export function useSpotifyToken() {
       return token.accessToken;
     }
 
-    // Need to refresh
-    const refreshed = await refreshSpotifyToken(token.refreshToken);
+    // Need to refresh. Prefer the server-side spotify-refresh edge fn —
+    // Supabase-issued Spotify refresh tokens require client_secret which
+    // lives in edge-fn secrets, not the browser. Fall back to the legacy
+    // client-side refreshSpotifyToken for tokens that were minted under
+    // the old PKCE flow (still in localStorage from before the OAuth
+    // migration); those use client_id only, so the browser call works.
+    const refreshed = await refreshViaEdgeFunction(token.refreshToken)
+      ?? await refreshSpotifyToken(token.refreshToken);
     if (!refreshed) {
       localStorage.removeItem(STORAGE_KEY);
       return null;
