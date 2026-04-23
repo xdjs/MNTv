@@ -24,7 +24,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { clearStoredProfile } from "./useMusicNerdState";
 import { clearSpotifyToken } from "./useSpotifyToken";
 import { clearAppleMusicToken } from "./useAppleMusicToken";
-import { PKCE_STATE_KEY, PKCE_VERIFIER_KEY } from "./useSpotifyAuth";
+
+// Legacy PKCE sessionStorage keys — the Supabase-managed OAuth flow
+// doesn't create these, but a tab that was mid-signin at cutover time
+// may still have them. Kept here (rather than imported) so a future
+// cleanup can drop the sweep entirely once no stragglers are possible.
+const LEGACY_PKCE_STATE_KEY = "spotify_pkce_state";
+const LEGACY_PKCE_VERIFIER_KEY = "spotify_pkce_verifier";
 
 /** Belt-and-suspenders cleanup of any Supabase-issued auth token in
  *  localStorage. supabase.auth.signOut() should remove the
@@ -76,8 +82,8 @@ export function useSignOut() {
     //    here automatically.
     sessionStorage.removeItem("musicnerd_redirect");
     sessionStorage.removeItem("spotify_pending_taste");
-    sessionStorage.removeItem(PKCE_STATE_KEY);
-    sessionStorage.removeItem(PKCE_VERIFIER_KEY);
+    sessionStorage.removeItem(LEGACY_PKCE_STATE_KEY);
+    sessionStorage.removeItem(LEGACY_PKCE_VERIFIER_KEY);
 
     // 5. Hard navigate. See module-level comment for why a full reload
     //    instead of React Router navigate().
