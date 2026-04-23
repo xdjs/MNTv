@@ -336,6 +336,25 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- getValidToken and getDeveloperToken are useCallback([])-stable; re-including them would churn the effect on every parent re-render and destroy/recreate engines
   }, [service, hasSpotifyToken, hasMusicToken]);
 
+  // ── Engine-init safety net ─────────────────────────────────────────
+  // Rarely the engine-init effect above fires before profile+token have
+  // both settled (race on initial mount), leaving service+token both true
+  // but no engine created. Symptom: Spotify SDK never loads, "track never
+  // started after 4s — retrying play()" logs loop. This poke fires the
+  // token-changed event once after mount so the useSpotifyToken hook
+  // re-syncs and the effect re-runs.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const t = setTimeout(() => {
+      if (!engineRef.current && (hasSpotifyToken || hasMusicToken)) {
+        if (import.meta.env.DEV) console.log("[Player] Engine-init safety-net poking token events");
+        window.dispatchEvent(new Event("spotify-token-changed"));
+        window.dispatchEvent(new Event("apple-music-token-changed"));
+      }
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [hasSpotifyToken, hasMusicToken]);
+
   // ── loadTrack ─────────────────────────────────────────────────────
 
   const hasAutoPlayedRef = useRef(false);
