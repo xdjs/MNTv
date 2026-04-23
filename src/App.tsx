@@ -16,7 +16,6 @@ const Browse = lazy(() => import("./pages/Browse"));
 const ArtistProfile = lazy(() => import("./pages/ArtistProfile"));
 const AlbumDetail = lazy(() => import("./pages/AlbumDetail"));
 const Listen = lazy(() => import("./pages/Listen"));
-const SpotifyCallback = lazy(() => import("./pages/SpotifyCallback"));
 const Profile = lazy(() => import("./pages/Profile"));
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { PlayerProvider } from "./contexts/PlayerContext";
@@ -82,9 +81,8 @@ function AnimatedRoutes() {
             {/* Public */}
             <Route path="/" element={<RootRoute />} />
             <Route path="/connect" element={<Connect />} />
-            <Route path="/spotify-callback" element={<SpotifyCallback />} />
 
-            {/* Protected — requires completed profile */}
+            {/* Protected — requires a Supabase session */}
             <Route path="/browse" element={<ProtectedRoute><Browse /></ProtectedRoute>} />
             <Route path="/artist/:artistId" element={<ProtectedRoute><ArtistProfile /></ProtectedRoute>} />
             <Route path="/album/:albumId" element={<ProtectedRoute><AlbumDetail /></ProtectedRoute>} />
