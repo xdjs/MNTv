@@ -52,6 +52,12 @@ export function bridgeSpotifyProviderTokens(session: Session | null): void {
   // expires (~1h) with no path forward.
   if (!session.provider_refresh_token) return;
 
+  // `session.expires_in` is strictly the Supabase JWT's TTL, not the
+  // Spotify access token's TTL — the two refresh on independent
+  // schedules. Both default to 3600s so they coincide in practice;
+  // useSpotifyToken's 60s refresh buffer + the reconnect banner catch
+  // any drift. If Supabase ever surfaces a provider-scoped TTL field
+  // (e.g. `provider_expires_at`), prefer that here.
   const expiresAt = Date.now() + ((session.expires_in ?? 3600) * 1000);
 
   if (typeof window === "undefined") return;

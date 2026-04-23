@@ -18,6 +18,7 @@ const AlbumDetail = lazy(() => import("./pages/AlbumDetail"));
 const Listen = lazy(() => import("./pages/Listen"));
 const Profile = lazy(() => import("./pages/Profile"));
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { getStoredProfile } from "./hooks/useMusicNerdState";
 import { PlayerProvider } from "./contexts/PlayerContext";
 import { StoriesProvider } from "./contexts/StoriesContext";
 import NowPlayingBar from "./components/NowPlayingBar";
@@ -51,16 +52,19 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-/** RootRoute — signed-in → /browse, signed-out → Onboarding.
- *  Deliberately session-gated (not profile-gated): a user partway
- *  through onboarding (session, no profile) still wants to land on
- *  /browse and finish there. Connect.tsx keeps its own `getStoredProfile`
- *  check to deflect fully-onboarded users away from the tier picker. */
+/** RootRoute — triages signed-in users between /browse and /connect.
+ *  A session alone isn't enough to send someone to /browse: a user who
+ *  completed Spotify OAuth (or signInAnonymously for Apple Music) but
+ *  then closed the tab before picking a tier has a session but no
+ *  profile, and /browse needs profile.calculatedTier to render. Send
+ *  those users back to /connect to finish onboarding. Fully-onboarded
+ *  users (session + profile) go straight to /browse; signed-out users
+ *  see Onboarding. */
 function RootRoute() {
   const { session, loading } = useAuth();
   if (loading) return <LazyFallback />;
-  if (session) return <Navigate to="/browse" replace />;
-  return <Onboarding />;
+  if (!session) return <Onboarding />;
+  return <Navigate to={getStoredProfile() ? "/browse" : "/connect"} replace />;
 }
 
 function LazyFallback() {

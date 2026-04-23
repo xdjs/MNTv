@@ -33,6 +33,11 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Belt-and-suspenders: `verify_jwt = true` in config.toml already rejects
+  // unauthenticated requests at the Supabase gateway, so in production this
+  // branch is dead code. Kept so running via `deno run` locally (which
+  // doesn't route through the gateway) still 401s cleanly instead of
+  // NPE'ing on the next `req.json()`.
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) {
     return new Response(

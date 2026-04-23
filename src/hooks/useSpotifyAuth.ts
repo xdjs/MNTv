@@ -43,6 +43,15 @@ export async function signInWithSpotify(): Promise<void> {
     options: {
       scopes: SPOTIFY_SCOPES,
       redirectTo: `${window.location.origin}/connect`,
+      // Force Spotify to re-prompt on every sign-in. Without this,
+      // Spotify silently reuses the prior grant, so a user who
+      // previously consented with a narrower scope set (before
+      // `streaming` was required by the Web Playback SDK) would keep
+      // their old grant and hit "Invalid token scopes" errors at every
+      // play attempt. Supabase forwards `queryParams` as query string
+      // parameters on the authorize URL, which is how we restore the
+      // behavior the legacy PKCE flow had built in.
+      queryParams: { show_dialog: "true" },
     },
   });
   if (error) {
