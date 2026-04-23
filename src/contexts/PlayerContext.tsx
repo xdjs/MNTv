@@ -225,6 +225,29 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     return prev;
   }, []);
 
+  // ── Spotify SDK audio-activation ────────────────────────────────────
+  // Spotify's Web Playback SDK needs player.activateElement() called inside
+  // a user gesture to unlock the iframe audio. Hard reloads satisfy this via
+  // the load event; SPA navs don't, which is why the OLD inline PlayerContext
+  // happened to work (direct page loads only) but the engine abstraction
+  // exposes the gap when users click tiles/stories.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const activate = () => {
+      const e = engineRef.current;
+      const maybe = (e as unknown as { activateElement?: () => void } | null)?.activateElement;
+      if (typeof maybe === "function") maybe.call(e);
+    };
+    // Capture so React's synthetic event system doesn't defer it — must
+    // run inside the gesture's synchronous task.
+    document.addEventListener("click", activate, { capture: true, passive: true });
+    document.addEventListener("touchend", activate, { capture: true, passive: true });
+    return () => {
+      document.removeEventListener("click", activate, { capture: true } as EventListenerOptions);
+      document.removeEventListener("touchend", activate, { capture: true } as EventListenerOptions);
+    };
+  }, []);
+
   // ── Engine init (on profile service change, if token available) ────
   //
   // Two string namespaces at play here — don't confuse them:

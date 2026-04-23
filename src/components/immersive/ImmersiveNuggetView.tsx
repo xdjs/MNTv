@@ -271,7 +271,7 @@ export default function ImmersiveNuggetView({
   const renderNuggetCard = useCallback(() => {
     const { url: imgUrl, isNuggetImage } = getNuggetImage();
     return (
-      <div className="w-full h-full overflow-y-auto glass-scrollbar">
+      <div className="w-full h-full overflow-y-auto scrollbar-hide">
         {/* Sticky image hero — stays pinned while body text scrolls over it.
             Prevents the gap/overlay break when scrolling up. */}
         <div className="sticky top-0 w-full h-full">

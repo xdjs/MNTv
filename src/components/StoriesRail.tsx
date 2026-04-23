@@ -133,10 +133,18 @@ export default function StoriesRail({ stories }: StoriesRailProps) {
     navigate(listenHrefForStory(s));
   };
 
+  const warmingCount = stories.filter((s) => !s.ready).length;
+
   return (
     <div className="mb-4 md:mb-6">
-      <div className="px-4 md:px-10 mb-2">
+      <div className="px-4 md:px-10 mb-2 flex items-center gap-2">
         <p className="text-xs uppercase tracking-widest text-white/40">Your stories</p>
+        {warmingCount > 0 && (
+          <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-rose-300/70">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            {warmingCount} warming up
+          </span>
+        )}
       </div>
       <div
         className="flex gap-3 overflow-x-auto px-4 md:px-10 pb-2 scrollbar-hide"

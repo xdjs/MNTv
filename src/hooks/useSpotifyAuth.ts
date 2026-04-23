@@ -49,6 +49,20 @@ export function getSpotifyRedirectUri(): string {
 export async function initiateSpotifyAuth(): Promise<void> {
   if (!SPOTIFY_CLIENT_ID) throw new Error("VITE_SPOTIFY_CLIENT_ID is not set");
 
+  // sessionStorage is origin-scoped, and Spotify rejects `localhost` as a
+  // redirect URI — so getSpotifyRedirectUri() swaps localhost→127.0.0.1.
+  // If we save the PKCE verifier on the `localhost` origin and Spotify then
+  // redirects back to the `127.0.0.1` origin, sessionStorage on that origin
+  // is empty and the callback fails with "missing verifier." Force the user
+  // onto the 127.0.0.1 origin before writing anything so the save and the
+  // callback both happen on the same origin.
+  if (window.location.hostname === "localhost") {
+    const { protocol, port, pathname, search, hash } = window.location;
+    const portSuffix = port ? `:${port}` : "";
+    window.location.href = `${protocol}//127.0.0.1${portSuffix}${pathname}${search}${hash}`;
+    return;
+  }
+
   const { verifier, challenge } = await generatePKCE();
   const state = base64UrlEncode(crypto.getRandomValues(new Uint8Array(16)).buffer);
 
@@ -63,6 +77,14 @@ export async function initiateSpotifyAuth(): Promise<void> {
     state,
     code_challenge_method: "S256",
     code_challenge: challenge,
+    // Force Spotify to show the consent dialog even for returning users.
+    // Without this, Spotify silently reuses the prior grant — which means
+    // if the user originally approved with fewer scopes (before we added
+    // `streaming` or any other), subsequent re-logins inherit the narrower
+    // consent and the Web Playback SDK fires "Invalid token scopes" at
+    // every play attempt. Forcing the dialog costs one tap but guarantees
+    // the current scope list takes effect.
+    show_dialog: "true",
   });
 
   window.location.href = `https://accounts.spotify.com/authorize?${params}`;

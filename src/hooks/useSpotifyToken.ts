@@ -27,6 +27,16 @@ function writeToken(token: StoredToken) {
   }
 }
 
+/** Save a freshly-exchanged OAuth token. Exported so SpotifyCallback and
+ *  other non-React callers can write the token AND notify every mounted
+ *  `useSpotifyToken` instance to flip `hasSpotifyToken` → true. Without
+ *  this, a raw `localStorage.setItem` would persist the token but leave
+ *  the PlayerProvider's token state stale, and the Spotify engine would
+ *  never initialize until the next hard refresh. */
+export function saveSpotifyToken(token: StoredToken): void {
+  writeToken(token);
+}
+
 /** Clear the Spotify playback token from localStorage. Top-level helper
  *  so `useSignOut` and other callers outside a React tree can invalidate
  *  the token without mounting the `useSpotifyToken` hook. Dispatches
