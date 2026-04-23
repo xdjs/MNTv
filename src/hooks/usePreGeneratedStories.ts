@@ -25,6 +25,48 @@ interface PreGenOptions {
 const DEFAULT_MAX_STORIES = 8;
 const DEFAULT_CONCURRENCY = 2;
 
+// Cross-session dedup — persists "we already fired pre-gen for this
+// (track,tier) since the cache-TTL" marker in localStorage so reloading
+// Browse doesn't re-blast Gemini. Keyed by `artist::title::tier`. Entries
+// older than 24h are ignored (fresh pre-gen permitted after a day to pick
+// up any Constitution/prompt improvements).
+const PREGEN_LEDGER_KEY = "musicnerd_pregen_ledger";
+const PREGEN_TTL_MS = 24 * 60 * 60 * 1000;
+
+function readLedger(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(PREGEN_LEDGER_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, number>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeLedger(ledger: Record<string, number>): void {
+  try {
+    localStorage.setItem(PREGEN_LEDGER_KEY, JSON.stringify(ledger));
+  } catch {
+    // Quota or storage disabled — silently skip persistence.
+  }
+}
+
+function wasPregennedRecently(trackKey: string, tier: string): boolean {
+  const ledger = readLedger();
+  const ts = ledger[`${trackKey}::${tier}`];
+  return typeof ts === "number" && Date.now() - ts < PREGEN_TTL_MS;
+}
+
+function recordPregen(trackKey: string, tier: string): void {
+  const ledger = readLedger();
+  ledger[`${trackKey}::${tier}`] = Date.now();
+  // Prune entries older than TTL to keep the ledger from growing unboundedly.
+  const cutoff = Date.now() - PREGEN_TTL_MS;
+  for (const k of Object.keys(ledger)) {
+    if (ledger[k] < cutoff) delete ledger[k];
+  }
+  writeLedger(ledger);
+}
+
 /**
  * usePreGeneratedStories: picks the top N tracks from the user's profile,
  * checks nugget_cache for each, and fires background generation for uncached
@@ -53,8 +95,11 @@ export function usePreGeneratedStories(
       return;
     }
 
-    // Seed stories from the top-tracks list, preserving order.
+    // Seed stories from the top-tracks list, preserving order. Require a
+    // URI so tapping the story can actually start playback — otherwise we'd
+    // show stories that navigate to a /listen/ URL Spotify can't resolve.
     const seeded: Story[] = profile.trackImages
+      .filter((t) => !!t.uri)
       .slice(0, maxStories)
       .map((t) => ({
         trackKey: `${t.artist}::${t.title}`,
@@ -98,13 +143,22 @@ export function usePreGeneratedStories(
           }
         });
 
-        // Flip ready flags on stories that have cached nuggets.
+        // Flip ready flags on stories that have cached nuggets OR that we've
+        // pre-gen'd within the last 24h (treat them as hot without re-querying
+        // every reload, even if cache key lookup happened to miss).
         setStories((prev) =>
-          prev.map((s) => (readyKeys.has(s.trackKey) ? { ...s, ready: true } : s)),
+          prev.map((s) => {
+            const fromCache = readyKeys.has(s.trackKey);
+            const fromLedger = wasPregennedRecently(s.trackKey, tier);
+            return fromCache || fromLedger ? { ...s, ready: true } : s;
+          }),
         );
 
-        // 2. Kick off pre-gen for the rest, throttled.
-        const needsGen = seeded.filter((s) => !readyKeys.has(s.trackKey));
+        // 2. Kick off pre-gen for the rest, throttled. Skip tracks we've
+        // already pre-gen'd recently (cross-session dedup via ledger).
+        const needsGen = seeded.filter(
+          (s) => !readyKeys.has(s.trackKey) && !wasPregennedRecently(s.trackKey, tier),
+        );
         await runThrottled(needsGen, maxConcurrent, async (story) => {
           const kickKey = `${story.trackKey}::${tier}`;
           if (kickedOffRef.current.has(kickKey)) return;
@@ -129,7 +183,9 @@ export function usePreGeneratedStories(
               if (import.meta.env.DEV) console.warn(`[Stories] pre-gen failed for ${story.trackKey}:`, error.message);
               return;
             }
-            // Flip this story's ready flag.
+            // Flip this story's ready flag and record cross-session success
+            // so a reload doesn't refetch.
+            recordPregen(story.trackKey, tier);
             setStories((prev) =>
               prev.map((s) => (s.trackKey === story.trackKey ? { ...s, ready: true } : s)),
             );

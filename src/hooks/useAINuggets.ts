@@ -434,6 +434,7 @@ export function useAINuggets(
         spotifyArtistImageUrl: artistImageUrl,
         spotifyTrackId: spotifyTrackIdValue,
         appleTrackId: appleTrackIdValue,
+        durationSec,  // server uses this to compute cache-side timestamps
       };
 
       // Get auth token for the request

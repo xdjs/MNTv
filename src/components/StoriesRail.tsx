@@ -33,7 +33,7 @@ export default function StoriesRail({ stories }: StoriesRailProps) {
   return (
     <div className="mb-4 md:mb-6">
       <div className="px-4 md:px-10 mb-2">
-        <p className="text-xs uppercase tracking-widest text-white/40">Your nuggets</p>
+        <p className="text-xs uppercase tracking-widest text-white/40">Your stories</p>
       </div>
       <div
         className="flex gap-3 overflow-x-auto px-4 md:px-10 pb-2 scrollbar-hide"

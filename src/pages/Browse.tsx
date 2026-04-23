@@ -12,7 +12,7 @@ import { usePersonalizedCatalog } from "@/hooks/usePersonalizedCatalog";
 import { useTierAccent } from "@/hooks/useTierAccent";
 import { useSignOut } from "@/hooks/useSignOut";
 import { usePlayer } from "@/contexts/PlayerContext";
-import { usePreGeneratedStories } from "@/hooks/usePreGeneratedStories";
+import { useStoriesContext } from "@/contexts/StoriesContext";
 
 export default function Browse() {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -35,9 +35,10 @@ export default function Browse() {
   const { rows: allRows } = usePersonalizedCatalog(profile);
   const userName = profile?.displayName || profile?.spotifyDisplayName || "";
 
-  // Pre-generate nuggets for top tracks so the stories rail shows ready-to-play
-  // pills. Tapping a story jumps to Listen and the first nugget is instant.
-  const { stories } = usePreGeneratedStories(profile, { tier: tier || "casual" });
+  // Pre-gen happens up at StoriesProvider (mounted in App), so stories start
+  // warming as soon as the profile is hydrated — not when the user reaches
+  // this page. Browse just reads the shared state.
+  const { stories } = useStoriesContext();
 
   const demoItems = [
     {

@@ -21,6 +21,7 @@ const Profile = lazy(() => import("./pages/Profile"));
 import { getStoredProfile } from "./hooks/useMusicNerdState";
 import { AuthProvider } from "./contexts/AuthContext";
 import { PlayerProvider } from "./contexts/PlayerContext";
+import { StoriesProvider } from "./contexts/StoriesContext";
 import NowPlayingBar from "./components/NowPlayingBar";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -98,6 +99,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <PlayerProvider>
+            <StoriesProvider>
             <ErrorBoundary fallback={
               <div className="min-h-screen bg-background flex items-center justify-center p-6">
                 <div className="text-center space-y-3">
@@ -115,6 +117,7 @@ const App = () => (
               <AnimatedRoutes />
               <NowPlayingBar />
             </ErrorBoundary>
+            </StoriesProvider>
           </PlayerProvider>
         </AuthProvider>
       </BrowserRouter>

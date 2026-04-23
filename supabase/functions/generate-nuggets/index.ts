@@ -2472,7 +2472,11 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, imageCaption, imageQuery, listenCount, previousNuggets, tier: rawTier, userTopArtists: rawTopArtists, userTopTracks: rawTopTracks, spotifyArtistImageUrl: rawSpotifyArtistImageUrl, spotifyTrackId: rawSpotifyTrackId, appleTrackId: rawAppleTrackId } = body;
+    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, imageCaption, imageQuery, listenCount, previousNuggets, tier: rawTier, userTopArtists: rawTopArtists, userTopTracks: rawTopTracks, spotifyArtistImageUrl: rawSpotifyArtistImageUrl, spotifyTrackId: rawSpotifyTrackId, appleTrackId: rawAppleTrackId, durationSec: rawDurationSec } = body;
+    // Default to 240s (avg song) when caller omits — used for cache-side
+    // timestamp computation so pre-gen flows (which don't know duration yet)
+    // can still produce a valid cached Nugget[] shape.
+    const cacheDurationSec = typeof rawDurationSec === "number" && rawDurationSec > 30 ? rawDurationSec : 240;
     const tier: Tier = (rawTier === "casual" || rawTier === "curious" || rawTier === "nerd") ? rawTier : "casual";
 
     // ── Input validation ────────────────────────────────────────────
@@ -3619,6 +3623,69 @@ Return ONLY valid JSON:
     _timings.total = Date.now() - functionStartTime;
     console.timeEnd("[Timing] TOTAL");
     console.log(`[Timing] Breakdown:`, JSON.stringify(_timings));
+
+    // ── Server-side nugget_cache write ──────────────────────────────────
+    // Historically the CLIENT wrote nugget_cache after receiving a response,
+    // which fails for anon users (RLS requires authenticated or service_role).
+    // That broke the stories pre-gen flow — pre-gen succeeded but nothing was
+    // cached, so tapping a story re-triggered a full 15-25s generation.
+    //
+    // Fix: the server writes here using the admin key (bypasses RLS). The
+    // client's cache-read path is unchanged. Client's cache-write is now
+    // redundant but harmless.
+    if (validatedNuggets.length > 0) {
+      try {
+        const uri = rawSpotifyTrackId ? `spotify:track:${rawSpotifyTrackId}`
+          : rawAppleTrackId ? `apple:song:${rawAppleTrackId}`
+          : "";
+        const trackId = `real::${artist}::${title}::${album || ""}::${uri}`;
+        const tier = (rawTier === "curious" || rawTier === "nerd") ? rawTier : "casual";
+        const dbCacheKey = `${trackId}::${tier}`;
+
+        // Build full Nugget[] matching the shape client's cache-read expects.
+        // Timestamps are computed the same way client's makeTimestamp does:
+        // earlyStart + spacing * (index+1), clamped to leave an end buffer.
+        const earlyStart = 20;
+        const endBuffer = 15;
+        const usable = Math.max(cacheDurationSec - earlyStart - endBuffer, 30);
+        const spacing = usable / (validatedNuggets.length + 1);
+        const cacheNuggets = validatedNuggets.map((n: any, i: number) => {
+          const sourceId = `ai-src-${trackId}-L1-${i}`;
+          const nuggetId = `ai-nug-${trackId}-L1-${i}`;
+          const ts = Math.min(Math.floor(earlyStart + spacing * (i + 1)), cacheDurationSec - 10);
+          return {
+            id: nuggetId, trackId, timestampSec: ts, durationMs: 7000,
+            headline: n.headline || n.text?.slice(0, 80) || "Music Fact",
+            text: n.text, kind: n.kind, listenFor: n.listenFor || false,
+            sourceId, imageUrl: n.imageUrl, imageCaption: n.imageCaption,
+          };
+        });
+        const cacheSources: Record<string, unknown> = {};
+        validatedNuggets.forEach((n: any, i: number) => {
+          const sourceId = `ai-src-${trackId}-L1-${i}`;
+          cacheSources[sourceId] = { id: sourceId, ...n.source };
+        });
+        cacheSources.artistSummary = artistSummary;
+        cacheSources.externalLinks = externalLinks;
+
+        const cacheUrl = Deno.env.get("SUPABASE_URL")!;
+        const cacheKey = Deno.env.get("SUPABASE_SECRET_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const { createClient: createCacheClient } = await import("https://esm.sh/@supabase/supabase-js@2.49.1");
+        const cacheClient = createCacheClient(cacheUrl, cacheKey);
+        const { error: cacheErr } = await cacheClient.from("nugget_cache").upsert(
+          { track_id: dbCacheKey, nuggets: cacheNuggets, sources: cacheSources, status: "ready" },
+          { onConflict: "track_id" },
+        );
+        if (cacheErr) {
+          console.warn(`[NuggetCache] server upsert failed (non-fatal):`, cacheErr.message);
+        } else {
+          console.log(`[NuggetCache] server upserted ${cacheNuggets.length} nuggets for ${dbCacheKey.slice(0, 80)}`);
+        }
+      } catch (e) {
+        console.warn("[NuggetCache] server upsert threw (non-fatal):", e);
+      }
+    }
+
     return new Response(JSON.stringify({ nuggets: validatedNuggets, artistSummary, externalLinks, noTrackData }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
