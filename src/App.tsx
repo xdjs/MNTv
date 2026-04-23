@@ -18,8 +18,7 @@ const AlbumDetail = lazy(() => import("./pages/AlbumDetail"));
 const Listen = lazy(() => import("./pages/Listen"));
 const SpotifyCallback = lazy(() => import("./pages/SpotifyCallback"));
 const Profile = lazy(() => import("./pages/Profile"));
-import { getStoredProfile } from "./hooks/useMusicNerdState";
-import { AuthProvider } from "./contexts/AuthContext";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { PlayerProvider } from "./contexts/PlayerContext";
 import { StoriesProvider } from "./contexts/StoriesContext";
 import NowPlayingBar from "./components/NowPlayingBar";
@@ -37,18 +36,30 @@ function ScrollToTop() {
   return null;
 }
 
-/** ProtectedRoute — requires a completed profile (localStorage). */
+/** ProtectedRoute — requires a Supabase session. Profile (tier selected)
+ *  is no longer the gate: an anonymous Apple Music user or a mid-
+ *  onboarding Spotify user both have a session without a profile, and
+ *  must still be allowed past /connect. Cross-device progression works
+ *  because the session follows the user, not a device's localStorage. */
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const location = useLocation();
-  if (!getStoredProfile()) {
+  const { session, loading } = useAuth();
+  if (loading) return <LazyFallback />;
+  if (!session) {
     return <Navigate to={`/connect?redirect=${encodeURIComponent(location.pathname)}`} replace />;
   }
   return <>{children}</>;
 }
 
-/** RootRoute — profile exists → /browse, otherwise → Onboarding. */
+/** RootRoute — signed-in → /browse, signed-out → Onboarding.
+ *  Deliberately session-gated (not profile-gated): a user partway
+ *  through onboarding (session, no profile) still wants to land on
+ *  /browse and finish there. Connect.tsx keeps its own `getStoredProfile`
+ *  check to deflect fully-onboarded users away from the tier picker. */
 function RootRoute() {
-  if (getStoredProfile()) return <Navigate to="/browse" replace />;
+  const { session, loading } = useAuth();
+  if (loading) return <LazyFallback />;
+  if (session) return <Navigate to="/browse" replace />;
   return <Onboarding />;
 }
 
