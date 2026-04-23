@@ -25,6 +25,25 @@ interface AINuggetData {
 
 // ── Helpers for consistent ID/object creation across SSE, cache, and JSON paths ──
 
+/**
+ * Blank the album slot in a `real::…` trackId before composing the
+ * nugget_cache key. Different entry points populate the album slot
+ * inconsistently (story rail leaves it empty, tile/search fill it),
+ * so keying on the URI only means every entry point reads and writes
+ * the same cache row for the same recording. Non-`real::` ids
+ * (seed-nugget slugs) are passed through unchanged. Mirror of the
+ * server-side canonicalization in generate-nuggets/index.ts.
+ */
+function canonicalCacheKey(trackId: string, tier: string): string {
+  if (!trackId.startsWith("real::")) return `${trackId}::${tier}`;
+  const parts = trackId.split("::");
+  // Expected: ["real", artist, title, album, uri...]. Fewer than 5 parts
+  // means the id is malformed — preserve original to avoid losing data.
+  if (parts.length < 5) return `${trackId}::${tier}`;
+  parts[3] = "";
+  return `${parts.join("::")}::${tier}`;
+}
+
 function makeIds(trackId: string, listenCount: number, index: number) {
   return {
     sourceId: `ai-src-${trackId}-L${listenCount}-${index}`,
@@ -219,8 +238,14 @@ export function useAINuggets(
     setError(null);
     // true once we own the 'generating' sentinel; reset to false after cache write succeeds
     let sentinelClaimed = false;
-    // Tier-scoped key for nugget_cache DB table — different tiers get different cached nuggets
-    const dbCacheKey = `${trackId}::${tier}`;
+    // Tier-scoped key for nugget_cache DB table — different tiers get
+    // different cached nuggets. We blank the album slot so that different
+    // entry points to the same track (story rail with empty album, tile /
+    // search with album populated, artist-profile tile, etc.) resolve to
+    // the same cache row. The URI still uniquely identifies the recording,
+    // so album is purely cosmetic for the cache key. MUST match the
+    // canonicalization in generate-nuggets/index.ts's server-side upsert.
+    const dbCacheKey = canonicalCacheKey(trackId, tier);
 
     try {
       const trackKey = `${artist}::${title}`;
@@ -887,7 +912,7 @@ export function useAINuggets(
         // sources/nuggets that arrived via SSE while this request was in
         // flight.
         try {
-          const dbCacheKey = `${trackId}::${tier}`;
+          const dbCacheKey = canonicalCacheKey(trackId, tier);
           const allNuggets = [...nuggetsRef.current, ...newNuggets];
           const allSources = new Map(sourcesRef.current);
           newSources.forEach((v, k) => allSources.set(k, v));

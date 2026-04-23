@@ -180,6 +180,12 @@ export function usePreGeneratedStories(
                 userTopArtists: profile.topArtists?.slice(0, 10),
                 userTopTracks: profile.topTracks?.slice(0, 10),
                 spotifyTrackId: story.uri?.match(/spotify:track:([a-zA-Z0-9]{22})/)?.[1],
+                // Without this, the server's cache key falls back to an
+                // empty URI slot for Apple Music users and misses the
+                // Listen-path read (which includes the full apple:song:
+                // URI). Result: pre-gen ran but cache never matched, and
+                // every story tap paid the full SSE generation cost.
+                appleTrackId: story.uri?.match(/apple:song:(\d+)/)?.[1],
               },
             });
             if (cancelled) return;

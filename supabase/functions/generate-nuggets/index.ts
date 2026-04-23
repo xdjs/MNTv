@@ -3649,7 +3649,11 @@ Return ONLY valid JSON:
         const uri = rawSpotifyTrackId ? `spotify:track:${rawSpotifyTrackId}`
           : rawAppleTrackId ? `apple:song:${rawAppleTrackId}`
           : "";
-        const trackId = `real::${artist}::${title}::${album || ""}::${uri}`;
+        // Blank the album slot in the cache key — different entry points
+        // (story rail vs tile vs search) populate album inconsistently,
+        // so keying on URI only means every path reads and writes the
+        // same row. MUST match canonicalCacheKey() in useAINuggets.ts.
+        const trackId = `real::${artist}::${title}::::${uri}`;
         const tier = (rawTier === "curious" || rawTier === "nerd") ? rawTier : "casual";
         const dbCacheKey = `${trackId}::${tier}`;
 

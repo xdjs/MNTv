@@ -75,4 +75,5 @@ Carried from the coworker's plan's "Open Questions" section:
 
 - **Anonymous Apple Music user identity drift:** localStorage clear / new device → new `auth.uid()` → prior `nugget_history` orphans. Cron cleanup is a future slice.
 - **Anon → Spotify identity upgrade loses history:** if an Apple Music anon user later connects Spotify via `signInWithOAuth`, they get a new `auth.uid()` and their anon history orphans. Fix is `supabase.auth.linkIdentity({ provider: "spotify" })` — future slice.
+- **Apple Music bookmark drift on MUT rotation:** `bookmark-nugget`'s Apple identity is `apple:${sha256(userToken::storefront)}`. Apple's Music-User-Token rotates on re-auth, MusicKit storage clear, new-device sign-in, and the ~6-month TTL — so each rotation silently changes `user_service_id` and orphans prior bookmarks (deny-all RLS prevents client-side reconciliation). Same structural root cause as the `nugget_history` drift above; resolved by Task 6.6's anonymous Supabase session anchoring bookmark identity to `auth.uid()`.
 - **Playwright E2E coverage:** not added; repo has no Playwright. Manual QA per the coworker's Task 14.

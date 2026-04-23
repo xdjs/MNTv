@@ -18,9 +18,13 @@ function bucketBookmark(bm: Bookmark): "Today" | "This week" | "Earlier" {
 }
 
 // track_id is stored as the same string Listen.tsx uses as its rawTrackId
-// (format: `real::artist::title::album::uri`), so we embed it as-is.
+// (format: `real::artist::title::album::uri`). Encode before embedding
+// because artist/title/album can contain `#`, `?`, `&`, `+`, or spaces —
+// left unencoded, `?` truncates into a query string and `#` into a hash
+// fragment, breaking both the Profile tile tap and the Share URL. Listen
+// decodes the splat param on the way in, so the round-trip is safe.
 function listenUrlFor(bm: Bookmark): string {
-  return `/listen/${bm.track_id}`;
+  return `/listen/${encodeURIComponent(bm.track_id)}`;
 }
 
 export default function Profile() {

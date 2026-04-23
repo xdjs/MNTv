@@ -179,6 +179,16 @@ export function useBookmarks() {
   }
 
   function toggle(nugget: BookmarkPayload) {
+    // Rapid double-taps during an in-flight add would find the optimistic
+    // row via natural-key lookup, then call removeMutation with the fake
+    // `optimistic-${Date.now()}` id — the server's `.eq("id", ...)` query
+    // fails Postgres UUID parsing, the remove rolls back to the cache
+    // snapshot (still containing the optimistic row), and the subsequent
+    // add-mutation invalidation refetches the real row — so the user sees
+    // their remove silently undone. Short-circuiting here is the cheapest
+    // fix; the long-term fix is swapping the optimistic id for the
+    // server-assigned UUID in addMutation.onSuccess.
+    if (addMutation.isPending || removeMutation.isPending) return;
     const existing = findBookmark(nugget.headline, nugget.trackId, nugget.kind);
     if (existing) {
       removeMutation.mutate(existing.id);
