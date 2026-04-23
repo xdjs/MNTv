@@ -6,11 +6,13 @@ import MusicNerdLogo from "@/components/MusicNerdLogo";
 import TileRow from "@/components/TileRow";
 import SearchOverlay from "@/components/SearchOverlay";
 import PageTransition from "@/components/PageTransition";
+import StoriesRail from "@/components/StoriesRail";
 import { useUserProfile, tierGreeting, tierBadgeLabel, tierBadgeColor, tierGlowClass } from "@/hooks/useMusicNerdState";
 import { usePersonalizedCatalog } from "@/hooks/usePersonalizedCatalog";
 import { useTierAccent } from "@/hooks/useTierAccent";
 import { useSignOut } from "@/hooks/useSignOut";
 import { usePlayer } from "@/contexts/PlayerContext";
+import { usePreGeneratedStories } from "@/hooks/usePreGeneratedStories";
 
 export default function Browse() {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -32,6 +34,10 @@ export default function Browse() {
 
   const { rows: allRows } = usePersonalizedCatalog(profile);
   const userName = profile?.displayName || profile?.spotifyDisplayName || "";
+
+  // Pre-generate nuggets for top tracks so the stories rail shows ready-to-play
+  // pills. Tapping a story jumps to Listen and the first nugget is instant.
+  const { stories } = usePreGeneratedStories(profile, { tier: tier || "casual" });
 
   const demoItems = [
     {
@@ -300,6 +306,10 @@ export default function Browse() {
               : "What do you want to listen to?"}
           </p>
         </div>
+
+        {/* Stories rail — pre-generated nuggets for your top tracks. Tapping
+            a story opens Listen with the first nugget instant from cache. */}
+        <StoriesRail stories={stories} />
 
         {/* Rows */}
         {allRows.map((row, i) => (
