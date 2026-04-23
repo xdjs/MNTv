@@ -1,6 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Heart, Music } from "lucide-react";
+import { ArrowLeft, Heart, Music, Share2, Trash2, Check } from "lucide-react";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
 import { useBookmarks, type Bookmark } from "@/hooks/useBookmarks";
 import PageTransition from "@/components/PageTransition";
@@ -29,8 +29,54 @@ function listenUrlFor(bm: Bookmark): string {
 
 export default function Profile() {
   const { profile } = useUserProfile();
-  const { bookmarks, loading, signedIn } = useBookmarks();
+  const { bookmarks, loading, signedIn, toggle } = useBookmarks();
   const navigate = useNavigate();
+  // Transient per-row UI state for the share button's "Copied!" confirmation.
+  // Keyed by bookmark id.
+  const [sharedIds, setSharedIds] = useState<Set<string>>(new Set());
+
+  async function handleShare(bm: Bookmark) {
+    const url = `${window.location.origin}${listenUrlFor(bm)}`;
+    const text = `${bm.headline}\n\n${bm.body}\n\n— ${bm.artist}, ${bm.title}\n${url}`;
+    try {
+      // Prefer Web Share API on mobile so users can send to Messages / Whatsapp
+      // directly; fall back to clipboard copy on desktop.
+      if (navigator.share) {
+        await navigator.share({ title: bm.headline, text, url });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      setSharedIds((prev) => {
+        const next = new Set(prev);
+        next.add(bm.id);
+        return next;
+      });
+      setTimeout(() => {
+        setSharedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(bm.id);
+          return next;
+        });
+      }, 1500);
+    } catch {
+      // User cancelled the share sheet, or clipboard blocked — silent.
+    }
+  }
+
+  function handleRemove(bm: Bookmark) {
+    // toggle removes when already-bookmarked (which it always is on Profile).
+    // Optimistic update from useBookmarks makes the row disappear instantly.
+    toggle({
+      trackId: bm.track_id,
+      artist: bm.artist,
+      title: bm.title,
+      kind: bm.nugget_kind,
+      headline: bm.headline,
+      body: bm.body,
+      source: bm.source,
+      imageUrl: bm.image_url ?? undefined,
+    });
+  }
 
   const grouped = useMemo(() => {
     const out: Record<"Today" | "This week" | "Earlier", Bookmark[]> = {
@@ -100,32 +146,67 @@ export default function Profile() {
                   </h2>
                   <div className="flex flex-col gap-3">
                     {grouped[bucket].map((bm) => (
-                      <button
+                      <div
                         key={bm.id}
-                        onClick={() => navigate(listenUrlFor(bm))}
-                        className="text-left bg-white/5 hover:bg-white/10 active:scale-[0.99] transition rounded-lg p-4 flex gap-3"
+                        className="bg-white/5 hover:bg-white/10 transition rounded-lg overflow-hidden"
                       >
-                        {bm.image_url ? (
-                          <img
-                            src={bm.image_url}
-                            alt=""
-                            className="w-14 h-14 rounded object-cover flex-shrink-0"
-                          />
-                        ) : (
-                          <div className="w-14 h-14 rounded bg-white/10 flex items-center justify-center flex-shrink-0">
-                            <Music className="w-5 h-5 text-white/30" />
+                        <button
+                          onClick={() => navigate(listenUrlFor(bm))}
+                          className="w-full text-left active:scale-[0.99] transition-transform p-4 flex gap-3"
+                        >
+                          {bm.image_url ? (
+                            <img
+                              src={bm.image_url}
+                              alt=""
+                              className="w-14 h-14 rounded object-cover flex-shrink-0"
+                            />
+                          ) : (
+                            <div className="w-14 h-14 rounded bg-white/10 flex items-center justify-center flex-shrink-0">
+                              <Music className="w-5 h-5 text-white/30" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] uppercase tracking-wider text-white/40 mb-0.5">
+                              {bm.artist} · {bm.title}
+                            </p>
+                            <p className="text-sm font-semibold text-white mb-1 line-clamp-2">
+                              {bm.headline}
+                            </p>
+                            <p className="text-xs text-white/50 line-clamp-2">{bm.body}</p>
                           </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[10px] uppercase tracking-wider text-white/40 mb-0.5">
-                            {bm.artist} · {bm.title}
-                          </p>
-                          <p className="text-sm font-semibold text-white mb-1 line-clamp-2">
-                            {bm.headline}
-                          </p>
-                          <p className="text-xs text-white/50 line-clamp-2">{bm.body}</p>
+                        </button>
+                        {/* Per-bookmark quick actions. e.stopPropagation isn't
+                            needed — the card and these buttons are siblings,
+                            not nested — so tapping an action never bubbles to
+                            the jump-to-Listen handler. */}
+                        <div className="px-4 pb-3 pt-0 flex gap-2 border-t border-white/5">
+                          <button
+                            onClick={() => handleShare(bm)}
+                            aria-label="Share nugget"
+                            className="text-[11px] px-3 py-1.5 rounded-full bg-white/10 text-white/70 active:scale-95 transition-transform flex items-center gap-1.5 mt-2"
+                          >
+                            {sharedIds.has(bm.id) ? (
+                              <>
+                                <Check className="w-3 h-3" />
+                                Copied
+                              </>
+                            ) : (
+                              <>
+                                <Share2 className="w-3 h-3" />
+                                Share
+                              </>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => handleRemove(bm)}
+                            aria-label="Remove bookmark"
+                            className="text-[11px] px-3 py-1.5 rounded-full bg-white/5 text-white/50 hover:bg-rose-500/15 hover:text-rose-400 active:scale-95 transition-all flex items-center gap-1.5 mt-2"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            Remove
+                          </button>
                         </div>
-                      </button>
+                      </div>
                     ))}
                   </div>
                 </section>

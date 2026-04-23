@@ -86,6 +86,9 @@ interface UseAINuggetsResult {
   listenCount: number;
   artistSummary: string | null;
   fromCache: boolean;
+  /** True while wave 2 or 3 is generating in the background. UI hint only;
+   *  main `loading` stays false because initial nuggets are already visible. */
+  waveLoading: boolean;
 }
 
 // ── Sentinel poll helper ──────────────────────────────────────────────────────
@@ -157,6 +160,8 @@ export function useAINuggets(
   // previousNuggets for dedup across waves.
   const currentWaveRef = useRef(1);
   const waveInFlightRef = useRef(false);
+  // Mirror waveInFlightRef as state so the UI can surface a "more coming" pill.
+  const [waveLoading, setWaveLoading] = useState(false);
   // Track the current trackId via ref so in-flight wave generations can
   // detect a track change and drop their results rather than appending to
   // a different track's nuggets.
@@ -788,6 +793,7 @@ export function useAINuggets(
     const waveTrackId = trackId;
     currentWaveRef.current = nextWave;
     waveInFlightRef.current = true;
+    setWaveLoading(true);
     if (import.meta.env.DEV) console.log(`[NuggetWave ${nextWave}] firing — ${Math.floor(durationSec - currentTime)}s remaining, ${nuggets.length} nuggets so far`);
 
     (async () => {
@@ -872,10 +878,11 @@ export function useAINuggets(
         if (import.meta.env.DEV) console.warn(`[NuggetWave ${nextWave}] threw:`, e);
       } finally {
         waveInFlightRef.current = false;
+        setWaveLoading(false);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- nuggets/sources read at trigger time, not subscribed
   }, [currentTime, nuggets.length, durationSec, isPlaying, trackId, artist, title, album, tier, fromCache]);
 
-  return { nuggets, sources, loading, error, listenCount, artistSummary, fromCache };
+  return { nuggets, sources, loading, error, listenCount, artistSummary, fromCache, waveLoading };
 }

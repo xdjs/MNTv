@@ -489,7 +489,7 @@ export default function Listen() {
   const tier = (profile?.calculatedTier as "casual" | "curious" | "nerd") || "casual";
   useTierAccent(tier);
   const artistImageUrl = (track?.artist && profile?.artistImages?.[track.artist]) || track?.coverArtUrl || "";
-  const { nuggets: aiNuggets, sources: aiSources, loading: aiLoading, error: aiError, listenCount, artistSummary, fromCache: aiFromCache } = useAINuggets(
+  const { nuggets: aiNuggets, sources: aiSources, loading: aiLoading, error: aiError, listenCount, artistSummary, fromCache: aiFromCache, waveLoading } = useAINuggets(
     trackId,
     track?.artist || "",
     track?.title || "",
@@ -1635,6 +1635,21 @@ export default function Listen() {
               }
             }}
           />
+        </div>
+      )}
+
+      {/* "More coming" pill — surfaces while wave 2/3 generates silently in
+          the background so the user knows additional nuggets are on the way
+          without interrupting their current reading. */}
+      {track && waveLoading && (
+        <div
+          className="fixed left-1/2 -translate-x-1/2 bottom-24 z-[55] pointer-events-none"
+          style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+        >
+          <div className="flex items-center gap-2 rounded-full px-3 py-1.5 bg-black/70 border border-white/10 text-xs text-white/80">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
+            <span>More coming…</span>
+          </div>
         </div>
       )}
     </PageTransition>
