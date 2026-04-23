@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { memo, useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, Heart } from "lucide-react";
 import { usePlayer } from "@/contexts/PlayerContext";
@@ -39,7 +39,7 @@ const MAX_DEEP_DIVES_PER_SESSION = 10;
 // it needs from useBookmarks rather than the whole hook return value, so
 // the component doesn't re-render on unrelated bookmark state changes.
 type BookmarksApi = ReturnType<typeof useBookmarks>;
-function BookmarkButton({
+const BookmarkButton = memo(function BookmarkButton({
   activeNugget,
   activeSource,
   artist,
@@ -83,7 +83,7 @@ function BookmarkButton({
       {saved ? "Saved" : "Save"}
     </button>
   );
-}
+});
 
 // Minimum time a nugget stays on-screen before auto-advance can swap it out.
 // Tuning knob for the streaming pacing — keeps freshly-streamed nuggets

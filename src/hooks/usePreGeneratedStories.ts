@@ -209,10 +209,13 @@ export function usePreGeneratedStories(
     })();
 
     return () => { cancelled = true; };
-    // trackImages is an array — use its length + tier as the stable trigger.
-    // Deep-diffing on every render is unnecessary; the profile hydrates once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.trackImages?.length, tier, maxStories, maxConcurrent]);
+    // Depend on the trackImages array identity rather than its length so a
+    // same-length profile replacement (e.g. user switches accounts, or
+    // SpotifyCallback writes a different top-8 tracks set of the same size)
+    // triggers a fresh pre-gen pass. Length-only was a silent trap: two
+    // 8-track taste profiles wouldn't re-run and the second user would
+    // stare at the first user's warmed stories.
+  }, [profile?.trackImages, tier, maxStories, maxConcurrent]);
 
   return { stories, loading };
 }
