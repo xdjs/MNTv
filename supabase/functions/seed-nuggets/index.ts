@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -163,10 +163,14 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // seed-nuggets is an internal admin tool — require service role key
+  // seed-nuggets is an internal admin tool — require the secret/service key
+  // as a Bearer token. Accept either the new secret key or the legacy
+  // service_role key during migration.
   const authHeader = req.headers.get("Authorization");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  if (!authHeader || authHeader !== `Bearer ${serviceRoleKey}`) {
+  const secretKey = Deno.env.get("SUPABASE_SECRET_KEY");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const validTokens = [secretKey, serviceRoleKey].filter(Boolean).map((k) => `Bearer ${k}`);
+  if (!authHeader || !validTokens.includes(authHeader)) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -179,9 +183,9 @@ serve(async (req) => {
     const skipExisting: boolean = body.skipExisting !== false; // default true
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const SUPABASE_ADMIN_KEY = secretKey ?? serviceRoleKey!;
     const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY")!;
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ADMIN_KEY);
 
     const tracksToSeed = trackFilter
       ? DEMO_TRACKS.filter((t) => trackFilter.includes(t.id))
@@ -211,11 +215,14 @@ serve(async (req) => {
 
       try {
         // Step 1: Generate nuggets via Gemini
+        // No Authorization header needed — generate-nuggets has
+        // verify_jwt = false and doesn't read the caller's auth.
+        // (The old Bearer header broke with the new sb_secret_* key
+        // format, which isn't a JWT.)
         const generateRes = await fetch(`${SUPABASE_URL}/functions/v1/generate-nuggets`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
           },
           body: JSON.stringify({
             artist: track.artist,

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import { exchangeSpotifyCode, fetchSpotifyTaste } from "@/hooks/useSpotifyAuth";
+import { saveSpotifyToken } from "@/hooks/useSpotifyToken";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
 
 type Status = "exchanging" | "fetching" | "saving" | "done" | "error";
@@ -41,15 +42,16 @@ export default function SpotifyCallback() {
         return;
       }
 
-      // Persist playback tokens for Spotify Web Playback SDK
-      localStorage.setItem(
-        "spotify_playback_token",
-        JSON.stringify({
-          accessToken: tokenResult.accessToken,
-          refreshToken: tokenResult.refreshToken,
-          expiresAt: Date.now() + tokenResult.expiresIn * 1000,
-        })
-      );
+      // Persist playback tokens for Spotify Web Playback SDK. Must go through
+      // saveSpotifyToken (not raw localStorage.setItem) so other mounted
+      // useSpotifyToken hook instances — notably the one inside
+      // PlayerProvider — flip their hasSpotifyToken state to true and the
+      // engine-init effect re-runs and creates the SDK player.
+      saveSpotifyToken({
+        accessToken: tokenResult.accessToken,
+        refreshToken: tokenResult.refreshToken,
+        expiresAt: Date.now() + tokenResult.expiresIn * 1000,
+      });
 
       // Step 2: Fetch taste profile
       setStatus("fetching");

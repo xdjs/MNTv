@@ -1,15 +1,18 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, LogOut } from "lucide-react";
+import { Search, LogOut, Heart } from "lucide-react";
+import { Link } from "react-router-dom";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import TileRow from "@/components/TileRow";
 import SearchOverlay from "@/components/SearchOverlay";
 import PageTransition from "@/components/PageTransition";
+import StoriesRail from "@/components/StoriesRail";
 import { useUserProfile, tierGreeting, tierBadgeLabel, tierBadgeColor, tierGlowClass } from "@/hooks/useMusicNerdState";
 import { usePersonalizedCatalog } from "@/hooks/usePersonalizedCatalog";
 import { useTierAccent } from "@/hooks/useTierAccent";
 import { useSignOut } from "@/hooks/useSignOut";
 import { usePlayer } from "@/contexts/PlayerContext";
+import { useStoriesContext } from "@/contexts/StoriesContext";
 
 export default function Browse() {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -31,6 +34,11 @@ export default function Browse() {
 
   const { rows: allRows } = usePersonalizedCatalog(profile);
   const userName = profile?.displayName || profile?.spotifyDisplayName || "";
+
+  // Pre-gen happens up at StoriesProvider (mounted in App), so stories start
+  // warming as soon as the profile is hydrated — not when the user reaches
+  // this page. Browse just reads the shared state.
+  const { stories } = useStoriesContext();
 
   const demoItems = [
     {
@@ -258,6 +266,14 @@ export default function Browse() {
               <Search size={16} />
               <span className="hidden md:inline" style={{ fontFamily: "'Nunito Sans', sans-serif" }}>Search</span>
             </button>
+            <Link
+              to="/profile"
+              title="Saved nuggets"
+              aria-label="Saved nuggets"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-foreground/5 text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground"
+            >
+              <Heart size={16} />
+            </Link>
             <button
               onClick={handleSignOut}
               title="Sign out"
@@ -291,6 +307,10 @@ export default function Browse() {
               : "What do you want to listen to?"}
           </p>
         </div>
+
+        {/* Stories rail — pre-generated nuggets for your top tracks. Tapping
+            a story opens Listen with the first nugget instant from cache. */}
+        <StoriesRail stories={stories} />
 
         {/* Rows */}
         {allRows.map((row, i) => (

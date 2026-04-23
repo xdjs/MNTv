@@ -80,6 +80,13 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
   private lastPosition = 0;       // ms — for resume after device loss
   private deviceLost = false;
   private reTransferring = false;
+  // True once a user gesture has called activateElement(). If this happens
+  // before `player` exists (common race — user taps a tile before SDK
+  // finishes connect()), we set the flag and fire activateElement again
+  // inside the "ready" event handler. Without that second call, the
+  // iframe audio stays silenced under Chrome's autoplay policy.
+  private gestureArmed = false;
+  private activated = false;
 
   // Subscribers
   private stateListeners: Set<(s: PlaybackState) => void> = new Set();
@@ -120,6 +127,11 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
       this._deviceId = device_id;
       this._ready = true;
       this.onReadyCb?.(device_id);
+      // If a click/touch called activateElement() before `player` existed,
+      // re-issue it now that the iframe is attached. Browsers accept this
+      // because the page-level sticky-activation from the original gesture
+      // still applies to the same document.
+      if (this.gestureArmed && !this.activated) this.tryActivate();
       // Auto-play pending URI that was stored before the SDK was ready
       if (this.lastUri && !this.hasAutoPlayed) {
         this.autoPlay(this.lastUri);
@@ -149,6 +161,42 @@ export class SpotifyPlaybackEngine implements PlaybackEngine {
     if (this.player) {
       this.player.disconnect();
       this.player = null;
+    }
+  }
+
+  /**
+   * Unlock browser audio output for the Spotify SDK's internal iframe.
+   * Call this from a click / touchend handler (capture phase). If the SDK
+   * hasn't finished `connect()` yet we remember the gesture and re-issue
+   * activation inside the "ready" event — Chrome's sticky-activation is
+   * page-scoped, so the document still counts as activated by the time
+   * the iframe attaches, a few hundred ms later.
+   *
+   * Idempotent.
+   */
+  activateElement(): void {
+    this.gestureArmed = true;
+    this.tryActivate();
+  }
+
+  private tryActivate(): void {
+    if (this.activated) return;
+    if (!this.player) return;
+    const activate = (this.player as unknown as { activateElement?: () => Promise<void> | void })
+      .activateElement;
+    if (typeof activate !== "function") return;
+    try {
+      const maybe = activate.call(this.player);
+      this.activated = true;
+      if (maybe && typeof (maybe as Promise<void>).catch === "function") {
+        (maybe as Promise<void>).catch(() => {
+          // Rejection = gesture expired before SDK accepted it. Allow
+          // the next gesture to re-arm a fresh activation attempt.
+          this.activated = false;
+        });
+      }
+    } catch {
+      this.activated = false;
     }
   }
 

@@ -225,6 +225,29 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     return prev;
   }, []);
 
+  // ── Spotify SDK audio-activation ────────────────────────────────────
+  // Spotify's Web Playback SDK needs player.activateElement() called inside
+  // a user gesture to unlock the iframe audio. Hard reloads satisfy this via
+  // the load event; SPA navs don't, which is why the OLD inline PlayerContext
+  // happened to work (direct page loads only) but the engine abstraction
+  // exposes the gap when users click tiles/stories.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const activate = () => {
+      const e = engineRef.current;
+      const maybe = (e as unknown as { activateElement?: () => void } | null)?.activateElement;
+      if (typeof maybe === "function") maybe.call(e);
+    };
+    // Capture so React's synthetic event system doesn't defer it — must
+    // run inside the gesture's synchronous task.
+    document.addEventListener("click", activate, { capture: true, passive: true });
+    document.addEventListener("touchend", activate, { capture: true, passive: true });
+    return () => {
+      document.removeEventListener("click", activate, { capture: true } as EventListenerOptions);
+      document.removeEventListener("touchend", activate, { capture: true } as EventListenerOptions);
+    };
+  }, []);
+
   // ── Engine init (on profile service change, if token available) ────
   //
   // Two string namespaces at play here — don't confuse them:
@@ -335,6 +358,34 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     return;
   // eslint-disable-next-line react-hooks/exhaustive-deps -- getValidToken and getDeveloperToken are useCallback([])-stable; re-including them would churn the effect on every parent re-render and destroy/recreate engines
   }, [service, hasSpotifyToken, hasMusicToken]);
+
+  // ── Engine-init safety net ─────────────────────────────────────────
+  // Rarely the engine-init effect above fires before profile+token have
+  // both settled (race on initial mount), leaving service+token both true
+  // but the Spotify SDK script never loaded. Symptom: "track never started
+  // after 4s — retrying play()" logs loop. Guard checks actual SDK state
+  // because engineRef.current can be truthy while its internal init()
+  // never reached the sdk.scdn.co script append. Pokes the token-changed
+  // events which force useSpotifyToken to re-sync hasSpotifyToken and
+  // re-run the engine-init effect.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const t = setTimeout(() => {
+      const sdkScriptPresent = !!document.querySelector('script[src*="sdk.scdn.co"]');
+      const sdkReady = typeof (window as unknown as { Spotify?: unknown }).Spotify !== "undefined";
+      // Only the Spotify path loads that SDK; Apple MusicKit loads its own
+      // script via a different URL, so check those independently.
+      if (hasSpotifyToken && !sdkScriptPresent && !sdkReady) {
+        if (import.meta.env.DEV) console.log("[Player] Engine-init safety-net poking spotify token");
+        window.dispatchEvent(new Event("spotify-token-changed"));
+      }
+      if (hasMusicToken && !(window as unknown as { MusicKit?: unknown }).MusicKit) {
+        if (import.meta.env.DEV) console.log("[Player] Engine-init safety-net poking apple token");
+        window.dispatchEvent(new Event("apple-music-token-changed"));
+      }
+    }, 1800);
+    return () => clearTimeout(t);
+  }, [hasSpotifyToken, hasMusicToken]);
 
   // ── loadTrack ─────────────────────────────────────────────────────
 

@@ -25,6 +25,25 @@ interface AINuggetData {
 
 // ── Helpers for consistent ID/object creation across SSE, cache, and JSON paths ──
 
+/**
+ * Blank the album slot in a `real::…` trackId before composing the
+ * nugget_cache key. Different entry points populate the album slot
+ * inconsistently (story rail leaves it empty, tile/search fill it),
+ * so keying on the URI only means every entry point reads and writes
+ * the same cache row for the same recording. Non-`real::` ids
+ * (seed-nugget slugs) are passed through unchanged. Mirror of the
+ * server-side canonicalization in generate-nuggets/index.ts.
+ */
+function canonicalCacheKey(trackId: string, tier: string): string {
+  if (!trackId.startsWith("real::")) return `${trackId}::${tier}`;
+  const parts = trackId.split("::");
+  // Expected: ["real", artist, title, album, uri...]. Fewer than 5 parts
+  // means the id is malformed — preserve original to avoid losing data.
+  if (parts.length < 5) return `${trackId}::${tier}`;
+  parts[3] = "";
+  return `${parts.join("::")}::${tier}`;
+}
+
 function makeIds(trackId: string, listenCount: number, index: number) {
   return {
     sourceId: `ai-src-${trackId}-L${listenCount}-${index}`,
@@ -86,6 +105,9 @@ interface UseAINuggetsResult {
   listenCount: number;
   artistSummary: string | null;
   fromCache: boolean;
+  /** True while wave 2 or 3 is generating in the background. UI hint only;
+   *  main `loading` stays false because initial nuggets are already visible. */
+  waveLoading: boolean;
 }
 
 // ── Sentinel poll helper ──────────────────────────────────────────────────────
@@ -134,17 +156,57 @@ export function useAINuggets(
   const [nuggets, setNuggets] = useState<Nugget[]>([]);
   const [sources, setSources] = useState<Map<string, Source>>(new Map());
   const [loading, setLoading] = useState(true);
+  // Sync the two state slices into refs (below, after the state declarations
+  // and their refs are created) — see nuggetsRef / sourcesRef usage in the
+  // wave 2/3 upsert.
   const [error, setError] = useState<string | null>(null);
   const [listenCount, setListenCount] = useState(1);
   const [artistSummary, setArtistSummary] = useState<string | null>(null);
   const [fromCache, setFromCache] = useState(false);
 
-  const { getNuggetCache, setNuggetCache, getTrackListenCount, setTrackListenCount } = usePlayer();
+  const {
+    getNuggetCache, setNuggetCache, getTrackListenCount, setTrackListenCount,
+    currentTime, isPlaying,
+  } = usePlayer();
   const cancelledRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   // Track when the last generation attempt started — used to only debounce
   // on rapid skips (< 5s between tracks), not on first page load.
   const lastGenTimestampRef = useRef(0);
+
+  // ── Wave orchestration ─────────────────────────────────────────────
+  // Wave 1 is the initial generate() call. Wave 2/3 fire in-session when
+  // the user has consumed all current nuggets AND the track has time left.
+  // Cap at wave 3 (9 total nuggets). Each wave bumps listenCount to unlock
+  // deeper angles in the ANGLE_POOL, and passes accumulated headlines as
+  // previousNuggets for dedup across waves.
+  const currentWaveRef = useRef(1);
+  const waveInFlightRef = useRef(false);
+  // Cooldown timestamp — when a wave attempt fails we hold off retrying for
+  // 30 s so a transient server error doesn't fire a new request every 500 ms
+  // (the effect re-evaluates on every currentTime tick).
+  const waveCooldownUntilRef = useRef(0);
+  // Mirror waveInFlightRef as state so the UI can surface a "more coming" pill.
+  const [waveLoading, setWaveLoading] = useState(false);
+  // Track the current trackId via ref so in-flight wave generations can
+  // detect a track change and drop their results rather than appending to
+  // a different track's nuggets.
+  const currentTrackIdRef = useRef(trackId);
+  currentTrackIdRef.current = trackId;
+  // Sync nuggets + sources into refs so the wave 2/3 upsert sees the
+  // latest arrays even if an SSE chunk lands between effect-fire and the
+  // post-request cache upsert (previously the upsert closed over stale
+  // state and could drop those SSE-delivered sources from the cache row).
+  const nuggetsRef = useRef<Nugget[]>([]);
+  const sourcesRef = useRef<Map<string, Source>>(new Map());
+  nuggetsRef.current = nuggets;
+  sourcesRef.current = sources;
+  // Reset wave state when the track changes.
+  useEffect(() => {
+    currentWaveRef.current = 1;
+    waveInFlightRef.current = false;
+    waveCooldownUntilRef.current = 0;
+  }, [trackId, regenerateKey]);
 
   const generate = useCallback(async () => {
     if (!artist || !title) return;
@@ -176,8 +238,14 @@ export function useAINuggets(
     setError(null);
     // true once we own the 'generating' sentinel; reset to false after cache write succeeds
     let sentinelClaimed = false;
-    // Tier-scoped key for nugget_cache DB table — different tiers get different cached nuggets
-    const dbCacheKey = `${trackId}::${tier}`;
+    // Tier-scoped key for nugget_cache DB table — different tiers get
+    // different cached nuggets. We blank the album slot so that different
+    // entry points to the same track (story rail with empty album, tile /
+    // search with album populated, artist-profile tile, etc.) resolve to
+    // the same cache row. The URI still uniquely identifies the recording,
+    // so album is purely cosmetic for the cache key. MUST match the
+    // canonicalization in generate-nuggets/index.ts's server-side upsert.
+    const dbCacheKey = canonicalCacheKey(trackId, tier);
 
     try {
       const trackKey = `${artist}::${title}`;
@@ -412,6 +480,7 @@ export function useAINuggets(
         spotifyArtistImageUrl: artistImageUrl,
         spotifyTrackId: spotifyTrackIdValue,
         appleTrackId: appleTrackIdValue,
+        durationSec,  // server uses this to compute cache-side timestamps
       };
 
       // Get auth token for the request
@@ -742,5 +811,136 @@ export function useAINuggets(
     };
   }, [generate, regenerateKey]);
 
-  return { nuggets, sources, loading, error, listenCount, artistSummary, fromCache };
+  // ── Wave 2/3 trigger ────────────────────────────────────────────────
+  // Fire the next wave when all current nuggets have been consumed (last
+  // timestamp passed + small buffer) AND the track has ≥45s remaining.
+  // Uses batch JSON (not SSE) for subsequent waves — the UX priority is
+  // "first nugget fast" which only applies to wave 1; waves 2/3 arrive
+  // in the background while the user reads wave 1's content.
+  useEffect(() => {
+    if (currentWaveRef.current >= 3) return;        // cap reached
+    if (waveInFlightRef.current) return;            // already generating
+    if (nuggets.length === 0) return;               // wave 1 not yet landed
+    if (!durationSec || durationSec < 90) return;   // track too short
+    if (!isPlaying) return;                         // paused — wait
+    if (cancelledRef.current) return;               // track changed / unmount
+    if (fromCache) return;                          // cached tracks don't wave-extend
+    if (Date.now() < waveCooldownUntilRef.current) return;  // recent failure, cooldown
+
+    const lastTimestamp = Math.max(...nuggets.map((n) => n.timestampSec));
+    if (currentTime < lastTimestamp + 5) return;    // user still consuming
+    if (durationSec - currentTime < 45) return;     // not enough time left
+
+    const nextWave = currentWaveRef.current + 1;
+    const waveTrackId = trackId;
+    // Hold off bumping currentWaveRef until we actually get nuggets back —
+    // that way a transient failure on wave 2 doesn't permanently lock the
+    // user out of wave 2 content for the rest of the session.
+    let advancedWaveRef = false;
+    waveInFlightRef.current = true;
+    setWaveLoading(true);
+    if (import.meta.env.DEV) console.log(`[NuggetWave ${nextWave}] firing — ${Math.floor(durationSec - currentTime)}s remaining, ${nuggets.length} nuggets so far`);
+
+    (async () => {
+      try {
+        const previousHeadlines = nuggets.map((n) => n.headline || n.text).filter(Boolean);
+        const spotifyUriMatch = trackId.match(/spotify:track:([a-zA-Z0-9]{22})/);
+        const appleUriMatch = trackId.match(/apple:song:(\d+)/);
+        const requestBody = {
+          artist,
+          title,
+          album,
+          listenCount: nextWave,                     // unlocks deeper angles
+          previousNuggets: previousHeadlines,        // cross-wave dedup
+          tier,
+          userTopArtists: topArtists?.slice(0, 10),
+          userTopTracks: topTracks?.slice(0, 10),
+          spotifyArtistImageUrl: artistImageUrl,
+          spotifyTrackId: spotifyUriMatch?.[1],
+          appleTrackId: appleUriMatch?.[1],
+        };
+        const { data, error } = await supabase.functions.invoke("generate-nuggets", {
+          body: requestBody,
+        });
+
+        // Drop results if track changed or generation cancelled.
+        if (waveTrackId !== currentTrackIdRef.current || cancelledRef.current) {
+          if (import.meta.env.DEV) console.log(`[NuggetWave ${nextWave}] dropped — track changed`);
+          return;
+        }
+        if (error) {
+          if (import.meta.env.DEV) console.warn(`[NuggetWave ${nextWave}] error:`, error.message);
+          return;
+        }
+        const newNuggetData = (data?.nuggets as AINuggetData[] | undefined) ?? [];
+        if (newNuggetData.length === 0) {
+          if (import.meta.env.DEV) console.log(`[NuggetWave ${nextWave}] server returned 0 nuggets — done`);
+          return;
+        }
+
+        // Assign timestamps in the post-last-existing-nugget window so the
+        // new cards unlock after the user has finished with wave 1.
+        const waveStart = Math.max(currentTime + 5, lastTimestamp + 10);
+        const waveEnd = durationSec - 10;
+        const waveSpan = Math.max(waveEnd - waveStart, 10);
+        const waveSpacing = waveSpan / (newNuggetData.length + 1);
+
+        const newNuggets: Nugget[] = [];
+        const newSources = new Map<string, Source>();
+        newNuggetData.forEach((n, i) => {
+          const absoluteIndex = nuggets.length + i;
+          const { sourceId, nuggetId } = makeIds(trackId, nextWave, absoluteIndex);
+          const ts = Math.min(Math.floor(waveStart + waveSpacing * (i + 1)), durationSec - 5);
+          newSources.set(sourceId, makeSource(sourceId, n.source));
+          newNuggets.push(makeNugget(n, nuggetId, sourceId, trackId, ts));
+        });
+
+        setNuggets((prev) => [...prev, ...newNuggets]);
+        setSources((prev) => {
+          const next = new Map(prev);
+          newSources.forEach((v, k) => next.set(k, v));
+          return next;
+        });
+        // Only advance the wave counter now that we have new nuggets landed —
+        // see the `let advancedWaveRef` comment above.
+        currentWaveRef.current = nextWave;
+        advancedWaveRef = true;
+        if (import.meta.env.DEV) console.log(`[NuggetWave ${nextWave}] appended ${newNuggets.length} nuggets`);
+
+        // Non-fatal: persist the accumulated set for future replays. Read
+        // current state from refs rather than closures so we include any
+        // sources/nuggets that arrived via SSE while this request was in
+        // flight.
+        try {
+          const dbCacheKey = canonicalCacheKey(trackId, tier);
+          const allNuggets = [...nuggetsRef.current, ...newNuggets];
+          const allSources = new Map(sourcesRef.current);
+          newSources.forEach((v, k) => allSources.set(k, v));
+          const cacheSourcesObj: Record<string, Source> = {};
+          allSources.forEach((src, key) => { cacheSourcesObj[key] = src; });
+          await supabase.from("nugget_cache").upsert(
+            { track_id: dbCacheKey, nuggets: allNuggets as unknown as Json, sources: cacheSourcesObj as unknown as Json, status: "ready" },
+            { onConflict: "track_id" },
+          );
+        } catch (e) {
+          if (import.meta.env.DEV) console.warn(`[NuggetWave ${nextWave}] cache upsert failed (non-fatal)`, e);
+        }
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        if (import.meta.env.DEV) console.warn(`[NuggetWave ${nextWave}] threw:`, e);
+      } finally {
+        waveInFlightRef.current = false;
+        setWaveLoading(false);
+        // If we exited without advancing the wave counter, the attempt
+        // either errored or came back empty. Apply the cooldown so the
+        // effect doesn't re-fire immediately on the next currentTime tick.
+        if (!advancedWaveRef) {
+          waveCooldownUntilRef.current = Date.now() + 30_000;
+        }
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nuggets/sources read at trigger time, not subscribed
+  }, [currentTime, nuggets.length, durationSec, isPlaying, trackId, artist, title, album, tier, fromCache]);
+
+  return { nuggets, sources, loading, error, listenCount, artistSummary, fromCache, waveLoading };
 }

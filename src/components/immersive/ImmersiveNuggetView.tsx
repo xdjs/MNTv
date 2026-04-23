@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { memo, useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Loader2 } from "lucide-react";
+import { Loader2, Heart } from "lucide-react";
 import { usePlayer } from "@/contexts/PlayerContext";
 import { supabase } from "@/integrations/supabase/client";
 import type { Nugget, Source } from "@/mock/types";
@@ -9,6 +9,7 @@ import TypewriterText from "./TypewriterText";
 import SwipeableNuggetStack from "./SwipeableNuggetStack";
 import MiniPlayer from "./MiniPlayer";
 import { useNuggetPacer } from "./useNuggetPacer";
+import { useBookmarks } from "@/hooks/useBookmarks";
 
 interface ImmersiveNuggetViewProps {
   nuggets: Nugget[];
@@ -31,6 +32,58 @@ interface ImmersiveNuggetViewProps {
 // A server-side guard in the edge function would be the robust long-term fix.
 let deepDiveSessionCount = 0;
 const MAX_DEEP_DIVES_PER_SESSION = 10;
+
+// Pulled out of the nugget-card JSX so the saved-state computation isn't
+// an IIFE inside useCallback's return value (fewer closures to reason about
+// in the memo dep array, easier to read). Takes only the two functions
+// it needs from useBookmarks rather than the whole hook return value, so
+// the component doesn't re-render on unrelated bookmark state changes.
+type BookmarksApi = ReturnType<typeof useBookmarks>;
+const BookmarkButton = memo(function BookmarkButton({
+  activeNugget,
+  activeSource,
+  artist,
+  trackTitle,
+  isBookmarked,
+  toggle,
+}: {
+  activeNugget: Nugget;
+  activeSource: Source | null | undefined;
+  artist: string;
+  trackTitle: string;
+  isBookmarked: BookmarksApi["isBookmarked"];
+  toggle: BookmarksApi["toggle"];
+}) {
+  const saved = isBookmarked(
+    activeNugget.headline || activeNugget.text,
+    activeNugget.trackId,
+    activeNugget.kind,
+  );
+  return (
+    <button
+      aria-label={saved ? "Remove bookmark" : "Save nugget"}
+      className={`text-xs px-3 py-1.5 rounded-full active:scale-95 transition-transform flex items-center gap-1.5 ${
+        saved ? "bg-rose-500/20 text-rose-400" : "bg-white/10 text-white/60"
+      }`}
+      onClick={(e) => {
+        e.stopPropagation();
+        toggle({
+          trackId: activeNugget.trackId,
+          artist,
+          title: trackTitle,
+          kind: activeNugget.kind,
+          headline: activeNugget.headline || activeNugget.text,
+          body: activeNugget.text,
+          source: activeSource ?? null,
+          imageUrl: activeNugget.imageUrl ?? undefined,
+        });
+      }}
+    >
+      <Heart className="w-3 h-3" fill={saved ? "currentColor" : "none"} />
+      {saved ? "Saved" : "Save"}
+    </button>
+  );
+});
 
 // Minimum time a nugget stays on-screen before auto-advance can swap it out.
 // Tuning knob for the streaming pacing — keeps freshly-streamed nuggets
@@ -81,6 +134,9 @@ export default function ImmersiveNuggetView({
   useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
   const initialUnlockDoneRef = useRef(false);
   const trackKey = `${trackTitle}::${artist}`;
+
+  // Bookmarking — optimistic toggle, server-verified identity via edge fn.
+  const bookmarks = useBookmarks();
 
   // ── Reset on track change ──────────────────────────────────────────
   // Pacer state (queue, timer, prevUnlockedCount) is reset by useNuggetPacer
@@ -267,7 +323,7 @@ export default function ImmersiveNuggetView({
   const renderNuggetCard = useCallback(() => {
     const { url: imgUrl, isNuggetImage } = getNuggetImage();
     return (
-      <div className="w-full h-full overflow-y-auto glass-scrollbar">
+      <div className="w-full h-full overflow-y-auto scrollbar-hide">
         {/* Sticky image hero — stays pinned while body text scrolls over it.
             Prevents the gap/overlay break when scrolling up. */}
         <div className="sticky top-0 w-full h-full">
@@ -347,6 +403,16 @@ export default function ImmersiveNuggetView({
                 : deepDiveRateLimited ? "Limit reached"
                 : deepDiveText ? "Go deeper" : "Tell me more"}
             </button>
+            {activeNugget && bookmarks.signedIn && (
+              <BookmarkButton
+                activeNugget={activeNugget}
+                activeSource={activeSource}
+                artist={artist}
+                trackTitle={trackTitle}
+                isBookmarked={bookmarks.isBookmarked}
+                toggle={bookmarks.toggle}
+              />
+            )}
           </div>
 
           {activeSource && (
@@ -355,7 +421,7 @@ export default function ImmersiveNuggetView({
         </div>
       </div>
     );
-  }, [getNuggetImage, activeNugget, activeSource, isTypewriterDone, handleTypewriterComplete, deepDiveText, deepDiveFollowUp, deepDiveLoading, deepDiveRateLimited, handleTellMeMore]);
+  }, [getNuggetImage, activeNugget, activeSource, isTypewriterDone, handleTypewriterComplete, deepDiveText, deepDiveFollowUp, deepDiveLoading, deepDiveRateLimited, handleTellMeMore, bookmarks, artist, trackTitle]);
 
   return (
     <motion.div

@@ -17,9 +17,11 @@ const ArtistProfile = lazy(() => import("./pages/ArtistProfile"));
 const AlbumDetail = lazy(() => import("./pages/AlbumDetail"));
 const Listen = lazy(() => import("./pages/Listen"));
 const SpotifyCallback = lazy(() => import("./pages/SpotifyCallback"));
+const Profile = lazy(() => import("./pages/Profile"));
 import { getStoredProfile } from "./hooks/useMusicNerdState";
 import { AuthProvider } from "./contexts/AuthContext";
 import { PlayerProvider } from "./contexts/PlayerContext";
+import { StoriesProvider } from "./contexts/StoriesContext";
 import NowPlayingBar from "./components/NowPlayingBar";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -75,6 +77,7 @@ function AnimatedRoutes() {
             <Route path="/artist/:artistId" element={<ProtectedRoute><ArtistProfile /></ProtectedRoute>} />
             <Route path="/album/:albumId" element={<ProtectedRoute><AlbumDetail /></ProtectedRoute>} />
             <Route path="/listen/*" element={<ProtectedRoute><Listen /></ProtectedRoute>} />
+            <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
 
             {/* Companion — eagerly loaded (QR-scanned on mobile, must be instant) */}
             <Route path="/companion/:trackId" element={<Companion />} />
@@ -96,6 +99,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <PlayerProvider>
+            <StoriesProvider>
             <ErrorBoundary fallback={
               <div className="min-h-screen bg-background flex items-center justify-center p-6">
                 <div className="text-center space-y-3">
@@ -113,6 +117,7 @@ const App = () => (
               <AnimatedRoutes />
               <NowPlayingBar />
             </ErrorBoundary>
+            </StoriesProvider>
           </PlayerProvider>
         </AuthProvider>
       </BrowserRouter>

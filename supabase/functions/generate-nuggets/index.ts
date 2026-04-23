@@ -1,10 +1,22 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getAppleDeveloperToken } from "../_shared/apple-token.ts";
+import { CONSTITUTION_PREAMBLE, CONSTITUTION_WRITER_RULES, CONSTITUTION_SCORING_CRITERIA, MAX_CONSTITUTION_SCORE } from "./constitution.ts";
+
+// Admin client for the server-side nugget_cache upsert. Module-level so we
+// don't pay import + client construction on every request. The key fallback
+// covers the legacy SUPABASE_SERVICE_ROLE_KEY name used by older deployments.
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_ADMIN_KEY =
+  Deno.env.get("SUPABASE_SECRET_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const cacheAdminClient = SUPABASE_ADMIN_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_ADMIN_KEY)
+  : null;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, accept, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 // ── YouTube Data API search ──────────────────────────────────────────
@@ -730,25 +742,7 @@ const CITATION_GROUP = {
 // argument.
 type WriterRule = string | ((artist: string) => string);
 
-const WRITER_BASE_RULES: WriterRule[] = [
-  `The listener can HEAR the music. Tell them what they CAN'T know from listening — stories, history, people, places, creative context.`,
-  `Dig like Nardwuar — find the specific detail nobody else would. Prioritize "almost didn't happen" stories, unlikely origins, specific people who changed the trajectory.`,
-  `VOICE GUARD: Never hedge ("likely", "suggests", "perhaps") — state facts or skip them. Never describe sound ("sonic landscape", "soundscape") — the listener can hear it. Write with the confidence of someone who KNOWS this, not someone guessing.`,
-  `If uncertain about a fact, OMIT IT. One confident true sentence beats three hedged guesses.`,
-  (artist) => `Headlines must CREATE A CURIOSITY GAP — say just enough to intrigue, withhold enough that the reader MUST read the body. If someone can skip the body after reading your headline, you failed.
-   SAME FACT, TWO WAYS:
-   - SUMMARY (bad): "A scrapped Gucci Mane beat became 'HUMBLE.'" → gives away the whole story, nothing left to read
-   - CURIOSITY (good): "HUMBLE. was never meant for Kendrick" → wait, whose beat was it? I need to read more
-   MORE GOOD: "the bedroom demo that almost got deleted" / "they only met because of a wrong phone number" / "a scrapped beat turned ${artist}'s biggest hit into an accident"
-   MORE BAD: "He recorded his first EP in a closet at 16" / "Aaron Doh's Early Digital Footprint Takes Shape" / "The Creative Evolution Behind the Music" / "this artist's creative path"
-   The test: does the headline make you ask "wait, what?" or "tell me more"? If it just states a fact, rewrite it.
-   Use "${artist}" by name in headlines — never say "this artist" or "he"/"she" without naming them.
-   NEVER use title case. NEVER use "[Name]'s [Abstract Noun]".`,
-  (artist) => `NO VAGUE FILLER. If a sentence could apply to any artist (e.g., "promoting messages of love and hope", "unique blend of genres", "committed to authentic artistry"), it's worthless. Every sentence must contain a detail that ONLY applies to THIS artist.
-   SWAP TEST: if you can replace "${artist}" with any other artist's name and the sentence still works, DELETE IT. It means you wrote nothing specific.`,
-  (artist) => `Do NOT recommend artists who share ANY part of ${artist}'s name.`,
-  `Do NOT use fabricated publisher names like "General Knowledge" or "Music Analysis". Use the artist's real website, Bandcamp, Spotify, or a real music publication.`,
-];
+const WRITER_BASE_RULES: WriterRule[] = CONSTITUTION_WRITER_RULES;
 
 function buildWriterNonNegotiables(artist: string, extras: string[] = []): string {
   const renderRule = (r: WriterRule) => typeof r === "function" ? r(artist) : r;
@@ -1162,31 +1156,31 @@ const TIER_CONFIG: Record<Tier, {
   temperature: number;
 }> = {
   casual: {
-    tone: "You're the friend at a party who hears a song playing and can't help yourself — you grab someone's arm and say 'oh wait, you have to know this about this song.' You're not a journalist, not a professor, not a music blogger. You're someone who genuinely loves this stuff and gets excited sharing it. The reader should finish a nugget thinking 'no way, really?' or 'I need to tell someone this.' Never summarize — reveal.",
+    tone: "You're an excited friend who just found something cool. One vivid detail, simple language, genuine surprise. The listener should think 'no way, really?' Never summarize — reveal.",
     assumedKnowledge: "The listener knows the artist's name but not much else. Give them the one story that will make them see this artist differently — don't recap the Wikipedia intro.",
-    artistFocus: "Who this person is as a human — their origin story, a memorable personality moment, a relatable struggle or triumph, or a surprising personal detail. Make them feel like a real person, not a Wikipedia entry.",
-    trackFocus: "The story behind how this song came to exist — who made a key decision, what almost went differently, what was happening in the room or in the artist's life. Prioritize origin stories and specific people over general philosophy. No technical jargon.",
-    discoveryFocus: "This is your moment to change someone's playlist. Recommend one artist they'll thank you for — someone they can play RIGHT NOW after this track ends. The connection must be real (shared producer, label, sample, scene) but lead with the excitement, not the citation. Write it like: 'If this is hitting right now, you need to hear [artist]' — then explain why.",
+    artistFocus: "Pick whichever of these this artist's research actually supports most vividly: a human origin story, a memorable personality moment, a relatable struggle or triumph, a surprising personal detail, a formative scene or city, a first-gig or first-recording story. Choose the angle that makes them feel like a real person. If none of those have specific citations, REDUCE THE COUNT (but always keep at least 1 nugget — grounded in catalog data or the clearest verifiable anchor you have) — never write a nugget ABOUT the absence of information (no 'the mystery is the story', no 'artist without a past', no 'blank slate').",
+    trackFocus: "Pick the angle the research actually rewards: the origin story of the song, a key decision someone made, what almost went differently, what was happening in the artist's life when it was written, a specific collaborator's role. Prioritize real specific people and moments. If track-level details are thin, pivot to the artist's creative context — but never describe the track's 'sound' or 'mood' in place of a real story, and never write ABOUT the absence of track info. If nothing specific exists, skip this slot entirely.",
+    discoveryFocus: "Recommend one artist they can play RIGHT NOW. The connection must be real and nameable — shared producer, shared label, shared sample, shared scene or city, confirmed influence. 'Similar vibe' is forbidden. Lead with excitement, then name the concrete link. If you don't have a producer/sample link, fall back to a same-scene or same-label connection — those are real links too. Recommended artist must exist on Spotify. If NO concrete connection can be named, SKIP this slot — do not write a nugget explaining why you can't recommend someone.",
     sourceExpectation: "Wikipedia, mainstream music press (Rolling Stone, NME, Billboard), YouTube interviews, music documentaries.",
     model: "gemini-2.5-flash",
     temperature: 1.0,
   },
   curious: {
-    tone: "You write like the best music podcast host — the one who makes you pull over to keep listening. You know the stories behind the stories: the 2am studio accident that became the hook, the argument that almost killed the album, the B-side that changed a genre. Go one layer past what Google would tell you. The reader should feel like they're getting insider knowledge, not a Wikipedia recap.",
+    tone: "You're the friend who's been down the rabbit hole. Backstory, tensions, specific moments. Go one layer past what Google would tell you. The reader should feel like they're getting insider knowledge, not a Wikipedia recap.",
     assumedKnowledge: "The listener has some music knowledge. Don't reintroduce the artist — they want the backstory, the tensions, and the specific moments that shaped things, not a biography summary.",
-    artistFocus: "A career turning point, creative evolution, or artistic philosophy that shaped who they became. What were the tensions, decisions, or collaborations that defined their sound? Name specific people and moments.",
-    trackFocus: "The specific origin story of this track — who made it, where, and what almost went differently. Name key collaborators, the studio or setup, and the decision or accident that shaped the final version. Prioritize 'almost didn't happen' moments over general career context.",
-    discoveryFocus: "Recommend an artist with a genuine thread connecting them — not 'similar vibe' but a real link: shared producer, confirmed influence, sample source, label family, same scene. The reader should feel like you just handed them a key to a door they didn't know existed. Be specific about the connection and opinionated about where to start.",
+    artistFocus: "Pick the angle this artist's research actually supports best: a career turning point, a creative evolution, an artistic philosophy that shaped their sound, a defining tension or collaboration, a named decision that changed their trajectory. Name specific people and moments when they exist in the research. When specific people aren't in the research, pivot to scene, label, regional movement, or release-history context — also backed by citations. Never paraphrase a guess as fact. If no angle has concrete support, REDUCE THE COUNT (but always keep at least 1 nugget — grounded in catalog data or the clearest verifiable anchor you have) — never philosophize about the artist being 'mysterious' or 'a blank slate'.",
+    trackFocus: "The origin story of this track — who made it, where, what almost went differently. Name key collaborators, the studio or setup, the decision or accident that shaped the final version. Prioritize 'almost didn't happen' moments over general career context. If track-level specifics aren't in the research, pivot to the artist's broader creative moment around the song — but don't invent session details, and don't write ABOUT the absence of track info. Skip the slot if nothing specific exists.",
+    discoveryFocus: "Recommend an artist with a genuine thread connecting them. Palette of real links: shared producer, confirmed influence, sample source, label family, session-player overlap, same scene, same city, same micro-genre movement. Pick the most surprising one the research supports. 'Similar vibe' is forbidden. Be specific about the connection and opinionated about where to start. If NO concrete link can be named, SKIP this slot rather than explaining why no recommendation is possible.",
     sourceExpectation: "Pitchfork, Rolling Stone deeper features, AllMusic, quality podcast interviews (Zane Lowe, Broken Record, Song Exploder, Rolling Stone Music Now).",
     model: "gemini-2.5-flash",
     temperature: 0.9,
   },
   nerd: {
-    tone: "You write like the Dissect podcast meets Sound on Sound — technically precise but never dry. You assume the reader has heard every album and knows the genre history. Skip the setup, go straight to the revelation: the exact signal chain, the borrowed chord progression, the session musician who played on both this track and that obscure 1974 B-side. The reader should feel smarter after reading this, not just more informed.",
+    tone: "You're the friend with the reference library. Technical precision, obscure connections, specifics. Skip all setup — go straight to the revelation. The reader should feel smarter after reading this, not just more informed.",
     assumedKnowledge: "The listener knows this artist's full catalog and their genre/era. Skip biography entirely — go to the technical, historical, or analytical layer that rewards real knowledge.",
-    artistFocus: "Technical innovations and signature approaches: specific gear (name the exact make/model/year), recording chain, studio methodology, influence chains with named records, relationships with specific engineers and producers. What is their sonic fingerprint and exactly how do they achieve it?",
-    trackFocus: "Production technique, harmonic or rhythmic analysis, specific studio and engineer details, specific take or edit decisions, what's happening in the mix that requires careful listening to notice. Be precise — name the exact gear, the exact technique, the specific moment in the track.",
-    discoveryFocus: "Connect them to something they haven't found yet — a session musician who played on both records, an obscure sample source, a micro-genre ancestor, an engineer whose fingerprint is on both. The connection should make them say 'how did I not know this?' Be precise and opinionated: name the specific record to start with.",
+    artistFocus: "Find the nerd-worthy angle this artist's research actually rewards. Palette (no priority order): sample archaeology, session-credit webs, micro-genre lineage, label and scene geography, named collaborators on specific records, studio or mix decisions, influence chains traced to named records, the artist's own words about a technical choice, specific gear when it's load-bearing to their sound. Pick whichever is most surprising AND most specific for THIS artist — don't default to gear or recording technique just because those read as 'technical.' A gear fact is only a nerd fact if it's surprising; a Nardwuar-style session-credit connection or a micro-genre ancestor is often more interesting than naming a preamp. Never invent gear, engineers, or studios — a nerd shifts registers when the research thins, it doesn't fabricate. If you cannot land a specific, verifiable angle for this slot, REDUCE THE COUNT (but always keep at least 1 nugget — grounded in catalog data or the clearest verifiable anchor you have) — never write a nugget ABOUT the absence of information.",
+    trackFocus: "Find the nerd-worthy angle about how this specific track was made. Palette: production technique, harmonic or rhythmic analysis, specific take or edit decisions, named track collaborators, sample sources, the specific moment in the mix that rewards careful listening, the studio or room, a technical accident that stayed in. Pick the angle the research actually supports best — don't default to production-tech just because it sounds nerd-coded. If the research has no track-level specifics, pivot to a nerd-worthy fact about the artist's approach around this record, rather than inventing a gear chain.",
+    discoveryFocus: "Connect them to something they haven't found yet. Palette: shared session player, shared engineer, sample source, confirmed influence, micro-genre ancestor, label family, scene crossover, producer's other work. Pick the most obscure verifiable link — the one that makes a real fan say 'how did I not know this?' — not the most technical-sounding. Be precise and opinionated: name the specific record to start with.",
     sourceExpectation: "Sound on Sound, Tape Op, Recording magazine, Discogs, MusicBrainz, academic music journals, specific Reddit communities (r/indieheads, r/LetsTalkMusic, r/audiophile), Resident Advisor (for electronic), gear wikis.",
     model: "gemini-2.5-pro",
     temperature: 0.8,
@@ -1380,6 +1374,8 @@ interface CuratedResearch {
   albumContext: string;
   keyCollaborators: string[];
   warningsForWriter: string[];
+  storyArcs?: string[];
+  connections?: string[];
 }
 
 async function curateResearch(
@@ -1436,6 +1432,11 @@ EXTRACTION CHECKLIST — actively look for and include each of these when presen
 - Relationships between artists: who worked with whom, who influenced whom, real collaborations
 - Track-specific production details: who played what instrument, where it was recorded, what gear was used
 
+NARRATIVE EXTRACTION — go beyond isolated facts:
+- Group related facts into narrative threads: origin story, creative partnership, turning point, unlikely connection. Put these in "storyArcs".
+- Identify connections between entities (who worked with whom, what event led to what creation). Put these in "connections".
+- Prioritize direct quotes and first-person accounts — mark them explicitly.
+
 SOURCES:
 ${exaContext}
 ${transcriptContext ? `\nYOUTUBE TRANSCRIPTS:\n${transcriptContext}` : ""}
@@ -1448,6 +1449,8 @@ Return ONLY valid JSON:
   "trackFacts": ["Any facts specifically about '${title}' — recording, personnel, who produced it, chart performance, behind-the-scenes stories, direct quotes about the song [CIT N]"],
   "albumContext": "What sources say about '${album || "the album"}'",
   "keyCollaborators": ["Full Name — specific role (e.g. 'produced the beat', 'co-wrote', 'engineered at Studio X') [CIT N]"],
+  "storyArcs": ["Cause→effect narrative threads, e.g. 'got kicked out of college → moved to Fort Myers → discovered hip-hop production → first mixtape'"],
+  "connections": ["Entity↔entity links, e.g. '${artist} ↔ Producer Name: met at X, collaborated on Y'"],
   "warningsForWriter": ["Caveats: name variations found, different projects referenced, limited track-specific info, etc."]
 }`;
 
@@ -1594,6 +1597,15 @@ const HALLUCINATED_PUBLISHERS = [
   "music vault", "musicvault", "artist vault",
   "beat archive", "beatarchive", "sound archive",
   "track vault", "trackvault", "music archive",
+  // Corporate-sounding fabrications observed in the wild — these read as
+  // legitimate institutional names but are invented when Gemini has no real
+  // source. Rule of thumb: a "system" or "team" or "research" publisher is
+  // almost always hallucinated.
+  "internal system", "music intelligence team", "music intelligence",
+  "music research team", "music research", "music analysis team",
+  "music editorial team", "editorial team", "research team",
+  "general knowledge", "music analysis", "artist research",
+  "music database", "song database", "catalog data",
 ];
 
 // Known real music publications — used as a positive signal when deciding
@@ -1612,11 +1624,34 @@ const KNOWN_REAL_PUBLISHERS = new Set([
   "the line of best fit", "the needle drop", "fantano",
 ]);
 
-function validateNuggetQuality(nuggets: GeminiNugget[], artist?: string): { valid: boolean; issues: string[]; hallucinated: boolean; vagueHeadlines: boolean } {
+function validateNuggetQuality(nuggets: GeminiNugget[], artist?: string): { valid: boolean; issues: string[]; hallucinated: boolean; vagueHeadlines: boolean; constitutionScores?: number[] } {
   const issues: string[] = [];
   let hallucinatedSourceCount = 0;
+  const constitutionScores: number[] = [];
+
+  // Proper noun detector for constitution scoring
+  const COMMON_WORDS = new Set(["The", "This", "That", "These", "When", "Where", "What", "How", "His", "Her", "Its", "After", "Before", "During", "From", "Into", "With", "About", "Also", "But", "And", "For", "Not", "All", "Any", "Each", "Every", "Both", "Such", "If", "In", "On", "At", "To", "Of", "A", "An", "By", "As", "Or", "So", "He", "She", "It", "They", "We", "You", "I"]);
+  const artistLower = (artist || "").toLowerCase();
+  function extractProperNouns(text: string): string[] {
+    const matches: string[] = [];
+    let match;
+    const re = /\b([A-Z][A-Za-z'.&-]*(?:\s+[A-Z][A-Za-z'.&-]*){0,3})\b/g;
+    while ((match = re.exec(text)) !== null) {
+      const name = match[1].trim();
+      const firstWord = name.split(/\s+/)[0];
+      if (!COMMON_WORDS.has(firstWord) && name.toLowerCase() !== artistLower && name.length > 2) {
+        matches.push(name);
+      }
+    }
+    return [...new Set(matches)];
+  }
+  const BIOGRAPHY_OPENERS = [/^(born|raised|grew up|hails from|is a|comes from|was born|originally from)\b/i];
+
   for (let i = 0; i < nuggets.length; i++) {
     const n = nuggets[i];
+    let score = 0;
+    let hasVagueHeadline = false;
+    let hasHallucinatedSource = false;
     // Empty headline — generate one from the first sentence of text
     if (!n.headline?.trim() && n.text?.trim()) {
       n.headline = generateHeadlineFromText(n.text);
@@ -1649,12 +1684,14 @@ function validateNuggetQuality(nuggets: GeminiNugget[], artist?: string): { vali
     for (const noun of VAGUE_HEADLINE_NOUNS) {
       if (headlineLower.includes(noun)) {
         issues.push(`Nugget ${i} (${n.kind}): vague headline noun "${noun}"`);
+        hasVagueHeadline = true;
         break;
       }
     }
     for (const verb of VAGUE_HEADLINE_VERBS) {
       if (headlineLower.includes(verb)) {
         issues.push(`Nugget ${i} (${n.kind}): vague headline verb "${verb}"`);
+        hasVagueHeadline = true;
         break;
       }
     }
@@ -1666,16 +1703,18 @@ function validateNuggetQuality(nuggets: GeminiNugget[], artist?: string): { vali
       /^an? emerging voice\b/i, /^the rise of\b/i, /^exploring the\b/i,
       /^the art of\b/i, /^a journey through\b/i, /^the beauty of\b/i,
       /^unveiling\b/i, /^the power of\b/i, /^a new chapter\b/i,
-      /\bthis artist\b/i, /\bthis track\b/i, /\bthis song\b/i, /\bthis musician\b/i,
+      /\bthis artist\b/i, /\bthis musician\b/i,
       /\byou['\u2019]ve (?:likely |probably )?heard\b/i, /\byou['\u2019]ve already heard\b/i, /\byou already know\b/i,
+      /^the (sound|music|art) of\b/i, /\bblending .+ and\b/i,
+      /\bpushes? (?:the )?boundar/i, /\bdefies? (?:easy )?categori/i,
     ];
     for (const pat of VAGUE_HEADLINE_PATTERNS) {
       if (pat.test(headline)) {
         issues.push(`Nugget ${i} (${n.kind}): vague headline pattern "${pat.source}"`);
+        hasVagueHeadline = true;
         break;
       }
     }
-    // Artist name in headlines is fine — better than vague "he"/"she" pronouns.
 
     // Check for hallucinated source types and publishers
     const sourceType = (n.source?.type || "").toLowerCase();
@@ -1683,10 +1722,12 @@ function validateNuggetQuality(nuggets: GeminiNugget[], artist?: string): { vali
     if (sourceType === "internal-data" || sourceType === "internal_data" || sourceType === "database" || sourceType === "editorial") {
       issues.push(`Nugget ${i} (${n.kind}): hallucinated source type "${n.source.type}"`);
       hallucinatedSourceCount++;
+      hasHallucinatedSource = true;
     }
     if (HALLUCINATED_PUBLISHERS.some(hp => sourcePublisher.includes(hp))) {
       issues.push(`Nugget ${i} (${n.kind}): hallucinated publisher "${n.source.publisher}"`);
       hallucinatedSourceCount++;
+      hasHallucinatedSource = true;
     }
     // Check for empty quoteSnippet with unverified google search URL — likely fabricated
     const sourceUrl = n.source?.sourceUrl || "";
@@ -1694,11 +1735,26 @@ function validateNuggetQuality(nuggets: GeminiNugget[], artist?: string): { vali
     if (!quoteSnippet && sourceUrl.includes("google.com/search") && sourceType !== "youtube") {
       issues.push(`Nugget ${i} (${n.kind}): no quote + google search URL (likely fabricated)`);
       hallucinatedSourceCount++;
+      hasHallucinatedSource = true;
     }
+
+    // ── Constitution scoring (soft checks, logged not blocking) ────────
+    const nuggetText = `${n.headline || ""} ${n.text || ""}`;
+    const properNouns = extractProperNouns(nuggetText);
+    if (properNouns.length >= 1) score += CONSTITUTION_SCORING_CRITERIA.specificity;
+    if (properNouns.length >= 2) score += CONSTITUTION_SCORING_CRITERIA.connection;
+    const isNovel = !BIOGRAPHY_OPENERS.some(pat => pat.test(headlineLower));
+    if (isNovel) score += CONSTITUTION_SCORING_CRITERIA.novelty;
+    const wordCount = nuggetText.split(/\s+/).filter(Boolean).length;
+    if (wordCount <= 120) score += CONSTITUTION_SCORING_CRITERIA.brevity;
+    if (!hasHallucinatedSource) score += CONSTITUTION_SCORING_CRITERIA.realSource;
+    if (!hasVagueHeadline) score += CONSTITUTION_SCORING_CRITERIA.factClarity;
+    constitutionScores.push(score);
+    console.log(`[Constitution] Nugget ${i} (${n.kind}): score ${score}/${MAX_CONSTITUTION_SCORE} | specificity=${properNouns.length >= 1 ? "pass" : "fail"} connection=${properNouns.length >= 2 ? "pass" : "fail"} novelty=${isNovel ? "pass" : "fail"} brevity=${wordCount <= 120 ? "pass" : "fail"}(${wordCount}w) source=${!hasHallucinatedSource ? "pass" : "fail"} headline=${!hasVagueHeadline ? "pass" : "fail"}`);
   }
-  const hallucinated = hallucinatedSourceCount >= 2; // majority of nuggets have fake sources
+  const hallucinated = hallucinatedSourceCount >= 2;
   const vagueHeadlines = issues.some(i => i.includes("vague headline") || i.includes("headline leads with artist"));
-  return { valid: issues.length === 0, issues, hallucinated, vagueHeadlines };
+  return { valid: issues.length === 0, issues, hallucinated, vagueHeadlines, constitutionScores };
 }
 
 // ── Generate nuggets with Gemini + Google Search grounding ───────────
@@ -1862,30 +1918,22 @@ Use this to:
   // Adaptive search guidance: tell Gemini when track/discovery research was skipped
   let adaptiveGuidance = "";
 
-  // Sparse data mode: when very few verified sources exist, change writer behavior
+  // Sparse data mode: operational guidance only. The tier personas above already
+  // handle WHAT to write about when evidence is thin (they pivot to verifiable
+  // angles via their palette+selection rule). The Constitution handles fabrication
+  // bans globally. This block is the remaining sparse-specific operational layer:
+  // tone framing, headline strategy, grounding activation, nugget count.
   if (sparseData) {
-    adaptiveGuidance += `\nSPARSE DATA MODE: Very little verified information exists about "${artist}". This is a lesser-known or emerging artist.
+    adaptiveGuidance += `\nSPARSE DATA MODE: Very little verified information exists about "${artist}". The persona focus above already pivots to verifiable angles — follow it, don't fabricate the rest.
 
-ACCURACY RULES (non-negotiable):
-- Do NOT fabricate a narrative. If you don't have verified facts, write about what you DO know (even if it's just genre, location, or catalog data).
-- Source type MUST be "youtube", "article", or "interview" — NEVER use "internal-data", "database", or invented types.
-- Publisher MUST be a REAL, EXISTING publication or platform (e.g., "Bandcamp", "Spotify", "SoundCloud", "YouTube", "Pitchfork", "Rolling Stone"). NEVER invent publisher names or domains. If you cannot name a real publisher, use "Spotify" (you always have Spotify catalog data).
-- NEVER invent studio names, engineer names, collaborator names, or anecdotes. If you don't know the real studio, don't name one. If you don't know the engineer, don't name one. Fabricated specifics (fake names, fake studios, fake incidents) are worse than honest generality.
-- Do NOT frame lack of information as a deliberate artistic choice (e.g., "operates as a digital ghost", "deliberate anti-persona"). A small artist is not automatically mysterious.
-- For the track nugget: write about the artist's creative context, NOT the track's sound or mood.
-
-WRITING QUALITY — LESSER-KNOWN does NOT mean BORING:
-- Lead with the most specific verifiable detail you have: a city, a year, a platform, a genre lineage, a release count.
-- If you know their origin city, that's a story — what's the music scene there? Who else came from it?
-- If you know their genre, trace the specific lineage — what micro-genre, what movement, what production style connects them to a larger tradition?
-- For the discovery nugget: recommend with a CONCRETE link — same label, same city, same micro-genre, shared producer. Not "similar vibe."
+TONE FRAMING:
 - Write like someone who discovered this artist early and is excited to share them, NOT like someone apologizing for lack of Wikipedia coverage.
-- It is better to write one vivid sentence about a real detail than three safe sentences about nothing.
+- Refer back to Constitution rule on meta-commentary: if no specific angle passes the SWAP TEST, REDUCE THE COUNT (but always keep at least 1 nugget — grounded in catalog data or the clearest verifiable anchor you have) rather than writing a nugget about the absence of information.
 
-SPARSE-DATA HEADLINE STRATEGY:
-- Even with limited info, create a curiosity gap: "3 EPs and zero interviews — on purpose", "The city that keeps producing artists like this"
-- Lean into the mystery with a specific anchor: a number, a city, a platform, a release count
-- FORBIDDEN: "An Emerging Voice in Modern Music", "A Fresh Take on [Genre]", "The Rise of [Name]" — these say nothing and create zero curiosity
+HEADLINE STRATEGY (sparse-case specific):
+- State a specific verifiable fact as the headline, not a tease. Examples: "${artist} has released 3 EPs with no press interviews as of 2024", "${artist} came up in the [city] DIY scene alongside [verified peer]".
+- If you only have a single verifiable anchor (a city, a number, a platform), write it as a complete sentence — not as a question or a hook. Anchor + context.
+- FORBIDDEN: "An Emerging Voice in Modern Music", "A Fresh Take on [Genre]", "The Rise of [Name]" — these say nothing. Also forbidden: "The city that keeps producing artists like this" (teases, no fact).
 
 GOOGLE SEARCH: You have Google Search available. USE IT. For lesser-known artists, your search results are more valuable than the thin research context. Ground your writing in what you find.
 
@@ -2065,6 +2113,12 @@ IMAGE SELECTION — at least 1 nugget MUST include an image:
       curatedFacts.keyCollaborators.length > 0
         ? `\nCOLLABORATORS:\n${curatedFacts.keyCollaborators.map(c => `- ${c}`).join("\n")}`
         : "",
+      curatedFacts.storyArcs && curatedFacts.storyArcs.length > 0
+        ? `\nSTORY ARCS (use these as narrative threads):\n${curatedFacts.storyArcs.map(a => `- ${a}`).join("\n")}`
+        : "",
+      curatedFacts.connections && curatedFacts.connections.length > 0
+        ? `\nCONNECTIONS:\n${curatedFacts.connections.map(c => `- ${c}`).join("\n")}`
+        : "",
       curatedFacts.warningsForWriter.length > 0
         ? `\nNOTES:\n${curatedFacts.warningsForWriter.map(w => `- ${w}`).join("\n")}`
         : "",
@@ -2079,7 +2133,9 @@ IMAGE SELECTION — at least 1 nugget MUST include an image:
       ? `\n\nBEST QUOTES (use these for color — attribution already verified):\n${directQuotes.map(q => `- ${q}`).join("\n")}`
       : "";
 
-    prompt = `You are a music journalist. The listener is PLAYING "${title}" by ${artist}${album ? ` from "${album}"` : ""} RIGHT NOW.
+    prompt = `${CONSTITUTION_PREAMBLE}
+
+The listener is PLAYING "${title}" by ${artist}${album ? ` from "${album}"` : ""} RIGHT NOW.
 
 RESEARCH BRIEF (verified — these are your primary facts. You may add details from Google Search grounding but NEVER contradict or embellish these facts):
 ${curatedContext}${quotesSection}
@@ -2096,7 +2152,7 @@ ${tierConfig.assumedKnowledge}
 
 ${buildWriterNonNegotiables(artist)}
 
-STRUCTURE — exactly 3 nuggets:
+STRUCTURE — produce 1-3 nuggets (always at least 1, up to 3 if strong). Prefer fewer strong nuggets over padded weak ones, but ALWAYS return at least one nugget grounded in whatever facts you have (Spotify catalog data, genre tags, track titles, release year, collaborators in research):
 1. **artist** (kind: "artist"): ${applyCollabBias
       ? `Focus on the collaboration behind this track. Key creative partners: ${collabsForPrompt.join("; ")}. ONLY discuss work on "${title}" — do NOT reference other tracks or albums by ${artist}. Tell the story of their creative relationship — how they connected, what each brought to the table, and how this collaboration shaped the music. ${tier === "nerd" ? "Include specific production roles, studio dynamics, and technical contributions." : "Name specific people and moments."}`
       : tierConfig.artistFocus}. listenFor: false.
@@ -2121,7 +2177,7 @@ Return ONLY valid JSON:
   "nuggets": [
     {
       "headline": "Tease the story — make them need to read more",
-      "text": "2-3 sentences delivering on the headline",
+      "text": "1-3 sentences building on the headline — each adds a new detail",
       "kind": "artist|track|context|discovery",
       "listenFor": false,
       ${imageFieldExample}
@@ -2147,7 +2203,9 @@ Return ONLY valid JSON:
     const curatorBrief = curatedFacts
       ? `\nCURATOR NOTES: Origin=${curatedFacts.artistOrigin}. ${curatedFacts.warningsForWriter.join(". ")}\n`
       : "";
-    prompt = `You are a music journalist. The listener is PLAYING "${title}" by ${artist}${album ? ` from "${album}"` : ""} RIGHT NOW. They can hear what it sounds like — tell them things they CAN'T know from listening alone.
+    prompt = `${CONSTITUTION_PREAMBLE}
+
+The listener is PLAYING "${title}" by ${artist}${album ? ` from "${album}"` : ""} RIGHT NOW. They can hear what it sounds like — tell them things they CAN'T know from listening alone.
 
 "${artist}" is the EXACT artist name. Do NOT use info about other people with similar names. Do NOT confuse the song title with films, games, or other media.
 ${exaSection}${curatorBrief}
@@ -2168,7 +2226,7 @@ ${buildWriterNonNegotiables(artist, [
   "Prefer birthplace over current city as the artist's origin.",
 ])}
 
-STRUCTURE — exactly 3 nuggets:
+STRUCTURE — produce 1-3 nuggets (always at least 1, up to 3 if strong). Prefer fewer strong nuggets over padded weak ones, but ALWAYS return at least one nugget grounded in whatever facts you have (Spotify catalog data, genre tags, track titles, release year, collaborators in research):
 1. **artist** (kind: "artist"): ${applyCollabBias
       ? `Focus on the collaboration behind this track. Key creative partners: ${collabsForPrompt.join("; ")}. ONLY discuss work on "${title}" — do NOT reference other tracks or albums by ${artist}. Tell the story of their creative relationship — how they connected, what each brought to the table, and how this collaboration shaped the music. ${tier === "nerd" ? "Include specific production roles, studio dynamics, and technical contributions." : "Name specific people and moments."}`
       : ((tier === "curious" || tier === "nerd") && hasExaResearch
@@ -2193,7 +2251,7 @@ Return ONLY valid JSON:
   "nuggets": [
     {
       "headline": "Tease the story — make them need to read more",
-      "text": "2-3 sentences",
+      "text": "1-3 sentences building on the headline",
       "kind": "artist|track|context|discovery",
       "listenFor": false,
       "imageSearchQuery": "specific search term OR omit",
@@ -2331,14 +2389,13 @@ Regenerate the nuggets now with REAL sources only.` }],
             role: "user",
             parts: [{ text: `CORRECTION: Some headlines are too vague or generic. Specific issues: ${vagueIssues.join("; ")}.
 
-REWRITE RULES — headlines must create a CURIOSITY GAP:
-- The reader should think "wait, what?" or "tell me more" — NOT feel like they got the whole story
-- Tease the surprising detail, don't summarize it. Withhold just enough that the body text is essential.
-- Never start with "${artist}'s" — the reader already knows who the artist is
+REWRITE RULES — headlines STATE the fact, they don't tease it:
+- The reader should finish the headline and already know the core surprise. The body adds context, citation, and depth.
+- Write a complete sentence that delivers the payload. No "wait, what?" teasers.
 - Never use framing titles like "The Story Behind...", "Beyond the...", "A Deeper Look At..."
-- GOOD: "The demo that almost got deleted", "They only met because someone dialed the wrong number", "Nobody at the label wanted to release it"
-- BAD: "An Emerging Voice in Modern Music", "The Creative Vision Takes Shape", "${artist}'s Unique Approach", "He recorded his first EP at 16"
-- The last "bad" example states a fact but doesn't make you curious. "The first EP was recorded in a place you'd never guess" does.
+- GOOD: "${artist} nearly deleted the bedroom demo that became their label debut", "${artist} met their main producer after a wrong-number phone call", "${artist}'s label rejected [track] three times before agreeing to release it"
+- BAD: "The demo that almost got deleted" (no fact, just tease), "They only met because someone dialed the wrong number" (who? what?), "An Emerging Voice in Modern Music" (says nothing), "The Creative Vision Takes Shape" (abstract nouns)
+- A good headline, when the body is removed, still teaches the reader something concrete. A bad headline only intrigues.
 
 Return the complete JSON with all nuggets, with improved headlines.` }],
           };
@@ -2426,7 +2483,11 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, imageCaption, imageQuery, listenCount, previousNuggets, tier: rawTier, userTopArtists: rawTopArtists, userTopTracks: rawTopTracks, spotifyArtistImageUrl: rawSpotifyArtistImageUrl, spotifyTrackId: rawSpotifyTrackId, appleTrackId: rawAppleTrackId } = body;
+    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, imageCaption, imageQuery, listenCount, previousNuggets, tier: rawTier, userTopArtists: rawTopArtists, userTopTracks: rawTopTracks, spotifyArtistImageUrl: rawSpotifyArtistImageUrl, spotifyTrackId: rawSpotifyTrackId, appleTrackId: rawAppleTrackId, durationSec: rawDurationSec } = body;
+    // Default to 240s (avg song) when caller omits — used for cache-side
+    // timestamp computation so pre-gen flows (which don't know duration yet)
+    // can still produce a valid cached Nugget[] shape.
+    const cacheDurationSec = typeof rawDurationSec === "number" && rawDurationSec > 30 ? rawDurationSec : 240;
     const tier: Tier = (rawTier === "casual" || rawTier === "curious" || rawTier === "nerd") ? rawTier : "casual";
 
     // ── Input validation ────────────────────────────────────────────
@@ -3242,6 +3303,10 @@ Return ONLY valid JSON:
               const generatedHeadlines: string[] = [];
 
               // ── Step 3: Define the 3 nugget kinds ──
+              // Focus strings come directly from TIER_CONFIG. Each is an evidence-
+              // palette with a selection rule — Gemini picks the strongest angle
+              // the research supports, pivoting when data is thin. Constitution
+              // rules 3/4 remain the global fabrication guard.
               const nuggetDefs = [
                 { kind: "artist", focus: tierConfig.artistFocus, listenFor: false, includeArtistSummary: true },
                 { kind: "track", focus: tierConfig.trackFocus, listenFor: true, includeArtistSummary: false },
@@ -3266,7 +3331,9 @@ Return ONLY valid JSON:
                   ? `\nDo NOT repeat or closely rephrase any of these previously shown headlines:\n${allPrevHeadlines.map(h => `- "${h}"`).join("\n")}`
                   : "";
 
-                const singlePrompt = `You are a music journalist. The listener is PLAYING "${title}" by ${artist}${album ? ` from "${album}"` : ""} RIGHT NOW.
+                const singlePrompt = `${CONSTITUTION_PREAMBLE}
+
+You are a music journalist. The listener is PLAYING "${title}" by ${artist}${album ? ` from "${album}"` : ""} RIGHT NOW.
 
 ${researchSection}
 
@@ -3289,7 +3356,7 @@ Return ONLY valid JSON:
   ${def.includeArtistSummary ? '"artistSummary": "...",' : ""}
   "nugget": {
     "headline": "Tease the story — make them need to read more",
-    "text": "2-3 sentences delivering on the headline",
+    "text": "1-3 sentences building on the headline — each adds a new detail",
     "kind": "${def.kind}",
     "listenFor": ${def.listenFor},
     "imageSearchQuery": "specific subject for image search OR omit if not needed",
@@ -3412,17 +3479,28 @@ Return ONLY valid JSON:
                   console.log(`[SSE] Skipping hallucinated publisher: ${def.kind}`);
                   continue;
                 }
-                // Unverified source + unknown publisher = likely fabricated.
-                // assembleNugget sets verified=false when no Exa citation or
-                // grounding chunk matched — if the publisher also isn't a
-                // known real publication, Gemini almost certainly invented it.
+                // Previous behavior dropped any sparse-artist nugget whose
+                // source wasn't in KNOWN_REAL_PUBLISHERS (a small whitelist
+                // of famous music publications). That whitelist is too
+                // restrictive: legitimate smaller publications (Voyage MIA,
+                // local magazines, niche blogs) fall through it even when
+                // Gemini's grounding cites them correctly, producing
+                // zero-nugget responses for real artists. We now rely on
+                // HALLUCINATED_PUBLISHERS (explicit blocklist, checked just
+                // above) + the schema-level source validation instead of
+                // the whitelist filter. Log-only for observability.
                 if (isSparseData && assembled.source?.verified === false) {
                   const pubNormalized = publisher.toLowerCase().replace(/^(the |www\.)/, "").replace(/\.(com|net|org|io|xyz)$/, "");
-                  if (!KNOWN_REAL_PUBLISHERS.has(pubNormalized) && !KNOWN_REAL_PUBLISHERS.has(publisher.toLowerCase())) {
-                    console.log(`[SSE] Skipping unverified source from unknown publisher "${assembled.source.publisher}" for sparse artist: ${def.kind}`);
-                    continue;
+                  const isKnown = KNOWN_REAL_PUBLISHERS.has(pubNormalized) || KNOWN_REAL_PUBLISHERS.has(publisher.toLowerCase());
+                  if (!isKnown) {
+                    console.log(`[SSE] Allowing unverified source from non-whitelisted publisher "${assembled.source.publisher}" (sparse artist, not in HALLUCINATED_PUBLISHERS)`);
                   }
                 }
+
+                // ── Constitution score (soft, logged only) ──
+                const sseValidation = validateNuggetQuality([nuggetData], artist);
+                const cScore = sseValidation.constitutionScores?.[0] ?? 0;
+                console.log(`[SSE] Constitution score for ${def.kind}: ${cScore}/${MAX_CONSTITUTION_SCORE}`);
 
                 // ── Stream immediately ──
                 streamedNuggets.push(assembled);
@@ -3556,6 +3634,73 @@ Return ONLY valid JSON:
     _timings.total = Date.now() - functionStartTime;
     console.timeEnd("[Timing] TOTAL");
     console.log(`[Timing] Breakdown:`, JSON.stringify(_timings));
+
+    // ── Server-side nugget_cache write ──────────────────────────────────
+    // Historically the CLIENT wrote nugget_cache after receiving a response,
+    // which fails for anon users (RLS requires authenticated or service_role).
+    // That broke the stories pre-gen flow — pre-gen succeeded but nothing was
+    // cached, so tapping a story re-triggered a full 15-25s generation.
+    //
+    // Fix: the server writes here using the admin key (bypasses RLS). The
+    // client's cache-read path is unchanged. Client's cache-write is now
+    // redundant but harmless.
+    if (validatedNuggets.length > 0) {
+      try {
+        const uri = rawSpotifyTrackId ? `spotify:track:${rawSpotifyTrackId}`
+          : rawAppleTrackId ? `apple:song:${rawAppleTrackId}`
+          : "";
+        // Blank the album slot in the cache key — different entry points
+        // (story rail vs tile vs search) populate album inconsistently,
+        // so keying on URI only means every path reads and writes the
+        // same row. MUST match canonicalCacheKey() in useAINuggets.ts.
+        const trackId = `real::${artist}::${title}::::${uri}`;
+        const tier = (rawTier === "curious" || rawTier === "nerd") ? rawTier : "casual";
+        const dbCacheKey = `${trackId}::${tier}`;
+
+        // Build full Nugget[] matching the shape client's cache-read expects.
+        // Timestamps are computed the same way client's makeTimestamp does:
+        // earlyStart + spacing * (index+1), clamped to leave an end buffer.
+        const earlyStart = 20;
+        const endBuffer = 15;
+        const usable = Math.max(cacheDurationSec - earlyStart - endBuffer, 30);
+        const spacing = usable / (validatedNuggets.length + 1);
+        const cacheNuggets = validatedNuggets.map((n: any, i: number) => {
+          const sourceId = `ai-src-${trackId}-L1-${i}`;
+          const nuggetId = `ai-nug-${trackId}-L1-${i}`;
+          const ts = Math.min(Math.floor(earlyStart + spacing * (i + 1)), cacheDurationSec - 10);
+          return {
+            id: nuggetId, trackId, timestampSec: ts, durationMs: 7000,
+            headline: n.headline || n.text?.slice(0, 80) || "Music Fact",
+            text: n.text, kind: n.kind, listenFor: n.listenFor || false,
+            sourceId, imageUrl: n.imageUrl, imageCaption: n.imageCaption,
+          };
+        });
+        const cacheSources: Record<string, unknown> = {};
+        validatedNuggets.forEach((n: any, i: number) => {
+          const sourceId = `ai-src-${trackId}-L1-${i}`;
+          cacheSources[sourceId] = { id: sourceId, ...n.source };
+        });
+        cacheSources.artistSummary = artistSummary;
+        cacheSources.externalLinks = externalLinks;
+
+        if (!cacheAdminClient) {
+          console.warn("[NuggetCache] server upsert skipped — no admin key configured");
+        } else {
+          const { error: cacheErr } = await cacheAdminClient.from("nugget_cache").upsert(
+            { track_id: dbCacheKey, nuggets: cacheNuggets, sources: cacheSources, status: "ready" },
+            { onConflict: "track_id" },
+          );
+          if (cacheErr) {
+            console.warn(`[NuggetCache] server upsert failed (non-fatal):`, cacheErr.message);
+          } else {
+            console.log(`[NuggetCache] server upserted ${cacheNuggets.length} nuggets for ${dbCacheKey.slice(0, 80)}`);
+          }
+        }
+      } catch (e) {
+        console.warn("[NuggetCache] server upsert threw (non-fatal):", e);
+      }
+    }
+
     return new Response(JSON.stringify({ nuggets: validatedNuggets, artistSummary, externalLinks, noTrackData }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

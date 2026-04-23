@@ -98,6 +98,22 @@ export default function SwipeableNuggetStack({
     return () => el.removeEventListener("touchmove", handler);
   }, []);
 
+  // Shared advance logic used by both swipe gestures and the chevron buttons.
+  // direction: +1 = next, -1 = previous. Bounds-checked internally.
+  const advance = useCallback((direction: 1 | -1) => {
+    if (disabled) return;
+    const nextIndex = activeIndex + direction;
+    if (nextIndex < 0 || nextIndex >= unlockedCount) return;
+    setPhase("exit");
+    setDragX(0);
+    if (swipeTimerRef.current) clearTimeout(swipeTimerRef.current);
+    swipeTimerRef.current = setTimeout(() => {
+      swipeTimerRef.current = null;
+      if (phaseRef.current !== "exit") return;
+      onSwipe(nextIndex);
+    }, 200);
+  }, [disabled, activeIndex, unlockedCount, onSwipe]);
+
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     setIsDragging(false);
 
@@ -110,27 +126,10 @@ export default function SwipeableNuggetStack({
     const goingLeft = dx < -SWIPE_THRESHOLD && canGoRight;
     const goingRight = dx > SWIPE_THRESHOLD && canGoLeft;
 
-    if (goingLeft || goingRight) {
-      // Phase 1: fade out current card
-      setPhase("exit");
-      setDragX(0);
-
-      // After fade-out, swap content and start fade-in
-      if (swipeTimerRef.current) clearTimeout(swipeTimerRef.current);
-      swipeTimerRef.current = setTimeout(() => {
-        swipeTimerRef.current = null;
-        // Guard: if an auto-unlock changed activeIndex during the exit
-        // animation, phase would already be "enter" — bail to avoid a
-        // double phase transition.
-        if (phaseRef.current !== "exit") return;
-        if (goingLeft) onSwipe(activeIndex + 1);
-        else onSwipe(activeIndex - 1);
-        // "enter" phase is triggered by the useEffect on activeIndex change
-      }, 200);
-    } else {
-      setDragX(0);
-    }
-  }, [disabled, activeIndex, canGoLeft, canGoRight, onSwipe]);
+    if (goingLeft) advance(1);
+    else if (goingRight) advance(-1);
+    else setDragX(0);
+  }, [disabled, canGoLeft, canGoRight, advance]);
 
   // Compute opacity based on phase + drag distance
   let opacity = 1;
@@ -181,18 +180,30 @@ export default function SwipeableNuggetStack({
         </div>
       )}
 
-      {/* Swipe hints */}
+      {/* Nav buttons — tap or swipe. Hit target is larger than the visible
+          chevron so the buttons are easy to tap on mobile. Mirrors the swipe
+          gesture transition. */}
       {phase === "idle" && !isDragging && unlockedCount > 1 && (
         <>
           {canGoLeft && (
-            <div className="absolute left-1 top-1/2 -translate-y-1/2 z-20 pointer-events-none opacity-30">
+            <button
+              type="button"
+              onClick={() => advance(-1)}
+              aria-label="Previous nugget"
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-20 h-16 w-10 flex items-center justify-center opacity-30 hover:opacity-70 active:opacity-90 transition-opacity"
+            >
               <svg width="8" height="24" viewBox="0 0 8 24" fill="none"><path d="M7 1L1 12L7 23" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
-            </div>
+            </button>
           )}
           {canGoRight && (
-            <div className="absolute right-1 top-1/2 -translate-y-1/2 z-20 pointer-events-none opacity-30">
+            <button
+              type="button"
+              onClick={() => advance(1)}
+              aria-label="Next nugget"
+              className="absolute right-0 top-1/2 -translate-y-1/2 z-20 h-16 w-10 flex items-center justify-center opacity-30 hover:opacity-70 active:opacity-90 transition-opacity"
+            >
               <svg width="8" height="24" viewBox="0 0 8 24" fill="none"><path d="M1 1L7 12L1 23" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
-            </div>
+            </button>
           )}
         </>
       )}
