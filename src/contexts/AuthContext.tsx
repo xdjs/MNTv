@@ -9,6 +9,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { bridgeSpotifyProviderTokens } from "@/lib/spotifyTokenStore";
 
 interface AuthContextValue {
   /** Current Supabase session (null while loading or signed out) */
@@ -36,13 +37,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 1. Eagerly hydrate from the persisted session (avoids flash)
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
+      bridgeSpotifyProviderTokens(data.session);
       setLoading(false);
     });
 
-    // 2. Keep state in sync for token refreshes, sign-in, sign-out
+    // 2. Keep state in sync for token refreshes, sign-in, sign-out. The
+    // bridge runs on every event so the localStorage token tracks the
+    // freshest Supabase session — but note: post-JWT-refresh events drop
+    // the provider token, which the bridge correctly no-ops on (see
+    // bridgeSpotifyProviderTokens guards).
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, newSession) => {
         setSession(newSession);
+        bridgeSpotifyProviderTokens(newSession);
         setLoading(false);
       }
     );

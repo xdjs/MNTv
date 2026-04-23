@@ -1,15 +1,15 @@
 import { useCallback, useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  SPOTIFY_STORAGE_KEY,
+  TOKEN_CHANGED_EVENT,
+  type StoredSpotifyToken,
+} from "@/lib/spotifyTokenStore";
 import { refreshSpotifyToken } from "./useSpotifyAuth";
 
-const STORAGE_KEY = "spotify_playback_token";
-const TOKEN_CHANGED_EVENT = "spotify-token-changed";
-
-interface StoredToken {
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number;
-}
+// Local alias for backward-compat with the rest of this file.
+type StoredToken = StoredSpotifyToken;
+const STORAGE_KEY = SPOTIFY_STORAGE_KEY;
 
 // Call the server-side spotify-refresh edge function. Returns null if the
 // function is missing (not yet deployed) or if Spotify rejected the refresh
