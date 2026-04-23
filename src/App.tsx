@@ -22,6 +22,7 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { PlayerProvider } from "./contexts/PlayerContext";
 import { StoriesProvider } from "./contexts/StoriesContext";
 import NowPlayingBar from "./components/NowPlayingBar";
+import SpotifyReconnectBanner from "./components/SpotifyReconnectBanner";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 const queryClient = new QueryClient();
@@ -127,6 +128,7 @@ const App = () => (
             }>
               <AnimatedRoutes />
               <NowPlayingBar />
+              <SpotifyReconnectBanner />
             </ErrorBoundary>
             </StoriesProvider>
           </PlayerProvider>

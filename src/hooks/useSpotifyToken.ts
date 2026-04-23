@@ -127,7 +127,14 @@ export function useSpotifyToken() {
     const refreshed = await refreshViaEdgeFunction(token.refreshToken)
       ?? await refreshSpotifyToken(token.refreshToken);
     if (!refreshed) {
+      // Clear the dead token so consumers stop retrying, and fire the
+      // reconnect event so SpotifyReconnectBanner can surface it. Without
+      // the event, the user would silently be bounced to onboarding on
+      // the next ProtectedRoute check — no signal that anything failed.
       localStorage.removeItem(STORAGE_KEY);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("spotify-reconnect-required"));
+      }
       return null;
     }
 
