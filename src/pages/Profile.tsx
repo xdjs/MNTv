@@ -17,13 +17,9 @@ function bucketBookmark(bm: Bookmark): "Today" | "This week" | "Earlier" {
   return "Earlier";
 }
 
-// Reconstruct the /listen URL for a bookmark — matches Listen.tsx's
-// expected format: `real::artist::title::album::uri`. Album + URI may be
-// missing on older bookmarks; the Listen page tolerates empty segments.
+// track_id is stored as the same string Listen.tsx uses as its rawTrackId
+// (format: `real::artist::title::album::uri`), so we embed it as-is.
 function listenUrlFor(bm: Bookmark): string {
-  const enc = encodeURIComponent;
-  const album = bm.album ?? "";
-  // track_id is the same string Listen uses as the rawTrackId; embed it as-is.
   return `/listen/${bm.track_id}`;
 }
 

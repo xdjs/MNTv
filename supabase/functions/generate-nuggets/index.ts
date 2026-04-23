@@ -1739,7 +1739,7 @@ function validateNuggetQuality(nuggets: GeminiNugget[], artist?: string): { vali
     if (!hasHallucinatedSource) score += CONSTITUTION_SCORING_CRITERIA.realSource;
     if (!hasVagueHeadline) score += CONSTITUTION_SCORING_CRITERIA.factClarity;
     constitutionScores.push(score);
-    console.log(`[Constitution] Nugget ${i} (${n.kind}): score ${score}/${MAX_CONSTITUTION_SCORE} | specificity=${properNouns.length >= 1 ? "pass" : "fail"} connection=${properNouns.length >= 2 ? "pass" : "fail"} novelty=${isNovel ? "pass" : "fail"} brevity=${wordCount <= 80 ? "pass" : "fail"}(${wordCount}w) source=${!hasHallucinatedSource ? "pass" : "fail"} headline=${!hasVagueHeadline ? "pass" : "fail"}`);
+    console.log(`[Constitution] Nugget ${i} (${n.kind}): score ${score}/${MAX_CONSTITUTION_SCORE} | specificity=${properNouns.length >= 1 ? "pass" : "fail"} connection=${properNouns.length >= 2 ? "pass" : "fail"} novelty=${isNovel ? "pass" : "fail"} brevity=${wordCount <= 120 ? "pass" : "fail"}(${wordCount}w) source=${!hasHallucinatedSource ? "pass" : "fail"} headline=${!hasVagueHeadline ? "pass" : "fail"}`);
   }
   const hallucinated = hallucinatedSourceCount >= 2;
   const vagueHeadlines = issues.some(i => i.includes("vague headline") || i.includes("headline leads with artist"));

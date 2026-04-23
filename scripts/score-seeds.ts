@@ -5,11 +5,18 @@
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
+// Canonical weights live alongside the runtime Constitution so we can't drift
+// on renames (e.g. curiosityGap → factClarity). constitution.ts has no Deno
+// APIs, so tsx resolves it fine despite living under supabase/functions/.
+import {
+  CONSTITUTION_SCORING_CRITERIA,
+  MAX_CONSTITUTION_SCORE,
+} from "../supabase/functions/generate-nuggets/constitution";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const SCORING = { specificity: 2, connection: 2, novelty: 2, brevity: 2, realSource: 1, curiosityGap: 1 };
-const MAX_SCORE = Object.values(SCORING).reduce((a, b) => a + b, 0);
+const SCORING = CONSTITUTION_SCORING_CRITERIA;
+const MAX_SCORE = MAX_CONSTITUTION_SCORE;
 
 const COMMON_WORDS = new Set(["The", "This", "That", "These", "When", "Where", "What", "How", "His", "Her", "Its", "After", "Before", "During", "From", "Into", "With", "About", "Also", "But", "And", "For", "Not", "All", "Any", "Each", "Every", "Both", "Such", "If", "In", "On", "At", "To", "Of", "A", "An", "By", "As", "Or", "So", "He", "She", "It", "They", "We", "You", "I"]);
 
@@ -57,7 +64,7 @@ function scoreNugget(n: any, artistLower: string): { score: number; failures: st
   if (!hallucinatedType && !hallucinatedPub) score += SCORING.realSource; else failures.push("source");
 
   let vagueHeadline = VAGUE_HEADLINE_NOUNS.some(n => headline.includes(n)) || VAGUE_HEADLINE_VERBS.some(v => headline.includes(v)) || VAGUE_PATTERNS.some(p => p.test(n.headline || ""));
-  if (!vagueHeadline) score += SCORING.curiosityGap; else failures.push("headline");
+  if (!vagueHeadline) score += SCORING.factClarity; else failures.push("headline");
 
   return { score, failures };
 }

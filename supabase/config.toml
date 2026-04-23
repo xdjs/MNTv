@@ -1,5 +1,27 @@
 project_id = "ofuayztvadxtacmsevxk"
 
+# ── JWT verification status ──────────────────────────────────────────
+# Every function below is currently `verify_jwt = false`. This was required
+# when the app had no real Supabase sessions (see PR #74). After the
+# Spotify-Supabase OAuth migration lands (see
+# docs/superpowers/plans/2026-04-23-spotify-supabase-oauth-adoption.md),
+# revisit each function:
+#
+#   • User-scoped (`spotify-taste`, `apple-taste`, `youtube-taste`,
+#     `bookmark-nugget`, `lastfm-sync`, `spotify-resolve` when called
+#     from signed-in UI): flip to `verify_jwt = true` AND rewrite the
+#     function to resolve the Spotify/Apple user token from
+#     auth.identities server-side, not the request body. Flipping
+#     verify_jwt alone is security theater — the Supabase JWT doesn't
+#     bind to whatever provider token the client supplies.
+#
+#   • Unauthenticated lookups (`spotify-search`, `spotify-artist`,
+#     `spotify-album`, `youtube-search`, `artist-image`, `nugget-image`,
+#     `generate-nuggets`, `generate-companion`, `lastfm-recommendations`,
+#     `seed-nuggets`, `apple-dev-token`): keep `verify_jwt = false` —
+#     these are called from public browse contexts where gating on auth
+#     would break the guest demo path.
+
 [functions.generate-nuggets]
 verify_jwt = false
 

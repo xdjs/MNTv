@@ -33,6 +33,53 @@ interface ImmersiveNuggetViewProps {
 let deepDiveSessionCount = 0;
 const MAX_DEEP_DIVES_PER_SESSION = 10;
 
+// Pulled out of the nugget-card JSX so the saved-state computation isn't
+// an IIFE inside useCallback's return value (fewer closures to reason about
+// in the memo dep array, easier to read, no perf difference either way).
+function BookmarkButton({
+  activeNugget,
+  activeSource,
+  artist,
+  trackTitle,
+  bookmarks,
+}: {
+  activeNugget: Nugget;
+  activeSource: Source | null | undefined;
+  artist: string;
+  trackTitle: string;
+  bookmarks: ReturnType<typeof useBookmarks>;
+}) {
+  const saved = bookmarks.isBookmarked(
+    activeNugget.headline || activeNugget.text,
+    activeNugget.trackId,
+    activeNugget.kind,
+  );
+  return (
+    <button
+      aria-label={saved ? "Remove bookmark" : "Save nugget"}
+      className={`text-xs px-3 py-1.5 rounded-full active:scale-95 transition-transform flex items-center gap-1.5 ${
+        saved ? "bg-rose-500/20 text-rose-400" : "bg-white/10 text-white/60"
+      }`}
+      onClick={(e) => {
+        e.stopPropagation();
+        bookmarks.toggle({
+          trackId: activeNugget.trackId,
+          artist,
+          title: trackTitle,
+          kind: activeNugget.kind,
+          headline: activeNugget.headline || activeNugget.text,
+          body: activeNugget.text,
+          source: activeSource ?? null,
+          imageUrl: activeNugget.imageUrl ?? undefined,
+        });
+      }}
+    >
+      <Heart className="w-3 h-3" fill={saved ? "currentColor" : "none"} />
+      {saved ? "Saved" : "Save"}
+    </button>
+  );
+}
+
 // Minimum time a nugget stays on-screen before auto-advance can swap it out.
 // Tuning knob for the streaming pacing — keeps freshly-streamed nuggets
 // readable without yanking the user mid-sentence.
@@ -351,37 +398,15 @@ export default function ImmersiveNuggetView({
                 : deepDiveRateLimited ? "Limit reached"
                 : deepDiveText ? "Go deeper" : "Tell me more"}
             </button>
-            {activeNugget && bookmarks.signedIn && (() => {
-              const saved = bookmarks.isBookmarked(
-                activeNugget.headline || activeNugget.text,
-                activeNugget.trackId,
-                activeNugget.kind,
-              );
-              return (
-                <button
-                  aria-label={saved ? "Remove bookmark" : "Save nugget"}
-                  className={`text-xs px-3 py-1.5 rounded-full active:scale-95 transition-transform flex items-center gap-1.5 ${
-                    saved ? "bg-rose-500/20 text-rose-400" : "bg-white/10 text-white/60"
-                  }`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    bookmarks.toggle({
-                      trackId: activeNugget.trackId,
-                      artist,
-                      title: trackTitle,
-                      kind: activeNugget.kind,
-                      headline: activeNugget.headline || activeNugget.text,
-                      body: activeNugget.text,
-                      source: activeSource ?? null,
-                      imageUrl: activeNugget.imageUrl ?? undefined,
-                    });
-                  }}
-                >
-                  <Heart className="w-3 h-3" fill={saved ? "currentColor" : "none"} />
-                  {saved ? "Saved" : "Save"}
-                </button>
-              );
-            })()}
+            {activeNugget && bookmarks.signedIn && (
+              <BookmarkButton
+                activeNugget={activeNugget}
+                activeSource={activeSource}
+                artist={artist}
+                trackTitle={trackTitle}
+                bookmarks={bookmarks}
+              />
+            )}
           </div>
 
           {activeSource && (

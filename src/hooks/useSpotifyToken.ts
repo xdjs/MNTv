@@ -20,6 +20,10 @@ function readToken(): StoredToken | null {
   }
 }
 
+// writeToken persists to localStorage AND dispatches TOKEN_CHANGED_EVENT so
+// every mounted useSpotifyToken hook instance re-reads and re-sets state. All
+// public writers (saveSpotifyToken, the refresh path below, clearSpotifyToken)
+// go through this or mirror its dispatch — never raw localStorage.setItem.
 function writeToken(token: StoredToken) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(token));
   if (typeof window !== "undefined") {
@@ -27,12 +31,12 @@ function writeToken(token: StoredToken) {
   }
 }
 
-/** Save a freshly-exchanged OAuth token. Exported so SpotifyCallback and
- *  other non-React callers can write the token AND notify every mounted
- *  `useSpotifyToken` instance to flip `hasSpotifyToken` → true. Without
- *  this, a raw `localStorage.setItem` would persist the token but leave
- *  the PlayerProvider's token state stale, and the Spotify engine would
- *  never initialize until the next hard refresh. */
+/** Save a freshly-exchanged OAuth token. Thin wrapper around writeToken that
+ *  guarantees the TOKEN_CHANGED_EVENT dispatch (see writeToken above).
+ *  Exported so SpotifyCallback and other non-React callers can persist the
+ *  token without mounting the hook. Without the event, a raw
+ *  localStorage.setItem would leave PlayerProvider's hasSpotifyToken stale
+ *  and the Spotify engine wouldn't initialize until the next hard refresh. */
 export function saveSpotifyToken(token: StoredToken): void {
   writeToken(token);
 }

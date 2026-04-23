@@ -174,6 +174,17 @@ serve(async (req) => {
       });
     }
 
+    // image_url is rendered as <img src={...}> on the Profile page, so reject
+    // anything that isn't a plain https:// URL. A client could otherwise pass
+    // javascript:/data:/vbscript: URIs and get them reflected in an <img>.
+    const rawImageUrl = nugget.imageUrl ? String(nugget.imageUrl) : null;
+    const safeImageUrl = rawImageUrl && /^https:\/\//i.test(rawImageUrl) ? rawImageUrl : null;
+
+    // source is stored as JSONB and rendered on Profile — only persist plain
+    // objects to keep the shape predictable and avoid stray primitives/arrays.
+    const rawSource = nugget.source;
+    const safeSource = rawSource && typeof rawSource === "object" && !Array.isArray(rawSource) ? rawSource : null;
+
     const record = {
       service: identity.service,
       user_service_id: identity.userServiceId,
@@ -184,8 +195,8 @@ serve(async (req) => {
       nugget_kind: String(nugget.kind ?? nugget.nuggetKind ?? "artist"),
       headline: String(nugget.headline ?? "").slice(0, 500),
       body: String(nugget.body ?? nugget.text ?? "").slice(0, 4000),
-      source: nugget.source ?? null,
-      image_url: nugget.imageUrl ? String(nugget.imageUrl) : null,
+      source: safeSource,
+      image_url: safeImageUrl,
     };
 
     if (!record.track_id || !record.artist || !record.title || !record.headline) {
