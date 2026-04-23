@@ -10,6 +10,7 @@ import { signInWithSpotify } from "@/hooks/useSpotifyAuth";
 import { initiateAppleMusicAuth, fetchAppleMusicTaste } from "@/hooks/useAppleMusicAuth";
 import { useAppleMusicToken } from "@/hooks/useAppleMusicToken";
 import { useSpotifyPostSigninSync } from "@/hooks/useSpotifyPostSigninSync";
+import { ensureSupabaseSession } from "@/hooks/ensureSupabaseSession";
 
 type Tier = "casual" | "curious" | "nerd";
 
@@ -108,13 +109,23 @@ export default function Connect() {
     setAppleMusicConnecting(true);
     setAppleMusicError(null);
     try {
-      // No Supabase session required: the deployed apple-dev-token edge
-      // function authenticates on the anon key alone (no in-function
-      // user check, no rows in auth.users). The earlier pre-flight gate
-      // here was based on a documented-but-not-enforced JWT requirement
-      // and blocked all Apple Music sign-ins after a real logout cleared
-      // the leftover Lovable broker session that nobody had explicitly
-      // provisioned.
+      // Seed a real Supabase session first. Spotify users get one from
+      // signInWithSpotify(); Apple Music users go through
+      // signInAnonymously() so every connected user has an auth.uid().
+      // Without this, the session-based route gate in App.tsx (Task 6.5)
+      // would lock Apple Music users out, and nugget_history writes
+      // would keep failing RLS silently (auth.uid() null). Idempotent —
+      // if the user already has a Supabase session from an earlier
+      // connect, this returns it without creating another anon user.
+      try {
+        await ensureSupabaseSession();
+      } catch (sessionErr) {
+        console.error("ensureSupabaseSession failed on Apple Music connect:", sessionErr);
+        setAppleMusicError("Couldn't start your session. Try again?");
+        setAppleMusicConnecting(false);
+        return;
+      }
+
       const musicUserToken = await initiateAppleMusicAuth();
       if (musicUserToken) {
         setAppleMusicConnected(true);
