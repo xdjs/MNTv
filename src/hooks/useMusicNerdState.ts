@@ -156,6 +156,15 @@ export function useUserProfile() {
   const [profile, setProfileState] = useState<UserProfile | null>(() =>
     parseStoredProfile(localStorage.getItem(PROFILE_KEY))
   );
+  // True while we're still figuring out whether this device has a profile.
+  // Synchronously false if localStorage already has one (common case —
+  // returning user on a known device); true only for the cross-device
+  // case where the DB might supply a profile the device doesn't have
+  // cached yet. Route gates consume this to avoid flash-redirecting
+  // users whose DB profile is still hydrating.
+  const [loading, setLoading] = useState<boolean>(() => {
+    return parseStoredProfile(localStorage.getItem(PROFILE_KEY)) === null;
+  });
 
   // Sync across hook instances: every call to useUserProfile has its own
   // independent useState slot, so when Connect.tsx saves a profile, other
@@ -179,10 +188,20 @@ export function useUserProfile() {
   // Local (localStorage) data is treated as fresher than DB — it may contain a profile
   // that was just saved but whose async DB write hasn't landed yet.
   useEffect(() => {
-    if (!user?.id) return;
+    // No signed-in user → nothing to hydrate. If we still had `loading`
+    // pending from init, resolve it now so route gates don't hang.
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     loadProfileFromDB(user.id).then((dbProfile) => {
-      if (cancelled || !dbProfile) return;
+      if (cancelled) return;
+      // Done loading regardless of whether the DB had a profile or not.
+      // Downstream readers see either a merged profile (via the event
+      // below) or stay on the localStorage fallback.
+      setLoading(false);
+      if (!dbProfile) return;
       const local = parseStoredProfile(localStorage.getItem(PROFILE_KEY));
 
       // If local already has taste data, it's fresher — don't overwrite it with stale DB.
@@ -236,7 +255,7 @@ export function useUserProfile() {
     clearStoredProfile();
   }, []);
 
-  return { profile, saveProfile, clearProfile };
+  return { profile, loading, saveProfile, clearProfile };
 }
 
 export function getStoredProfile(): UserProfile | null {

@@ -20,7 +20,6 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import { useAINuggets } from "@/hooks/useAINuggets";
 import { getSeedCompanion, getDemoTrackById, getDemoTrackUri } from "@/data/seedNuggets";
 import { useSpotifyToken } from "@/hooks/useSpotifyToken";
-import { signInWithSpotify } from "@/hooks/useSpotifyAuth";
 import { usePlayer } from "@/contexts/PlayerContext";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
 import { withAppleStorefront } from "@/lib/appleStorefront";
@@ -1287,26 +1286,10 @@ export default function Listen() {
           </motion.p>
         )}
 
-        {/* Spotify session expired — reconnect prompt */}
-        {!hasSpotifyToken && !isAppleMusicUser && trackUri && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="relative z-10 mx-10 mt-3"
-          >
-            <div className="flex items-center gap-3 rounded-xl bg-foreground/10 backdrop-blur-md px-4 py-2.5">
-              <p className="text-sm text-foreground/70 flex-1">
-                Spotify session expired
-              </p>
-              <button
-                onClick={() => signInWithSpotify()}
-                className="px-3 py-1 rounded-full text-xs font-semibold bg-primary/20 text-primary hover:bg-primary/30 transition-colors"
-              >
-                Reconnect
-              </button>
-            </div>
-          </motion.div>
-        )}
+        {/* Spotify reconnect UI is now the root-mounted
+            <SpotifyReconnectBanner />, so the old inline prompt was
+            removed to avoid two overlapping toasts during the same
+            refresh-failure event. */}
 
         {/* External listen mode banner */}
         {isExternalListenMode && externalPlayback && (

@@ -42,7 +42,7 @@ describe("route gates (src/routes.tsx)", () => {
   beforeEach(() => {
     useAuthMock.mockReset();
     useUserProfileMock.mockReset();
-    useUserProfileMock.mockReturnValue({ profile: null });
+    useUserProfileMock.mockReturnValue({ profile: null, loading: false });
   });
 
   it("renders a fallback while auth is hydrating", () => {
@@ -50,6 +50,14 @@ describe("route gates (src/routes.tsx)", () => {
     const { container } = render(<RenderHarness initialPath="/browse" />);
     // LazyFallback is a plain empty div — the key invariant is "no
     // Onboarding / Connect / Browse marker showed up."
+    expect(container.querySelector('[data-testid]')).toBeNull();
+  });
+
+  it("renders a fallback while profile is hydrating (cross-device: session present, profile loading)", () => {
+    useAuthMock.mockReturnValue({ session: { user: { id: "u1" } }, loading: false });
+    useUserProfileMock.mockReturnValue({ profile: null, loading: true });
+    const { container } = render(<RenderHarness initialPath="/browse" />);
+    // Must NOT flash-redirect to /connect while DB profile is loading.
     expect(container.querySelector('[data-testid]')).toBeNull();
   });
 
@@ -61,14 +69,14 @@ describe("route gates (src/routes.tsx)", () => {
 
   it("RootRoute: session + profile redirects to Browse", () => {
     useAuthMock.mockReturnValue({ session: { user: { id: "u1" } }, loading: false });
-    useUserProfileMock.mockReturnValue({ profile: { streamingService: "Spotify", calculatedTier: "curious" } });
+    useUserProfileMock.mockReturnValue({ profile: { streamingService: "Spotify", calculatedTier: "curious" }, loading: false });
     render(<RenderHarness initialPath="/" />);
     expect(screen.getByTestId("browse")).toBeInTheDocument();
   });
 
   it("RootRoute: session without profile redirects to Connect (tier-less user)", () => {
     useAuthMock.mockReturnValue({ session: { user: { id: "u1" } }, loading: false });
-    useUserProfileMock.mockReturnValue({ profile: null });
+    useUserProfileMock.mockReturnValue({ profile: null, loading: false });
     render(<RenderHarness initialPath="/" />);
     expect(screen.getByTestId("connect")).toBeInTheDocument();
   });
@@ -86,14 +94,14 @@ describe("route gates (src/routes.tsx)", () => {
     // gate now requires BOTH session and profile. RootRoute has the
     // same triage but only fires on `/`; this closes the deep-link gap.
     useAuthMock.mockReturnValue({ session: { user: { id: "u1" } }, loading: false });
-    useUserProfileMock.mockReturnValue({ profile: null });
+    useUserProfileMock.mockReturnValue({ profile: null, loading: false });
     render(<RenderHarness initialPath="/browse" />);
     expect(screen.getByTestId("connect")).toBeInTheDocument();
   });
 
   it("ProtectedRoute: session + profile renders Browse", () => {
     useAuthMock.mockReturnValue({ session: { user: { id: "u1" } }, loading: false });
-    useUserProfileMock.mockReturnValue({ profile: { streamingService: "Spotify", calculatedTier: "curious" } });
+    useUserProfileMock.mockReturnValue({ profile: { streamingService: "Spotify", calculatedTier: "curious" }, loading: false });
     render(<RenderHarness initialPath="/browse" />);
     expect(screen.getByTestId("browse")).toBeInTheDocument();
   });

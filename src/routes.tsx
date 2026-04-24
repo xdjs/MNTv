@@ -38,9 +38,13 @@ export function LazyFallback() {
  */
 export function ProtectedRoute({ children }: { children: ReactNode }) {
   const location = useLocation();
-  const { session, loading } = useAuth();
-  const { profile } = useUserProfile();
-  if (loading) return <LazyFallback />;
+  const { session, loading: authLoading } = useAuth();
+  const { profile, loading: profileLoading } = useUserProfile();
+  // Gate on profile loading too — a new-device user with a session but
+  // no localStorage profile triggers a DB hydration that populates the
+  // profile a tick later. Without this guard they'd flash-redirect to
+  // /connect before hydration completes.
+  if (authLoading || profileLoading) return <LazyFallback />;
   if (!session || !profile) {
     const redirect = encodeURIComponent(location.pathname);
     return <Navigate to={`/connect?redirect=${redirect}`} replace />;
@@ -65,9 +69,9 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
  *   - session no profile → /connect (tier-less user finishes onboarding)
  */
 export function RootRoute() {
-  const { session, loading } = useAuth();
-  const { profile } = useUserProfile();
-  if (loading) return <LazyFallback />;
+  const { session, loading: authLoading } = useAuth();
+  const { profile, loading: profileLoading } = useUserProfile();
+  if (authLoading || profileLoading) return <LazyFallback />;
   if (!session) return <Onboarding />;
   return <Navigate to={profile ? "/browse" : "/connect"} replace />;
 }
