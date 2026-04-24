@@ -10,11 +10,11 @@ import StoriesRail from "@/components/StoriesRail";
 import ArtistUpdatesSection from "@/components/ArtistUpdatesSection";
 import { useUserProfile, tierGreeting, tierBadgeLabel, tierBadgeColor, tierGlowClass } from "@/hooks/useMusicNerdState";
 import { usePersonalizedCatalog } from "@/hooks/usePersonalizedCatalog";
-import { useArtistUpdates } from "@/hooks/useArtistUpdates";
 import { useTierAccent } from "@/hooks/useTierAccent";
 import { useSignOut } from "@/hooks/useSignOut";
 import { usePlayer } from "@/contexts/PlayerContext";
 import { useStoriesContext } from "@/contexts/StoriesContext";
+import { useArtistUpdatesContext } from "@/contexts/ArtistUpdatesContext";
 
 export default function Browse() {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -42,15 +42,16 @@ export default function Browse() {
   // this page. Browse just reads the shared state.
   const { stories } = useStoriesContext();
 
-  // "Your artists, lately" — nested rows, one per top artist. Each
-  // artist resolves to up to 3 updates (release card + 2 facts) from
-  // the artist-updates edge function; results land incrementally so
-  // Browse shows skeletons while Gemini catches up.
+  // "Your artists, lately" — nested rows, one per top artist. Pre-gen
+  // is hoisted into `ArtistUpdatesProvider` at app root so warmup
+  // starts on profile hydration (returning user) OR immediately after
+  // handleTierSelect saves the profile (new user), rather than waiting
+  // for Browse to mount. Browse just reads the shared state.
   const {
     groups: artistUpdateGroups,
     totalCount: artistUpdatesTotal,
     readyCount: artistUpdatesReady,
-  } = useArtistUpdates(profile, { tier: (tier || "casual") });
+  } = useArtistUpdatesContext();
 
   const demoItems = [
     {

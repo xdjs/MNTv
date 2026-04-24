@@ -19,6 +19,7 @@ const Profile = lazy(() => import("./pages/Profile"));
 import { AuthProvider } from "./contexts/AuthContext";
 import { PlayerProvider } from "./contexts/PlayerContext";
 import { StoriesProvider } from "./contexts/StoriesContext";
+import { ArtistUpdatesProvider } from "./contexts/ArtistUpdatesContext";
 import NowPlayingBar from "./components/NowPlayingBar";
 import SpotifyReconnectBanner from "./components/SpotifyReconnectBanner";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -82,6 +83,7 @@ const App = () => (
         <AuthProvider>
           <PlayerProvider>
             <StoriesProvider>
+            <ArtistUpdatesProvider>
             <ErrorBoundary fallback={
               <div className="min-h-screen bg-background flex items-center justify-center p-6">
                 <div className="text-center space-y-3">
@@ -100,6 +102,7 @@ const App = () => (
               <NowPlayingBar />
               <SpotifyReconnectBanner />
             </ErrorBoundary>
+            </ArtistUpdatesProvider>
             </StoriesProvider>
           </PlayerProvider>
         </AuthProvider>
