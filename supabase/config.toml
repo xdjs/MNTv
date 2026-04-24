@@ -79,3 +79,8 @@ verify_jwt = false
 # we don't want unauthenticated callers exchanging refresh tokens.
 [functions.spotify-refresh]
 verify_jwt = true
+
+# Artist-level "Your artists, lately" updates. Same public-browse
+# context as generate-nuggets — kept unauthenticated for now.
+[functions.artist-updates]
+verify_jwt = false
