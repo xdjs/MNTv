@@ -19,13 +19,12 @@ export type SpotifyProfilePatch = Pick<
 
 /**
  * Fetch the user's Spotify taste profile and reshape it into a patch the
- * caller can merge into the app's `UserProfile`. Extracted from the old
- * SpotifyCallback.tsx so the same logic runs from either:
- *   - the new post-signin effect in Connect.tsx (after Supabase OAuth)
- *   - the legacy callback page until Task 7 deletes it
+ * caller can merge into the app's `UserProfile`. Called from
+ * `useSpotifyPostSigninSync` after Supabase OAuth lands on /connect.
  *
- * Returns `null` on fetch failure — caller decides how to surface (today:
- * silent no-op; Task 9 will wire a reconnect banner for the refresh case).
+ * Returns `null` on fetch failure — caller decides how to surface.
+ * Today: silent no-op on the sign-in path; `SpotifyReconnectBanner`
+ * covers the refresh-failure path downstream.
  */
 export async function completeSpotifyConnect(
   accessToken: string,

@@ -106,6 +106,12 @@ export default function Connect() {
       // errors here are rare (network, provider misconfiguration) but
       // when they hit, the user needs to know the click did something.
       setSpotifyError("Couldn't connect to Spotify. Try again?");
+    } finally {
+      // Belt-and-suspenders — on the happy path `signInWithOAuth`
+      // redirects the whole tab so this setter runs on a tab that's
+      // about to unload. But if the redirect is ever blocked (popup
+      // blocker edge cases, SDK change, etc.) the button would stay
+      // in a loading state forever without this.
       setSpotifyConnecting(false);
     }
   };
@@ -117,7 +123,7 @@ export default function Connect() {
       // Seed a real Supabase session first. Spotify users get one from
       // signInWithSpotify(); Apple Music users go through
       // signInAnonymously() so every connected user has an auth.uid().
-      // Without this, the session-based route gate in App.tsx (Task 6.5)
+      // Without this, the session-based route gate (src/routes.tsx)
       // would lock Apple Music users out, and nugget_history writes
       // would keep failing RLS silently (auth.uid() null). Idempotent —
       // if the user already has a Supabase session from an earlier

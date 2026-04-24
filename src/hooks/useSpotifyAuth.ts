@@ -38,14 +38,12 @@ const SPOTIFY_SCOPES =
  * dashboard edit.
  */
 export async function signInWithSpotify(): Promise<void> {
-  // Dev-experience guard. Note: `signInWithOAuth` doesn't actually use
-  // this value — Supabase's server-side provider config supplies the
-  // client id to Spotify. But `VITE_SPOTIFY_CLIENT_ID` IS used by the
-  // legacy `refreshSpotifyToken` fallback below, and its presence is a
-  // reasonable proxy for "local env is configured at all." The first
-  // time a dev forgets .env.local, this is a clearer error than a
-  // downstream Spotify "invalid_client" surface.
-  if (!SPOTIFY_CLIENT_ID) throw new Error("VITE_SPOTIFY_CLIENT_ID is not set — check .env.local");
+  // No dev-experience guard here anymore. `signInWithOAuth` doesn't
+  // consume VITE_SPOTIFY_CLIENT_ID — Supabase's server-side provider
+  // config supplies the client id. The env-var precondition moved into
+  // `refreshSpotifyToken` below where it actually matters. The supabase
+  // client itself already logs a dev warning for missing VITE_SUPABASE_*
+  // vars (src/integrations/supabase/client.ts).
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "spotify",
     options: {
@@ -80,6 +78,13 @@ export async function signInWithSpotify(): Promise<void> {
 export async function refreshSpotifyToken(
   refreshToken: string,
 ): Promise<{ accessToken: string; refreshToken: string; expiresIn: number } | null> {
+  // This path (legacy PKCE tokens) actually needs the client id — it's
+  // a POST body field Spotify requires. Fail fast with a message that
+  // points at the env var if the build is missing it.
+  if (!SPOTIFY_CLIENT_ID) {
+    console.error("[refreshSpotifyToken] VITE_SPOTIFY_CLIENT_ID is not set — check .env.local");
+    return null;
+  }
   const res = await fetch("https://accounts.spotify.com/api/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },

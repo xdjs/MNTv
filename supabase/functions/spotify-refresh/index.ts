@@ -6,11 +6,16 @@
 // SPOTIFY_CLIENT_SECRET. We must not expose the secret client-side, so
 // refresh has to happen here.
 //
-// Auth gate: verify_jwt = true. Only authenticated callers can hit this.
-// The caller supplies the refresh token in the body; we treat it as
-// opaque and pass through to Spotify. No binding to auth.uid() yet —
-// that ties in once Task 6 (post-signin sync) lands and the browser can
-// just call `getValidToken()` without knowing about this function at all.
+// Auth gate: verify_jwt = true. Only authenticated Supabase callers can
+// hit this. The caller supplies the refresh token in the body; we treat
+// it as opaque and pass through to Spotify.
+//
+// TODO(security): the refresh token is NOT currently bound to the
+// caller's auth.uid() — a valid JWT from user A could technically send
+// user B's refresh token if they had it (practical risk low: refresh
+// tokens are hard to intercept). Deferred as a separate slice that
+// stores refresh tokens server-side keyed on auth.uid() and ignores
+// the body field entirely.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 

@@ -9,8 +9,8 @@ import { supabase } from "@/integrations/supabase/client";
  *
  * Used by the Apple Music connect path so every connected user has a
  * real `auth.uid()`. Two downstream benefits:
- *   1. The session-based route gate in Task 6.5 works for Apple users
- *      (they're no longer locked out for lacking a session).
+ *   1. The session-based route gate (see `src/routes.tsx`) works for
+ *      Apple users (they're no longer locked out for lacking a session).
  *   2. `nugget_history` writes pass RLS, which today silently rejects
  *      them because `auth.uid()` is null for Apple users.
  *
