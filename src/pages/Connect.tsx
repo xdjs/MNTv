@@ -39,6 +39,7 @@ export default function Connect() {
   const [direction, setDirection] = useState(1);
   const [spotifyConnecting, setSpotifyConnecting] = useState(false);
   const [spotifyConnected, setSpotifyConnected] = useState(false);
+  const [spotifyError, setSpotifyError] = useState<string | null>(null);
   const [pendingTopArtists, setPendingTopArtists] = useState<string[] | null>(null);
   const [pendingTopTracks, setPendingTopTracks] = useState<string[] | null>(null);
   const [pendingArtistImages, setPendingArtistImages] = useState<Record<string, string>>({});
@@ -101,8 +102,18 @@ export default function Connect() {
 
   const handleConnectSpotify = async () => {
     setSpotifyConnecting(true);
-    try { await signInWithSpotify(); }
-    catch (e) { console.error("Spotify auth error:", e); setSpotifyConnecting(false); }
+    setSpotifyError(null);
+    try {
+      await signInWithSpotify();
+    } catch (e) {
+      console.error("Spotify auth error:", e);
+      // Mirror the Apple Music path: surface a message instead of
+      // silently re-enabling the button. Supabase's signInWithOAuth
+      // errors here are rare (network, provider misconfiguration) but
+      // when they hit, the user needs to know the click did something.
+      setSpotifyError("Couldn't connect to Spotify. Try again?");
+      setSpotifyConnecting(false);
+    }
   };
 
   const handleConnectAppleMusic = async () => {
@@ -230,11 +241,16 @@ export default function Connect() {
 
                     {/* Spotify — connect or show connected */}
                     {!pendingTopArtists ? (
-                      <button onClick={handleConnectSpotify} disabled={spotifyConnecting} className="flex items-center gap-4 w-full rounded-2xl border bg-foreground/5 px-5 py-4 text-left font-semibold text-foreground transition-all duration-200 disabled:opacity-70 border-green-500/40 hover:border-green-500 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)]">
-                        <img src={spotifyLogo} alt="Spotify" className="w-8 h-8 object-contain" />
-                        <span className="flex-1">Spotify</span>
-                        {spotifyConnecting ? <Spinner className="h-4 w-4 text-green-400" /> : <span className="text-xs text-muted-foreground">Connect</span>}
-                      </button>
+                      <>
+                        <button onClick={handleConnectSpotify} disabled={spotifyConnecting} className="flex items-center gap-4 w-full rounded-2xl border bg-foreground/5 px-5 py-4 text-left font-semibold text-foreground transition-all duration-200 disabled:opacity-70 border-green-500/40 hover:border-green-500 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)]">
+                          <img src={spotifyLogo} alt="Spotify" className="w-8 h-8 object-contain" />
+                          <span className="flex-1">Spotify</span>
+                          {spotifyConnecting ? <Spinner className="h-4 w-4 text-green-400" /> : <span className="text-xs text-muted-foreground">Connect</span>}
+                        </button>
+                        {spotifyError && (
+                          <p className="mt-1.5 px-1 text-xs text-red-400">{spotifyError}</p>
+                        )}
+                      </>
                     ) : (
                       <div className="flex items-center gap-4 w-full rounded-2xl border bg-foreground/5 px-5 py-4 text-left font-semibold text-foreground border-green-500/60 ring-1 ring-green-500/30">
                         <img src={spotifyLogo} alt="Spotify" className="w-8 h-8 object-contain" />

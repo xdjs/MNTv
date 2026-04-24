@@ -37,10 +37,13 @@ function Onboarding() {
   return <div data-testid="onboarding">Onboarding</div>;
 }
 
-// Re-implement ProtectedRoute + RootRoute with identical logic to App.tsx.
-// Testing the inline App.tsx definitions directly would require importing
-// the full App tree (PlayerProvider, StoriesProvider, Spotify SDK); this
-// keeps the test tight to the routing invariant the review flagged.
+// Re-implement ProtectedRoute + RootRoute with identical logic to
+// `src/App.tsx` (ProtectedRoute ~line 45, RootRoute ~line 60). Testing
+// the inline App.tsx definitions directly would require importing the
+// full App tree (PlayerProvider, StoriesProvider, Spotify SDK load);
+// this keeps the test tight to the routing invariant the review
+// flagged. IMPORTANT: if the App.tsx gate logic changes, update both
+// sides in lockstep.
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const location = useLocation();
   const { session, loading } = useAuth();
