@@ -206,14 +206,18 @@ Return JSON only, no preamble:
   ]
 }`;
 
+  // Use the same model + request shape as generate-nuggets' Writer:
+  // `gemini-2.5-flash`, `role: "user"` on parts, and NO
+  // `responseMimeType`. The response sometimes comes wrapped in a
+  // ```json code fence which we strip before JSON.parse.
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.7, responseMimeType: "application/json" },
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.7 },
       }),
     },
   );
@@ -222,11 +226,16 @@ Return JSON only, no preamble:
     return [];
   }
   const data = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  const rawText: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  const text = rawText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+  if (!text) {
+    console.warn("[artist-updates] Gemini returned empty text");
+    return [];
+  }
   try {
     const parsed = JSON.parse(text);
     const nuggets = Array.isArray(parsed?.nuggets) ? parsed.nuggets : [];
-    return nuggets
+    const accepted = nuggets
       .filter(
         (n: unknown): n is { headline: string; body: string } =>
           !!n && typeof (n as { headline?: unknown }).headline === "string" &&
@@ -234,8 +243,10 @@ Return JSON only, no preamble:
       )
       .slice(0, count)
       .map((n) => ({ headline: String(n.headline), body: String(n.body) }));
-  } catch {
-    console.warn("[artist-updates] Gemini returned non-JSON:", text.slice(0, 200));
+    console.log(`[artist-updates] Gemini returned ${accepted.length}/${count} facts for ${artistName}`);
+    return accepted;
+  } catch (e) {
+    console.warn("[artist-updates] Gemini non-JSON output:", text.slice(0, 300), String(e));
     return [];
   }
 }
@@ -360,10 +371,17 @@ serve(async (req) => {
     generateArtistFacts(artistInfo.name, tier, FACTS_PER_ARTIST),
   ]);
 
+  const releaseAgeDays = release ? daysSince(release.release_date) : null;
+  console.log(
+    `[artist-updates] ${artistInfo.name} → release=${
+      release ? `${release.name} (${releaseAgeDays}d)` : "none"
+    }, facts=${facts.length}`,
+  );
+
   const updates: ArtistUpdate[] = [];
 
   // Release first so it anchors the row visually as "what's new."
-  if (release && daysSince(release.release_date) <= RECENT_WINDOW_DAYS) {
+  if (release && releaseAgeDays !== null && releaseAgeDays <= RECENT_WINDOW_DAYS) {
     updates.push(buildReleaseUpdate(artistInfo, release));
   }
 
