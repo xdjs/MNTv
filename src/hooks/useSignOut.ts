@@ -77,9 +77,13 @@ export function useSignOut() {
     clearSpotifyToken();
     clearAppleMusicToken();
 
-    // 4. sessionStorage cleanup. PKCE keys are imported as constants
-    //    instead of hardcoded so a rename in useSpotifyAuth picks up
-    //    here automatically.
+    // 4. sessionStorage cleanup. The current sign-in flow doesn't write
+    //    `spotify_pending_taste` anymore (the Supabase-managed OAuth
+    //    refactor moved that handoff to a direct hook callback in
+    //    Connect.tsx). The removeItem stays as a one-release sweep in
+    //    case a tab with an old write is still hanging around. Same
+    //    story for the LEGACY_PKCE_* keys: no current writer, kept as
+    //    belt-and-suspenders.
     sessionStorage.removeItem("musicnerd_redirect");
     sessionStorage.removeItem("spotify_pending_taste");
     sessionStorage.removeItem(LEGACY_PKCE_STATE_KEY);

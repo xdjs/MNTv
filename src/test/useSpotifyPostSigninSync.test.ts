@@ -25,17 +25,14 @@ vi.mock("@/hooks/useMusicNerdState", () => ({
 
 import { useSpotifyPostSigninSync } from "@/hooks/useSpotifyPostSigninSync";
 
-const PENDING_KEY = "spotify_pending_taste";
-
 beforeEach(() => {
-  sessionStorage.clear();
   getSessionMock.mockReset();
   completeSpotifyConnectMock.mockReset();
   useAuthMock.mockReset();
   useUserProfileMock.mockReset();
 });
 afterEach(() => {
-  sessionStorage.clear();
+  vi.clearAllMocks();
 });
 
 function setup({
@@ -51,71 +48,72 @@ function setup({
 }) {
   useAuthMock.mockReturnValue({ user });
   useUserProfileMock.mockReturnValue({ profile });
-  getSessionMock.mockResolvedValue({ data: { session: session ?? null } });
+  getSessionMock.mockResolvedValue({ data: { session: session ?? null }, error: null });
   completeSpotifyConnectMock.mockResolvedValue(patch ?? null);
 }
 
 describe("useSpotifyPostSigninSync", () => {
   it("does nothing when there is no user", () => {
+    const onSynced = vi.fn();
     setup({ user: null, profile: null });
-    renderHook(() => useSpotifyPostSigninSync());
+    renderHook(() => useSpotifyPostSigninSync({ onSynced }));
     expect(completeSpotifyConnectMock).not.toHaveBeenCalled();
+    expect(onSynced).not.toHaveBeenCalled();
   });
 
   it("does nothing for anonymous sessions (no provider)", () => {
-    setup({
-      user: { id: "anon", app_metadata: {} },
-      profile: null,
-    });
-    renderHook(() => useSpotifyPostSigninSync());
-    expect(completeSpotifyConnectMock).not.toHaveBeenCalled();
-    expect(sessionStorage.getItem(PENDING_KEY)).toBeNull();
+    const onSynced = vi.fn();
+    setup({ user: { id: "anon", app_metadata: {} }, profile: null });
+    renderHook(() => useSpotifyPostSigninSync({ onSynced }));
+    expect(onSynced).not.toHaveBeenCalled();
   });
 
   it("does nothing for non-Spotify providers (e.g. apple)", () => {
+    const onSynced = vi.fn();
     setup({
       user: { id: "u1", app_metadata: { provider: "apple" } },
       profile: null,
     });
-    renderHook(() => useSpotifyPostSigninSync());
-    expect(completeSpotifyConnectMock).not.toHaveBeenCalled();
+    renderHook(() => useSpotifyPostSigninSync({ onSynced }));
+    expect(onSynced).not.toHaveBeenCalled();
   });
 
   it("skips fetch when profile already has Spotify taste", () => {
+    const onSynced = vi.fn();
     setup({
       user: { id: "u1", app_metadata: { provider: "spotify" } },
       profile: { streamingService: "Spotify", topArtists: ["a"] },
     });
-    renderHook(() => useSpotifyPostSigninSync());
+    renderHook(() => useSpotifyPostSigninSync({ onSynced }));
     expect(completeSpotifyConnectMock).not.toHaveBeenCalled();
+    expect(onSynced).not.toHaveBeenCalled();
   });
 
-  it("fetches taste and writes ephemeral patch to sessionStorage", async () => {
+  it("fetches taste and delivers it to onSynced (happy path)", async () => {
+    const onSynced = vi.fn();
+    const patch = {
+      streamingService: "Spotify",
+      spotifyDisplayName: "Jane",
+      topArtists: ["Beach House"],
+      topTracks: ["Space Song"],
+      artistImages: {},
+      artistIds: {},
+      trackImages: [],
+    };
     setup({
       user: { id: "u1", app_metadata: { provider: "spotify" } },
       profile: { streamingService: "", topArtists: [] },
       session: { provider_token: "tok-abc" },
-      patch: {
-        streamingService: "Spotify",
-        spotifyDisplayName: "Jane",
-        topArtists: ["Beach House"],
-        topTracks: ["Space Song"],
-        artistImages: {},
-        artistIds: {},
-        trackImages: [],
-      },
+      patch,
     });
-    renderHook(() => useSpotifyPostSigninSync());
-    await waitFor(() => {
-      expect(sessionStorage.getItem(PENDING_KEY)).not.toBeNull();
-    });
-    const stored = JSON.parse(sessionStorage.getItem(PENDING_KEY)!);
-    expect(stored.displayName).toBe("Jane");
-    expect(stored.topArtists).toEqual(["Beach House"]);
+    renderHook(() => useSpotifyPostSigninSync({ onSynced }));
+    await waitFor(() => expect(onSynced).toHaveBeenCalledTimes(1));
+    expect(onSynced).toHaveBeenCalledWith(patch);
     expect(completeSpotifyConnectMock).toHaveBeenCalledWith("tok-abc");
   });
 
   it("does not retry once synced for a given user id", async () => {
+    const onSynced = vi.fn();
     setup({
       user: { id: "u1", app_metadata: { provider: "spotify" } },
       profile: { streamingService: "", topArtists: [] },
@@ -130,25 +128,49 @@ describe("useSpotifyPostSigninSync", () => {
         trackImages: [],
       },
     });
-    const { rerender } = renderHook(() => useSpotifyPostSigninSync());
-    await waitFor(() => {
-      expect(completeSpotifyConnectMock).toHaveBeenCalledTimes(1);
-    });
+    const { rerender } = renderHook(() => useSpotifyPostSigninSync({ onSynced }));
+    await waitFor(() => expect(completeSpotifyConnectMock).toHaveBeenCalledTimes(1));
     rerender();
     rerender();
     expect(completeSpotifyConnectMock).toHaveBeenCalledTimes(1);
+    expect(onSynced).toHaveBeenCalledTimes(1);
   });
 
-  it("does not write to sessionStorage when session has no provider_token", async () => {
+  it("does not invoke onSynced when session has no provider_token", async () => {
+    const onSynced = vi.fn();
     setup({
       user: { id: "u1", app_metadata: { provider: "spotify" } },
       profile: { streamingService: "", topArtists: [] },
       session: { provider_token: undefined },
     });
-    renderHook(() => useSpotifyPostSigninSync());
-    // Let the async flow run
+    renderHook(() => useSpotifyPostSigninSync({ onSynced }));
     await new Promise((r) => setTimeout(r, 0));
     expect(completeSpotifyConnectMock).not.toHaveBeenCalled();
-    expect(sessionStorage.getItem(PENDING_KEY)).toBeNull();
+    expect(onSynced).not.toHaveBeenCalled();
+  });
+
+  it("handles getSession errors without invoking onSynced", async () => {
+    const onSynced = vi.fn();
+    setup({
+      user: { id: "u1", app_metadata: { provider: "spotify" } },
+      profile: { streamingService: "", topArtists: [] },
+    });
+    getSessionMock.mockResolvedValue({ data: { session: null }, error: { message: "network" } });
+    renderHook(() => useSpotifyPostSigninSync({ onSynced }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(onSynced).not.toHaveBeenCalled();
+  });
+
+  it("does not invoke onSynced when completeSpotifyConnect returns null", async () => {
+    const onSynced = vi.fn();
+    setup({
+      user: { id: "u1", app_metadata: { provider: "spotify" } },
+      profile: { streamingService: "", topArtists: [] },
+      session: { provider_token: "tok-abc" },
+      patch: null,
+    });
+    renderHook(() => useSpotifyPostSigninSync({ onSynced }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(onSynced).not.toHaveBeenCalled();
   });
 });

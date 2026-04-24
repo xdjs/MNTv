@@ -11,7 +11,6 @@ import { initiateAppleMusicAuth, fetchAppleMusicTaste } from "@/hooks/useAppleMu
 import { useAppleMusicToken } from "@/hooks/useAppleMusicToken";
 import { useSpotifyPostSigninSync } from "@/hooks/useSpotifyPostSigninSync";
 import { ensureSupabaseSession } from "@/lib/ensureSupabaseSession";
-import { SPOTIFY_PENDING_TASTE_KEY } from "@/lib/spotifyTokenStore";
 
 type Tier = "casual" | "curious" | "nerd";
 
@@ -66,36 +65,30 @@ export default function Connect() {
   const [lastFmUsername, setLastFmUsername] = useState("");
   const [lastFmSaved, setLastFmSaved] = useState(false);
   const [showLastFm, setShowLastFm] = useState(false);
-  // Mount the post-signin sync so a Supabase Spotify-provider session
-  // landing on this page kicks off a taste fetch and writes the ephemeral
-  // patch to sessionStorage. Read side lives in the existing useEffect
-  // below that reads `spotify_pending_taste`.
-  useSpotifyPostSigninSync();
+  // After Supabase's Spotify OAuth lands on /connect, the hook fetches
+  // taste data and hands it back via this callback. Previously we went
+  // through sessionStorage, but that raced against the reader effect:
+  // the reader fired on mount (before auth resolved) and never re-ran,
+  // so the async write arrived after nobody was listening. The direct
+  // callback is race-free — the setters run the moment the taste fetch
+  // resolves.
+  useSpotifyPostSigninSync({
+    onSynced: (patch) => {
+      setSpotifyConnected(true);
+      setPendingTopArtists(patch.topArtists ?? null);
+      setPendingTopTracks(patch.topTracks ?? null);
+      if (patch.spotifyDisplayName) setPendingDisplayName(patch.spotifyDisplayName);
+      if (patch.artistImages) setPendingArtistImages(patch.artistImages);
+      if (patch.artistIds) setPendingArtistIds(patch.artistIds);
+      if (patch.trackImages) setPendingTrackImages(patch.trackImages);
+      setStep(1);
+    },
+  });
 
   // If already onboarded, redirect to browse
   useEffect(() => {
     if (getStoredProfile()) {
       navigate(redirectUrl || "/browse", { replace: true });
-    }
-  }, []);
-
-  // Pick up Spotify data from sessionStorage (after Spotify OAuth redirect)
-  useEffect(() => {
-    const raw = sessionStorage.getItem(SPOTIFY_PENDING_TASTE_KEY);
-    if (raw) {
-      try {
-        const { displayName, topArtists, topTracks, artistImages, artistIds, trackImages } = JSON.parse(raw);
-        setSpotifyConnected(true);
-        setPendingTopArtists(topArtists);
-        setPendingTopTracks(topTracks);
-        if (displayName) setPendingDisplayName(displayName);
-        if (artistImages) setPendingArtistImages(artistImages);
-        if (artistIds) setPendingArtistIds(artistIds);
-        if (trackImages) setPendingTrackImages(trackImages);
-        sessionStorage.removeItem(SPOTIFY_PENDING_TASTE_KEY);
-        // Jump to tier picker
-        setStep(1);
-      } catch { /* ignore */ }
     }
   }, []);
 
