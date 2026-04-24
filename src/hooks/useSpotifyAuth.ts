@@ -38,11 +38,14 @@ const SPOTIFY_SCOPES =
  * dashboard edit.
  */
 export async function signInWithSpotify(): Promise<void> {
-  // Guard against missing env in local/preview builds. Supabase's
-  // signInWithOAuth will happily redirect with an invalid client id and
-  // let Spotify return a generic error — this throws early with a
-  // useful message the first time a dev forgets .env.local.
-  if (!SPOTIFY_CLIENT_ID) throw new Error("VITE_SPOTIFY_CLIENT_ID is not set");
+  // Dev-experience guard. Note: `signInWithOAuth` doesn't actually use
+  // this value — Supabase's server-side provider config supplies the
+  // client id to Spotify. But `VITE_SPOTIFY_CLIENT_ID` IS used by the
+  // legacy `refreshSpotifyToken` fallback below, and its presence is a
+  // reasonable proxy for "local env is configured at all." The first
+  // time a dev forgets .env.local, this is a clearer error than a
+  // downstream Spotify "invalid_client" surface.
+  if (!SPOTIFY_CLIENT_ID) throw new Error("VITE_SPOTIFY_CLIENT_ID is not set — check .env.local");
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "spotify",
     options: {

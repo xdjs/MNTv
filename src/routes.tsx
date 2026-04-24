@@ -19,19 +19,31 @@ export function LazyFallback() {
 }
 
 /**
- * ProtectedRoute — requires a Supabase session. Profile (tier selected)
- * is deliberately NOT the gate: an anonymous Apple Music user or a
- * mid-onboarding Spotify user both have a session without a profile
- * and must still be allowed past so they can finish onboarding. Cross-
- * device progression works because the session follows the user, not
- * a device's localStorage.
+ * ProtectedRoute — requires both a Supabase session AND a local
+ * profile (tier selected). Two-step triage:
+ *
+ *   - no session → /connect (sign in first; ?redirect= preserves the
+ *     target so the user lands back where they started after OAuth +
+ *     tier select)
+ *   - session, no profile → /connect (the mid-onboarding state: Apple
+ *     Music anonymous session or a Spotify user who closed the tab
+ *     before tier pick; same ?redirect= behavior)
+ *   - session + profile → render the protected content
+ *
+ * The session-alone gate was considered and rejected: Browse.tsx and
+ * Listen.tsx dereference profile fields (`calculatedTier`, taste data)
+ * and would crash on a direct-navigation bookmark from a mid-onboarding
+ * user. Enforcing at the route gate closes that class of bug without
+ * per-page null checks.
  */
 export function ProtectedRoute({ children }: { children: ReactNode }) {
   const location = useLocation();
   const { session, loading } = useAuth();
+  const { profile } = useUserProfile();
   if (loading) return <LazyFallback />;
-  if (!session) {
-    return <Navigate to={`/connect?redirect=${encodeURIComponent(location.pathname)}`} replace />;
+  if (!session || !profile) {
+    const redirect = encodeURIComponent(location.pathname);
+    return <Navigate to={`/connect?redirect=${redirect}`} replace />;
   }
   return <>{children}</>;
 }

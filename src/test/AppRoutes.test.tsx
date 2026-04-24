@@ -79,13 +79,21 @@ describe("route gates (src/routes.tsx)", () => {
     expect(screen.getByTestId("connect")).toBeInTheDocument();
   });
 
-  it("ProtectedRoute: session present renders Browse (even without profile)", () => {
-    // Critical invariant from the migration: anonymous Apple Music users
-    // and mid-onboarding Spotify users have a session but no profile,
-    // and must pass ProtectedRoute. RootRoute triages them back to
-    // /connect — the protected-route gate itself trusts session alone.
+  it("ProtectedRoute: session without profile redirects to Connect (mid-onboarding)", () => {
+    // Session alone isn't enough to pass: Browse and Listen dereference
+    // profile fields (`calculatedTier`, taste data) and would crash on
+    // a direct-navigation bookmark from a mid-onboarding user. The
+    // gate now requires BOTH session and profile. RootRoute has the
+    // same triage but only fires on `/`; this closes the deep-link gap.
     useAuthMock.mockReturnValue({ session: { user: { id: "u1" } }, loading: false });
     useUserProfileMock.mockReturnValue({ profile: null });
+    render(<RenderHarness initialPath="/browse" />);
+    expect(screen.getByTestId("connect")).toBeInTheDocument();
+  });
+
+  it("ProtectedRoute: session + profile renders Browse", () => {
+    useAuthMock.mockReturnValue({ session: { user: { id: "u1" } }, loading: false });
+    useUserProfileMock.mockReturnValue({ profile: { streamingService: "Spotify", calculatedTier: "curious" } });
     render(<RenderHarness initialPath="/browse" />);
     expect(screen.getByTestId("browse")).toBeInTheDocument();
   });
