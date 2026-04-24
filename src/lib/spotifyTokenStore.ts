@@ -23,6 +23,14 @@ import type { Session } from "@supabase/supabase-js";
 export const SPOTIFY_STORAGE_KEY = "spotify_playback_token";
 export const TOKEN_CHANGED_EVENT = "spotify-token-changed";
 
+// Ephemeral handoff for post-OAuth Spotify taste data. The
+// `useSpotifyPostSigninSync` hook writes to this key in sessionStorage
+// after fetching taste from the edge function; Connect.tsx's existing
+// effect consumes the same key and advances to the tier picker. Both
+// sides must import this constant so a rename breaks the build rather
+// than silently breaking the handoff.
+export const SPOTIFY_PENDING_TASTE_KEY = "spotify_pending_taste";
+
 export interface StoredSpotifyToken {
   accessToken: string;
   refreshToken: string;

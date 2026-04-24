@@ -2,10 +2,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
-import { lazy, Suspense, useEffect, type ReactNode } from "react";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { lazy, Suspense, useEffect } from "react";
 import { AnimatePresence } from "framer-motion";
-import Onboarding from "./pages/Onboarding";
 import Companion from "./pages/Companion";
 import CompanionShortRedirect from "./pages/CompanionShortRedirect";
 import NotFound from "./pages/NotFound";
@@ -17,13 +16,13 @@ const ArtistProfile = lazy(() => import("./pages/ArtistProfile"));
 const AlbumDetail = lazy(() => import("./pages/AlbumDetail"));
 const Listen = lazy(() => import("./pages/Listen"));
 const Profile = lazy(() => import("./pages/Profile"));
-import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { getStoredProfile } from "./hooks/useMusicNerdState";
+import { AuthProvider } from "./contexts/AuthContext";
 import { PlayerProvider } from "./contexts/PlayerContext";
 import { StoriesProvider } from "./contexts/StoriesContext";
 import NowPlayingBar from "./components/NowPlayingBar";
 import SpotifyReconnectBanner from "./components/SpotifyReconnectBanner";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { ProtectedRoute, RootRoute, LazyFallback } from "./routes";
 
 const queryClient = new QueryClient();
 
@@ -37,39 +36,8 @@ function ScrollToTop() {
   return null;
 }
 
-/** ProtectedRoute — requires a Supabase session. Profile (tier selected)
- *  is no longer the gate: an anonymous Apple Music user or a mid-
- *  onboarding Spotify user both have a session without a profile, and
- *  must still be allowed past /connect. Cross-device progression works
- *  because the session follows the user, not a device's localStorage. */
-function ProtectedRoute({ children }: { children: ReactNode }) {
-  const location = useLocation();
-  const { session, loading } = useAuth();
-  if (loading) return <LazyFallback />;
-  if (!session) {
-    return <Navigate to={`/connect?redirect=${encodeURIComponent(location.pathname)}`} replace />;
-  }
-  return <>{children}</>;
-}
-
-/** RootRoute — triages signed-in users between /browse and /connect.
- *  A session alone isn't enough to send someone to /browse: a user who
- *  completed Spotify OAuth (or signInAnonymously for Apple Music) but
- *  then closed the tab before picking a tier has a session but no
- *  profile, and /browse needs profile.calculatedTier to render. Send
- *  those users back to /connect to finish onboarding. Fully-onboarded
- *  users (session + profile) go straight to /browse; signed-out users
- *  see Onboarding. */
-function RootRoute() {
-  const { session, loading } = useAuth();
-  if (loading) return <LazyFallback />;
-  if (!session) return <Onboarding />;
-  return <Navigate to={getStoredProfile() ? "/browse" : "/connect"} replace />;
-}
-
-function LazyFallback() {
-  return <div className="min-h-screen bg-background" />;
-}
+// ProtectedRoute, RootRoute, LazyFallback live in `src/routes.tsx` so
+// unit tests can import the real implementations.
 
 function AnimatedRoutes() {
   const location = useLocation();

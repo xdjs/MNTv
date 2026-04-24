@@ -11,6 +11,7 @@ import { initiateAppleMusicAuth, fetchAppleMusicTaste } from "@/hooks/useAppleMu
 import { useAppleMusicToken } from "@/hooks/useAppleMusicToken";
 import { useSpotifyPostSigninSync } from "@/hooks/useSpotifyPostSigninSync";
 import { ensureSupabaseSession } from "@/lib/ensureSupabaseSession";
+import { SPOTIFY_PENDING_TASTE_KEY } from "@/lib/spotifyTokenStore";
 
 type Tier = "casual" | "curious" | "nerd";
 
@@ -80,7 +81,7 @@ export default function Connect() {
 
   // Pick up Spotify data from sessionStorage (after Spotify OAuth redirect)
   useEffect(() => {
-    const raw = sessionStorage.getItem("spotify_pending_taste");
+    const raw = sessionStorage.getItem(SPOTIFY_PENDING_TASTE_KEY);
     if (raw) {
       try {
         const { displayName, topArtists, topTracks, artistImages, artistIds, trackImages } = JSON.parse(raw);
@@ -91,7 +92,7 @@ export default function Connect() {
         if (artistImages) setPendingArtistImages(artistImages);
         if (artistIds) setPendingArtistIds(artistIds);
         if (trackImages) setPendingTrackImages(trackImages);
-        sessionStorage.removeItem("spotify_pending_taste");
+        sessionStorage.removeItem(SPOTIFY_PENDING_TASTE_KEY);
         // Jump to tier picker
         setStep(1);
       } catch { /* ignore */ }

@@ -1,64 +1,32 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import type { ReactNode } from "react";
+import { MemoryRouter, Routes, Route } from "react-router-dom";
 
-const { useAuthMock, getStoredProfileMock } = vi.hoisted(() => ({
+const { useAuthMock, useUserProfileMock } = vi.hoisted(() => ({
   useAuthMock: vi.fn(),
-  getStoredProfileMock: vi.fn(),
+  useUserProfileMock: vi.fn(),
 }));
 
 vi.mock("@/contexts/AuthContext", async () => {
   const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>("@/contexts/AuthContext");
-  return {
-    ...actual,
-    useAuth: () => useAuthMock(),
-  };
+  return { ...actual, useAuth: () => useAuthMock() };
 });
 vi.mock("@/hooks/useMusicNerdState", async () => {
   const actual = await vi.importActual<typeof import("@/hooks/useMusicNerdState")>("@/hooks/useMusicNerdState");
-  return {
-    ...actual,
-    getStoredProfile: () => getStoredProfileMock(),
-  };
+  return { ...actual, useUserProfile: () => useUserProfileMock() };
 });
+// Avoid pulling the full Onboarding tree (images, logo animations) into
+// the test — stub it with a marker so assertions stay simple.
+vi.mock("@/pages/Onboarding", () => ({
+  default: () => <div data-testid="onboarding">Onboarding</div>,
+}));
 
-import { useAuth } from "@/contexts/AuthContext";
-import { getStoredProfile } from "@/hooks/useMusicNerdState";
+import { ProtectedRoute, RootRoute } from "@/routes";
 
-// Lightweight page stubs so the render is synchronous.
-function Browse() {
-  return <div data-testid="browse">Browse</div>;
-}
-function ConnectStub() {
-  return <div data-testid="connect">Connect</div>;
-}
-function Onboarding() {
-  return <div data-testid="onboarding">Onboarding</div>;
-}
+function Browse() { return <div data-testid="browse">Browse</div>; }
+function ConnectStub() { return <div data-testid="connect">Connect</div>; }
 
-// Re-implement ProtectedRoute + RootRoute with identical logic to
-// `src/App.tsx` (ProtectedRoute ~line 45, RootRoute ~line 60). Testing
-// the inline App.tsx definitions directly would require importing the
-// full App tree (PlayerProvider, StoriesProvider, Spotify SDK load);
-// this keeps the test tight to the routing invariant the review
-// flagged. IMPORTANT: if the App.tsx gate logic changes, update both
-// sides in lockstep.
-function ProtectedRoute({ children }: { children: ReactNode }) {
-  const location = useLocation();
-  const { session, loading } = useAuth();
-  if (loading) return <div data-testid="loading">loading</div>;
-  if (!session) return <Navigate to={`/connect?redirect=${encodeURIComponent(location.pathname)}`} replace />;
-  return <>{children}</>;
-}
-function RootRoute() {
-  const { session, loading } = useAuth();
-  if (loading) return <div data-testid="loading">loading</div>;
-  if (!session) return <Onboarding />;
-  return <Navigate to={getStoredProfile() ? "/browse" : "/connect"} replace />;
-}
-
-function StubApp({ initialPath }: { initialPath: string }) {
+function RenderHarness({ initialPath }: { initialPath: string }) {
   return (
     <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
@@ -70,53 +38,55 @@ function StubApp({ initialPath }: { initialPath: string }) {
   );
 }
 
-describe("App route gates", () => {
+describe("route gates (src/routes.tsx)", () => {
   beforeEach(() => {
     useAuthMock.mockReset();
-    getStoredProfileMock.mockReset();
+    useUserProfileMock.mockReset();
+    useUserProfileMock.mockReturnValue({ profile: null });
   });
 
-  it("shows a loading stub while auth is hydrating", () => {
+  it("renders a fallback while auth is hydrating", () => {
     useAuthMock.mockReturnValue({ session: null, loading: true });
-    render(<StubApp initialPath="/browse" />);
-    expect(screen.getByTestId("loading")).toBeInTheDocument();
+    const { container } = render(<RenderHarness initialPath="/browse" />);
+    // LazyFallback is a plain empty div — the key invariant is "no
+    // Onboarding / Connect / Browse marker showed up."
+    expect(container.querySelector('[data-testid]')).toBeNull();
   });
 
   it("RootRoute: signed-out user sees Onboarding", () => {
     useAuthMock.mockReturnValue({ session: null, loading: false });
-    render(<StubApp initialPath="/" />);
+    render(<RenderHarness initialPath="/" />);
     expect(screen.getByTestId("onboarding")).toBeInTheDocument();
   });
 
   it("RootRoute: session + profile redirects to Browse", () => {
     useAuthMock.mockReturnValue({ session: { user: { id: "u1" } }, loading: false });
-    getStoredProfileMock.mockReturnValue({ streamingService: "Spotify", calculatedTier: "curious" });
-    render(<StubApp initialPath="/" />);
+    useUserProfileMock.mockReturnValue({ profile: { streamingService: "Spotify", calculatedTier: "curious" } });
+    render(<RenderHarness initialPath="/" />);
     expect(screen.getByTestId("browse")).toBeInTheDocument();
   });
 
   it("RootRoute: session without profile redirects to Connect (tier-less user)", () => {
     useAuthMock.mockReturnValue({ session: { user: { id: "u1" } }, loading: false });
-    getStoredProfileMock.mockReturnValue(null);
-    render(<StubApp initialPath="/" />);
+    useUserProfileMock.mockReturnValue({ profile: null });
+    render(<RenderHarness initialPath="/" />);
     expect(screen.getByTestId("connect")).toBeInTheDocument();
   });
 
-  it("ProtectedRoute: no session bounces to Connect with a redirect param", () => {
+  it("ProtectedRoute: no session bounces to Connect", () => {
     useAuthMock.mockReturnValue({ session: null, loading: false });
-    render(<StubApp initialPath="/browse" />);
+    render(<RenderHarness initialPath="/browse" />);
     expect(screen.getByTestId("connect")).toBeInTheDocument();
   });
 
-  it("ProtectedRoute: session present lets Browse render (even without profile)", () => {
-    // Critical invariant from the migration: a user with a session but
-    // no profile (mid-onboarding Spotify user, anonymous Apple Music
-    // user) must be allowed past ProtectedRoute so they can finish
-    // onboarding. RootRoute triages them back to /connect — the
-    // protected-route gate itself trusts session alone.
+  it("ProtectedRoute: session present renders Browse (even without profile)", () => {
+    // Critical invariant from the migration: anonymous Apple Music users
+    // and mid-onboarding Spotify users have a session but no profile,
+    // and must pass ProtectedRoute. RootRoute triages them back to
+    // /connect — the protected-route gate itself trusts session alone.
     useAuthMock.mockReturnValue({ session: { user: { id: "u1" } }, loading: false });
-    getStoredProfileMock.mockReturnValue(null);
-    render(<StubApp initialPath="/browse" />);
+    useUserProfileMock.mockReturnValue({ profile: null });
+    render(<RenderHarness initialPath="/browse" />);
     expect(screen.getByTestId("browse")).toBeInTheDocument();
   });
 });

@@ -38,6 +38,11 @@ const SPOTIFY_SCOPES =
  * dashboard edit.
  */
 export async function signInWithSpotify(): Promise<void> {
+  // Guard against missing env in local/preview builds. Supabase's
+  // signInWithOAuth will happily redirect with an invalid client id and
+  // let Spotify return a generic error — this throws early with a
+  // useful message the first time a dev forgets .env.local.
+  if (!SPOTIFY_CLIENT_ID) throw new Error("VITE_SPOTIFY_CLIENT_ID is not set");
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "spotify",
     options: {
@@ -85,7 +90,10 @@ export async function refreshSpotifyToken(
   if (!res.ok) {
     // Expected for Supabase-issued refresh tokens — they require the
     // client secret and so fail with 400 invalid_client. Caller falls
-    // through to the edge function.
+    // through to the edge function. Log at debug rather than error so
+    // the expected failures are observable (revoked grants, Spotify API
+    // shifts) without polluting the console on every refresh tick.
+    console.debug(`[refreshSpotifyToken] legacy refresh returned ${res.status}; caller falls through`);
     return null;
   }
 
