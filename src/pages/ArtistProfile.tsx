@@ -5,7 +5,9 @@ import { getArtistById, getAlbumsForArtist, getTracksForArtist, artists } from "
 import { supabase } from "@/integrations/supabase/client";
 import PageTransition from "@/components/PageTransition";
 import TileRow from "@/components/TileRow";
+import LatestFactsSection from "@/components/LatestFactsSection";
 import { useArtistImage } from "@/hooks/useArtistImage";
+import { useArtistLatestFacts } from "@/hooks/useArtistLatestFacts";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
 import {
   isSpotifyPrefix,
@@ -326,6 +328,17 @@ function RealArtistProfileInner({ artist, trackTiles, albumTiles, relatedTiles }
   const heroImage = useArtistImage(artist.name, artist.imageUrl);
   const trackRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
+  // Pull Latest Facts for this artist — shares the nugget_cache row
+  // that Browse's ArtistUpdatesSection already warmed, so a user
+  // arriving here via the Browse tap-through sees the facts instantly.
+  // Tier selects the phrasing of generated facts and caches per-tier.
+  const { profile: userProfile } = useUserProfile();
+  const latestTier = (userProfile?.calculatedTier as "casual" | "curious" | "nerd") || "casual";
+  const { updates: latestUpdates, loading: latestLoading } = useArtistLatestFacts(
+    artist.name,
+    latestTier,
+  );
+
   const tileRows = useMemo(() => {
     const rows: { label: string; items: typeof albumTiles; tileSize: "sm" | "md" | "lg" }[] = [];
     if (albumTiles.length > 0) rows.push({ label: "Discography", items: albumTiles, tileSize: "md" });
@@ -465,6 +478,15 @@ function RealArtistProfileInner({ artist, trackTiles, albumTiles, relatedTiles }
           <p className="max-w-2xl text-base leading-relaxed text-foreground/70">{artist.bio}</p>
         </div>
       )}
+
+      {/* Latest Facts — shares the artist-updates cache with Browse.
+          If the user arrived via a nugget tap, the `?nugget=<id>` query
+          param scrolls the matching card into view and pulses it. */}
+      <LatestFactsSection
+        updates={latestUpdates}
+        loading={latestLoading}
+        artistName={artist.name}
+      />
 
       {/* Popular tracks */}
       {trackTiles.length > 0 && (
