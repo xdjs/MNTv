@@ -1,5 +1,5 @@
 import type { UserProfile } from "@/mock/types";
-import { fetchSpotifyTaste } from "./useSpotifyAuth";
+import { fetchSpotifyTaste } from "@/hooks/useSpotifyAuth";
 
 /**
  * Profile fields that a fresh Spotify taste fetch populates. Separated
