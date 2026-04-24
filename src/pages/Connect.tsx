@@ -10,7 +10,7 @@ import { signInWithSpotify } from "@/hooks/useSpotifyAuth";
 import { initiateAppleMusicAuth, fetchAppleMusicTaste } from "@/hooks/useAppleMusicAuth";
 import { useAppleMusicToken } from "@/hooks/useAppleMusicToken";
 import { useSpotifyPostSigninSync } from "@/hooks/useSpotifyPostSigninSync";
-import { ensureSupabaseSession } from "@/hooks/ensureSupabaseSession";
+import { ensureSupabaseSession } from "@/lib/ensureSupabaseSession";
 
 type Tier = "casual" | "curious" | "nerd";
 

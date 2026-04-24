@@ -4,7 +4,7 @@ vi.mock("@/hooks/useSpotifyAuth", () => ({
   fetchSpotifyTaste: vi.fn(),
 }));
 
-import { completeSpotifyConnect } from "@/hooks/completeSpotifyConnect";
+import { completeSpotifyConnect } from "@/lib/completeSpotifyConnect";
 import { fetchSpotifyTaste } from "@/hooks/useSpotifyAuth";
 
 const mockedFetch = fetchSpotifyTaste as ReturnType<typeof vi.fn>;

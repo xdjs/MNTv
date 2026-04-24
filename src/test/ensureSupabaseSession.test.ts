@@ -14,7 +14,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-import { ensureSupabaseSession } from "@/hooks/ensureSupabaseSession";
+import { ensureSupabaseSession } from "@/lib/ensureSupabaseSession";
 
 describe("ensureSupabaseSession", () => {
   beforeEach(() => {

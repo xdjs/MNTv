@@ -2,8 +2,12 @@ import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserProfile } from "./useMusicNerdState";
-import { completeSpotifyConnect } from "./completeSpotifyConnect";
+import { completeSpotifyConnect } from "@/lib/completeSpotifyConnect";
 
+// Kept in lockstep with the reader in Connect.tsx (which still consumes the
+// sessionStorage entry directly). A follow-up could fold both sides into a
+// shared helper in src/lib/ to remove this coupling; tracked as a nit in
+// the PR #75 review.
 const PENDING_TASTE_KEY = "spotify_pending_taste";
 
 /**

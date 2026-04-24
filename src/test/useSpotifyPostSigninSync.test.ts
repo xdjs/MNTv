@@ -13,7 +13,7 @@ const { getSessionMock, completeSpotifyConnectMock, useAuthMock, useUserProfileM
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { auth: { getSession: getSessionMock } },
 }));
-vi.mock("@/hooks/completeSpotifyConnect", () => ({
+vi.mock("@/lib/completeSpotifyConnect", () => ({
   completeSpotifyConnect: completeSpotifyConnectMock,
 }));
 vi.mock("@/contexts/AuthContext", () => ({
