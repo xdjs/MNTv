@@ -7,7 +7,7 @@ MusicNerd TV is a React SPA that delivers AI-powered music discovery through rea
 - **Framework**: React 18 + Vite 5.4 (SWC)
 - **Language**: TypeScript
 - **Database**: Supabase (PostgreSQL + Auth + Edge Functions + RLS)
-- **Authentication**: Supabase Auth + Spotify OAuth (PKCE)
+- **Authentication**: Supabase Auth (Spotify OAuth provider + anonymous sessions for Apple Music) + Apple MusicKit JS (separate, for library access)
 - **Styling**: Tailwind CSS 3.4 + shadcn/ui (Radix UI primitives)
 - **Animation**: Framer Motion 12
 - **Routing**: React Router v6
@@ -22,7 +22,7 @@ MusicNerd TV is a React SPA that delivers AI-powered music discovery through rea
 ## Key Features
 1. **AI Nuggets**: Real-time AI-generated facts timed to track playback (Exa → Gemini → validation pipeline)
 2. **Tier-Based Content Scaling**: 3/6/9 nuggets for Casual/Curious/Nerd tiers
-3. **Spotify Integration**: PKCE OAuth, Web Playback SDK, search, artist data
+3. **Spotify Integration**: Supabase-managed OAuth provider, Web Playback SDK, search, artist data
 4. **Companion Page**: Mobile-friendly deep-dive content via QR code
 5. **Personalized Catalog**: Browse page built from taste signals (Spotify top artists/tracks)
 6. **Demo Seed Data**: 50+ pre-generated JSON files for instant guest experience
@@ -134,7 +134,8 @@ npm run test:watch   # Vitest watch mode
 ## Architecture Notes
 - **Nugget Pipeline**: Multi-agent architecture (Curator → Writer → Validator) using Exa for web research + Gemini for generation, reducing hallucination vs pure LLM
 - **Tier System**: Same track yields different content depth per tier; cached per `listen_count_tier`
-- **Spotify PKCE**: Client-side OAuth, no backend secret needed; tokens in localStorage
+- **Spotify OAuth**: Supabase-managed. `signInWithSpotify()` calls `supabase.auth.signInWithOAuth({ provider: "spotify" })`; Supabase handles the callback server-side with `client_secret`, then redirects to `/connect`. `AuthContext` bridges `session.provider_token` + `session.provider_refresh_token` into `localStorage.spotify_playback_token` (via `src/lib/spotifyTokenStore.ts`) so the Web Playback SDK + `useSpotifyToken` keep reading from the same shape. Refresh is server-side via the `spotify-refresh` edge function (Supabase-issued refresh tokens require the secret). Apple Music users get an anonymous Supabase session via `signInAnonymously()` so routes gate uniformly on session presence, not localStorage
+- **Route gating**: `ProtectedRoute` and `RootRoute` in `src/App.tsx` gate on `useAuth().session`, NOT localStorage profile. This allows mid-onboarding users (session but no tier yet) to stay on Connect, and cross-device progression since the session follows the user
 - **Demo Mode**: 50+ pre-generated seed files enable zero-latency guest experience
 - **RLS**: Row-Level Security enforces data access at the database level; cache tables are public read-only, profiles are user-owned
 - **Deploy**: Frontend auto-deploys to Vercel on push; Supabase edge functions deploy via Supabase CLI

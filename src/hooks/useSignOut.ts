@@ -1,11 +1,22 @@
 /**
  * useSignOut — single source of truth for ending a user's session.
  *
+ * Since the Spotify-Supabase OAuth migration landed, `supabase.auth.signOut()`
+ * actually invalidates the JWT server-side — under the legacy anon-only flow
+ * it was a soft no-op because there was nothing to revoke. The local-
+ * storage sweep below remains belt-and-suspenders for the case where the
+ * /auth/v1/logout network call fails (see nukeSupabaseAuthTokens).
+ *
  * Hard reload at the end is intentional: it tears down the Spotify Web
  * Playback SDK + MusicKit JS singletons (which would otherwise keep
  * playing audio into an unauthenticated session) and avoids the
  * ProtectedRoute re-render race that React Router navigate("/") hits
  * when clearProfile fires mid-render.
+ *
+ * The PKCE_STATE_KEY / PKCE_VERIFIER_KEY cleanup is now vestigial — the
+ * new flow doesn't create those sessionStorage entries. Keeping the
+ * sweep covers tabs that had PKCE state in flight at cutover time; Task
+ * 8 removes the imports once the migration settles.
  */
 
 import { useCallback } from "react";
@@ -13,7 +24,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { clearStoredProfile } from "./useMusicNerdState";
 import { clearSpotifyToken } from "./useSpotifyToken";
 import { clearAppleMusicToken } from "./useAppleMusicToken";
-import { PKCE_STATE_KEY, PKCE_VERIFIER_KEY } from "./useSpotifyAuth";
+
+// Legacy PKCE sessionStorage keys — the Supabase-managed OAuth flow
+// doesn't create these, but a tab that was mid-signin at cutover time
+// may still have them. Kept here (rather than imported) so a future
+// cleanup can drop the sweep entirely once no stragglers are possible.
+const LEGACY_PKCE_STATE_KEY = "spotify_pkce_state";
+const LEGACY_PKCE_VERIFIER_KEY = "spotify_pkce_verifier";
 
 /** Belt-and-suspenders cleanup of any Supabase-issued auth token in
  *  localStorage. supabase.auth.signOut() should remove the
@@ -60,13 +77,17 @@ export function useSignOut() {
     clearSpotifyToken();
     clearAppleMusicToken();
 
-    // 4. sessionStorage cleanup. PKCE keys are imported as constants
-    //    instead of hardcoded so a rename in useSpotifyAuth picks up
-    //    here automatically.
+    // 4. sessionStorage cleanup. The current sign-in flow doesn't write
+    //    `spotify_pending_taste` anymore (the Supabase-managed OAuth
+    //    refactor moved that handoff to a direct hook callback in
+    //    Connect.tsx). The removeItem stays as a one-release sweep in
+    //    case a tab with an old write is still hanging around. Same
+    //    story for the LEGACY_PKCE_* keys: no current writer, kept as
+    //    belt-and-suspenders.
     sessionStorage.removeItem("musicnerd_redirect");
     sessionStorage.removeItem("spotify_pending_taste");
-    sessionStorage.removeItem(PKCE_STATE_KEY);
-    sessionStorage.removeItem(PKCE_VERIFIER_KEY);
+    sessionStorage.removeItem(LEGACY_PKCE_STATE_KEY);
+    sessionStorage.removeItem(LEGACY_PKCE_VERIFIER_KEY);
 
     // 5. Hard navigate. See module-level comment for why a full reload
     //    instead of React Router navigate().

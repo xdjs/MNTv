@@ -49,16 +49,15 @@ async function verifySpotifyToken(token: string): Promise<VerifiedIdentity | nul
 // identity off a hash of (userToken, storefront) because Apple doesn't
 // surface a stable MusicKit user id.
 //
-// IMPORTANT CAVEAT: the Music-User-Token ROTATES on re-authorization,
-// MusicKit storage clear, new-device sign-in, and at its ~6-month TTL —
-// so this identifier is stable WITHIN a MusicKit session but NOT across
-// re-auth events. When a user re-auths, their bookmarks saved under the
-// previous hash are orphaned and the deny-all RLS on `nugget_bookmarks`
-// prevents client-side reconciliation. The durable fix is to anchor
-// bookmark identity to `auth.uid()` via the Spotify-Supabase OAuth
-// migration (Task 6.6 seeds an anonymous Supabase session under the
-// Apple Music connect path). See
-// docs/superpowers/plans/2026-04-23-spotify-supabase-oauth-adoption.md.
+// KNOWN LIMITATION — the Music-User-Token ROTATES on re-authorization,
+// MusicKit storage clear, new-device sign-in, and at its ~6-month TTL.
+// So this identifier is stable WITHIN a MusicKit session but NOT across
+// re-auth events — when a user re-auths, their bookmarks saved under
+// the previous hash are orphaned, and the deny-all RLS on
+// `nugget_bookmarks` prevents client-side reconciliation. The durable
+// fix is to anchor bookmark identity to `auth.uid()` via
+// `supabase.auth.linkIdentity()` once the Spotify-Supabase OAuth
+// migration has shipped — tracked as a separate slice.
 async function verifyAppleToken(userToken: string, storefront: string): Promise<VerifiedIdentity | null> {
   try {
     const devToken = await getAppleDeveloperToken();

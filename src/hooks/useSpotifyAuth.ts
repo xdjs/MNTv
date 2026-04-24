@@ -1,144 +1,90 @@
 /**
- * Spotify PKCE OAuth — fully client-side.
- * Client ID is public by spec; stored as VITE_SPOTIFY_CLIENT_ID.
- * Token exchange is done directly with Spotify (no edge function needed for PKCE).
- * Only the taste-profile fetch hits our edge function (backend needs it for RAG).
+ * Spotify auth helpers — Supabase-managed OAuth.
+ *
+ * `signInWithSpotify` delegates the whole OAuth dance to Supabase's
+ * built-in Spotify provider. Supabase redirects the user to Spotify,
+ * exchanges the code server-side with `client_secret`, and sends the
+ * user back to /connect with a real Supabase session. AuthContext's
+ * `onAuthStateChange` then bridges `session.provider_token` +
+ * `session.provider_refresh_token` into localStorage via
+ * `src/lib/spotifyTokenStore.ts` so the Web Playback SDK and
+ * `useSpotifyToken` keep reading from the same shape they always have.
+ *
+ * `refreshSpotifyToken` remains for the tail of the migration: tokens
+ * minted under the old PKCE flow (which used `client_id` only) are
+ * still in localStorage for some users and can be refreshed without
+ * the secret. New Supabase-issued tokens go through the
+ * `spotify-refresh` edge function in `useSpotifyToken.getValidToken`
+ * because Supabase's provider uses the server-side code flow that
+ * requires `client_secret` — and the secret must not be shipped to
+ * the browser.
+ *
+ * `fetchSpotifyTaste` is unchanged — it hits the `spotify-taste` edge
+ * function with the caller's Spotify access token so the server can
+ * build RAG-ready taste data.
  */
 
 import { supabase } from "@/integrations/supabase/client";
 
 const SPOTIFY_CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID as string;
-const SPOTIFY_SCOPES = "user-top-read user-read-recently-played user-read-private streaming user-read-playback-state user-modify-playback-state";
+const SPOTIFY_SCOPES =
+  "user-top-read user-read-recently-played user-read-private streaming user-read-playback-state user-modify-playback-state";
 
-// Exported so useSignOut can clear them on logout without hardcoding the
-// strings. Drift safety: if these keys ever rename, all writers and
-// clearers update via this single export.
-export const PKCE_STATE_KEY = "spotify_pkce_state";
-export const PKCE_VERIFIER_KEY = "spotify_pkce_verifier";
+// ── Supabase-managed OAuth ────────────────────────────────────────────────────
 
-// ── PKCE helpers ──────────────────────────────────────────────────────────────
-
-function base64UrlEncode(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let str = "";
-  for (const b of bytes) str += String.fromCharCode(b);
-  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
-}
-
-async function generatePKCE(): Promise<{ verifier: string; challenge: string }> {
-  const array = new Uint8Array(32);
-  crypto.getRandomValues(array);
-  const verifier = base64UrlEncode(array.buffer);
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
-  const challenge = base64UrlEncode(digest);
-  return { verifier, challenge };
-}
-
-// ── Redirect URI ──────────────────────────────────────────────────────────────
-
-export function getSpotifyRedirectUri(): string {
-  const { protocol, hostname, port } = window.location;
-  // Spotify rejects "localhost" — use explicit 127.0.0.1 for local dev
-  const host = hostname === "localhost" ? "127.0.0.1" : hostname;
-  const portSuffix = port ? `:${port}` : "";
-  return `${protocol}//${host}${portSuffix}/spotify-callback`;
-}
-
-// ── Step 1: Kick off OAuth (redirect to Spotify) ──────────────────────────────
-
-export async function initiateSpotifyAuth(): Promise<void> {
-  if (!SPOTIFY_CLIENT_ID) throw new Error("VITE_SPOTIFY_CLIENT_ID is not set");
-
-  // sessionStorage is origin-scoped, and Spotify rejects `localhost` as a
-  // redirect URI — so getSpotifyRedirectUri() swaps localhost→127.0.0.1.
-  // If we save the PKCE verifier on the `localhost` origin and Spotify then
-  // redirects back to the `127.0.0.1` origin, sessionStorage on that origin
-  // is empty and the callback fails with "missing verifier." Force the user
-  // onto the 127.0.0.1 origin before writing anything so the save and the
-  // callback both happen on the same origin.
-  if (window.location.hostname === "localhost") {
-    const { protocol, port, pathname, search, hash } = window.location;
-    const portSuffix = port ? `:${port}` : "";
-    window.location.href = `${protocol}//127.0.0.1${portSuffix}${pathname}${search}${hash}`;
-    return;
-  }
-
-  const { verifier, challenge } = await generatePKCE();
-  const state = base64UrlEncode(crypto.getRandomValues(new Uint8Array(16)).buffer);
-
-  sessionStorage.setItem(PKCE_VERIFIER_KEY, verifier);
-  sessionStorage.setItem(PKCE_STATE_KEY, state);
-
-  const params = new URLSearchParams({
-    response_type: "code",
-    client_id: SPOTIFY_CLIENT_ID,
-    scope: SPOTIFY_SCOPES,
-    redirect_uri: getSpotifyRedirectUri(),
-    state,
-    code_challenge_method: "S256",
-    code_challenge: challenge,
-    // Force Spotify to show the consent dialog even for returning users.
-    // Without this, Spotify silently reuses the prior grant — which means
-    // if the user originally approved with fewer scopes (before we added
-    // `streaming` or any other), subsequent re-logins inherit the narrower
-    // consent and the Web Playback SDK fires "Invalid token scopes" at
-    // every play attempt. Forcing the dialog costs one tap but guarantees
-    // the current scope list takes effect.
-    show_dialog: "true",
+/**
+ * Trigger Supabase's Spotify OAuth provider. Scopes are passed per-call
+ * (not configured in the dashboard) so rotating scopes doesn't need a
+ * dashboard edit.
+ */
+export async function signInWithSpotify(): Promise<void> {
+  // No dev-experience guard here anymore. `signInWithOAuth` doesn't
+  // consume VITE_SPOTIFY_CLIENT_ID — Supabase's server-side provider
+  // config supplies the client id. The env-var precondition moved into
+  // `refreshSpotifyToken` below where it actually matters. The supabase
+  // client itself already logs a dev warning for missing VITE_SUPABASE_*
+  // vars (src/integrations/supabase/client.ts).
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "spotify",
+    options: {
+      scopes: SPOTIFY_SCOPES,
+      redirectTo: `${window.location.origin}/connect`,
+      // Force Spotify to re-prompt on every sign-in. Without this,
+      // Spotify silently reuses the prior grant, so a user who
+      // previously consented with a narrower scope set (before
+      // `streaming` was required by the Web Playback SDK) would keep
+      // their old grant and hit "Invalid token scopes" errors at every
+      // play attempt. Supabase forwards `queryParams` as query string
+      // parameters on the authorize URL, which is how we restore the
+      // behavior the legacy PKCE flow had built in.
+      queryParams: { show_dialog: "true" },
+    },
   });
-
-  window.location.href = `https://accounts.spotify.com/authorize?${params}`;
+  if (error) {
+    console.error("[signInWithSpotify] failed:", error);
+    throw error;
+  }
 }
 
-// ── Step 2: Exchange code for token — directly with Spotify (PKCE, no secret) ─
-
-export async function exchangeSpotifyCode(
-  code: string,
-  state: string
-): Promise<{ accessToken: string; refreshToken: string; expiresIn: number } | null> {
-  const savedState = sessionStorage.getItem(PKCE_STATE_KEY);
-  const codeVerifier = sessionStorage.getItem(PKCE_VERIFIER_KEY);
-
-  if (!savedState || savedState !== state || !codeVerifier) {
-    console.error("PKCE state mismatch or missing verifier");
-    return null;
-  }
-
-  sessionStorage.removeItem(PKCE_STATE_KEY);
-  sessionStorage.removeItem(PKCE_VERIFIER_KEY);
-
-  const res = await fetch("https://accounts.spotify.com/api/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: getSpotifyRedirectUri(),
-      client_id: SPOTIFY_CLIENT_ID,
-      code_verifier: codeVerifier,
-    }),
-  });
-
-  if (!res.ok) {
-    console.error("Spotify token exchange failed:", await res.text());
-    return null;
-  }
-
-  const data = await res.json();
-  return data.access_token
-    ? {
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token || "",
-        expiresIn: data.expires_in || 3600,
-      }
-    : null;
-}
-
-// ── Refresh token ────────────────────────────────────────────────────────────
+// ── Refresh (legacy PKCE fallback) ───────────────────────────────────────────
+//
+// Used by `useSpotifyToken.getValidToken` only when the primary
+// `spotify-refresh` edge function returns null — which is the expected
+// path for tokens that were issued under the old client-side PKCE flow
+// (they only need `client_id` to refresh). Tokens issued by Supabase's
+// provider carry a refresh token that requires `client_secret`, which
+// we don't ship to the browser; those go through the edge function.
 
 export async function refreshSpotifyToken(
-  refreshToken: string
+  refreshToken: string,
 ): Promise<{ accessToken: string; refreshToken: string; expiresIn: number } | null> {
+  // This path (legacy PKCE tokens) actually needs the client id — it's
+  // a POST body field Spotify requires. Fail fast with a message that
+  // points at the env var if the build is missing it.
+  if (!SPOTIFY_CLIENT_ID) {
+    console.error("[refreshSpotifyToken] VITE_SPOTIFY_CLIENT_ID is not set — check .env.local");
+    return null;
+  }
   const res = await fetch("https://accounts.spotify.com/api/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -150,7 +96,12 @@ export async function refreshSpotifyToken(
   });
 
   if (!res.ok) {
-    console.error("Spotify token refresh failed:", await res.text());
+    // Expected for Supabase-issued refresh tokens — they require the
+    // client secret and so fail with 400 invalid_client. Caller falls
+    // through to the edge function. Log at debug rather than error so
+    // the expected failures are observable (revoked grants, Spotify API
+    // shifts) without polluting the console on every refresh tick.
+    console.debug(`[refreshSpotifyToken] legacy refresh returned ${res.status}; caller falls through`);
     return null;
   }
 
@@ -164,7 +115,7 @@ export async function refreshSpotifyToken(
     : null;
 }
 
-// ── Step 3: Fetch taste profile — via edge function (backend needs it for RAG) ─
+// ── Taste fetch — via edge function (backend needs it for RAG) ───────────────
 
 export async function fetchSpotifyTaste(accessToken: string): Promise<{
   topArtists: string[];

@@ -72,3 +72,10 @@ verify_jwt = false
 
 [functions.bookmark-nugget]
 verify_jwt = false
+
+# Spotify provider token refresh. Unlike the blanket verify_jwt=false
+# stance above (temporary pending the OAuth migration), this function is
+# JWT-gated from day one because it returns a live Spotify access token —
+# we don't want unauthenticated callers exchanging refresh tokens.
+[functions.spotify-refresh]
+verify_jwt = true

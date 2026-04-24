@@ -6,9 +6,11 @@ import MusicNerdLogo from "@/components/MusicNerdLogo";
 import { useUserProfile, getStoredProfile } from "@/hooks/useMusicNerdState";
 import type { UserProfile } from "@/mock/types";
 import spotifyLogo from "@/assets/spotify-logo.png";
-import { initiateSpotifyAuth } from "@/hooks/useSpotifyAuth";
+import { signInWithSpotify } from "@/hooks/useSpotifyAuth";
 import { initiateAppleMusicAuth, fetchAppleMusicTaste } from "@/hooks/useAppleMusicAuth";
 import { useAppleMusicToken } from "@/hooks/useAppleMusicToken";
+import { useSpotifyPostSigninSync } from "@/hooks/useSpotifyPostSigninSync";
+import { ensureSupabaseSession } from "@/lib/ensureSupabaseSession";
 
 type Tier = "casual" | "curious" | "nerd";
 
@@ -37,6 +39,7 @@ export default function Connect() {
   const [direction, setDirection] = useState(1);
   const [spotifyConnecting, setSpotifyConnecting] = useState(false);
   const [spotifyConnected, setSpotifyConnected] = useState(false);
+  const [spotifyError, setSpotifyError] = useState<string | null>(null);
   const [pendingTopArtists, setPendingTopArtists] = useState<string[] | null>(null);
   const [pendingTopTracks, setPendingTopTracks] = useState<string[] | null>(null);
   const [pendingArtistImages, setPendingArtistImages] = useState<Record<string, string>>({});
@@ -62,6 +65,25 @@ export default function Connect() {
   const [lastFmUsername, setLastFmUsername] = useState("");
   const [lastFmSaved, setLastFmSaved] = useState(false);
   const [showLastFm, setShowLastFm] = useState(false);
+  // After Supabase's Spotify OAuth lands on /connect, the hook fetches
+  // taste data and hands it back via this callback. Previously we went
+  // through sessionStorage, but that raced against the reader effect:
+  // the reader fired on mount (before auth resolved) and never re-ran,
+  // so the async write arrived after nobody was listening. The direct
+  // callback is race-free — the setters run the moment the taste fetch
+  // resolves.
+  useSpotifyPostSigninSync({
+    onSynced: (patch) => {
+      setSpotifyConnected(true);
+      setPendingTopArtists(patch.topArtists ?? null);
+      setPendingTopTracks(patch.topTracks ?? null);
+      if (patch.spotifyDisplayName) setPendingDisplayName(patch.spotifyDisplayName);
+      if (patch.artistImages) setPendingArtistImages(patch.artistImages);
+      if (patch.artistIds) setPendingArtistIds(patch.artistIds);
+      if (patch.trackImages) setPendingTrackImages(patch.trackImages);
+      setStep(1);
+    },
+  });
 
   // If already onboarded, redirect to browse
   useEffect(() => {
@@ -70,45 +92,51 @@ export default function Connect() {
     }
   }, []);
 
-  // Pick up Spotify data from sessionStorage (after Spotify OAuth redirect)
-  useEffect(() => {
-    const raw = sessionStorage.getItem("spotify_pending_taste");
-    if (raw) {
-      try {
-        const { displayName, topArtists, topTracks, artistImages, artistIds, trackImages } = JSON.parse(raw);
-        setSpotifyConnected(true);
-        setPendingTopArtists(topArtists);
-        setPendingTopTracks(topTracks);
-        if (displayName) setPendingDisplayName(displayName);
-        if (artistImages) setPendingArtistImages(artistImages);
-        if (artistIds) setPendingArtistIds(artistIds);
-        if (trackImages) setPendingTrackImages(trackImages);
-        sessionStorage.removeItem("spotify_pending_taste");
-        // Jump to tier picker
-        setStep(1);
-      } catch { /* ignore */ }
-    }
-  }, []);
-
   const goNext = (delta = 1) => { setDirection(delta); setStep((s) => s + delta); };
 
   const handleConnectSpotify = async () => {
     setSpotifyConnecting(true);
-    try { await initiateSpotifyAuth(); }
-    catch (e) { console.error("Spotify auth error:", e); setSpotifyConnecting(false); }
+    setSpotifyError(null);
+    try {
+      await signInWithSpotify();
+    } catch (e) {
+      console.error("Spotify auth error:", e);
+      // Mirror the Apple Music path: surface a message instead of
+      // silently re-enabling the button. Supabase's signInWithOAuth
+      // errors here are rare (network, provider misconfiguration) but
+      // when they hit, the user needs to know the click did something.
+      setSpotifyError("Couldn't connect to Spotify. Try again?");
+    } finally {
+      // Belt-and-suspenders — on the happy path `signInWithOAuth`
+      // redirects the whole tab so this setter runs on a tab that's
+      // about to unload. But if the redirect is ever blocked (popup
+      // blocker edge cases, SDK change, etc.) the button would stay
+      // in a loading state forever without this.
+      setSpotifyConnecting(false);
+    }
   };
 
   const handleConnectAppleMusic = async () => {
     setAppleMusicConnecting(true);
     setAppleMusicError(null);
     try {
-      // No Supabase session required: the deployed apple-dev-token edge
-      // function authenticates on the anon key alone (no in-function
-      // user check, no rows in auth.users). The earlier pre-flight gate
-      // here was based on a documented-but-not-enforced JWT requirement
-      // and blocked all Apple Music sign-ins after a real logout cleared
-      // the leftover Lovable broker session that nobody had explicitly
-      // provisioned.
+      // Seed a real Supabase session first. Spotify users get one from
+      // signInWithSpotify(); Apple Music users go through
+      // signInAnonymously() so every connected user has an auth.uid().
+      // Without this, the session-based route gate (src/routes.tsx)
+      // would lock Apple Music users out, and nugget_history writes
+      // would keep failing RLS silently (auth.uid() null). Idempotent —
+      // if the user already has a Supabase session from an earlier
+      // connect, this returns it without creating another anon user.
+      try {
+        await ensureSupabaseSession();
+      } catch (sessionErr) {
+        console.error("ensureSupabaseSession failed on Apple Music connect:", sessionErr);
+        setAppleMusicError("Couldn't start your session. Try again?");
+        setAppleMusicConnecting(false);
+        return;
+      }
+
       const musicUserToken = await initiateAppleMusicAuth();
       if (musicUserToken) {
         setAppleMusicConnected(true);
@@ -213,11 +241,16 @@ export default function Connect() {
 
                     {/* Spotify — connect or show connected */}
                     {!pendingTopArtists ? (
-                      <button onClick={handleConnectSpotify} disabled={spotifyConnecting} className="flex items-center gap-4 w-full rounded-2xl border bg-foreground/5 px-5 py-4 text-left font-semibold text-foreground transition-all duration-200 disabled:opacity-70 border-green-500/40 hover:border-green-500 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)]">
-                        <img src={spotifyLogo} alt="Spotify" className="w-8 h-8 object-contain" />
-                        <span className="flex-1">Spotify</span>
-                        {spotifyConnecting ? <Spinner className="h-4 w-4 text-green-400" /> : <span className="text-xs text-muted-foreground">Connect</span>}
-                      </button>
+                      <>
+                        <button onClick={handleConnectSpotify} disabled={spotifyConnecting} className="flex items-center gap-4 w-full rounded-2xl border bg-foreground/5 px-5 py-4 text-left font-semibold text-foreground transition-all duration-200 disabled:opacity-70 border-green-500/40 hover:border-green-500 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)]">
+                          <img src={spotifyLogo} alt="Spotify" className="w-8 h-8 object-contain" />
+                          <span className="flex-1">Spotify</span>
+                          {spotifyConnecting ? <Spinner className="h-4 w-4 text-green-400" /> : <span className="text-xs text-muted-foreground">Connect</span>}
+                        </button>
+                        {spotifyError && (
+                          <p className="mt-1.5 px-1 text-xs text-red-400">{spotifyError}</p>
+                        )}
+                      </>
                     ) : (
                       <div className="flex items-center gap-4 w-full rounded-2xl border bg-foreground/5 px-5 py-4 text-left font-semibold text-foreground border-green-500/60 ring-1 ring-green-500/30">
                         <img src={spotifyLogo} alt="Spotify" className="w-8 h-8 object-contain" />
