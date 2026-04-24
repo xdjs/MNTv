@@ -201,7 +201,11 @@ export default function Connect() {
     };
     saveProfile(profile);
     sessionStorage.removeItem("musicnerd_redirect");
-    navigate(redirectUrl || "/browse");
+    // Route first-run users through /preparing so stories + artist
+    // updates get a warmup window before Browse renders. The splash
+    // honors ?next= so deep-links survive the onboarding detour.
+    const next = redirectUrl || "/browse";
+    navigate(`/preparing?next=${encodeURIComponent(next)}`);
   };
 
   const tiers = [

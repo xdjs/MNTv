@@ -40,7 +40,11 @@ interface UseArtistUpdatesOptions {
   maxConcurrent?: number;
 }
 
-const DEFAULT_MAX_ARTISTS = 5;
+// Defaults dropped from 5 → 3 after first-run feedback: 5 artists × up
+// to 3 updates + 8 stories was too much cold-generation pressure on
+// first sign-in. 3 × 3 = 9 cards per artist row is still plenty of
+// MusicNerd density without burying the first paint.
+const DEFAULT_MAX_ARTISTS = 3;
 const DEFAULT_CONCURRENCY = 2;
 
 export interface UseArtistUpdatesResult {

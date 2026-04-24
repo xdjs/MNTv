@@ -16,6 +16,7 @@ const ArtistProfile = lazy(() => import("./pages/ArtistProfile"));
 const AlbumDetail = lazy(() => import("./pages/AlbumDetail"));
 const Listen = lazy(() => import("./pages/Listen"));
 const Profile = lazy(() => import("./pages/Profile"));
+const PreparingExperience = lazy(() => import("./pages/PreparingExperience"));
 import { AuthProvider } from "./contexts/AuthContext";
 import { PlayerProvider } from "./contexts/PlayerContext";
 import { StoriesProvider } from "./contexts/StoriesContext";
@@ -54,6 +55,7 @@ function AnimatedRoutes() {
             {/* Public */}
             <Route path="/" element={<RootRoute />} />
             <Route path="/connect" element={<Connect />} />
+            <Route path="/preparing" element={<ProtectedRoute><PreparingExperience /></ProtectedRoute>} />
 
             {/* Protected — requires a Supabase session */}
             <Route path="/browse" element={<ProtectedRoute><Browse /></ProtectedRoute>} />

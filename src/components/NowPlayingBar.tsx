@@ -15,10 +15,18 @@ export default function NowPlayingBar() {
   const location = useLocation();
   const { isPlaying, currentTrack, currentTime, duration, toggle, seek, popTrackHistory, externalPlayback, setExternalListenMode, nowPlayingFocused, nowPlayingFocusIndex, setNowPlayingFocused, setNowPlayingFocusIndex } = usePlayer();
 
-  // Don't show on Listen page (has its own bar) or companion pages (phone QR experience)
+  // Don't show on Listen page (has its own bar), companion pages (phone
+  // QR experience), or anywhere in the onboarding / auth funnel. The
+  // bar showing up during Spotify's approve screen or on the tier
+  // picker is distracting and competes with primary UI the user is
+  // supposed to be focused on.
   const hiddenRoute = location.pathname.startsWith("/listen/")
     || location.pathname.startsWith("/companion/")
-    || location.pathname.startsWith("/c/");
+    || location.pathname.startsWith("/c/")
+    || location.pathname === "/"
+    || location.pathname === "/connect"
+    || location.pathname === "/preparing"
+    || location.pathname === "/spotify-callback";
 
   // Show if there's a loaded track OR external playback detected
   const showExternal = !hiddenRoute && !currentTrack && !!externalPlayback;

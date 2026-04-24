@@ -22,7 +22,11 @@ interface PreGenOptions {
   maxConcurrent?: number;      // default 2 — throttle to avoid blasting Gemini
 }
 
-const DEFAULT_MAX_STORIES = 8;
+// 8 → 5. Pairs with DEFAULT_MAX_ARTISTS dropping from 5 → 3 in
+// useArtistUpdates.ts to lighten first-run pre-gen pressure. Most
+// users engage with the first few stories anyway; generating 8 on
+// cold sign-in was a lot of Gemini traffic we don't need.
+const DEFAULT_MAX_STORIES = 5;
 const DEFAULT_CONCURRENCY = 2;
 
 // Cross-session dedup — persists "we already fired pre-gen for this
