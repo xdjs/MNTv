@@ -7,8 +7,10 @@ import TileRow from "@/components/TileRow";
 import SearchOverlay from "@/components/SearchOverlay";
 import PageTransition from "@/components/PageTransition";
 import StoriesRail from "@/components/StoriesRail";
+import ArtistUpdatesSection from "@/components/ArtistUpdatesSection";
 import { useUserProfile, tierGreeting, tierBadgeLabel, tierBadgeColor, tierGlowClass } from "@/hooks/useMusicNerdState";
 import { usePersonalizedCatalog } from "@/hooks/usePersonalizedCatalog";
+import { useArtistUpdates } from "@/hooks/useArtistUpdates";
 import { useTierAccent } from "@/hooks/useTierAccent";
 import { useSignOut } from "@/hooks/useSignOut";
 import { usePlayer } from "@/contexts/PlayerContext";
@@ -39,6 +41,16 @@ export default function Browse() {
   // warming as soon as the profile is hydrated — not when the user reaches
   // this page. Browse just reads the shared state.
   const { stories } = useStoriesContext();
+
+  // "Your artists, lately" — nested rows, one per top artist. Each
+  // artist resolves to up to 3 updates (release card + 2 facts) from
+  // the artist-updates edge function; results land incrementally so
+  // Browse shows skeletons while Gemini catches up.
+  const {
+    groups: artistUpdateGroups,
+    totalCount: artistUpdatesTotal,
+    readyCount: artistUpdatesReady,
+  } = useArtistUpdates(profile, { tier: (tier || "casual") });
 
   const demoItems = [
     {
@@ -311,6 +323,17 @@ export default function Browse() {
         {/* Stories rail — pre-generated nuggets for your top tracks. Tapping
             a story opens Listen with the first nugget instant from cache. */}
         <StoriesRail stories={stories} />
+
+        {/* "Your artists, lately" — nested per-artist rows of updates.
+            Replaces the old Jump-Back-In + Top-Artists rows; moves Browse
+            away from the Spotify-shaped layout. */}
+        <ArtistUpdatesSection
+          groups={artistUpdateGroups}
+          profile={profile}
+          artistIds={profile?.artistIds}
+          totalCount={artistUpdatesTotal}
+          readyCount={artistUpdatesReady}
+        />
 
         {/* Rows */}
         {allRows.map((row, i) => (
