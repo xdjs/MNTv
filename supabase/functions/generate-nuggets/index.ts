@@ -3302,16 +3302,41 @@ Return ONLY valid JSON:
               const prevHeadlines = [...safePreviousNuggets];
               const generatedHeadlines: string[] = [];
 
-              // ── Step 3: Define the 3 nugget kinds ──
-              // Focus strings come directly from TIER_CONFIG. Each is an evidence-
-              // palette with a selection rule — Gemini picks the strongest angle
-              // the research supports, pivoting when data is thin. Constitution
-              // rules 3/4 remain the global fabrication guard.
-              const nuggetDefs = [
+              // ── Step 3: Define the nugget kinds ──
+              // Tier-scaled output:
+              //   casual = 3 (1 artist, 1 track, 1 discovery)
+              //   curious = 6 (2 artist, 2 track, 2 discovery)
+              //   nerd = 9 (3 artist, 3 track, 3 discovery)
+              // Each kind generates sequentially; subsequent same-kind
+              // nuggets see prior `generatedHeadlines` in the
+              // nonRepeat block, so Gemini picks a different angle.
+              // Cost: more calls = longer wall time at higher tiers,
+              // but SSE streams nuggets as they land so the user sees
+              // the first appear quickly.
+              const NUGGETS_PER_KIND: Record<Tier, number> = {
+                casual: 1,
+                curious: 2,
+                nerd: 3,
+              };
+              const perKind = NUGGETS_PER_KIND[tier];
+              const baseDefs = [
                 { kind: "artist", focus: tierConfig.artistFocus, listenFor: false, includeArtistSummary: true },
                 { kind: "track", focus: tierConfig.trackFocus, listenFor: true, includeArtistSummary: false },
                 { kind: "discovery", focus: tierConfig.discoveryFocus, listenFor: false, includeArtistSummary: false },
               ];
+              // Expand per kind, tagging variant index so the prompt can
+              // ask for a distinct angle on the second/third pass.
+              // Only the FIRST artist-kind def carries includeArtistSummary
+              // so we don't generate the bio block N times per call.
+              const nuggetDefs = baseDefs.flatMap((d, baseIdx) =>
+                Array.from({ length: perKind }, (_, variantIdx) => ({
+                  ...d,
+                  variantIdx,
+                  variantTotal: perKind,
+                  baseIdx, // stable citation-group anchor (artist=0, track=1, discovery=2)
+                  includeArtistSummary: d.includeArtistSummary && variantIdx === 0,
+                })),
+              );
 
               let streamedIndex = 0;
               const streamedNuggets: any[] = [];
@@ -3346,7 +3371,7 @@ SOURCES: Match facts to [CIT N] citations via "citIndex". Do not invent URLs.
 ${nonRepeat}
 
 TASK: Generate exactly ONE "${def.kind}" nugget.
-Focus: ${def.focus}
+${def.variantTotal > 1 ? `This is "${def.kind}" nugget #${def.variantIdx + 1} of ${def.variantTotal} for this listen — pick a DIFFERENT angle from the prior ${def.kind} nugget(s) above. No two ${def.kind} nuggets should overlap in subject, citation source, or framing. If the research only supports one strong ${def.kind} angle, return a nugget that pivots to an adjacent verifiable detail rather than padding the same story.\n` : ""}Focus: ${def.focus}
 listenFor: ${def.listenFor}
 ${def.kind === "discovery" ? `HONESTY RULE: Only claim a connection you can verify from the research. Do NOT recommend artists sharing any part of ${artist}'s name.` : ""}
 ${def.includeArtistSummary ? `\nAlso generate "artistSummary": 2-3 punchy sentences about ${artist}.` : ""}
@@ -3442,13 +3467,26 @@ Return ONLY valid JSON:
                   continue;
                 }
 
+                // Force kind to match what we asked for. Each per-kind
+                // prompt explicitly says `kind: "${def.kind}"` in the
+                // JSON template, but Gemini occasionally drifts (returns
+                // "track" when asked for "context", etc). Without this,
+                // tier-scaled outputs (curious=6, nerd=9) would have no
+                // safety net since the batch-path kind-fix block only
+                // covers slots 0/1/2.
+                if (nuggetData.kind !== def.kind) {
+                  console.log(`[SSE KindFix] ${def.kind}#${def.variantIdx + 1}: "${nuggetData.kind}" → "${def.kind}"`);
+                  nuggetData.kind = def.kind;
+                }
+
                 const headlineForHistory = nuggetData.headline || nuggetData.text;
                 if (headlineForHistory) generatedHeadlines.push(headlineForHistory);
 
                 // ── Image: Exa first (instant), Wikipedia fallback ──
-                // Use defIdx (not streamedIndex) so citation grouping stays
-                // aligned even when earlier nuggets are skipped by validation.
-                resolveExaImageForNugget(nuggetData, defIdx, exaCitationsStrict, usedImageUrls);
+                // Use baseIdx (kind anchor: artist=0, track=1, discovery=2)
+                // so citation grouping stays aligned across tier-scaled
+                // expansions where multiple nuggetDefs share a kind.
+                resolveExaImageForNugget(nuggetData, def.baseIdx, exaCitationsStrict, usedImageUrls);
                 if (!nuggetData._resolvedImageUrl && isValidImageQuery(nuggetData.imageSearchQuery)) {
                   try {
                     const wikiResult = await resolveNuggetImage(nuggetData.imageSearchQuery!);

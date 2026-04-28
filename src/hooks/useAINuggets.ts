@@ -170,6 +170,11 @@ export function useAINuggets(
   } = usePlayer();
   const cancelledRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
+  // Mirror currentTime into a ref so the SSE handler (closes over stale
+  // currentTime from effect-setup time) can read the LIVE playback
+  // position when deciding whether to early-cancel mid-stream.
+  const currentTimeRef = useRef(currentTime);
+  currentTimeRef.current = currentTime;
   // Track when the last generation attempt started — used to only debounce
   // on rapid skips (< 5s between tracks), not on first page load.
   const lastGenTimestampRef = useRef(0);
@@ -526,8 +531,17 @@ export function useAINuggets(
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
+        // Flips true when we've decided to stop reading early because
+        // the user is near track-end and we have enough nuggets. Read
+        // by both inner and outer loops so we exit cleanly without
+        // throwing an AbortError (which would skip the cache write).
+        let earlyComplete = false;
 
         while (true) {
+          if (earlyComplete) {
+            await reader.cancel().catch(() => {}); // tell server we're done
+            break;
+          }
           const { done, value } = await reader.read();
           if (done) break;
           if (cancelledRef.current) { reader.cancel(); return; }
@@ -561,6 +575,37 @@ export function useAINuggets(
               setSources((prev) => new Map(prev).set(sourceId, source));
               setNuggets((prev) => [...prev, nugget]);
               if (import.meta.env.DEV) console.log(`[SSE] Received nugget ${payload.index}: "${n.headline?.slice(0, 40)}"`);
+
+              // Early-cancel: if we already have enough nuggets to cover
+              // the rest of playback, abort the stream rather than burning
+              // Gemini calls the user will never see. Conditions:
+              //   - have ≥ MIN_EARLY_CANCEL_NUGGETS (4) — keep at least
+              //     casual-tier worth of content even on short tracks
+              //   - track has ≤ EARLY_CANCEL_REMAINING_SEC (45s) left
+              //   - playback is actively running (paused users may still
+              //     read, so don't cancel on them)
+              // We treat the partial set as the final cache row — this
+              // listen's full nugget budget got pruned to "what fits the
+              // remaining playback window," not lost.
+              const MIN_EARLY_CANCEL_NUGGETS = 4;
+              const EARLY_CANCEL_REMAINING_SEC = 45;
+              const liveCurrentTime = currentTimeRef.current;
+              const remainingSec = durationSec - liveCurrentTime;
+              if (
+                isPlaying &&
+                aiNuggets.length >= MIN_EARLY_CANCEL_NUGGETS &&
+                remainingSec > 0 &&
+                remainingSec <= EARLY_CANCEL_REMAINING_SEC
+              ) {
+                if (import.meta.env.DEV) {
+                  console.log(`[SSE] early-complete: ${aiNuggets.length} nuggets in hand, ${Math.round(remainingSec)}s left on track — stopping stream + caching what we have`);
+                }
+                earlyComplete = true;
+                // Break out of the event loop; outer while sees the
+                // flag, cancels the reader, and falls through to the
+                // post-stream cache write so the partial set isn't lost.
+                break;
+              }
 
             } else if (payload.type === "done") {
               aiArtistSummary = payload.artistSummary || "";
