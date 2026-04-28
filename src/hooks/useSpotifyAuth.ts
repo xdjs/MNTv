@@ -117,6 +117,30 @@ export async function refreshSpotifyToken(
 
 // ── Taste fetch — via edge function (backend needs it for RAG) ───────────────
 
+// Hard ceiling on the spotify-taste invoke. Supabase's client doesn't
+// impose one, so a wedged function (cold start stuck, Spotify rate-
+// limited, network drop mid-stream) would hang the promise forever.
+// Healthy warm calls land in 2-5s; cold starts in 7-10s. 20s gives
+// cold starts real headroom without making a retry feel like an
+// eternity.
+const TASTE_FETCH_TIMEOUT_MS = 20_000;
+
+/**
+ * Fire-and-forget ping to wake the spotify-taste edge function so the
+ * real call after OAuth return doesn't eat the cold-start latency.
+ * Send a deliberately invalid payload so the function 400s immediately
+ * without burning a Spotify API call. Safe to call from Connect mount.
+ */
+export function prewarmSpotifyTaste(): void {
+  // Use invoke() so we inherit the same transport + auth as the real
+  // call — otherwise we might warm a different instance.
+  supabase.functions
+    .invoke("spotify-taste", { body: { accessToken: "prewarm" } })
+    .catch(() => {
+      // Any error is fine — we're just trying to boot the container.
+    });
+}
+
 export async function fetchSpotifyTaste(accessToken: string): Promise<{
   topArtists: string[];
   topTracks: string[];
@@ -125,21 +149,57 @@ export async function fetchSpotifyTaste(accessToken: string): Promise<{
   trackImages: { title: string; artist: string; imageUrl: string; uri?: string }[];
   displayName: string | null;
 } | null> {
-  const { data, error } = await supabase.functions.invoke("spotify-taste", {
-    body: { accessToken },
+  const t0 = performance.now();
+  const elapsed = () => `${(performance.now() - t0).toFixed(0)}ms`;
+  console.info(`[spotify-taste] fetch started (timeout=${TASTE_FETCH_TIMEOUT_MS}ms)`);
+
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<{ timedOut: true }>((resolve) => {
+    timeoutId = setTimeout(() => resolve({ timedOut: true }), TASTE_FETCH_TIMEOUT_MS);
   });
 
-  if (error || !data) {
-    console.error("Taste fetch error:", error);
-    return null;
-  }
+  try {
+    const invokePromise = supabase.functions.invoke("spotify-taste", {
+      body: { accessToken },
+    });
 
-  return {
-    topArtists: data.topArtists || [],
-    topTracks: data.topTracks || [],
-    artistImages: data.artistImages || {},
-    artistIds: data.artistIds || {},
-    trackImages: data.trackImages || [],
-    displayName: data.displayName || null,
-  };
+    let race: { timedOut: true } | Awaited<typeof invokePromise>;
+    try {
+      race = await Promise.race([invokePromise, timeoutPromise]);
+    } catch (err) {
+      // Network-level rejection — the invoke threw before returning
+      // the { data, error } shape. Log and return null so the caller
+      // surfaces the retry state instead of bubbling an unhandled rej.
+      console.error(`[spotify-taste] invoke threw after ${elapsed()}:`, err);
+      return null;
+    }
+
+    if ("timedOut" in race) {
+      console.error(`[spotify-taste] timed out after ${TASTE_FETCH_TIMEOUT_MS}ms`);
+      return null;
+    }
+
+    const { data, error } = race;
+    if (error) {
+      console.error(`[spotify-taste] edge function error after ${elapsed()}:`, error);
+      return null;
+    }
+    if (!data) {
+      console.error(`[spotify-taste] empty payload after ${elapsed()}`);
+      return null;
+    }
+
+    console.info(`[spotify-taste] succeeded in ${elapsed()} — ${data.topArtists?.length ?? 0} artists, ${data.topTracks?.length ?? 0} tracks`);
+
+    return {
+      topArtists: data.topArtists || [],
+      topTracks: data.topTracks || [],
+      artistImages: data.artistImages || {},
+      artistIds: data.artistIds || {},
+      trackImages: data.trackImages || [],
+      displayName: data.displayName || null,
+    };
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 }

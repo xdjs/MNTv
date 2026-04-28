@@ -40,11 +40,13 @@ interface UseArtistUpdatesOptions {
   maxConcurrent?: number;
 }
 
-// Defaults dropped from 5 → 3 after first-run feedback: 5 artists × up
-// to 3 updates + 8 stories was too much cold-generation pressure on
-// first sign-in. 3 × 3 = 9 cards per artist row is still plenty of
-// MusicNerd density without burying the first paint.
-const DEFAULT_MAX_ARTISTS = 3;
+// TEMPORARY: dropped to 1 for testing the refresh cascade in isolation
+// (one artist makes the loading state easy to spot and minimizes API
+// burn while validating). Revert to 3 before shipping — production
+// density needs the full 3-artist row. Tracked in CLAUDE.md TODO.
+// (Was 3 after first-run feedback: 5 artists × up to 3 updates + 8
+// stories was too much cold-generation pressure on first sign-in.)
+const DEFAULT_MAX_ARTISTS = 1;
 const DEFAULT_CONCURRENCY = 2;
 
 export interface UseArtistUpdatesResult {
@@ -85,6 +87,16 @@ export function useArtistUpdates(
   // Scoped per `(artist, tier)` so switching tiers re-fetches but a
   // re-render doesn't re-fire in-flight requests.
   const inFlightRef = useRef<Set<string>>(new Set());
+
+  // Stable content signature of the artist slice we're about to fetch.
+  // useUserProfile re-renders with a new `profile.topArtists` array
+  // identity every time the DB hydrate effect runs (even when the
+  // content is identical), which previously re-fired this effect and
+  // wedged the fan-out: the second run's fetchOne short-circuited on
+  // inFlightRef keys still held by the first run, while the first run's
+  // cancelled=true closure suppressed its own setState. Content-keyed
+  // deps keep the effect stable across identity-only re-renders.
+  const topArtistsSig = (profile?.topArtists ?? []).slice(0, maxArtists).join("|");
 
   useEffect(() => {
     const topArtists = profile?.topArtists ?? [];
@@ -160,10 +172,13 @@ export function useArtistUpdates(
     return () => {
       cancelled = true;
     };
-    // Array identity (not length) so a same-length taste refresh with
-    // different artists still re-fetches — parity with the PR #74
-    // round-3 fix in usePreGeneratedStories.ts.
-  }, [profile?.topArtists, tier, maxArtists, maxConcurrent]);
+    // Content-keyed (not identity): `topArtistsSig` is a stable string
+    // of the sliced artist names. useUserProfile re-issues new array
+    // identities on every DB-hydrate notification; using those directly
+    // as deps wedged the hook (see block comment above `topArtistsSig`).
+    // `tier` / `maxArtists` / `maxConcurrent` are primitives — safe.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topArtistsSig, tier, maxArtists, maxConcurrent]);
 
   const allUpdates = useMemo(
     () => groups.flatMap((g) => g.updates ?? []),

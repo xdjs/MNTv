@@ -9,20 +9,35 @@ import { useArtistUpdatesContext } from "@/contexts/ArtistUpdatesContext";
  * profile hydration — no duplicate requests.
  *
  * "Ready" is the FIRST of:
- *   - MIN_READY stories have resolved AND MIN_READY artist updates
- *     have resolved (either returned data or confirmed empty).
+ *   - MIN_STORIES stories have resolved AND MIN_ARTISTS artist-update
+ *     rows have resolved (either returned data or confirmed empty).
  *   - MAX_WAIT_MS has elapsed since the hook mounted.
  *
  * Tuning:
- *   - MIN_READY = 2 is "enough to look full above the fold" without
- *     forcing the user to wait for everything. Raise if Browse still
- *     feels sparse on arrival.
- *   - MAX_WAIT_MS = 10_000 is the we-give-up-and-let-them-in ceiling.
- *     Beyond this, the user's impatience beats the content ready-state
- *     and Browse's own skeleton state takes over.
+ *   - MIN_STORIES = 2 — enough story rails to hide a first-paint with
+ *     skeletons while the rest stream in.
+ *   - MIN_ARTISTS = 2 — top-2 artist rows need to be populated so
+ *     Browse opens with content above the fold. The 3rd artist
+ *     continues fetching in the background and streams into its row
+ *     once it lands, with the per-row skeleton covering the gap.
+ *   - MAX_WAIT_MS = 15_000 — cold-path artist-updates can take ~8-10s
+ *     for 2 artists at concurrency 2. 15s gives that window real
+ *     headroom; beyond, impatience beats the gate and Browse's own
+ *     per-row skeletons take over.
  */
-const MIN_READY = 2;
-const MAX_WAIT_MS = 10_000;
+// What we wait on before letting the user into Browse:
+// - Artist updates: blocking. The "Your artists, lately" rail is the
+//   first thing the user sees on /browse and looks broken with empty
+//   skeletons; it has to be populated before we hand off.
+// - Stories: NOT blocking. Pre-gen warms the per-track nugget cache
+//   for future taps — the user doesn't need it to use Browse, and
+//   waiting on it can mean 60-120s of Gemini cold starts. Stories
+//   show their own per-card loading state on Browse.
+const MIN_ARTISTS = 1;
+// Higher ceiling than the prior 15s — a single artist on a cold cache
+// can spend 30-60s in a Gemini call. Better to wait than to drop the
+// user onto Browse with an empty rail.
+const MAX_WAIT_MS = 90_000;
 
 export interface FirstRunReadiness {
   ready: boolean;
@@ -59,9 +74,10 @@ export function useFirstRunReadiness(): FirstRunReadiness {
     };
   }, []);
 
-  const enoughStories = storiesTotal > 0 && storiesReady >= Math.min(MIN_READY, storiesTotal);
-  const enoughArtists = artistsTotal > 0 && artistsReady >= Math.min(MIN_READY, artistsTotal);
-  const contentReady = enoughStories && enoughArtists;
+  // Only artist-updates block the gate. Stories continue loading on
+  // Browse via their own per-card state.
+  const enoughArtists = artistsTotal > 0 && artistsReady >= Math.min(MIN_ARTISTS, artistsTotal);
+  const contentReady = enoughArtists;
 
   return {
     ready: contentReady || timedOut,

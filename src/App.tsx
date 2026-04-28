@@ -24,6 +24,8 @@ import { ArtistUpdatesProvider } from "./contexts/ArtistUpdatesContext";
 import NowPlayingBar from "./components/NowPlayingBar";
 import SpotifyReconnectBanner from "./components/SpotifyReconnectBanner";
 import ErrorBoundary from "./components/ErrorBoundary";
+import GlobalRefreshIndicator from "./components/GlobalRefreshIndicator";
+import { RefreshIndicatorProvider } from "./contexts/RefreshIndicatorContext";
 import { ProtectedRoute, RootRoute, LazyFallback } from "./routes";
 
 const queryClient = new QueryClient();
@@ -86,6 +88,7 @@ const App = () => (
           <PlayerProvider>
             <StoriesProvider>
             <ArtistUpdatesProvider>
+            <RefreshIndicatorProvider>
             <ErrorBoundary fallback={
               <div className="min-h-screen bg-background flex items-center justify-center p-6">
                 <div className="text-center space-y-3">
@@ -103,7 +106,9 @@ const App = () => (
               <AnimatedRoutes />
               <NowPlayingBar />
               <SpotifyReconnectBanner />
+              <GlobalRefreshIndicator />
             </ErrorBoundary>
+            </RefreshIndicatorProvider>
             </ArtistUpdatesProvider>
             </StoriesProvider>
           </PlayerProvider>

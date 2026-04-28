@@ -102,5 +102,9 @@ export interface UserProfile {
   artistImages?: Record<string, string>;
   artistIds?: Record<string, string>;   // artist name → service-specific artist ID
   trackImages?: { title: string; artist: string; imageUrl: string; uri?: string }[];
+  /** ISO timestamp of the last successful Spotify-taste fetch. Drives the
+   *  background refresh TTL (`useBackgroundTasteRefresh`). Undefined for
+   *  pre-feature profiles → treated as stale and refreshed on next load. */
+  tasteRefreshedAt?: string;
   calculatedTier: "casual" | "curious" | "nerd";
 }

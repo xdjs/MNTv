@@ -26,8 +26,25 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const FACTS_PER_ARTIST = 2;
+// One fact per artist keeps the /preparing-to-browse transition
+// snappy: each edge-function call is a single Gemini generation
+// instead of a batched-two-nuggets prompt. "New release + 1 fact"
+// is the minimum viable row content; more nuggets per artist belong
+// on the Artist Profile page via useArtistLatestFacts.
+const FACTS_PER_ARTIST = 1;
 const RECENT_WINDOW_DAYS = 90;
+
+// Below this Spotify follower count we assume there's essentially no
+// press, interviews, or journalism about the artist — so any prompt
+// asking Gemini to recall specific stories about them will fabricate.
+// Pete Rango, Earl from Yonder, Qu33nK, etc. all land under this
+// threshold; well-known artists (Radiohead, Kendrick) sit three+
+// orders of magnitude above it. In sparse mode we pivot to catalog-
+// grounded nuggets (real track titles + genres from Spotify) instead
+// of open-ended story generation. This is a simpler signal than
+// generate-nuggets' Exa-citation-count approach; a proper parity fix
+// would add Exa here too but is scoped separately.
+const SPARSE_FOLLOWER_THRESHOLD = 5000;
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -53,6 +70,13 @@ interface SpotifyArtistSearchResult {
   name: string;
   images?: { url: string }[];
   followers?: { total: number };
+  genres?: string[];
+  popularity?: number;
+}
+
+interface SpotifyTopTrack {
+  name: string;
+  album?: { name?: string; release_date?: string };
 }
 
 interface SpotifyReleaseItem {
@@ -95,6 +119,22 @@ async function searchArtist(
   // unrelated artists for sparse names — case-insensitive, trim-tolerant.
   const matches = String(first.name).trim().toLowerCase() === name.trim().toLowerCase();
   return matches ? first : null;
+}
+
+async function fetchArtistTopTracks(
+  token: string,
+  artistId: string,
+  limit = 5,
+): Promise<SpotifyTopTrack[]> {
+  // Used only in sparse mode — gives Gemini real, verifiable track
+  // names + release dates to anchor catalog-grounded nuggets. Skipped
+  // in the non-sparse path to save a call.
+  const url = `https://api.spotify.com/v1/artists/${artistId}/top-tracks?market=US`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) return [];
+  const data = await res.json();
+  const tracks = (data?.tracks ?? []) as SpotifyTopTrack[];
+  return tracks.slice(0, limit);
 }
 
 async function fetchRecentRelease(
@@ -167,11 +207,26 @@ function buildReleaseUpdate(
 
 // ── Gemini fact generation (batched: N facts in one call) ─────────────
 
+interface FactGenerationContext {
+  artistName: string;
+  tier: "casual" | "curious" | "nerd";
+  count: number;
+  /** When true, Gemini gets a locked-down prompt that forbids open-ended
+   *  storytelling and requires grounding in the catalog data supplied
+   *  below. Used when follower count suggests there's no real press to
+   *  draw from — the anti-hallucination gate for indie / niche artists. */
+  sparse: boolean;
+  /** Spotify genre tags for the artist (from /v1/artists search hit). */
+  genres?: string[];
+  /** Top tracks with album + release year — catalog grounding for
+   *  sparse prompts. Ignored in non-sparse mode. */
+  topTracks?: SpotifyTopTrack[];
+}
+
 async function generateArtistFacts(
-  artistName: string,
-  tier: "casual" | "curious" | "nerd",
-  count: number,
+  ctx: FactGenerationContext,
 ): Promise<{ headline: string; body: string }[]> {
+  const { artistName, tier, count, sparse, genres, topTracks } = ctx;
   const apiKey = Deno.env.get("GOOGLE_AI_API_KEY");
   if (!apiKey) {
     console.warn("[artist-updates] GOOGLE_AI_API_KEY not set — skipping facts");
@@ -182,34 +237,120 @@ async function generateArtistFacts(
     typeof rule === "function" ? rule(artistName) : rule,
   ).join("\n\n");
 
-  const tierGuidance =
-    tier === "nerd"
+  const tierGuidance = sparse
+    ? // Override tier-specific "deep production", "session credits",
+      // etc. asks — for sparse artists Gemini has no verified material
+      // for those angles and will fabricate. Mirrors the sparse-focus
+      // override shipped to generate-nuggets in commit 96fc5c1.
+      "Audience context applies BUT: skip any ask for deep production, session credits, studio anecdotes, or collaborator stories. Restrict to what's verifiable from the catalog data below."
+    : tier === "nerd"
       ? "Audience is a hardcore music nerd — surface deep production, session-credit, micro-genre, or lineage facts."
       : tier === "curious"
       ? "Audience is a curious fan — lead with specific people, collaborators, or cause-and-effect moments."
       : "Audience is a casual listener — relatable origin stories, turning-point moments, and unlikely personal details work well.";
 
+  const multiNuggetAngleLine =
+    count === 1
+      ? ""
+      : count === 2
+      ? "\nMake the 2 cover different angles (e.g. one collaborator story, one production/lineage/cultural detail)."
+      : `\nMake the ${count} cover different angles — no two should overlap.`;
+
+  // Sparse mode: Gemini gets a CATALOG-ONLY grounding block and an
+  // explicit ban on inventing collaborators, stories, labels, etc.
+  // Non-sparse: same prompt as before (mainstream artists can draw
+  // on training data more safely, though Exa grounding is still the
+  // real fix — tracked as follow-up).
+  const sparseGroundingBlock = sparse
+    ? `\n\nVERIFIED CATALOG DATA (this is the ONLY ground truth you have — do not invent beyond it):
+- Artist: ${artistName}
+- Genres (from Spotify): ${(genres ?? []).slice(0, 4).join(", ") || "(none listed)"}
+- Known tracks: ${
+        (topTracks ?? [])
+          .slice(0, 5)
+          .map((t) => `"${t.name}"${t.album?.release_date ? ` (${t.album.release_date.slice(0, 4)})` : ""}`)
+          .join(", ") || "(none available)"
+      }
+
+SPARSE DATA MODE: There is essentially no press coverage, interviews, or journalism about ${artistName}. You MUST NOT fabricate:
+  - collaborator names, producer names, label names, engineer names
+  - voicemails, discarded demos, near-miss anecdotes, recording stories
+  - venues, cities, or scenes unless they appear in the data above
+  - quotes attributed to ${artistName} or anyone else
+
+If you cannot produce ${count === 1 ? "a nugget" : `${count} nuggets`} grounded strictly in the catalog data above (track titles, genre lineage, release-year context), return an empty nuggets array. Zero nuggets is allowed and preferred over invented stories.
+
+Acceptable sparse-mode angles — every fact must reveal a SHIFT or
+TURNING POINT in the artist's catalog, not just describe a pattern.
+A naming-convention observation is weak; a hiatus → comeback or
+solo-to-collaborator pivot tells a story.
+
+Strong angles (prefer these):
+  - Hiatus / comeback: long gap between releases (years apart) followed
+    by a flurry — implies a return to making music. Use the actual
+    years from above.
+  - Career pivot visible in titles: "(feat. X)" or "(${artistName} Mix)"
+    or "(${artistName} Remix)" reveals collaboration; spot when this
+    pattern starts/stops.
+  - Output tempo shift: years with one release vs. years with several
+    suggest a productivity change. Use the actual track-count-by-year
+    from above.
+  - Genre-lineage anchor: "${artistName}'s <listed genre> sits in the
+    same lineage as <well-known foundational act in that genre>…"
+    (only if the genre IS in the list above)
+
+Weak angles (avoid unless nothing else works):
+  - Title aesthetics or naming conventions ("opulent titles", "color
+    motifs", "punctuation patterns") — describes surface, no story.
+  - Generic catalog stats ("X has Y tracks") — uninformative.
+  - "Earliest listed track" timestamp facts — Spotify catalog ≠ debut.
+
+Format: lead with the shift, anchor with the year(s) and at least one
+real track name from above. NEVER invent collaborators, labels, or
+quotes. NEVER claim anything that can't be verified from the list.`
+    : "";
+
   const prompt = `${CONSTITUTION_PREAMBLE}
 
 ${writerRules}
 
-${tierGuidance}
+${tierGuidance}${sparseGroundingBlock}
 
-Write ${count} DISTINCT nuggets about ${artistName}. Each must pass the SWAP TEST — the headline is useless if you could swap in another artist's name and the sentence still works. No release-date recaps; those are covered elsewhere. Make the ${count} cover ${count === 2 ? "different angles (e.g. one collaborator story, one production/lineage/cultural detail)" : "different angles — no two should overlap"}.
+You have Google Search available as a tool. USE IT FIRST to find
+verified, recent information about ${artistName} — interviews,
+production credits, label history, scene context, recent press. Pull
+the strongest grounded fact from what you find. Only fall back to the
+catalog data above if Google Search returns nothing usable.
+
+ARTIST NAME LOCK: refer to the artist as "${artistName}" throughout —
+that's their public/stage name and how the audience knows them.
+- Do NOT introduce a legal/birth/alternate name in the headline or body
+  (e.g. "X, known professionally as Y"). Even if Google surfaces one,
+  drop it. The audience came here for the artist they recognize.
+- All pronoun/short references must trace back to "${artistName}", not
+  to a discovered alternate. Never use just a last name from a legal
+  identity.
+
+Write ${count === 1 ? "ONE nugget" : `${count} DISTINCT nuggets`} about ${artistName}. ${
+    count === 1 ? "It" : "Each"
+  } must pass the SWAP TEST — the headline is useless if you could swap in another artist's name and the sentence still works. No release-date recaps; those are covered elsewhere.${multiNuggetAngleLine}
 
 Return JSON only, no preamble:
 {
   "nuggets": [
     { "headline": "<complete-fact sentence, sentence case, names ${artistName} explicitly>",
-      "body": "<1-3 sentences of context adding who/where/what-happened-next>" },
-    …
+      "body": "<1-3 sentences of context adding who/where/what-happened-next>" }${count > 1 ? ",\n    …" : ""}
   ]
 }`;
 
-  // Use the same model + request shape as generate-nuggets' Writer:
-  // `gemini-2.5-flash`, `role: "user"` on parts, and NO
-  // `responseMimeType`. The response sometimes comes wrapped in a
-  // ```json code fence which we strip before JSON.parse.
+  // Use `gemini-2.5-flash` with Google Search grounding enabled. The
+  // model autonomously decides whether to search; grounded responses
+  // come back with `groundingMetadata` we could surface as citations
+  // (future). For now we just use the grounded text.
+  //
+  // `responseMimeType` is intentionally NOT set — incompatible with
+  // grounding tools. The response sometimes comes wrapped in a
+  // ```json fence which we strip before JSON.parse.
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
     {
@@ -217,6 +358,7 @@ Return JSON only, no preamble:
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
+        tools: [{ googleSearch: {} }],
         generationConfig: { temperature: 0.7 },
       }),
     },
@@ -226,6 +368,17 @@ Return JSON only, no preamble:
     return [];
   }
   const data = await res.json();
+  // Surface grounding usage so we can tell whether a weak fact came
+  // from no search results vs. Gemini ignoring the tool. The metadata
+  // shape: `groundingMetadata.groundingChunks` is an array of pages
+  // the model cited.
+  const groundingChunks = data?.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
+  const searchQueries = data?.candidates?.[0]?.groundingMetadata?.webSearchQueries ?? [];
+  if (groundingChunks.length > 0) {
+    console.log(`[artist-updates] grounded fact for ${artistName} — ${groundingChunks.length} sources, queries: ${JSON.stringify(searchQueries)}`);
+  } else {
+    console.log(`[artist-updates] no grounding for ${artistName} (catalog-only fallback)`);
+  }
   const rawText: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
   const text = rawText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
   if (!text) {
@@ -273,34 +426,147 @@ function buildFactUpdate(
 
 // ── Cache ──────────────────────────────────────────────────────────────
 
+// How long a cached artist-updates row stays fresh. Past this window we
+// treat the row as a miss and regenerate so timely content (new releases,
+// recent activity) doesn't go stale on long-running cached entries.
+// 7 days strikes a balance: most artists release less often than weekly,
+// but a fan visiting after a release shouldn't see week-old "latest".
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+// How long a `status='generating'` sentinel is treated as live before
+// we assume the generator crashed/timed out and re-claim. Generation
+// itself takes 5-60s for cold Gemini; 90s gives real headroom.
+const STALE_GENERATION_MS = 90 * 1000;
+
+// How long followers wait for an in-flight generation to land before
+// giving up and generating themselves. Should be ≥ STALE_GENERATION_MS
+// so the leader has every chance to finish.
+const POLL_TIMEOUT_MS = 95 * 1000;
+const POLL_INTERVAL_MS = 1_000;
+
 function cacheKey(artistName: string, tier: string): string {
   // Normalized (lowercased + trimmed) so whitespace / case variations
   // land on the same cache row.
   return `artist::${artistName.trim().toLowerCase()}::${tier}`;
 }
 
-async function readFromCache(key: string): Promise<ArtistUpdate[] | null> {
-  if (!cacheAdminClient) return null;
+type CacheState =
+  | { kind: "ready"; updates: ArtistUpdate[] }
+  | { kind: "generating"; ageMs: number }
+  | { kind: "stale" }   // ready row past TTL — treat as miss, evict before re-claim
+  | { kind: "missing" };
+
+async function readCacheState(key: string): Promise<CacheState> {
+  if (!cacheAdminClient) return { kind: "missing" };
   try {
     const { data } = await cacheAdminClient
       .from("nugget_cache")
-      .select("nuggets, status")
+      .select("nuggets, status, created_at")
       .eq("track_id", key)
       .maybeSingle();
-    if (!data || data.status !== "ready") return null;
-    const updates = (data.nuggets as ArtistUpdate[] | null) ?? [];
-    return updates.length > 0 ? updates : null;
+    if (!data) return { kind: "missing" };
+
+    const ageMs = data.created_at
+      ? Date.now() - new Date(data.created_at as string).getTime()
+      : Infinity;
+
+    if (data.status === "generating") return { kind: "generating", ageMs };
+
+    if (data.status === "ready") {
+      if (ageMs > CACHE_TTL_MS) return { kind: "stale" };
+      const updates = (data.nuggets as ArtistUpdate[] | null) ?? [];
+      if (updates.length === 0) return { kind: "missing" };
+      return { kind: "ready", updates };
+    }
+
+    return { kind: "missing" };
   } catch (e) {
     console.warn("[artist-updates] cache read threw:", e);
-    return null;
+    return { kind: "missing" };
+  }
+}
+
+/**
+ * Wait for an in-flight generation (status='generating') to flip to
+ * 'ready'. Returns the generated updates, or null on timeout / eviction.
+ * Polled rather than push-notified because Supabase realtime would be
+ * over-engineering for a 1-2× per cache-miss event.
+ */
+async function waitForGeneration(key: string): Promise<ArtistUpdate[] | null> {
+  if (!cacheAdminClient) return null;
+  const start = Date.now();
+  while (Date.now() - start < POLL_TIMEOUT_MS) {
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    const state = await readCacheState(key);
+    if (state.kind === "ready") {
+      console.info(`[artist-updates] poll resolved for ${key} in ${Date.now() - start}ms`);
+      return state.updates;
+    }
+    if (state.kind === "missing" || state.kind === "stale") {
+      // Leader's row was evicted (rare — manual SQL delete or stale).
+      // Fall through to caller so they can claim + generate.
+      return null;
+    }
+    // 'generating' — keep waiting
+  }
+  console.warn(`[artist-updates] poll timed out for ${key} after ${POLL_TIMEOUT_MS}ms`);
+  return null;
+}
+
+/**
+ * Atomically try to claim the right to generate for `key`. Uses an
+ * INSERT (which fails on the unique track_id constraint if a row
+ * exists), so two concurrent callers can't both think they won.
+ *
+ * Caller is responsible for evicting any stale row first — we don't
+ * try to overwrite, because UPSERT would silently let a second
+ * "leader" through.
+ */
+async function tryClaim(key: string): Promise<boolean> {
+  if (!cacheAdminClient) return true; // No cache → degrade to "always generate"
+  const { error } = await cacheAdminClient.from("nugget_cache").insert({
+    track_id: key,
+    nuggets: [],
+    sources: {},
+    status: "generating",
+  });
+  if (error) {
+    // Postgres 23505 = unique_violation — expected when another caller
+    // already claimed. Anything else is a real failure; log and treat
+    // as "lost the claim" so we fall through to polling.
+    if (error.code !== "23505") {
+      console.warn("[artist-updates] tryClaim threw:", error);
+    }
+    return false;
+  }
+  return true;
+}
+
+async function evictStaleRow(key: string): Promise<void> {
+  if (!cacheAdminClient) return;
+  try {
+    await cacheAdminClient.from("nugget_cache").delete().eq("track_id", key);
+  } catch (e) {
+    console.warn("[artist-updates] evict threw:", e);
   }
 }
 
 async function writeToCache(key: string, updates: ArtistUpdate[]): Promise<void> {
   if (!cacheAdminClient || updates.length === 0) return;
   try {
+    // Explicitly set created_at so the TTL window resets when we
+    // regenerate a stale row. The column defaults to `now()` on INSERT
+    // only, so an upsert that hits the existing row would otherwise
+    // leave the original timestamp and the row would be stale forever
+    // after first refresh.
     await cacheAdminClient.from("nugget_cache").upsert(
-      { track_id: key, nuggets: updates, sources: {}, status: "ready" },
+      {
+        track_id: key,
+        nuggets: updates,
+        sources: {},
+        status: "ready",
+        created_at: new Date().toISOString(),
+      },
       { onConflict: "track_id" },
     );
   } catch (e) {
@@ -337,12 +603,58 @@ serve(async (req) => {
 
   const key = cacheKey(artist, tier);
 
-  // 1. Cache hit? Return the whole set.
-  const cached = await readFromCache(key);
-  if (cached) {
-    return new Response(JSON.stringify({ updates: cached, cached: true }), {
+  // 1. Cache state machine — picks one of:
+  //    - ready  → return cached
+  //    - generating (fresh) → poll for the leader's result; on timeout
+  //      / eviction, fall through to claim+generate ourselves
+  //    - generating (stale) → leader probably crashed; evict and claim
+  //    - stale  → ready row past TTL; evict and claim
+  //    - missing → claim and generate
+  //
+  //    The claim is an INSERT with track_id UNIQUE — atomic, so two
+  //    concurrent callers can't both win. The loser polls.
+  const initialState = await readCacheState(key);
+
+  if (initialState.kind === "ready") {
+    return new Response(JSON.stringify({ updates: initialState.updates, cached: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+  }
+
+  if (initialState.kind === "generating" && initialState.ageMs < STALE_GENERATION_MS) {
+    console.info(`[artist-updates] ${artist} — joining in-flight generation`);
+    const polled = await waitForGeneration(key);
+    if (polled) {
+      return new Response(JSON.stringify({ updates: polled, cached: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    // Polling failed/timed out — fall through to evict + claim.
+  }
+
+  // Evict any stale row before attempting to claim. INSERT into
+  // existing track_id would fail with unique_violation; better to
+  // delete first so our claim succeeds.
+  if (initialState.kind === "stale" || initialState.kind === "generating") {
+    await evictStaleRow(key);
+  }
+
+  const claimed = await tryClaim(key);
+  if (!claimed) {
+    // Lost a tight race with another concurrent caller. Poll for
+    // their result rather than generating a duplicate.
+    console.info(`[artist-updates] ${artist} — lost claim race, polling for winner`);
+    const polled = await waitForGeneration(key);
+    if (polled) {
+      return new Response(JSON.stringify({ updates: polled, cached: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    // Worst case: poll timed out and we still need to respond. Fall
+    // through to generation. The duplicate write is benign — last
+    // writeToCache wins, both responses arrive at consistent data on
+    // any subsequent read.
+    console.warn(`[artist-updates] ${artist} — lost claim AND poll failed; generating anyway`);
   }
 
   // 2. Resolve artist on Spotify.
@@ -364,18 +676,35 @@ serve(async (req) => {
     });
   }
 
-  // 3. Run release lookup + fact generation in parallel to minimize
-  //    total latency for the user (cold-start overlap).
-  const [release, facts] = await Promise.all([
+  // 3. Sparse detection from Spotify's follower count. Below the
+  //    threshold we pull top tracks (for catalog grounding) and flip
+  //    the Gemini prompt into sparse-safe mode.
+  const followers = artistInfo.followers?.total ?? 0;
+  const isSparse = followers < SPARSE_FOLLOWER_THRESHOLD;
+
+  // 4. Fetch Spotify data in parallel (release always, top tracks
+  //    only when sparse), then feed into Gemini. Running top-tracks
+  //    alongside release keeps wall time flat even on the sparse
+  //    path — the sequencing penalty is only on facts-after-tracks.
+  const [release, topTracks] = await Promise.all([
     fetchRecentRelease(token, artistInfo.id),
-    generateArtistFacts(artistInfo.name, tier, FACTS_PER_ARTIST),
+    isSparse ? fetchArtistTopTracks(token, artistInfo.id) : Promise.resolve([] as SpotifyTopTrack[]),
   ]);
+
+  const facts = await generateArtistFacts({
+    artistName: artistInfo.name,
+    tier,
+    count: FACTS_PER_ARTIST,
+    sparse: isSparse,
+    genres: artistInfo.genres,
+    topTracks: isSparse ? topTracks : undefined,
+  });
 
   const releaseAgeDays = release ? daysSince(release.release_date) : null;
   console.log(
-    `[artist-updates] ${artistInfo.name} → release=${
+    `[artist-updates] ${artistInfo.name} (followers=${followers}${isSparse ? ", SPARSE" : ""}) → release=${
       release ? `${release.name} (${releaseAgeDays}d)` : "none"
-    }, facts=${facts.length}`,
+    }, facts=${facts.length}, topTracks=${topTracks.length}`,
   );
 
   const updates: ArtistUpdate[] = [];

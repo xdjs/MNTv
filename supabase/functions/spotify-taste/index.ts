@@ -34,10 +34,15 @@ serve(async (req) => {
 
     const authHeader = { Authorization: `Bearer ${accessToken}` };
 
-    // Parallel: top artists (medium ~6mo + short ~4wk) and top tracks
+    // Parallel: top artists (medium ~6mo + short ~4wk) and top tracks.
+    // Limits are sized to what Browse actually renders:
+    //   - 3 artists are shown in "Your artists, lately" (ArtistUpdatesSection)
+    //   - The remaining ≤5 are only used as seeds for lastfm-recommendations
+    //   - Tracks drive the "Your Top Tracks" rail (first 15)
+    // Fetching 20 artists previously meant ~12 were cold ballast.
     const [artistsMediumRes, artistsShortRes, tracksMediumRes, profileRes] = await Promise.all([
-      fetch("https://api.spotify.com/v1/me/top/artists?limit=20&time_range=medium_term", { headers: authHeader }),
-      fetch("https://api.spotify.com/v1/me/top/artists?limit=10&time_range=short_term", { headers: authHeader }),
+      fetch("https://api.spotify.com/v1/me/top/artists?limit=10&time_range=medium_term", { headers: authHeader }),
+      fetch("https://api.spotify.com/v1/me/top/artists?limit=5&time_range=short_term", { headers: authHeader }),
       fetch("https://api.spotify.com/v1/me/top/tracks?limit=20&time_range=medium_term", { headers: authHeader }),
       fetch("https://api.spotify.com/v1/me", { headers: authHeader }),
     ]);
@@ -89,7 +94,10 @@ serve(async (req) => {
         .map((a: any) => a.name as string),
     ];
 
-    const topArtists = [...new Set(allArtists)].slice(0, 20);
+    // Cap at 8 artists: first 3 drive the Browse artist-row, remaining
+    // 5 seed Last.fm similar-artist recommendations. More than 8 seeds
+    // doesn't meaningfully improve recommendation quality.
+    const topArtists = [...new Set(allArtists)].slice(0, 8);
 
     // Build artist images object: { "Artist Name": "https://..." }
     const artistImages: Record<string, string> = {};
