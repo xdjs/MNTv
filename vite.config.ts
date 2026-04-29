@@ -11,6 +11,11 @@ export default defineConfig(({ mode }) => ({
     hmr: {
       overlay: false,
     },
+    // Allow ngrok tunnels for mobile testing. ".ngrok-free.app" and
+    // ".ngrok.app" cover the free + paid tunnel domains. Each ngrok
+    // restart picks a new subdomain, so a wildcard is the only way to
+    // avoid editing this file every session.
+    allowedHosts: [".ngrok-free.app", ".ngrok.app"],
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {

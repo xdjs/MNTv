@@ -45,6 +45,27 @@ export default function ArtistUpdatesSection({
   const showProgress = totalCount > 0 && readyCount < totalCount;
 
   function openArtistAtNugget(update: ArtistUpdate) {
+    // New-release / collab cards: tap should land on Listen for the
+    // released track, not the artist profile. Requires a track-level
+    // URI (Spotify's playback API rejects album URIs in `uris`); the
+    // edge function populates `relatedTrackTitle` only when it
+    // successfully resolved the album's first track.
+    if (
+      (update.kind === "new-release" || update.kind === "collab") &&
+      update.relatedTrackUri &&
+      update.relatedTrackTitle &&
+      update.relatedTrackUri.startsWith("spotify:track:")
+    ) {
+      const enc = encodeURIComponent;
+      const album = update.relatedAlbumName ?? "";
+      navigate(
+        `/listen/real::${enc(update.artistName)}::${enc(update.relatedTrackTitle)}::${enc(album)}::${enc(update.relatedTrackUri)}`,
+      );
+      return;
+    }
+
+    // Fact cards (or release cards where track resolution failed):
+    // open the artist profile and deep-link to the nugget.
     const id = artistIds[update.artistName] || update.artistId;
     if (!id) return;
     // Route format is `spotify::{id}::{name}` (double-colon delimiter

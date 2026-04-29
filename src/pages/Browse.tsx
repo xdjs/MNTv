@@ -145,6 +145,13 @@ export default function Browse() {
   // Focus state: rowIndex (-1 = header), colIndex
   const [rowIndex, setRowIndex] = useState(-1);
   const [colIndex, setColIndex] = useState(0);
+  // Hide the TV-style focus glow until the user actually presses an
+  // arrow key. Touch users (mobile) never trigger it, so the glow
+  // doesn't sit glued to the first tile while they scroll. Flips true
+  // on the first keydown handled below; never flips back (a touch
+  // session that briefly used a keyboard still has tactile cues, and
+  // re-hiding mid-session would feel like a bug).
+  const [kbNavActive, setKbNavActive] = useState(false);
 
   const HEADER_ITEMS = 3;
 
@@ -180,6 +187,14 @@ export default function Browse() {
     if (nowPlayingFocused) return; // NowPlayingBar handles its own keys
 
     const onKeyDown = (e: KeyboardEvent) => {
+      // First arrow press promotes us to "kb nav" mode; until then,
+      // focusedIndex is null on every TileRow (no glow on mobile).
+      if (
+        !kbNavActive &&
+        (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "ArrowLeft" || e.key === "ArrowRight")
+      ) {
+        setKbNavActive(true);
+      }
       if (e.key === "ArrowDown") {
         e.preventDefault();
         if (rowIndex === -1) {
@@ -265,7 +280,7 @@ export default function Browse() {
           <button
             onClick={cycleTier}
             title={`Switch tier (currently ${tier || "casual"})`}
-            className={`rounded-full transition-all ${rowIndex === -1 && colIndex === 0 ? focusGlow + " scale-110" : ""}`}
+            className={`rounded-full transition-all ${kbNavActive && rowIndex === -1 && colIndex === 0 ? focusGlow + " scale-110" : ""}`}
           >
             <MusicNerdLogo size={36} glow className="opacity-80" />
           </button>
@@ -273,7 +288,7 @@ export default function Browse() {
             <button
               onClick={() => setSearchOpen(true)}
               className={`flex h-10 items-center gap-2 rounded-full bg-foreground/5 px-5 text-sm text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground ${
-                rowIndex === -1 && colIndex === 1 ? focusGlow + " scale-105" : ""
+                kbNavActive && rowIndex === -1 && colIndex === 1 ? focusGlow + " scale-105" : ""
               }`}
             >
               <Search size={16} />
@@ -291,7 +306,7 @@ export default function Browse() {
               onClick={handleSignOut}
               title="Sign out"
               className={`flex h-10 w-10 items-center justify-center rounded-full bg-foreground/5 text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground ${
-                rowIndex === -1 && colIndex === 2 ? focusGlow + " scale-105" : ""
+                kbNavActive && rowIndex === -1 && colIndex === 2 ? focusGlow + " scale-105" : ""
               }`}
             >
               <LogOut size={16} />
@@ -343,7 +358,7 @@ export default function Browse() {
             label={row.label}
             items={row.items}
             tileSize={row.size}
-            focusedIndex={rowIndex === i ? colIndex : null}
+            focusedIndex={kbNavActive && rowIndex === i ? colIndex : null}
           />
         ))}
 
@@ -352,7 +367,7 @@ export default function Browse() {
           label="Demo Tracks"
           items={demoItems}
           tileSize="md"
-          focusedIndex={rowIndex === allRows.length ? colIndex : null}
+          focusedIndex={kbNavActive && rowIndex === allRows.length ? colIndex : null}
         />
 
         <div className="h-28" />

@@ -24,6 +24,11 @@ export interface ArtistUpdate {
   };
   nuggetId?: string;
   relatedTrackUri?: string;
+  /** Track-level metadata for new-release/collab kinds. Set by the
+   *  edge function via a follow-up call to /albums/:id/tracks; lets
+   *  client navigate to /listen/ with a URI Spotify can actually play. */
+  relatedTrackTitle?: string;
+  relatedAlbumName?: string;
 }
 
 /** A top artist paired with their updates. Stays null while loading. */

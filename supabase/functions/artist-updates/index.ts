@@ -55,6 +55,10 @@ interface ArtistUpdate {
   kind: "new-release" | "collab" | "fact";
   headline: string;
   body: string;
+  /** Track-level metadata for new-release/collab kinds — lets the client
+   *  build a /listen/ route that the Spotify SDK can actually play. */
+  relatedTrackTitle?: string;
+  relatedAlbumName?: string;
   source?: {
     type: string;
     title?: string;
@@ -88,6 +92,11 @@ interface SpotifyReleaseItem {
   artists: { id: string; name: string }[];
   external_urls?: { spotify: string };
   images?: { url: string }[];
+  // Populated by fetchRecentRelease's secondary call to /albums/:id/tracks.
+  // Present iff the call succeeded; client navigates to the artist page as
+  // a fallback when these are missing.
+  firstTrackUri?: string;
+  firstTrackName?: string;
 }
 
 // ── Module-level admin client for cache upsert ────────────────────────
@@ -150,7 +159,33 @@ async function fetchRecentRelease(
   // Spotify's default ordering is already most-recent-first but we sort
   // defensively so a market variance can't surface an older release.
   items.sort((a, b) => (a.release_date < b.release_date ? 1 : -1));
-  return items[0];
+  const release = items[0];
+
+  // Grab the first track of the release. The album-level URI
+  // (`spotify:album:…`) can't be played via Spotify's `uris` array
+  // (that endpoint only takes track URIs), so the Listen route would
+  // open with a playable-looking URI and silently fail to start
+  // playback. Track-level URI gives Listen something it can actually
+  // hand to the Web Playback SDK.
+  try {
+    const tracksRes = await fetch(
+      `https://api.spotify.com/v1/albums/${release.id}/tracks?limit=1&market=US`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (tracksRes.ok) {
+      const tracksData = await tracksRes.json();
+      const firstTrack = tracksData?.items?.[0];
+      if (firstTrack?.uri && firstTrack?.name) {
+        release.firstTrackUri = firstTrack.uri;
+        release.firstTrackName = firstTrack.name;
+      }
+    }
+  } catch (e) {
+    console.warn("[artist-updates] album-tracks fetch failed:", e);
+    // Fall through — we'll still return the release without track info.
+    // The client falls back to artist-page navigation in that case.
+  }
+  return release;
 }
 
 function daysSince(isoDate: string): number {
@@ -187,6 +222,11 @@ function buildReleaseUpdate(
     (release.images?.[0]?.url) ??
     (artist.images?.[0]?.url) ??
     "";
+  // Prefer the album's first track URI for navigation; fall back to the
+  // album URI (which won't actually play, but at least the client can
+  // detect the missing track signal and route to the artist page).
+  const navUri = release.firstTrackUri ?? release.uri;
+  const navTitle = release.firstTrackName ?? release.name;
   return {
     artistId: artist.id,
     artistName: artist.name,
@@ -200,7 +240,9 @@ function buildReleaseUpdate(
       publisher: "Spotify",
       url: release.external_urls?.spotify,
     },
-    relatedTrackUri: release.uri,
+    relatedTrackUri: navUri,
+    relatedTrackTitle: navTitle,
+    relatedAlbumName: release.name,
     nuggetId: `release-${release.id}`,
   };
 }
