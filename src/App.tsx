@@ -87,29 +87,29 @@ const App = () => (
         <AuthProvider>
           <PlayerProvider>
             <StoriesProvider>
-            <ArtistUpdatesProvider>
-            <RefreshIndicatorProvider>
-            <ErrorBoundary fallback={
-              <div className="min-h-screen bg-background flex items-center justify-center p-6">
-                <div className="text-center space-y-3">
-                  <p className="text-lg font-bold text-foreground">Something went wrong</p>
-                  <p className="text-sm text-muted-foreground">Try refreshing the page.</p>
-                  <button
-                    onClick={() => window.location.reload()}
-                    className="mt-2 px-5 py-2 rounded-full bg-primary/20 text-primary text-sm font-semibold hover:bg-primary/30 transition-colors"
-                  >
-                    Refresh
-                  </button>
-                </div>
-              </div>
-            }>
-              <AnimatedRoutes />
-              <NowPlayingBar />
-              <SpotifyReconnectBanner />
-              <GlobalRefreshIndicator />
-            </ErrorBoundary>
-            </RefreshIndicatorProvider>
-            </ArtistUpdatesProvider>
+              <ArtistUpdatesProvider>
+                <RefreshIndicatorProvider>
+                  <ErrorBoundary fallback={
+                    <div className="min-h-screen bg-background flex items-center justify-center p-6">
+                      <div className="text-center space-y-3">
+                        <p className="text-lg font-bold text-foreground">Something went wrong</p>
+                        <p className="text-sm text-muted-foreground">Try refreshing the page.</p>
+                        <button
+                          onClick={() => window.location.reload()}
+                          className="mt-2 px-5 py-2 rounded-full bg-primary/20 text-primary text-sm font-semibold hover:bg-primary/30 transition-colors"
+                        >
+                          Refresh
+                        </button>
+                      </div>
+                    </div>
+                  }>
+                    <AnimatedRoutes />
+                    <NowPlayingBar />
+                    <SpotifyReconnectBanner />
+                    <GlobalRefreshIndicator />
+                  </ErrorBoundary>
+                </RefreshIndicatorProvider>
+              </ArtistUpdatesProvider>
             </StoriesProvider>
           </PlayerProvider>
         </AuthProvider>

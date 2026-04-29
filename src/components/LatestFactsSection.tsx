@@ -87,7 +87,6 @@ export default function LatestFactsSection({ updates, loading, artistName }: Pro
               <FactCard
                 key={u.nuggetId ?? `${u.kind}-${u.headline}`}
                 update={u}
-                artistName={artistName}
                 expanded={u.nuggetId === expandedId}
                 pulsing={u.nuggetId === pulseId}
                 onToggle={() =>
@@ -107,7 +106,6 @@ export default function LatestFactsSection({ updates, loading, artistName }: Pro
 
 interface FactCardProps {
   update: ArtistUpdate;
-  artistName: string;
   expanded: boolean;
   pulsing: boolean;
   onToggle: () => void;

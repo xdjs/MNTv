@@ -64,7 +64,7 @@ export function useBackgroundTasteRefresh(): BackgroundTasteRefreshState {
     const lastRefreshMs = lastRefreshIso ? Date.parse(lastRefreshIso) : 0;
     const ageMs = Date.now() - lastRefreshMs;
     if (lastRefreshIso && ageMs < TASTE_TTL_MS) {
-      console.info(`[bg-taste-refresh] skip — fresh (${Math.round(ageMs / 1000 / 60)}m old)`);
+      if (import.meta.env.DEV) console.info(`[bg-taste-refresh] skip — fresh (${Math.round(ageMs / 1000 / 60)}m old)`);
       refreshedForUserRef.current = user.id;
       return;
     }
@@ -72,7 +72,7 @@ export function useBackgroundTasteRefresh(): BackgroundTasteRefreshState {
     refreshedForUserRef.current = user.id;
     let cancelled = false;
     const ageLabel = lastRefreshIso ? `${Math.round(ageMs / 1000 / 60 / 60)}h` : "never";
-    console.info(`[bg-taste-refresh] start (last refresh: ${ageLabel})`);
+    if (import.meta.env.DEV) console.info(`[bg-taste-refresh] start (last refresh: ${ageLabel})`);
     setRefreshing(true);
 
     (async () => {
@@ -103,7 +103,7 @@ export function useBackgroundTasteRefresh(): BackgroundTasteRefreshState {
         if (merged) {
           const now = new Date().toISOString();
           setLastRefreshedAt(now);
-          console.info("[bg-taste-refresh] success");
+          if (import.meta.env.DEV) console.info("[bg-taste-refresh] success");
         }
       } catch (err) {
         console.warn("[bg-taste-refresh] threw:", err);

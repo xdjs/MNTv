@@ -5,6 +5,7 @@ import MusicNerdLogo from "@/components/MusicNerdLogo";
 import PageTransition from "@/components/PageTransition";
 import { useUserProfile, getStoredProfile } from "@/hooks/useMusicNerdState";
 import { useFirstRunReadiness } from "@/hooks/useFirstRunReadiness";
+import { sanitizeRedirect } from "@/lib/routeUtils";
 
 /**
  * Splash shown between sign-in and Browse. Waits for the artist-updates
@@ -42,14 +43,11 @@ export default function PreparingExperience() {
   const { ready, skipAvailable } = useFirstRunReadiness();
 
   // Deep-link support: a user signed in via /connect?redirect=/listen/xxx
-  // should land back on that URL after warmup, not /browse. Reject
-  // self-references and other onboarding paths so a polluted ?next=
+  // should land back on that URL after warmup, not /browse. sanitizeRedirect
+  // rejects self-references and other onboarding paths so a polluted ?next=
   // can't loop the user (a prior bug had ?next=/preparing trap users
   // forever once ready=true).
-  const rawNext = searchParams.get("next");
-  const nextUrl = !rawNext || rawNext === "/" || rawNext === "/connect" || rawNext.startsWith("/preparing")
-    ? "/browse"
-    : rawNext;
+  const nextUrl = sanitizeRedirect(searchParams.get("next")) ?? "/browse";
 
   // Hard guard: somebody hit /preparing with no profile (bookmark,
   // refresh mid-onboarding, etc). Bounce them back to the entry.

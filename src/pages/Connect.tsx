@@ -7,6 +7,7 @@ import { useUserProfile, getStoredProfile } from "@/hooks/useMusicNerdState";
 import type { UserProfile } from "@/mock/types";
 import spotifyLogo from "@/assets/spotify-logo.png";
 import { signInWithSpotify, prewarmSpotifyTaste } from "@/hooks/useSpotifyAuth";
+import { sanitizeRedirect } from "@/lib/routeUtils";
 import { initiateAppleMusicAuth, fetchAppleMusicTaste } from "@/hooks/useAppleMusicAuth";
 import { useAppleMusicToken } from "@/hooks/useAppleMusicToken";
 import { useSpotifyPostSigninSync } from "@/hooks/useSpotifyPostSigninSync";
@@ -28,17 +29,9 @@ const Spinner = ({ className = "h-4 w-4" }: { className?: string }) => (
   </svg>
 );
 
-// Reject non-content destinations so we never loop the user back through
-// the onboarding funnel: /connect (this page), /preparing (splash), /
-// (root router that re-routes here). Without this guard, a stray
-// ?redirect=/preparing creates an infinite /connect → /preparing →
-// /connect cycle when ProtectedRoute on /preparing trips on a transient
-// null in profile state.
-function sanitizeRedirect(url: string | null): string | null {
-  if (!url) return null;
-  if (url === "/" || url === "/connect" || url.startsWith("/preparing")) return null;
-  return url;
-}
+// sanitizeRedirect lives in src/lib/routeUtils.ts so PreparingExperience
+// uses the same logic — see the comment there for why we reject /,
+// /connect, and /preparing.
 
 /**
  * Outer gate for /connect. Reads URL/sessionStorage redirect and the
