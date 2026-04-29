@@ -34,13 +34,35 @@ interface AINuggetData {
  * (seed-nugget slugs) are passed through unchanged. Mirror of the
  * server-side canonicalization in generate-nuggets/index.ts.
  */
+function safeDecode(s: string): string {
+  try { return decodeURIComponent(s); } catch { return s; }
+}
+
 function canonicalCacheKey(trackId: string, tier: string): string {
-  if (!trackId.startsWith("real::")) return `${trackId}::${tier}`;
-  const parts = trackId.split("::");
+  // Listen receives `trackId` from React Router params, which keeps URL-
+  // encoded characters (`%20`, `%3A`, etc.). The server-side write path
+  // builds the cache key from the request body's raw artist/title/uri
+  // strings (no encoding). Without normalizing here, every Listen mount
+  // on a track with spaces or special chars cache-misses and re-runs
+  // the full ~30s nugget pipeline.
+  //
+  // A `real%3A%3A…` trackId still starts with the right prefix once
+  // decoded; check for both forms so the early-return path doesn't
+  // skip encoded inputs.
+  if (!trackId.startsWith("real::") && !trackId.startsWith("real%3A%3A")) {
+    return `${trackId}::${tier}`;
+  }
+  // Normalize encoded delimiters before split so parts line up regardless
+  // of how the upstream route preserved them.
+  const normalized = trackId.replace(/%3A%3A/gi, "::");
+  const parts = normalized.split("::");
   // Expected: ["real", artist, title, album, uri...]. Fewer than 5 parts
   // means the id is malformed — preserve original to avoid losing data.
   if (parts.length < 5) return `${trackId}::${tier}`;
-  parts[3] = "";
+  parts[1] = safeDecode(parts[1]); // artist
+  parts[2] = safeDecode(parts[2]); // title
+  parts[3] = ""; // album — blanked by canon (multiple entry points populate inconsistently)
+  parts[4] = safeDecode(parts[4]); // uri
   return `${parts.join("::")}::${tier}`;
 }
 
