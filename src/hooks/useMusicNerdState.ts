@@ -34,6 +34,9 @@ interface TasteData {
   artistImages?: Record<string, string>;
   artistIds?: Record<string, string>;
   trackImages?: { title: string; artist: string; imageUrl: string }[];
+  /** ISO timestamp of the last successful Spotify-taste fetch. Persisted
+   *  inside the per-service blob so the DB column shape stays unchanged. */
+  refreshedAt?: string;
 }
 
 /** Legacy localStorage payload shape. Pre-rename profiles used `spotify*`
@@ -96,6 +99,7 @@ async function loadProfileFromDB(userId: string): Promise<UserProfile | null> {
     artistImages: taste?.artistImages ?? undefined,
     artistIds: taste?.artistIds ?? undefined,
     trackImages: taste?.trackImages ?? undefined,
+    tasteRefreshedAt: taste?.refreshedAt ?? undefined,
     calculatedTier: (data.tier as UserProfile["calculatedTier"]) || "casual",
   };
 }
@@ -130,6 +134,7 @@ async function saveProfileToDB(p: UserProfile, userId: string): Promise<void> {
           artistImages: p.artistImages ?? {},
           artistIds: p.artistIds ?? {},
           trackImages: p.trackImages ?? [],
+          refreshedAt: p.tasteRefreshedAt,
         }
       : null;
 
@@ -246,6 +251,14 @@ export function useUserProfile() {
   // localStorage, so the originating instance gets its own update through the
   // same path as every other instance — single data flow, no double-set.
   const saveProfile = useCallback(async (p: UserProfile) => {
+    // Persist what was passed — DON'T auto-stamp tasteRefreshedAt
+    // here. Earlier this hook stamped on any save with `topArtists`,
+    // which falsely-reset the 24h TTL on saves that didn't actually
+    // re-fetch from Spotify (e.g. a future tier-change save that
+    // rebuilds the profile object without carrying the existing
+    // timestamp). `applyTastePatch` is now the only path that
+    // stamps tasteRefreshedAt — it's called only when fresh Spotify
+    // data has just landed (post-signin sync, background refresh).
     localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
     notifyProfileUpdated();
     if (user?.id) await saveProfileToDB(p, user.id);
@@ -260,6 +273,53 @@ export function useUserProfile() {
 
 export function getStoredProfile(): UserProfile | null {
   return parseStoredProfile(localStorage.getItem(PROFILE_KEY));
+}
+
+/**
+ * Merge a fresh taste patch onto the stored profile, persist to
+ * localStorage + DB, and notify all `useUserProfile` instances.
+ *
+ * Used by `useBackgroundTasteRefresh` so the refresh path doesn't have
+ * to construct a `UserProfile` from scratch — it picks up tier/lastFm/
+ * streamingService from whatever's already cached.
+ *
+ * Always stamps `tasteRefreshedAt = now` so the TTL window resets.
+ * Returns true if the merge happened, false if there's nothing to merge
+ * onto (no stored profile yet).
+ */
+export async function applyTastePatch(
+  patch: {
+    topArtists?: string[];
+    topTracks?: string[];
+    artistImages?: Record<string, string>;
+    artistIds?: Record<string, string>;
+    trackImages?: UserProfile["trackImages"];
+    spotifyDisplayName?: string;
+  },
+  userId: string | null
+): Promise<boolean> {
+  const current = parseStoredProfile(localStorage.getItem(PROFILE_KEY));
+  if (!current) return false;
+  const merged: UserProfile = {
+    ...current,
+    topArtists: patch.topArtists ?? current.topArtists,
+    topTracks: patch.topTracks ?? current.topTracks,
+    artistImages: patch.artistImages ?? current.artistImages,
+    artistIds: patch.artistIds ?? current.artistIds,
+    trackImages: patch.trackImages ?? current.trackImages,
+    spotifyDisplayName: patch.spotifyDisplayName ?? current.spotifyDisplayName,
+    tasteRefreshedAt: new Date().toISOString(),
+  };
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(merged));
+  notifyProfileUpdated();
+  if (userId) {
+    try {
+      await saveProfileToDB(merged, userId);
+    } catch (err) {
+      console.warn("[applyTastePatch] DB save failed:", err);
+    }
+  }
+  return true;
 }
 
 // ── Tier helpers ──────────────────────────────────────────────────────────────

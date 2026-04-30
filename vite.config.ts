@@ -11,6 +11,13 @@ export default defineConfig(({ mode }) => ({
     hmr: {
       overlay: false,
     },
+    // Allow ngrok tunnels for mobile testing — DEV ONLY. allowedHosts
+    // is a dev-server-only Vite option (no effect on `vite build`),
+    // but gating by mode keeps intent explicit so reading the config
+    // doesn't suggest a wider production trust surface.
+    ...(mode === "development"
+      ? { allowedHosts: [".ngrok-free.app", ".ngrok.app"] }
+      : {}),
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {

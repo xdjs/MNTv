@@ -244,49 +244,11 @@ export function usePersonalizedCatalog(profile: UserProfile | null): {
     // service is set.
     const activeService = serviceParamFromProfile(profile.streamingService);
 
-    // ── 1. "Jump Back In" — recent tracks or top tracks ──────────────
-    const recentTiles: BrowseTile[] = [];
-
-      if (lastFmData?.recentTracks?.length) {
-        lastFmData.recentTracks.slice(0, 10).forEach((t) => {
-          const image = t.imageUrl || trackCoverUrl(t.name, t.artist, trackImgs);
-          const trackMatch = trackImgs?.find(
-            (img) => img.title.toLowerCase() === t.name.toLowerCase() && img.artist.toLowerCase() === t.artist.toLowerCase()
-          );
-          recentTiles.push({
-            id: `recent-${t.artist}-${t.name}`,
-            imageUrl: image,
-            title: t.name,
-            subtitle: t.artist,
-            href: realTrackHref(t.artist, t.name, t.album, trackMatch?.uri),
-            isRealTrack: true,
-          });
-        });
-    } else if (topTracks.length) {
-      topTracks.slice(0, 8).forEach((t) => {
-        recentTiles.push(trackTile(t, "recent", trackImgs));
-      });
-    }
-
-    if (recentTiles.length > 0) {
-      allRows.push({ label: "Jump Back In", items: recentTiles, size: "md" });
-    }
-
-    // ── 2. "Your Top Artists" ────────────────────────────────────────
-    if (topArtistNames.length > 0) {
-      // cachedArtistIds holds catalog IDs from the active service's
-      // taste data. Falls back to the runtime-resolved map when a given
-      // name wasn't in taste.
-      const cachedArtistIds = profile.artistIds || {};
-      const topArtistTiles: BrowseTile[] = topArtistNames.slice(0, 20).map((name) => ({
-        id: `artist-${name}`,
-        imageUrl: artistImageUrl(name, artistImgs, resolvedImages),
-        title: name,
-        subtitle: "Artist",
-        href: artistHref(name, cachedArtistIds[name] || resolvedIds.get(name), activeService),
-      }));
-      allRows.push({ label: "Your Top Artists", items: topArtistTiles, size: "lg" });
-    }
+    // "Jump Back In" + "Your Top Artists" were removed in favor of the
+    // new "Your artists, lately" section on Browse (see
+    // src/components/ArtistUpdatesSection.tsx). Stories already covers
+    // the recent-tracks promise, and the flat artist-tiles row was the
+    // piece that made Browse feel Spotify-shaped.
 
     // ── 3. "Your Top Tracks" ─────────────────────────────────────────
     if (topTracks.length > 0) {

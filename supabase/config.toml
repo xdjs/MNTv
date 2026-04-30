@@ -79,3 +79,15 @@ verify_jwt = false
 # we don't want unauthenticated callers exchanging refresh tokens.
 [functions.spotify-refresh]
 verify_jwt = true
+
+# Artist-level "Your artists, lately" updates. Authenticated — every
+# app caller (Browse rail, ArtistProfile Latest Facts) sits behind
+# ProtectedRoute, which requires a Supabase session (Spotify-OAuth
+# user or anonymous Apple Music session). Closes the unauthenticated
+# Gemini-burn vector flagged in PR #78 review: previously a stranger
+# could enumerate arbitrary artist names and drain the project's
+# Gemini quota since the function takes only a plain artist string.
+# supabase.functions.invoke() automatically attaches the user's JWT,
+# so client code didn't need changes.
+[functions.artist-updates]
+verify_jwt = true

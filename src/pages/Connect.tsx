@@ -1,4 +1,4 @@
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, Navigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import PageTransition from "@/components/PageTransition";
@@ -6,11 +6,13 @@ import MusicNerdLogo from "@/components/MusicNerdLogo";
 import { useUserProfile, getStoredProfile } from "@/hooks/useMusicNerdState";
 import type { UserProfile } from "@/mock/types";
 import spotifyLogo from "@/assets/spotify-logo.png";
-import { signInWithSpotify } from "@/hooks/useSpotifyAuth";
+import { signInWithSpotify, prewarmSpotifyTaste } from "@/hooks/useSpotifyAuth";
+import { sanitizeRedirect } from "@/lib/routeUtils";
 import { initiateAppleMusicAuth, fetchAppleMusicTaste } from "@/hooks/useAppleMusicAuth";
 import { useAppleMusicToken } from "@/hooks/useAppleMusicToken";
 import { useSpotifyPostSigninSync } from "@/hooks/useSpotifyPostSigninSync";
 import { ensureSupabaseSession } from "@/lib/ensureSupabaseSession";
+import SpotifySyncingOverlay from "@/components/SpotifySyncingOverlay";
 
 type Tier = "casual" | "curious" | "nerd";
 
@@ -27,13 +29,64 @@ const Spinner = ({ className = "h-4 w-4" }: { className?: string }) => (
   </svg>
 );
 
+// sanitizeRedirect lives in src/lib/routeUtils.ts so PreparingExperience
+// uses the same logic — see the comment there for why we reject /,
+// /connect, and /preparing.
+
+/**
+ * Outer gate for /connect. Reads URL/sessionStorage redirect and the
+ * stored profile synchronously so a returning user (cached profile) can
+ * be sent straight to their destination via <Navigate> without ever
+ * mounting Connect's body. This avoids the AnimatePresence transition
+ * stall that hit /connect → /preparing|/browse: PageTransition's exit
+ * animation didn't propagate up from inside Routes, so AnimatePresence
+ * with mode="wait" hung waiting for an exit that never fired, leaving
+ * Connect rendered on the new URL.
+ */
 export default function Connect() {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  // Persist redirect URL in sessionStorage so it survives OAuth redirects
-  const redirectParam = searchParams.get("redirect");
-  if (redirectParam) sessionStorage.setItem("musicnerd_redirect", redirectParam);
-  const redirectUrl = redirectParam || sessionStorage.getItem("musicnerd_redirect");
+  // Subscribe to profile so this gate re-renders when DB hydration
+  // populates it after a fresh sign-in (returning user, signOut cleared
+  // local but DB still has the row).
+  const { profile } = useUserProfile();
+  const redirectParam = sanitizeRedirect(searchParams.get("redirect"));
+  // Persist redirect across the OAuth round-trip so the post-callback
+  // mount of Connect can still read where to send the user. Side-effect
+  // moved into useEffect because writes in the render body run twice
+  // under React 18 StrictMode and again on every re-render.
+  useEffect(() => {
+    if (redirectParam) {
+      sessionStorage.setItem("musicnerd_redirect", redirectParam);
+    }
+  }, [redirectParam]);
+  const storedRedirect = sanitizeRedirect(sessionStorage.getItem("musicnerd_redirect"));
+  // Evict polluted sessionStorage entries (e.g. stale "/preparing" left
+  // over from a pre-fix run). Must also be in an effect — writes during
+  // render violate the rendering contract.
+  useEffect(() => {
+    if (sessionStorage.getItem("musicnerd_redirect") && !storedRedirect) {
+      sessionStorage.removeItem("musicnerd_redirect");
+    }
+  }, [storedRedirect]);
+  const redirectUrl = redirectParam || storedRedirect;
+  // Treat live profile state OR localStorage as authoritative — the live
+  // state can lag a render behind localStorage immediately after
+  // saveProfile fires, so checking both closes the gap.
+  const hasProfile = !!profile || !!getStoredProfile();
+  if (hasProfile) {
+    // Route through /preparing so the artist-updates rail has a window
+    // to populate before Browse renders. Without this, returning users
+    // land on Browse with an empty rail and watch it fill in — the
+    // splash gives the per-artist Gemini call (cold-start 30-60s) time
+    // to land. Stories continue loading on Browse via their own state.
+    const next = redirectUrl || "/browse";
+    return <Navigate to={`/preparing?next=${encodeURIComponent(next)}`} replace />;
+  }
+  return <ConnectInner redirectUrl={redirectUrl} />;
+}
+
+function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
+  const navigate = useNavigate();
   const { saveProfile } = useUserProfile();
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
@@ -72,7 +125,7 @@ export default function Connect() {
   // so the async write arrived after nobody was listening. The direct
   // callback is race-free — the setters run the moment the taste fetch
   // resolves.
-  useSpotifyPostSigninSync({
+  const { syncing: spotifySyncing, syncError: spotifySyncError, retrySync } = useSpotifyPostSigninSync({
     onSynced: (patch) => {
       setSpotifyConnected(true);
       setPendingTopArtists(patch.topArtists ?? null);
@@ -85,11 +138,20 @@ export default function Connect() {
     },
   });
 
-  // If already onboarded, redirect to browse
+  // Returning users go through /preparing too — it gives the hoisted
+  // ArtistUpdatesContext a window to warm so Browse's "Your artists,
+  // lately" rail has content on first paint instead of a skeleton.
+  // The splash auto-advances when MIN_ARTISTS (1) artist-update rows
+  // resolve, or the MAX_WAIT_MS ceiling fires. Stories pre-gen runs
+  // in parallel but is NOT a gating signal — it continues loading on
+  // Browse via per-card state. Deep-links survive via ?next=.
+  // Warm the spotify-taste edge function on mount so the post-OAuth
+  // taste fetch doesn't eat the cold-start latency. The outer Connect
+  // gate already short-circuits returning users via <Navigate> before
+  // ConnectInner mounts, so anyone reaching here is on the fresh-user
+  // path and will need this fetch.
   useEffect(() => {
-    if (getStoredProfile()) {
-      navigate(redirectUrl || "/browse", { replace: true });
-    }
+    prewarmSpotifyTaste();
   }, []);
 
   const goNext = (delta = 1) => { setDirection(delta); setStep((s) => s + delta); };
@@ -198,10 +260,22 @@ export default function Connect() {
       trackImages: pendingTrackImages.length ? pendingTrackImages : undefined,
       lastFmUsername: lastFmUsername.trim() || undefined,
       calculatedTier: t,
+      // Stamp tasteRefreshedAt explicitly — pendingTop* came from the
+      // post-signin sync's fetchSpotifyTaste call moments ago, so the
+      // 24h TTL window starts now. saveProfile no longer auto-stamps,
+      // so without this the next page load would treat the snapshot
+      // as "never refreshed" and trigger an immediate redundant
+      // background fetch.
+      tasteRefreshedAt: pendingTopArtists ? new Date().toISOString() : undefined,
     };
     saveProfile(profile);
     sessionStorage.removeItem("musicnerd_redirect");
-    navigate(redirectUrl || "/browse");
+    // Route through /preparing so artist-updates gets a warmup window
+    // before Browse renders. Splash auto-advances when 1 artist-update
+    // row lands, or the 45s ceiling fires. Stories pre-gen runs in
+    // parallel but doesn't block the splash.
+    const next = redirectUrl || "/browse";
+    navigate(`/preparing?next=${encodeURIComponent(next)}`);
   };
 
   const tiers = [
@@ -212,6 +286,17 @@ export default function Connect() {
 
   return (
     <PageTransition>
+      {/* Full-screen takeover while the post-OAuth taste fetch runs. Keeps
+          the user from re-reading the Connect prompts (boring) and from
+          double-clicking Sign in with Spotify (confusing). Stays up
+          through an error so the user always has a retry path — if we
+          just dismissed on failure, they'd land back on step 0 and
+          think their click did nothing. */}
+      <SpotifySyncingOverlay
+        visible={spotifySyncing || !!spotifySyncError}
+        error={spotifySyncError}
+        onRetry={retrySync}
+      />
       <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden noise-overlay px-6">
         <div className="absolute inset-0 bg-gradient-to-b from-background via-background to-secondary/20" />
 
@@ -242,7 +327,7 @@ export default function Connect() {
                     {/* Spotify — connect or show connected */}
                     {!pendingTopArtists ? (
                       <>
-                        <button onClick={handleConnectSpotify} disabled={spotifyConnecting} className="flex items-center gap-4 w-full rounded-2xl border bg-foreground/5 px-5 py-4 text-left font-semibold text-foreground transition-all duration-200 disabled:opacity-70 border-green-500/40 hover:border-green-500 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)]">
+                        <button onClick={handleConnectSpotify} disabled={spotifyConnecting || spotifySyncing} className="flex items-center gap-4 w-full rounded-2xl border bg-foreground/5 px-5 py-4 text-left font-semibold text-foreground transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed border-green-500/40 hover:border-green-500 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)]">
                           <img src={spotifyLogo} alt="Spotify" className="w-8 h-8 object-contain" />
                           <span className="flex-1">Spotify</span>
                           {spotifyConnecting ? <Spinner className="h-4 w-4 text-green-400" /> : <span className="text-xs text-muted-foreground">Connect</span>}
