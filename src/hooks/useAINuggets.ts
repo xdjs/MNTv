@@ -25,6 +25,15 @@ interface AINuggetData {
 
 // ── Helpers for consistent ID/object creation across SSE, cache, and JSON paths ──
 
+// Early-cancel thresholds for the SSE stream. Module-scope so they
+// aren't re-allocated per nugget event in the loop.
+//   - MIN_EARLY_CANCEL_NUGGETS: keep at least casual-tier worth of
+//     content (3) plus one buffer before considering a cancel.
+//   - EARLY_CANCEL_REMAINING_SEC: track-end window where additional
+//     nuggets won't reach the user; bail rather than burn Gemini.
+const MIN_EARLY_CANCEL_NUGGETS = 4;
+const EARLY_CANCEL_REMAINING_SEC = 45;
+
 /**
  * Blank the album slot in a `real::…` trackId before composing the
  * nugget_cache key. Different entry points populate the album slot
@@ -34,13 +43,37 @@ interface AINuggetData {
  * (seed-nugget slugs) are passed through unchanged. Mirror of the
  * server-side canonicalization in generate-nuggets/index.ts.
  */
-function canonicalCacheKey(trackId: string, tier: string): string {
-  if (!trackId.startsWith("real::")) return `${trackId}::${tier}`;
-  const parts = trackId.split("::");
+function safeDecode(s: string): string {
+  try { return decodeURIComponent(s); } catch { return s; }
+}
+
+// Exported for unit tests — see src/test/canonicalCacheKey.test.ts.
+// Internal call sites still go through this same function.
+export function canonicalCacheKey(trackId: string, tier: string): string {
+  // Listen receives `trackId` from React Router params, which keeps URL-
+  // encoded characters (`%20`, `%3A`, etc.). The server-side write path
+  // builds the cache key from the request body's raw artist/title/uri
+  // strings (no encoding). Without normalizing here, every Listen mount
+  // on a track with spaces or special chars cache-misses and re-runs
+  // the full ~30s nugget pipeline.
+  //
+  // A `real%3A%3A…` trackId still starts with the right prefix once
+  // decoded; check for both forms so the early-return path doesn't
+  // skip encoded inputs.
+  if (!trackId.startsWith("real::") && !trackId.startsWith("real%3A%3A")) {
+    return `${trackId}::${tier}`;
+  }
+  // Normalize encoded delimiters before split so parts line up regardless
+  // of how the upstream route preserved them.
+  const normalized = trackId.replace(/%3A%3A/gi, "::");
+  const parts = normalized.split("::");
   // Expected: ["real", artist, title, album, uri...]. Fewer than 5 parts
   // means the id is malformed — preserve original to avoid losing data.
   if (parts.length < 5) return `${trackId}::${tier}`;
-  parts[3] = "";
+  parts[1] = safeDecode(parts[1]); // artist
+  parts[2] = safeDecode(parts[2]); // title
+  parts[3] = ""; // album — blanked by canon (multiple entry points populate inconsistently)
+  parts[4] = safeDecode(parts[4]); // uri
   return `${parts.join("::")}::${tier}`;
 }
 
@@ -170,6 +203,17 @@ export function useAINuggets(
   } = usePlayer();
   const cancelledRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
+  // Mirror currentTime into a ref so the SSE handler (closes over stale
+  // currentTime from effect-setup time) can read the LIVE playback
+  // position when deciding whether to early-cancel mid-stream.
+  const currentTimeRef = useRef(currentTime);
+  currentTimeRef.current = currentTime;
+  // Same for isPlaying — without a ref the early-cancel closure sees
+  // whatever isPlaying was at the moment the effect fired and never
+  // updates. A user who pauses mid-stream would still trigger the
+  // cancel because the closure thinks they're still playing.
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
   // Track when the last generation attempt started — used to only debounce
   // on rapid skips (< 5s between tracks), not on first page load.
   const lastGenTimestampRef = useRef(0);
@@ -526,8 +570,17 @@ export function useAINuggets(
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
+        // Flips true when we've decided to stop reading early because
+        // the user is near track-end and we have enough nuggets. Read
+        // by both inner and outer loops so we exit cleanly without
+        // throwing an AbortError (which would skip the cache write).
+        let earlyComplete = false;
 
         while (true) {
+          if (earlyComplete) {
+            await reader.cancel().catch(() => {}); // tell server we're done
+            break;
+          }
           const { done, value } = await reader.read();
           if (done) break;
           if (cancelledRef.current) { reader.cancel(); return; }
@@ -561,6 +614,45 @@ export function useAINuggets(
               setSources((prev) => new Map(prev).set(sourceId, source));
               setNuggets((prev) => [...prev, nugget]);
               if (import.meta.env.DEV) console.log(`[SSE] Received nugget ${payload.index}: "${n.headline?.slice(0, 40)}"`);
+
+              // Early-cancel: if we already have enough nuggets to cover
+              // the rest of playback, abort the stream rather than burning
+              // Gemini calls the user will never see. Conditions:
+              //   - have ≥ MIN_EARLY_CANCEL_NUGGETS (4) — keep at least
+              //     casual-tier worth of content even on short tracks
+              //   - track has ≤ EARLY_CANCEL_REMAINING_SEC (45s) left
+              //   - playback is actively running (paused users may still
+              //     read, so don't cancel on them)
+              // We treat the partial set as the final cache row — this
+              // listen's full nugget budget got pruned to "what fits the
+              // remaining playback window," not lost.
+              //
+              // NOTE on `aiNuggets.length`: this is a LOCAL `let` array
+              // (declared at line 545), pushed synchronously above on
+              // line 589 BEFORE this check runs. It's not React state,
+              // so the count is live — no ref-mirror needed.
+              // `isPlayingRef.current` and `currentTimeRef.current` ARE
+              // ref-mirrored because they come from React state via
+              // usePlayer() and would otherwise be stale closures.
+              // (MIN_EARLY_CANCEL_NUGGETS / EARLY_CANCEL_REMAINING_SEC
+              //  hoisted to module scope; were re-evaluated per nugget here.)
+              const liveCurrentTime = currentTimeRef.current;
+              const remainingSec = durationSec - liveCurrentTime;
+              if (
+                isPlayingRef.current &&
+                aiNuggets.length >= MIN_EARLY_CANCEL_NUGGETS &&
+                remainingSec > 0 &&
+                remainingSec <= EARLY_CANCEL_REMAINING_SEC
+              ) {
+                if (import.meta.env.DEV) {
+                  console.log(`[SSE] early-complete: ${aiNuggets.length} nuggets in hand, ${Math.round(remainingSec)}s left on track — stopping stream + caching what we have`);
+                }
+                earlyComplete = true;
+                // Break out of the event loop; outer while sees the
+                // flag, cancels the reader, and falls through to the
+                // post-stream cache write so the partial set isn't lost.
+                break;
+              }
 
             } else if (payload.type === "done") {
               aiArtistSummary = payload.artistSummary || "";

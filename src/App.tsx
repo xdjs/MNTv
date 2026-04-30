@@ -16,12 +16,16 @@ const ArtistProfile = lazy(() => import("./pages/ArtistProfile"));
 const AlbumDetail = lazy(() => import("./pages/AlbumDetail"));
 const Listen = lazy(() => import("./pages/Listen"));
 const Profile = lazy(() => import("./pages/Profile"));
+const PreparingExperience = lazy(() => import("./pages/PreparingExperience"));
 import { AuthProvider } from "./contexts/AuthContext";
 import { PlayerProvider } from "./contexts/PlayerContext";
 import { StoriesProvider } from "./contexts/StoriesContext";
+import { ArtistUpdatesProvider } from "./contexts/ArtistUpdatesContext";
 import NowPlayingBar from "./components/NowPlayingBar";
 import SpotifyReconnectBanner from "./components/SpotifyReconnectBanner";
 import ErrorBoundary from "./components/ErrorBoundary";
+import GlobalRefreshIndicator from "./components/GlobalRefreshIndicator";
+import { RefreshIndicatorProvider } from "./contexts/RefreshIndicatorContext";
 import { ProtectedRoute, RootRoute, LazyFallback } from "./routes";
 
 const queryClient = new QueryClient();
@@ -53,6 +57,7 @@ function AnimatedRoutes() {
             {/* Public */}
             <Route path="/" element={<RootRoute />} />
             <Route path="/connect" element={<Connect />} />
+            <Route path="/preparing" element={<ProtectedRoute><PreparingExperience /></ProtectedRoute>} />
 
             {/* Protected — requires a Supabase session */}
             <Route path="/browse" element={<ProtectedRoute><Browse /></ProtectedRoute>} />
@@ -82,24 +87,29 @@ const App = () => (
         <AuthProvider>
           <PlayerProvider>
             <StoriesProvider>
-            <ErrorBoundary fallback={
-              <div className="min-h-screen bg-background flex items-center justify-center p-6">
-                <div className="text-center space-y-3">
-                  <p className="text-lg font-bold text-foreground">Something went wrong</p>
-                  <p className="text-sm text-muted-foreground">Try refreshing the page.</p>
-                  <button
-                    onClick={() => window.location.reload()}
-                    className="mt-2 px-5 py-2 rounded-full bg-primary/20 text-primary text-sm font-semibold hover:bg-primary/30 transition-colors"
-                  >
-                    Refresh
-                  </button>
-                </div>
-              </div>
-            }>
-              <AnimatedRoutes />
-              <NowPlayingBar />
-              <SpotifyReconnectBanner />
-            </ErrorBoundary>
+              <ArtistUpdatesProvider>
+                <RefreshIndicatorProvider>
+                  <ErrorBoundary fallback={
+                    <div className="min-h-screen bg-background flex items-center justify-center p-6">
+                      <div className="text-center space-y-3">
+                        <p className="text-lg font-bold text-foreground">Something went wrong</p>
+                        <p className="text-sm text-muted-foreground">Try refreshing the page.</p>
+                        <button
+                          onClick={() => window.location.reload()}
+                          className="mt-2 px-5 py-2 rounded-full bg-primary/20 text-primary text-sm font-semibold hover:bg-primary/30 transition-colors"
+                        >
+                          Refresh
+                        </button>
+                      </div>
+                    </div>
+                  }>
+                    <AnimatedRoutes />
+                    <NowPlayingBar />
+                    <SpotifyReconnectBanner />
+                    <GlobalRefreshIndicator />
+                  </ErrorBoundary>
+                </RefreshIndicatorProvider>
+              </ArtistUpdatesProvider>
             </StoriesProvider>
           </PlayerProvider>
         </AuthProvider>
