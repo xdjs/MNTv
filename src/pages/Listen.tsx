@@ -1227,7 +1227,7 @@ export default function Listen() {
               {topFocusIndex === 0 ? "Back" : "Open Companion"}
             </motion.p>
           )}
-          {!isMobile && <div className="flex flex-col items-center gap-1.5">
+          <div className="flex flex-col items-center gap-1.5">
             <MusicNerdLoadingOrchestrator
               aiLoading={aiLoading}
               aiError={aiError}
@@ -1244,33 +1244,15 @@ export default function Listen() {
                 }
               }}
             />
-            <button
-              onClick={() => setDevOpen((o) => !o)}
-              className="rounded-md bg-foreground/5 px-2.5 py-0.5 text-[10px] text-muted-foreground/50 hover:bg-foreground/10 hover:text-muted-foreground transition-colors"
-            >
-              DEV
-            </button>
-          </div>}
-          {/* Mobile-visible research indicator. The MusicNerdLoadingOrchestrator
-              above is desktop-tuned (anchored container, fixed top-bar
-              spacing) and gated behind !isMobile — without this fallback,
-              phone users tapping a cold-cache track see the song start
-              with zero indication that nugget research is running. Pill
-              hides once any nugget streams in or generation errors. */}
-          {isMobile && aiLoading && trackNuggets.length === 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="flex items-center gap-2 rounded-full bg-foreground/10 backdrop-blur-md px-3 py-1.5 text-xs text-foreground/80"
-            >
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-              <span>
-                Researching <span className="font-semibold">{track.artist}</span>
-                <span className="inline-block w-4 text-left animate-pulse">…</span>
-              </span>
-            </motion.div>
-          )}
+            {!isMobile && (
+              <button
+                onClick={() => setDevOpen((o) => !o)}
+                className="rounded-md bg-foreground/5 px-2.5 py-0.5 text-[10px] text-muted-foreground/50 hover:bg-foreground/10 hover:text-muted-foreground transition-colors"
+              >
+                DEV
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Track info — fixed bottom-left, visible when playback bar is hidden */}
