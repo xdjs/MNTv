@@ -1,5 +1,6 @@
 import { useNavigate, useSearchParams, Navigate } from "react-router-dom";
 import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import PageTransition from "@/components/PageTransition";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
@@ -69,11 +70,16 @@ export default function Connect() {
     }
   }, [storedRedirect]);
   const redirectUrl = redirectParam || storedRedirect;
-  // Treat live profile state OR localStorage as authoritative — the live
-  // state can lag a render behind localStorage immediately after
-  // saveProfile fires, so checking both closes the gap.
+  // Need BOTH a session AND a profile to short-circuit past the
+  // sign-in UI. Profile-only (e.g. session expired but localStorage
+  // is still seeded) used to ping-pong: gate Navigates to /preparing
+  // → ProtectedRoute on /preparing fails on missing session →
+  // redirects back to /connect → loop. With both checks, an expired
+  // session falls through to ConnectInner where the user can
+  // re-authenticate.
+  const { session } = useAuth();
   const hasProfile = !!profile || !!getStoredProfile();
-  if (hasProfile) {
+  if (session && hasProfile) {
     // Route through /preparing so the artist-updates rail has a window
     // to populate before Browse renders. Without this, returning users
     // land on Browse with an empty rail and watch it fill in — the

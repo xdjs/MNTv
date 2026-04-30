@@ -1337,10 +1337,17 @@ export default function Listen() {
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Floating nugget card — independent of bar visibility, anchored to timeline position */}
+        {/* Floating nugget card — independent of bar visibility, anchored to timeline position.
+            Bottom offsets must keep the card's bottom edge ABOVE the
+            playback bar's top edge or the headline's lower lines render
+            in the same vertical band as the timeline-marker dots. Live
+            measurement (vh=628): bar top sits at ~y=560, so anything
+            with bottom<68 ends up overlapping. 90/240 give a clear gap
+            in both states (bar hidden → mini-bar at bottom; bar visible
+            → full controls). */}
         <div
           className="fixed left-0 right-0 z-30 pointer-events-none transition-[bottom] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
-          style={{ bottom: barVisible ? 160 : 48 }}
+          style={{ bottom: barVisible ? 240 : 90 }}
         >
           {/* Layout wrapper matching progress bar track horizontal bounds */}
           <div className="px-4 md:px-10">

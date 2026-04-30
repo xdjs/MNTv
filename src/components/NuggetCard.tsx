@@ -207,11 +207,15 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
               </motion.div>
             )}
 
-            {/* Nugget headline */}
+            {/* Nugget headline. Capped at 3 lines so a long headline
+                doesn't push the card's bottom edge into the playback
+                bar's timeline (which renders marker dots that visually
+                overlap the lower lines). The expanded body view from
+                "Tell me more" already shows the full text. */}
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1, transition: { delay: animationStyle === "B" ? 0.5 : 0.4, duration: 0.3 } }}
-              className="text-base md:text-lg leading-7 text-foreground/90"
+              className="text-base md:text-lg leading-7 text-foreground/90 line-clamp-3"
             >
               {nugget.headline || nugget.text}
             </motion.p>
