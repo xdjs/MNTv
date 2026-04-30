@@ -96,11 +96,26 @@ function makeSource(id: string, s: AINuggetData["source"]): Source {
 }
 
 export function makeTimestamp(index: number, totalNuggets: number, durationSec: number) {
-  const earlyStart = 20;
+  // Nugget timestamps are reveal-times during playback. Three constraints:
+  //   1. First nugget pinned at `earlyStart` so the user sees content
+  //      almost immediately when the song starts (Pete's UX: "tap a
+  //      story, song plays, I'm displayed with the first nugget I
+  //      found"). Previously the first nugget landed at `earlyStart +
+  //      spacing` ≈ 49s into a 4-min Curious-tier listen — long enough
+  //      to look like nothing was happening even when cache was hit.
+  //   2. Last nugget pinned at `durationSec - endBuffer` so the user
+  //      doesn't lose the final beat to a nugget appearing in the last
+  //      few seconds of the track.
+  //   3. Middle nuggets distributed evenly between.
+  const earlyStart = 3;
   const endBuffer = 15;
   const usable = Math.max(durationSec - earlyStart - endBuffer, 30);
-  const spacing = usable / (totalNuggets + 1);
-  return Math.min(Math.floor(earlyStart + spacing * (index + 1)), durationSec - 10);
+  // Denominator guards a 1-nugget track (would otherwise divide by 0
+  // and place the only nugget at NaN). With one nugget we want it at
+  // earlyStart exactly, so the formula collapses to `earlyStart + 0`.
+  const denom = Math.max(totalNuggets - 1, 1);
+  const spacing = usable / denom;
+  return Math.min(Math.floor(earlyStart + spacing * index), durationSec - 10);
 }
 
 /**
@@ -370,11 +385,15 @@ export function useAINuggets(
           };
           newSources.set(sourceId, source);
 
-          const earlyStart = 20;
+          // Mirror the spacing logic in makeTimestamp: first seed nugget
+          // pinned at earlyStart (3s) so it shows almost immediately,
+          // last at duration - endBuffer, middle distributed evenly.
+          const earlyStart = 3;
           const endBuffer = 15;
           const usableDuration = Math.max(durationSec - earlyStart - endBuffer, 30);
-          const spacing = usableDuration / (seedData.length + 1);
-          const timestampSec = Math.floor(earlyStart + spacing * (i + 1));
+          const seedDenom = Math.max(seedData.length - 1, 1);
+          const spacing = usableDuration / seedDenom;
+          const timestampSec = Math.floor(earlyStart + spacing * i);
 
           return {
             id: nuggetId,

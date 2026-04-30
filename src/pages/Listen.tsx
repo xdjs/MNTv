@@ -1065,48 +1065,28 @@ export default function Listen() {
     // for content and should see nuggets the moment they arrive.
     if (!isPlaying && aiFromCache) return;
 
+    // Reveal rule (Pete: "an active shouldn't auto-dismiss; it should
+    // stay up until another nugget arrives, pushing it to the side so
+    // the new nugget is displayed"):
+    //   - No 8s auto-dismiss, no queue.
+    //   - When a new nugget triggers and one is already active, push
+    //     the active one into `dismissedNuggets` (so the playback-bar
+    //     re-open chip renders for it) and replace it with the new
+    //     nugget immediately.
+    //   - The last nugget of the track stays on screen until track
+    //     end, navigation, or user re-opens an earlier nugget.
     for (const n of trackNuggets) {
       if (shownNuggetIds.has(n.id)) continue;
-      if (shouldTrigger(n)) {
-        if (activeNugget) {
-          if (reopenedNuggetId) {
-            setDismissedNuggets((prev) => new Map(prev).set(activeNugget.id, activeNugget));
-            setActiveNugget(n);
-            setReopenedNuggetId(null);
-            setShownNuggetIds((s) => new Set(s).add(n.id));
-          } else {
-            setNuggetQueue((q) => (q.find((x) => x.id === n.id) ? q : [...q, n]));
-          }
-        } else {
-          setActiveNugget(n);
-          setReopenedNuggetId(null);
-          setShownNuggetIds((s) => new Set(s).add(n.id));
-        }
+      if (!shouldTrigger(n)) continue;
+      if (activeNugget && activeNugget.id !== n.id) {
+        setDismissedNuggets((prev) => new Map(prev).set(activeNugget.id, activeNugget));
       }
+      setActiveNugget(n);
+      setReopenedNuggetId(null);
+      setShownNuggetIds((s) => new Set(s).add(n.id));
     }
   }, [currentTime, isPlaying, nerdActive, trackNuggets, activeNugget, shownNuggetIds, reopenedNuggetId, aiFromCache]);
 
-  // Auto-dismiss nugget: quick swap if queued, otherwise fade after 8s
-  useEffect(() => {
-    if (!activeNugget || deepDiveNugget || nuggetFocused) return;
-    const delay = nuggetQueue.length > 0 ? 6000 : 8000;
-    const timer = setTimeout(() => {
-      setDismissedNuggets((prev) => new Map(prev).set(activeNugget.id, activeNugget));
-      setActiveNugget(null);
-      setReopenedNuggetId(null);
-    }, delay);
-    return () => clearTimeout(timer);
-  }, [activeNugget, deepDiveNugget, nuggetFocused, nuggetQueue.length]);
-
-  useEffect(() => {
-    if (!activeNugget && nuggetQueue.length > 0) {
-      const next = nuggetQueue[0];
-      setNuggetQueue((q) => q.slice(1));
-      setActiveNugget(next);
-      setReopenedNuggetId(null);
-      setShownNuggetIds((s) => new Set(s).add(next.id));
-    }
-  }, [activeNugget, nuggetQueue]);
 
   const getSource = useCallback((sourceId: string): Source | undefined => {
     return aiSources.get(sourceId);
@@ -1635,20 +1615,12 @@ export default function Listen() {
         </div>
       )}
 
-      {/* "More coming" pill — surfaces while wave 2/3 generates silently in
-          the background so the user knows additional nuggets are on the way
-          without interrupting their current reading. */}
-      {track && waveLoading && (
-        <div
-          className="fixed left-1/2 -translate-x-1/2 bottom-24 z-[55] pointer-events-none"
-          style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
-        >
-          <div className="flex items-center gap-2 rounded-full px-3 py-1.5 bg-black/70 border border-white/10 text-xs text-white/80">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
-            <span>More coming…</span>
-          </div>
-        </div>
-      )}
+      {/* "More coming…" pill removed — the timeline-marker dots in
+          the playback bar already communicate how many nuggets are
+          on deck, and the pill was overlapping the active nugget's
+          headline on mobile. `waveLoading` state stays in
+          useAINuggets for any future use that doesn't compete with
+          content for screen real estate. */}
     </PageTransition>
   );
 }
