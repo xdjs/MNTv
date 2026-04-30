@@ -289,6 +289,11 @@ export function useAINuggets(
     setError(null);
     // true once we own the 'generating' sentinel; reset to false after cache write succeeds
     let sentinelClaimed = false;
+    // Hoisted so the catch block's cache-fallback can read the latest
+    // listen count when SSE fails (the deeper-tier path skips the cache
+    // check; on failure we want to recover with whatever cached row
+    // exists, regardless of which listen the user is on).
+    let currentListenCount = 1;
     // Tier-scoped key for nugget_cache DB table — different tiers get
     // different cached nuggets. We blank the album slot so that different
     // entry points to the same track (story rail with empty album, tile /
@@ -315,7 +320,10 @@ export function useAINuggets(
       })();
 
       // ── Listen history ────────────────────────────────────────────
-      let currentListenCount = 1;
+      // currentListenCount declared above (outside try) so the catch's
+      // fallback can use it. Reset to default in case a previous
+      // generate() run left a stale value in scope.
+      currentListenCount = 1;
       let previousNuggets: string[] = [];
 
       const { data: historyRow } = await supabase
@@ -884,7 +892,40 @@ export function useAINuggets(
       // AbortError is intentional (user skipped track) — don't surface it
       if (e instanceof DOMException && e.name === "AbortError") return;
       console.error("AI nugget generation failed:", e);
+
+      // FALLBACK: try the canonical cache row even though `currentListenCount`
+      // gated us out of using it earlier. The repeat-listen flow normally
+      // skips cache to force a fresh deeper-tier generation, but if the
+      // generation fails (network, edge timeout, 5xx) we'd otherwise leave
+      // the user staring at cover art with zero nuggets — when there's a
+      // perfectly good listen-1 cache row sitting in the DB. The deeper-
+      // tier content is "nice to have"; cached nuggets are the safety net.
       if (!cancelledRef.current) {
+        try {
+          const { data: fallback } = await supabase
+            .from("nugget_cache")
+            .select("nuggets, sources, status")
+            .eq("track_id", dbCacheKey)
+            .maybeSingle();
+          const fbNuggets = fallback?.status === "ready"
+            ? (fallback.nuggets as Nugget[] | null) ?? []
+            : [];
+          if (fbNuggets.length > 0) {
+            console.warn(`[useAINuggets] SSE failed; falling back to cached nuggets (${fbNuggets.length}) for ${dbCacheKey}`);
+            const sanitized = fbNuggets.map(sanitizeNugget);
+            const fbSources = new Map<string, Source>();
+            const rawSources = (fallback!.sources ?? {}) as Record<string, Source>;
+            for (const [k, v] of Object.entries(rawSources)) fbSources.set(k, v);
+            setNuggets(sanitized);
+            setSources(fbSources);
+            setNuggetCache(cacheKey, { nuggets: sanitized, sources: fbSources, listenCount: currentListenCount });
+            setError(null);
+            // Don't fall through to error / sentinel cleanup — we recovered.
+            return;
+          }
+        } catch (fbErr) {
+          console.warn("[useAINuggets] cache fallback lookup threw:", fbErr);
+        }
         setError(e instanceof Error ? e.message : "Unknown error");
       }
       // Remove the 'generating' sentinel so waiting clients don't poll indefinitely.
