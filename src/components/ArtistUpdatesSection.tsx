@@ -53,19 +53,28 @@ function ArtistUpdatesSectionInner({
 
   function openArtistAtNugget(update: ArtistUpdate) {
     // New-release / collab cards: tap should land on Listen for the
-    // released track, not the artist profile. Requires a track-level
-    // URI (Spotify's playback API rejects album URIs in `uris`); the
-    // edge function populates `relatedTrackTitle` only when it
-    // successfully resolved the album's first track.
+    // released track, not the artist profile. We need at minimum a
+    // track-level title from the edge function (set only when it
+    // successfully resolved the album's first track via Spotify).
+    //
+    // Service-aware URI handling:
+    //   - Spotify users: bake the spotify:track: URI into the route
+    //     so Listen plays instantly without a catalog re-lookup.
+    //   - Apple Music users: omit the URI so Listen's findCatalogUri
+    //     effect resolves the Apple equivalent via {artist, title}.
+    //     Passing the Spotify URI directly would lock Listen into a
+    //     URI Apple Music can't play.
     if (
       (update.kind === "new-release" || update.kind === "collab") &&
-      update.relatedTrackUri &&
-      update.relatedTrackTitle &&
-      update.relatedTrackUri.startsWith("spotify:track:")
+      update.relatedTrackTitle
     ) {
       const album = update.relatedAlbumName ?? "";
+      const isAppleUser = profile?.streamingService === "Apple Music";
+      const hasSpotifyTrackUri =
+        !!update.relatedTrackUri && update.relatedTrackUri.startsWith("spotify:track:");
+      const navUri = !isAppleUser && hasSpotifyTrackUri ? update.relatedTrackUri! : "";
       navigate(
-        `/listen/real::${encodeURIComponent(update.artistName)}::${encodeURIComponent(update.relatedTrackTitle)}::${encodeURIComponent(album)}::${encodeURIComponent(update.relatedTrackUri)}`,
+        `/listen/real::${encodeURIComponent(update.artistName)}::${encodeURIComponent(update.relatedTrackTitle)}::${encodeURIComponent(album)}::${encodeURIComponent(navUri)}`,
       );
       return;
     }

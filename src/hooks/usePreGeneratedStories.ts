@@ -92,11 +92,32 @@ export function usePreGeneratedStories(
   // re-renders (profile hydration, tier switch) don't retrigger the same
   // pre-gen request. Keyed by `artist::title::tier`.
   const kickedOffRef = useRef<Set<string>>(new Set());
+  // Detect tier switches (vs initial mount). When the user explicitly
+  // changes tier — Casual → Curious — they want to see ALL stories
+  // re-warm with the new depth, not silently inherit any stray cache row
+  // that happens to exist for the new tier from a prior visit. On a
+  // detected tier switch we bypass cache + ledger checks for this run so
+  // every story flips through the warming animation and the server
+  // regenerates with whatever the latest Constitution / prompt looks
+  // like. Initial mount keeps the efficient cache-first path.
+  const prevTierRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!profile?.trackImages?.length) {
       setStories([]);
       return;
+    }
+    const tierSwitched = prevTierRef.current !== null && prevTierRef.current !== tier;
+    prevTierRef.current = tier;
+    // On a tier switch, drop kickedOffRef entries scoped to the new tier
+    // so we'll actually re-fire pre-gen. Without this, a user who toggles
+    // curious → casual → curious would see the second curious switch
+    // bail in runThrottled (kicked-off in the first curious run) and the
+    // skipped cache lookup leaves stories stuck in warming forever.
+    if (tierSwitched) {
+      kickedOffRef.current.forEach((key) => {
+        if (key.endsWith(`::${tier}`)) kickedOffRef.current.delete(key);
+      });
     }
 
     // Seed stories from the top-tracks list, preserving order. Require a
@@ -133,40 +154,52 @@ export function usePreGeneratedStories(
       );
 
       try {
-        const { data: rows } = await supabase
-          .from("nugget_cache")
-          .select("track_id, status")
-          .or(likePatterns.map((p) => `track_id.ilike.${p}`).join(","));
-
-        if (cancelled) return;
-
+        // On a tier switch we deliberately skip the cache lookup so the
+        // user sees every story re-warm and the server regenerates with
+        // the new depth. `readyKeys` stays empty in that branch, which
+        // both leaves all five stories in the warming state and forces
+        // every story into `needsGen` below.
         const readyKeys = new Set<string>();
-        (rows || []).forEach((r) => {
-          if (r.status === "ready") {
-            // Extract artist::title from track_id to match story.trackKey
-            const parts = String(r.track_id).split("::");
-            if (parts.length >= 3) {
-              readyKeys.add(`${parts[1]}::${parts[2]}`);
-            }
-          }
-        });
+        if (!tierSwitched) {
+          const { data: rows } = await supabase
+            .from("nugget_cache")
+            .select("track_id, status")
+            .or(likePatterns.map((p) => `track_id.ilike.${p}`).join(","));
 
-        // Flip ready flags on stories that have cached nuggets OR that we've
-        // pre-gen'd within the last 24h (treat them as hot without re-querying
-        // every reload, even if cache key lookup happened to miss).
-        setStories((prev) =>
-          prev.map((s) => {
-            const fromCache = readyKeys.has(s.trackKey);
-            const fromLedger = wasPregennedRecently(s.trackKey, tier);
-            return fromCache || fromLedger ? { ...s, ready: true } : s;
-          }),
-        );
+          if (cancelled) return;
+
+          (rows || []).forEach((r) => {
+            if (r.status === "ready") {
+              // Extract artist::title from track_id to match story.trackKey
+              const parts = String(r.track_id).split("::");
+              if (parts.length >= 3) {
+                readyKeys.add(`${parts[1]}::${parts[2]}`);
+              }
+            }
+          });
+
+          // Flip ready flags on stories that have cached nuggets OR that we've
+          // pre-gen'd within the last 24h (treat them as hot without re-querying
+          // every reload, even if cache key lookup happened to miss).
+          setStories((prev) =>
+            prev.map((s) => {
+              const fromCache = readyKeys.has(s.trackKey);
+              const fromLedger = wasPregennedRecently(s.trackKey, tier);
+              return fromCache || fromLedger ? { ...s, ready: true } : s;
+            }),
+          );
+        }
 
         // 2. Kick off pre-gen for the rest, throttled. Skip tracks we've
         // already pre-gen'd recently (cross-session dedup via ledger).
-        const needsGen = seeded.filter(
-          (s) => !readyKeys.has(s.trackKey) && !wasPregennedRecently(s.trackKey, tier),
-        );
+        // On tier switch, regenerate ALL stories — bypass the ledger so a
+        // recently-pregenned (but old-tier) entry doesn't suppress the
+        // re-warm.
+        const needsGen = tierSwitched
+          ? seeded
+          : seeded.filter(
+              (s) => !readyKeys.has(s.trackKey) && !wasPregennedRecently(s.trackKey, tier),
+            );
         await runThrottled(needsGen, maxConcurrent, async (story) => {
           const kickKey = `${story.trackKey}::${tier}`;
           if (kickedOffRef.current.has(kickKey)) return;

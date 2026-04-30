@@ -262,6 +262,85 @@ function buildReleaseUpdate(
   };
 }
 
+// ── Exa research (lightweight wrapper) ─────────────────────────────────
+//
+// One Exa /search call per non-sparse artist gives Gemini real journalism
+// to anchor a fact in. Without this, the row was effectively asking
+// gemini-2.5-flash to recall trivia from training data — Pete's
+// complaint: "really poor, feels like its not diving in doing research
+// like we do our regular nuggets." generate-nuggets uses 3 Exa calls
+// (artist / track / discovery) and a Curator+Writer+Validator pipeline;
+// here we settle for a single artist-scoped search to keep wall-time
+// under the existing GEMINI_TIMEOUT_MS budget.
+//
+// Skipped on the sparse path — the SPARSE_FOLLOWER_THRESHOLD already
+// signals "no press exists", and the catalog-grounded prompt is what
+// prevents hallucination there.
+const EXA_TIMEOUT_MS = 8_000;
+
+async function researchArtistOnExa(
+  artistName: string,
+  apiKey: string,
+): Promise<{ snippets: string; citations: { title: string; url: string }[] }> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), EXA_TIMEOUT_MS);
+  try {
+    const res = await fetch("https://api.exa.ai/search", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        query: `${artistName} interview production credits collaborators backstory`,
+        type: "auto",
+        numResults: 4,
+        livecrawl: "fallback",
+        contents: {
+          text: { maxCharacters: 3500 },
+          highlights: { numSentences: 3, highlightsPerUrl: 2 },
+        },
+        includeText: [artistName],
+        excludeDomains: ["facebook.com", "instagram.com", "tiktok.com"],
+      }),
+      signal: ctl.signal,
+    });
+    if (!res.ok) {
+      console.warn(`[artist-updates] Exa ${res.status} for ${artistName}:`, await res.text().catch(() => ""));
+      return { snippets: "", citations: [] };
+    }
+    const data = await res.json();
+    const results = (data?.results ?? []) as Array<{
+      title?: string;
+      url?: string;
+      text?: string;
+      highlights?: string[];
+    }>;
+    const citations = results
+      .filter((r) => r.url)
+      .map((r) => ({ title: r.title || "", url: r.url! }));
+    const snippets = results
+      .map((r, i) => {
+        const highlightBlock = r.highlights?.length
+          ? `\n[Key excerpts]:\n${r.highlights.map((h) => `• ${h}`).join("\n")}`
+          : "";
+        const body = (r.text || "").slice(0, 2500);
+        return `[Source ${i + 1}: "${r.title || "(no title)"}" — ${r.url}]${highlightBlock}\n${body}`;
+      })
+      .join("\n\n---\n\n");
+    return { snippets, citations };
+  } catch (e) {
+    if ((e as Error)?.name === "AbortError") {
+      console.warn(`[artist-updates] Exa timed out after ${EXA_TIMEOUT_MS}ms for ${artistName}`);
+    } else {
+      console.warn(`[artist-updates] Exa threw for ${artistName}:`, e);
+    }
+    return { snippets: "", citations: [] };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ── Gemini fact generation (batched: N facts in one call) ─────────────
 
 interface FactGenerationContext {
@@ -278,12 +357,16 @@ interface FactGenerationContext {
   /** Top tracks with album + release year — catalog grounding for
    *  sparse prompts. Ignored in non-sparse mode. */
   topTracks?: SpotifyTopTrack[];
+  /** Exa research snippets — multi-page text + highlights from journalism
+   *  about the artist. Empty string if Exa is unavailable or returned
+   *  nothing. Sparse mode skips Exa and ignores this field. */
+  researchSnippets?: string;
 }
 
 async function generateArtistFacts(
   ctx: FactGenerationContext,
 ): Promise<{ headline: string; body: string }[]> {
-  const { artistName, tier, count, sparse, genres, topTracks } = ctx;
+  const { artistName, tier, count, sparse, genres, topTracks, researchSnippets } = ctx;
   const apiKey = Deno.env.get("GOOGLE_AI_API_KEY");
   if (!apiKey) {
     console.warn("[artist-updates] GOOGLE_AI_API_KEY not set — skipping facts");
@@ -367,17 +450,30 @@ real track name from above. NEVER invent collaborators, labels, or
 quotes. NEVER claim anything that can't be verified from the list.`
     : "";
 
+  const exaResearchBlock = !sparse && researchSnippets
+    ? `\n\nEXA RESEARCH (multi-page journalism about ${artistName} — treat this as the PRIMARY ground truth, ahead of training data and ahead of Google Search):
+${researchSnippets}
+
+REQUIREMENTS WHEN USING EXA RESEARCH:
+- Pull the most specific, surprising, or non-obvious detail from the snippets above. Vague summaries fail the SWAP TEST — anchor every fact in something concrete that came out of the research.
+- Every fact MUST contain at least TWO of: a real person's name, a year/date, a place/venue, a song or album title, a label, a producer, an engineer, a co-writer, or a verifiable number. Vibe statements ("X has a unique sound") fail.
+- Quote sparingly. If you quote, attribute to a named source from the research and keep it under 12 words.
+- If the research contradicts what you "know" from training data, trust the research.
+- If the research is thin and you can't pull two concrete anchors, return zero nuggets — empty array is better than a generic fact.
+`
+    : "";
+
   const prompt = `${CONSTITUTION_PREAMBLE}
 
 ${writerRules}
 
-${tierGuidance}${sparseGroundingBlock}
+${tierGuidance}${sparseGroundingBlock}${exaResearchBlock}
 
-You have Google Search available as a tool. USE IT FIRST to find
-verified, recent information about ${artistName} — interviews,
-production credits, label history, scene context, recent press. Pull
-the strongest grounded fact from what you find. Only fall back to the
-catalog data above if Google Search returns nothing usable.
+You also have Google Search available as a tool. USE IT to verify or
+extend the Exa research above — interviews, production credits, label
+history, scene context, recent press. Cross-check any specific name /
+year / venue / song title before committing to it. Only fall back to
+the catalog data above if both Exa and Google Search are empty.
 
 ARTIST NAME LOCK: refer to the artist as "${artistName}" throughout —
 that's their public/stage name and how the audience knows them.
@@ -487,7 +583,14 @@ function buildFactUpdate(
   headline: string,
   body: string,
   index: number,
+  citation?: { title: string; url: string },
 ): ArtistUpdate {
+  // Prefer an Exa citation if we have one — gives the fact a real
+  // article to click through to. Falls back to the generic MusicNerd
+  // source attribution when Exa was unavailable / sparse mode.
+  const source = citation && citation.url
+    ? { type: "web", title: citation.title, url: citation.url }
+    : { type: "generated", publisher: "MusicNerd" };
   return {
     artistId: artist.id,
     artistName: artist.name,
@@ -495,7 +598,7 @@ function buildFactUpdate(
     kind: "fact",
     headline,
     body,
-    source: { type: "generated", publisher: "MusicNerd" },
+    source,
     // Stable-ish id so the client can dedupe inside a cache row if we
     // ever regenerate. Uses the index within the fact set.
     nuggetId: `fact-${artist.id}-${index}`,
@@ -800,13 +903,19 @@ serve(async (req) => {
   // throw mid-flow. catch + re-throw so the platform still sees a
   // 500 — we just want to make sure the sentinel doesn't outlive us.
   try {
-    // 4. Fetch Spotify data in parallel (release always, top tracks
-    //    only when sparse), then feed into Gemini. Running top-tracks
-    //    alongside release keeps wall time flat even on the sparse
-    //    path — the sequencing penalty is only on facts-after-tracks.
-    const [release, topTracks] = await Promise.all([
+    // 4. Fetch Spotify data + (non-sparse only) Exa research in parallel,
+    //    then feed everything into Gemini. Exa adds 3-6s but anchors the
+    //    fact in real journalism instead of training-data trivia, which
+    //    was the source of "shallow" complaints. Sparse artists skip
+    //    Exa — by definition there's no journalism, and the catalog-
+    //    grounded prompt is what keeps them from hallucinating.
+    const exaApiKey = Deno.env.get("EXA_API_KEY");
+    const [release, topTracks, exaResult] = await Promise.all([
       fetchRecentRelease(token, artistInfo.id),
       isSparse ? fetchArtistTopTracks(token, artistInfo.id) : Promise.resolve([] as SpotifyTopTrack[]),
+      !isSparse && exaApiKey
+        ? researchArtistOnExa(artistInfo.name, exaApiKey)
+        : Promise.resolve({ snippets: "", citations: [] as { title: string; url: string }[] }),
     ]);
 
     const facts = await generateArtistFacts({
@@ -816,6 +925,7 @@ serve(async (req) => {
       sparse: isSparse,
       genres: artistInfo.genres,
       topTracks: isSparse ? topTracks : undefined,
+      researchSnippets: exaResult.snippets,
     });
 
     const releaseAgeDays = release ? daysSince(release.release_date) : null;
@@ -833,7 +943,11 @@ serve(async (req) => {
     }
 
     facts.forEach((f, i) => {
-      updates.push(buildFactUpdate(artistInfo, f.headline, f.body, i));
+      // Round-robin through Exa citations so multiple facts on the same
+      // artist don't all link to the same article (we ask for 1 fact per
+      // artist today but this keeps it correct if FACTS_PER_ARTIST grows).
+      const citation = exaResult.citations[i % Math.max(exaResult.citations.length, 1)];
+      updates.push(buildFactUpdate(artistInfo, f.headline, f.body, i, citation));
     });
 
     if (updates.length === 0) {

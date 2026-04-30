@@ -1317,17 +1317,22 @@ export default function Listen() {
           </motion.div>
         )}
 
-        {/* Centered album art */}
+        {/* Centered album art — responsive sizing scales with viewport so
+            it fills the frame on phones (where there's no foreground card
+            of its own) and on TVs. Sized off the smaller viewport axis
+            (min(70vw, 70vh)) so it stays square regardless of orientation
+            and never gets cropped against the playback bar. */}
         <motion.div
-          className="hidden md:flex absolute inset-0 z-[5] items-center justify-center pointer-events-none"
-          animate={{ opacity: barVisible ? 0.85 : 1, scale: barVisible ? 0.95 : 1 }}
+          className="absolute inset-0 z-[5] flex items-center justify-center pointer-events-none"
+          animate={{ opacity: barVisible ? 0.9 : 1, scale: barVisible ? 0.96 : 1 }}
           transition={{ duration: 0.7, ease: [0.4, 0, 0.2, 1] }}
         >
           <motion.img
             key={effectiveCoverArt}
             src={effectiveCoverArt}
             alt={`${track.title} cover art`}
-            className="w-[400px] h-[400px] rounded-2xl object-cover shadow-2xl shadow-black/50"
+            className="rounded-2xl object-cover shadow-2xl shadow-black/50"
+            style={{ width: "min(70vw, 70vh)", height: "min(70vw, 70vh)" }}
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
