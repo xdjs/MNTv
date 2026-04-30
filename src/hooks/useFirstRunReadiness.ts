@@ -29,7 +29,10 @@ const MIN_ARTISTS = 1;
 // — users with sub-cold connectivity were waiting almost a minute on
 // a screen with no value, and the 3s "Jump in" hatch sees little use
 // when the page advances on its own at ~45s anyway.
-const MAX_WAIT_MS = 45_000;
+// Exported so PreparingExperience's progress-bar Framer transition can
+// reference the same value — without the export the bar duration was
+// hard-coded as `45` and would silently desync if this ceiling moved.
+export const MAX_WAIT_MS = 45_000;
 
 export interface FirstRunReadiness {
   ready: boolean;

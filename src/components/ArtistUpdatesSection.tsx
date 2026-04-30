@@ -63,10 +63,9 @@ function ArtistUpdatesSectionInner({
       update.relatedTrackTitle &&
       update.relatedTrackUri.startsWith("spotify:track:")
     ) {
-      const enc = encodeURIComponent;
       const album = update.relatedAlbumName ?? "";
       navigate(
-        `/listen/real::${enc(update.artistName)}::${enc(update.relatedTrackTitle)}::${enc(album)}::${enc(update.relatedTrackUri)}`,
+        `/listen/real::${encodeURIComponent(update.artistName)}::${encodeURIComponent(update.relatedTrackTitle)}::${encodeURIComponent(album)}::${encodeURIComponent(update.relatedTrackUri)}`,
       );
       return;
     }
@@ -149,7 +148,7 @@ function ArtistRow({ group, onOpen }: ArtistRowProps) {
         {heroImg ? (
           <img
             src={heroImg}
-            alt=""
+            alt={`${group.artistName} avatar`}
             className="w-14 h-14 rounded-full object-cover ring-2 ring-white/10 shadow-lg"
           />
         ) : (

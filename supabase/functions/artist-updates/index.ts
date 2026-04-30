@@ -408,18 +408,39 @@ Return JSON only, no preamble:
   // `responseMimeType` is intentionally NOT set — incompatible with
   // grounding tools. The response sometimes comes wrapped in a
   // ```json fence which we strip before JSON.parse.
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        tools: [{ googleSearch: {} }],
-        generationConfig: { temperature: 0.7 },
-      }),
-    },
-  );
+  //
+  // 40s abort timeout: keeps the worst-case wall time predictable so a
+  // hung Gemini doesn't hold the cache sentinel for the full
+  // STALE_GENERATION_MS (55s) before followers can re-claim. Mirrors
+  // the Promise.race pattern in fetchSpotifyTaste on the client side.
+  const GEMINI_TIMEOUT_MS = 40_000;
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), GEMINI_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          tools: [{ googleSearch: {} }],
+          generationConfig: { temperature: 0.7 },
+        }),
+        signal: ctl.signal,
+      },
+    );
+  } catch (e) {
+    clearTimeout(timer);
+    if ((e as Error)?.name === "AbortError") {
+      console.warn(`[artist-updates] Gemini timed out after ${GEMINI_TIMEOUT_MS}ms for ${artistName}`);
+    } else {
+      console.warn(`[artist-updates] Gemini fetch threw for ${artistName}:`, e);
+    }
+    return [];
+  }
+  clearTimeout(timer);
   if (!res.ok) {
     console.warn(`[artist-updates] Gemini ${res.status}:`, await res.text().catch(() => ""));
     return [];
@@ -768,57 +789,76 @@ serve(async (req) => {
   const followers = artistInfo.followers?.total ?? 0;
   const isSparse = followers < SPARSE_FOLLOWER_THRESHOLD;
 
-  // 4. Fetch Spotify data in parallel (release always, top tracks
-  //    only when sparse), then feed into Gemini. Running top-tracks
-  //    alongside release keeps wall time flat even on the sparse
-  //    path — the sequencing penalty is only on facts-after-tracks.
-  const [release, topTracks] = await Promise.all([
-    fetchRecentRelease(token, artistInfo.id),
-    isSparse ? fetchArtistTopTracks(token, artistInfo.id) : Promise.resolve([] as SpotifyTopTrack[]),
-  ]);
+  // Wrap the post-claim generation flow in a try/catch so the sentinel
+  // is always released — without this, an unexpected throw inside
+  // fetchRecentRelease / generateArtistFacts / writeToCache would
+  // leave the row at status='generating' for the full
+  // STALE_GENERATION_MS window (55s), during which concurrent
+  // followers would poll until timeout and then re-claim. The four
+  // explicit error paths above (missing token, artist-not-found,
+  // empty updates) already evict, but those don't cover an unexpected
+  // throw mid-flow. catch + re-throw so the platform still sees a
+  // 500 — we just want to make sure the sentinel doesn't outlive us.
+  try {
+    // 4. Fetch Spotify data in parallel (release always, top tracks
+    //    only when sparse), then feed into Gemini. Running top-tracks
+    //    alongside release keeps wall time flat even on the sparse
+    //    path — the sequencing penalty is only on facts-after-tracks.
+    const [release, topTracks] = await Promise.all([
+      fetchRecentRelease(token, artistInfo.id),
+      isSparse ? fetchArtistTopTracks(token, artistInfo.id) : Promise.resolve([] as SpotifyTopTrack[]),
+    ]);
 
-  const facts = await generateArtistFacts({
-    artistName: artistInfo.name,
-    tier,
-    count: FACTS_PER_ARTIST,
-    sparse: isSparse,
-    genres: artistInfo.genres,
-    topTracks: isSparse ? topTracks : undefined,
-  });
+    const facts = await generateArtistFacts({
+      artistName: artistInfo.name,
+      tier,
+      count: FACTS_PER_ARTIST,
+      sparse: isSparse,
+      genres: artistInfo.genres,
+      topTracks: isSparse ? topTracks : undefined,
+    });
 
-  const releaseAgeDays = release ? daysSince(release.release_date) : null;
-  console.log(
-    `[artist-updates] ${artistInfo.name} (followers=${followers}${isSparse ? ", SPARSE" : ""}) → release=${
-      release ? `${release.name} (${releaseAgeDays}d)` : "none"
-    }, facts=${facts.length}, topTracks=${topTracks.length}`,
-  );
+    const releaseAgeDays = release ? daysSince(release.release_date) : null;
+    console.log(
+      `[artist-updates] ${artistInfo.name} (followers=${followers}${isSparse ? ", SPARSE" : ""}) → release=${
+        release ? `${release.name} (${releaseAgeDays}d)` : "none"
+      }, facts=${facts.length}, topTracks=${topTracks.length}`,
+    );
 
-  const updates: ArtistUpdate[] = [];
+    const updates: ArtistUpdate[] = [];
 
-  // Release first so it anchors the row visually as "what's new."
-  if (release && releaseAgeDays !== null && releaseAgeDays <= RECENT_WINDOW_DAYS) {
-    updates.push(buildReleaseUpdate(artistInfo, release));
-  }
+    // Release first so it anchors the row visually as "what's new."
+    if (release && releaseAgeDays !== null && releaseAgeDays <= RECENT_WINDOW_DAYS) {
+      updates.push(buildReleaseUpdate(artistInfo, release));
+    }
 
-  facts.forEach((f, i) => {
-    updates.push(buildFactUpdate(artistInfo, f.headline, f.body, i));
-  });
+    facts.forEach((f, i) => {
+      updates.push(buildFactUpdate(artistInfo, f.headline, f.body, i));
+    });
 
-  if (updates.length === 0) {
-    // Couldn't compose anything (sparse artist + Gemini returned 0
-    // facts, no recent release). We claimed the sentinel earlier via
-    // tryClaim() — must release it now so concurrent followers don't
-    // sit in waitForGeneration polling for a row that's never going
-    // to flip to 'ready'. Without this they'd timeout after 95s and
-    // re-claim+re-fail in a thundering loop.
+    if (updates.length === 0) {
+      // Couldn't compose anything (sparse artist + Gemini returned 0
+      // facts, no recent release). We claimed the sentinel earlier via
+      // tryClaim() — must release it now so concurrent followers don't
+      // sit in waitForGeneration polling for a row that's never going
+      // to flip to 'ready'. Without this they'd timeout after 95s and
+      // re-claim+re-fail in a thundering loop.
+      await evictStaleRow(key);
+      return new Response(JSON.stringify({ updates: [], reason: "compose-failed" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    await writeToCache(key, updates);
+    return new Response(JSON.stringify({ updates, cached: false }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (e) {
+    console.error("[artist-updates] unexpected generation error — evicting sentinel:", e);
     await evictStaleRow(key);
-    return new Response(JSON.stringify({ updates: [], reason: "compose-failed" }), {
+    return new Response(JSON.stringify({ error: "generation-failed" }), {
+      status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-
-  await writeToCache(key, updates);
-  return new Response(JSON.stringify({ updates, cached: false }), {
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
 });

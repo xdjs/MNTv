@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import PageTransition from "@/components/PageTransition";
 import { useUserProfile, getStoredProfile } from "@/hooks/useMusicNerdState";
-import { useFirstRunReadiness } from "@/hooks/useFirstRunReadiness";
+import { useFirstRunReadiness, MAX_WAIT_MS } from "@/hooks/useFirstRunReadiness";
 import { sanitizeRedirect } from "@/lib/routeUtils";
 
 /**
@@ -147,7 +147,7 @@ export default function PreparingExperience() {
               className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-green-400 via-emerald-300 to-pink-400"
               initial={{ width: "4%" }}
               animate={{ width: ready ? "100%" : "95%" }}
-              transition={{ duration: ready ? 0.3 : 45, ease: [0.2, 0.6, 0.3, 1] }}
+              transition={{ duration: ready ? 0.3 : MAX_WAIT_MS / 1000, ease: [0.2, 0.6, 0.3, 1] }}
             />
             <motion.div
               className="absolute inset-y-0 w-24 rounded-full"
