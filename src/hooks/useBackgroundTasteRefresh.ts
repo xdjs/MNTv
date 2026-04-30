@@ -79,13 +79,18 @@ export function useBackgroundTasteRefresh(): BackgroundTasteRefreshState {
       try {
         const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
         if (sessionErr || !sessionData.session?.provider_token) {
-          console.warn("[bg-taste-refresh] no provider_token, skipping");
+          // Common right after a JWT-only refresh (provider_token gone
+          // until next OAuth) — DEV-only so it doesn't pollute every
+          // signed-in user's console on routine reloads.
+          if (import.meta.env.DEV) console.warn("[bg-taste-refresh] no provider_token, skipping");
           return;
         }
         const taste = await fetchSpotifyTaste(sessionData.session.provider_token);
         if (cancelled) return;
         if (!taste) {
-          console.warn("[bg-taste-refresh] fetch returned null — leaving cache untouched");
+          // Network blip or Spotify rate-limit — non-fatal, the cache
+          // stays valid. DEV-only to keep production consoles quiet.
+          if (import.meta.env.DEV) console.warn("[bg-taste-refresh] fetch returned null — leaving cache untouched");
           return;
         }
         const merged = await applyTastePatch(
@@ -106,7 +111,10 @@ export function useBackgroundTasteRefresh(): BackgroundTasteRefreshState {
           if (import.meta.env.DEV) console.info("[bg-taste-refresh] success");
         }
       } catch (err) {
-        console.warn("[bg-taste-refresh] threw:", err);
+        // Truly unexpected (network unreachable, JS throw). DEV-only —
+        // a background refresh failure is recoverable and not user-
+        // visible; surfacing it in production consoles only adds noise.
+        if (import.meta.env.DEV) console.warn("[bg-taste-refresh] threw:", err);
       } finally {
         if (!cancelled) setRefreshing(false);
       }

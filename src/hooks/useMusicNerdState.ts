@@ -251,15 +251,17 @@ export function useUserProfile() {
   // localStorage, so the originating instance gets its own update through the
   // same path as every other instance — single data flow, no double-set.
   const saveProfile = useCallback(async (p: UserProfile) => {
-    // Stamp tasteRefreshedAt whenever this save carries fresh taste data.
-    // Drives the background refresh TTL — the next mount knows when the
-    // current snapshot was last pulled from Spotify.
-    const stamped: UserProfile = p.topArtists
-      ? { ...p, tasteRefreshedAt: p.tasteRefreshedAt ?? new Date().toISOString() }
-      : p;
-    localStorage.setItem(PROFILE_KEY, JSON.stringify(stamped));
+    // Persist what was passed — DON'T auto-stamp tasteRefreshedAt
+    // here. Earlier this hook stamped on any save with `topArtists`,
+    // which falsely-reset the 24h TTL on saves that didn't actually
+    // re-fetch from Spotify (e.g. a future tier-change save that
+    // rebuilds the profile object without carrying the existing
+    // timestamp). `applyTastePatch` is now the only path that
+    // stamps tasteRefreshedAt — it's called only when fresh Spotify
+    // data has just landed (post-signin sync, background refresh).
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
     notifyProfileUpdated();
-    if (user?.id) await saveProfileToDB(stamped, user.id);
+    if (user?.id) await saveProfileToDB(p, user.id);
   }, [user?.id]);
 
   const clearProfile = useCallback(() => {

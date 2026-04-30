@@ -652,7 +652,13 @@ serve(async (req) => {
   const artist = typeof body.artist === "string" ? body.artist.trim() : "";
   const tier = body.tier === "curious" || body.tier === "nerd" ? body.tier : "casual";
 
-  if (!artist) {
+  // 300 is generous — the longest legitimate artist names ("...And You
+  // Will Know Us by the Trail of Dead") are <50 chars. Cap is here to
+  // bound the input that flows into the Spotify search URL, the cache
+  // key, and the Gemini prompt body — not to enforce a name standard.
+  // Reject silently with the same shape as the missing-input case.
+  const MAX_ARTIST_LEN = 300;
+  if (!artist || artist.length > MAX_ARTIST_LEN) {
     return new Response(JSON.stringify({ error: "artist required" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

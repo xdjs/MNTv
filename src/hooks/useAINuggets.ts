@@ -25,6 +25,15 @@ interface AINuggetData {
 
 // ── Helpers for consistent ID/object creation across SSE, cache, and JSON paths ──
 
+// Early-cancel thresholds for the SSE stream. Module-scope so they
+// aren't re-allocated per nugget event in the loop.
+//   - MIN_EARLY_CANCEL_NUGGETS: keep at least casual-tier worth of
+//     content (3) plus one buffer before considering a cancel.
+//   - EARLY_CANCEL_REMAINING_SEC: track-end window where additional
+//     nuggets won't reach the user; bail rather than burn Gemini.
+const MIN_EARLY_CANCEL_NUGGETS = 4;
+const EARLY_CANCEL_REMAINING_SEC = 45;
+
 /**
  * Blank the album slot in a `real::…` trackId before composing the
  * nugget_cache key. Different entry points populate the album slot
@@ -38,7 +47,9 @@ function safeDecode(s: string): string {
   try { return decodeURIComponent(s); } catch { return s; }
 }
 
-function canonicalCacheKey(trackId: string, tier: string): string {
+// Exported for unit tests — see src/test/canonicalCacheKey.test.ts.
+// Internal call sites still go through this same function.
+export function canonicalCacheKey(trackId: string, tier: string): string {
   // Listen receives `trackId` from React Router params, which keeps URL-
   // encoded characters (`%20`, `%3A`, etc.). The server-side write path
   // builds the cache key from the request body's raw artist/title/uri
@@ -623,8 +634,8 @@ export function useAINuggets(
               // `isPlayingRef.current` and `currentTimeRef.current` ARE
               // ref-mirrored because they come from React state via
               // usePlayer() and would otherwise be stale closures.
-              const MIN_EARLY_CANCEL_NUGGETS = 4;
-              const EARLY_CANCEL_REMAINING_SEC = 45;
+              // (MIN_EARLY_CANCEL_NUGGETS / EARLY_CANCEL_REMAINING_SEC
+              //  hoisted to module scope; were re-evaluated per nugget here.)
               const liveCurrentTime = currentTimeRef.current;
               const remainingSec = durationSec - liveCurrentTime;
               if (

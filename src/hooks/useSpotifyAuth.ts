@@ -128,8 +128,19 @@ const TASTE_FETCH_TIMEOUT_MS = 20_000;
 /**
  * Fire-and-forget ping to wake the spotify-taste edge function so the
  * real call after OAuth return doesn't eat the cold-start latency.
- * Send a deliberately invalid payload so the function 400s immediately
- * without burning a Spotify API call. Safe to call from Connect mount.
+ * Sends `{ accessToken: "prewarm" }`; the function passes that as a
+ * Bearer token to Spotify which 401s immediately, returning before
+ * any expensive work. Safe to call from Connect mount.
+ *
+ * FRAGILITY NOTE: this only works because spotify-taste is currently
+ * `verify_jwt = false`, so the request reaches the function body and
+ * gets short-circuited by Spotify's auth check. If spotify-taste is
+ * ever flipped to `verify_jwt = true`, the request would 401 at the
+ * Supabase auth layer (no/invalid JWT), the container wouldn't run,
+ * and the prewarm would silently stop working. If you flip JWT here,
+ * either drop this prewarm or add a server-side `if (accessToken ===
+ * "prewarm") return new Response(...)` short-circuit so the warmup
+ * doesn't depend on Spotify's response.
  */
 export function prewarmSpotifyTaste(): void {
   // Use invoke() so we inherit the same transport + auth as the real

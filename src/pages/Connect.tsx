@@ -139,10 +139,12 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
   });
 
   // Returning users go through /preparing too — it gives the hoisted
-  // stories + artist-updates contexts a window to warm so Browse's
-  // first paint has content instead of a wall of skeletons. The splash
-  // auto-advances once 2 stories + 3 artist-updates rows are ready
-  // (or its internal ceiling fires). Deep-links survive via ?next=.
+  // ArtistUpdatesContext a window to warm so Browse's "Your artists,
+  // lately" rail has content on first paint instead of a skeleton.
+  // The splash auto-advances when MIN_ARTISTS (1) artist-update rows
+  // resolve, or the MAX_WAIT_MS ceiling fires. Stories pre-gen runs
+  // in parallel but is NOT a gating signal — it continues loading on
+  // Browse via per-card state. Deep-links survive via ?next=.
   // Warm the spotify-taste edge function on mount so the post-OAuth
   // taste fetch doesn't eat the cold-start latency. The outer Connect
   // gate already short-circuits returning users via <Navigate> before
@@ -258,12 +260,20 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
       trackImages: pendingTrackImages.length ? pendingTrackImages : undefined,
       lastFmUsername: lastFmUsername.trim() || undefined,
       calculatedTier: t,
+      // Stamp tasteRefreshedAt explicitly — pendingTop* came from the
+      // post-signin sync's fetchSpotifyTaste call moments ago, so the
+      // 24h TTL window starts now. saveProfile no longer auto-stamps,
+      // so without this the next page load would treat the snapshot
+      // as "never refreshed" and trigger an immediate redundant
+      // background fetch.
+      tasteRefreshedAt: pendingTopArtists ? new Date().toISOString() : undefined,
     };
     saveProfile(profile);
     sessionStorage.removeItem("musicnerd_redirect");
-    // Route through /preparing so stories + artist-updates get a
-    // warmup window before Browse renders. Splash auto-advances once
-    // 2 stories + 3 artist-updates rows land, or the ceiling fires.
+    // Route through /preparing so artist-updates gets a warmup window
+    // before Browse renders. Splash auto-advances when 1 artist-update
+    // row lands, or the 45s ceiling fires. Stories pre-gen runs in
+    // parallel but doesn't block the splash.
     const next = redirectUrl || "/browse";
     navigate(`/preparing?next=${encodeURIComponent(next)}`);
   };
