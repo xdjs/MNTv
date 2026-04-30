@@ -162,7 +162,7 @@ export async function fetchSpotifyTaste(accessToken: string): Promise<{
 } | null> {
   const t0 = performance.now();
   const elapsed = () => `${(performance.now() - t0).toFixed(0)}ms`;
-  console.info(`[spotify-taste] fetch started (timeout=${TASTE_FETCH_TIMEOUT_MS}ms)`);
+  if (import.meta.env.DEV) console.info(`[spotify-taste] fetch started (timeout=${TASTE_FETCH_TIMEOUT_MS}ms)`);
 
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   const timeoutPromise = new Promise<{ timedOut: true }>((resolve) => {
@@ -181,26 +181,26 @@ export async function fetchSpotifyTaste(accessToken: string): Promise<{
       // Network-level rejection — the invoke threw before returning
       // the { data, error } shape. Log and return null so the caller
       // surfaces the retry state instead of bubbling an unhandled rej.
-      console.error(`[spotify-taste] invoke threw after ${elapsed()}:`, err);
+      if (import.meta.env.DEV) console.error(`[spotify-taste] invoke threw after ${elapsed()}:`, err);
       return null;
     }
 
     if ("timedOut" in race) {
-      console.error(`[spotify-taste] timed out after ${TASTE_FETCH_TIMEOUT_MS}ms`);
+      if (import.meta.env.DEV) console.error(`[spotify-taste] timed out after ${TASTE_FETCH_TIMEOUT_MS}ms`);
       return null;
     }
 
     const { data, error } = race;
     if (error) {
-      console.error(`[spotify-taste] edge function error after ${elapsed()}:`, error);
+      if (import.meta.env.DEV) console.error(`[spotify-taste] edge function error after ${elapsed()}:`, error);
       return null;
     }
     if (!data) {
-      console.error(`[spotify-taste] empty payload after ${elapsed()}`);
+      if (import.meta.env.DEV) console.error(`[spotify-taste] empty payload after ${elapsed()}`);
       return null;
     }
 
-    console.info(`[spotify-taste] succeeded in ${elapsed()} — ${data.topArtists?.length ?? 0} artists, ${data.topTracks?.length ?? 0} tracks`);
+    if (import.meta.env.DEV) console.info(`[spotify-taste] succeeded in ${elapsed()} — ${data.topArtists?.length ?? 0} artists, ${data.topTracks?.length ?? 0} tracks`);
 
     return {
       topArtists: data.topArtists || [],

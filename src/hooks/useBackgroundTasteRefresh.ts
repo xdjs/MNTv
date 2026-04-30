@@ -69,7 +69,14 @@ export function useBackgroundTasteRefresh(): BackgroundTasteRefreshState {
       return;
     }
 
-    refreshedForUserRef.current = user.id;
+    // Don't stamp `refreshedForUserRef` yet — that happens only on
+    // the success path below. Stamping unconditionally before the
+    // async work meant a transient failure (Spotify rate limit,
+    // network blip, missing provider_token) would lock this user out
+    // of any retry until the next page load. With success-only
+    // stamping, a failed attempt re-runs the next time the effect
+    // dep array re-evaluates (typically the next render after auth
+    // resolves) — at most ~1 retry per session.
     let cancelled = false;
     const ageLabel = lastRefreshIso ? `${Math.round(ageMs / 1000 / 60 / 60)}h` : "never";
     if (import.meta.env.DEV) console.info(`[bg-taste-refresh] start (last refresh: ${ageLabel})`);
@@ -108,6 +115,10 @@ export function useBackgroundTasteRefresh(): BackgroundTasteRefreshState {
         if (merged) {
           const now = new Date().toISOString();
           setLastRefreshedAt(now);
+          // SUCCESS path: stamp the per-user guard so we don't re-fire
+          // on every render this session. Failure paths leave it
+          // null, allowing a follow-up attempt.
+          refreshedForUserRef.current = user.id;
           if (import.meta.env.DEV) console.info("[bg-taste-refresh] success");
         }
       } catch (err) {

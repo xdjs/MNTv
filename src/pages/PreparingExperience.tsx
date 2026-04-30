@@ -22,7 +22,7 @@ import { sanitizeRedirect } from "@/lib/routeUtils";
  * Guards:
  *   - Landing here without a profile (direct-URL hit, refresh-during-
  *     onboarding) immediately bounces to `/`.
- *   - If `ready` flips true (artist-updates ready or 90s ceiling hit),
+ *   - If `ready` flips true (artist-updates ready or 45s ceiling hit),
  *     auto-navigate to /browse.
  *   - A "Jump in" link appears after 3s for users who don't want to
  *     wait the full warmup.
@@ -32,8 +32,8 @@ const STATUS_STEPS = [
   { threshold: 0, label: "Tuning into your top artists" },
   { threshold: 3_000, label: "Pulling in their latest releases" },
   { threshold: 10_000, label: "Reading the room — what they've been up to" },
-  { threshold: 25_000, label: "Hand-picking facts worth knowing" },
-  { threshold: 50_000, label: "Just a moment more" },
+  { threshold: 22_000, label: "Hand-picking facts worth knowing" },
+  { threshold: 35_000, label: "Just a moment more" },
 ];
 
 export default function PreparingExperience() {
@@ -131,16 +131,16 @@ export default function PreparingExperience() {
           </div>
 
           {/* Bar pacing matches SpotifySyncingOverlay (4% → 95% over the
-              expected wait window). The first-artist Gemini cold start
-              dominates here — we tune duration to ~50s which is the
-              common-case worst, leaving headroom under the 90s ceiling.
-              On success, exit snaps to 100%. */}
+              expected wait window). Duration is 45s — same as
+              useFirstRunReadiness's MAX_WAIT_MS so the bar never
+              overshoots the auto-advance. On success, exit snaps to
+              100%. */}
           <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-white/10">
             <motion.div
               className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-green-400 via-emerald-300 to-pink-400"
               initial={{ width: "4%" }}
               animate={{ width: ready ? "100%" : "95%" }}
-              transition={{ duration: ready ? 0.3 : 50, ease: [0.2, 0.6, 0.3, 1] }}
+              transition={{ duration: ready ? 0.3 : 45, ease: [0.2, 0.6, 0.3, 1] }}
             />
             <motion.div
               className="absolute inset-y-0 w-24 rounded-full"
