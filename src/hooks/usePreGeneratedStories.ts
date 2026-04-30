@@ -194,12 +194,7 @@ export function usePreGeneratedStories(
             });
             if (cancelled) return;
             if (error) {
-              // Production-visible: a failed pre-gen leaves the story
-              // permanently in "warming up" state because we never set
-              // ready=true here. Surfacing in console so users hitting
-              // a real failure (Gemini quota, edge timeout) can report
-              // it instead of staring at a frozen indicator.
-              console.warn(`[Stories] pre-gen failed for ${story.trackKey}:`, error.message);
+              if (import.meta.env.DEV) console.warn(`[Stories] pre-gen failed for ${story.trackKey}:`, error.message);
               return;
             }
             // Flip this story's ready flag and record cross-session success
@@ -209,10 +204,7 @@ export function usePreGeneratedStories(
               prev.map((s) => (s.trackKey === story.trackKey ? { ...s, ready: true } : s)),
             );
           } catch (e) {
-            // Same reasoning as the `error` branch above — a thrown
-            // pre-gen leaves the story stuck in "warming up". Visible
-            // in production so the failure is actionable.
-            console.warn(`[Stories] pre-gen threw for ${story.trackKey}:`, e);
+            if (import.meta.env.DEV) console.warn(`[Stories] pre-gen threw for ${story.trackKey}:`, e);
           }
         });
       } finally {
