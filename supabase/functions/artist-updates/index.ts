@@ -102,6 +102,21 @@ interface SpotifyReleaseItem {
 // ── Module-level admin client for cache upsert ────────────────────────
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+// Migration note (verified 2026-04-30 via diagnostic deploy):
+//   - SUPABASE_SECRET_KEY (singular) is NOT auto-injected by Supabase.
+//     The team's pattern below treats it as the migration target —
+//     once we generate a service-role JWT signed via JWT Signing Keys
+//     and stash it under this name (`supabase secrets set
+//     SUPABASE_SECRET_KEY=<jwt>`), this lookup picks it up
+//     transparently with no code change needed.
+//   - SUPABASE_SERVICE_ROLE_KEY is what's actually resolving today.
+//     Supabase has marked it deprecated in the dashboard ("use
+//     SUPABASE_SECRET_KEYS instead"); when they remove it we MUST
+//     have set the singular SECRET_KEY first or this client goes
+//     null and the sentinel concurrency guard silently degrades.
+//   - SUPABASE_SECRET_KEYS (plural, new) is a JSON blob of JWT
+//     signing-key metadata, NOT a usable service-role token. We
+//     can't fall back to it without a JWT-signing step.
 const SUPABASE_ADMIN_KEY =
   Deno.env.get("SUPABASE_SECRET_KEY") ??
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
