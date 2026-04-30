@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import type { ArtistUpdate, ArtistUpdateGroup } from "@/hooks/useArtistUpdates";
@@ -31,7 +32,12 @@ interface Props {
   readyCount: number;
 }
 
-export default function ArtistUpdatesSection({
+// Memoized — Browse re-renders frequently as the keyboard-nav focus
+// state shifts between row/col indices. None of those updates touch
+// this section's props, so skipping the re-render is a clear win.
+// Cheap today (DEFAULT_MAX_ARTISTS = 1) but pays off if/when the row
+// count grows.
+function ArtistUpdatesSectionInner({
   groups,
   profile,
   artistIds = {},
@@ -114,6 +120,9 @@ export default function ArtistUpdatesSection({
     </section>
   );
 }
+
+const ArtistUpdatesSection = memo(ArtistUpdatesSectionInner);
+export default ArtistUpdatesSection;
 
 // ── Per-artist row ────────────────────────────────────────────────────
 

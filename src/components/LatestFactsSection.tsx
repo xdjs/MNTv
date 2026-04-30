@@ -67,10 +67,7 @@ export default function LatestFactsSection({ updates, loading, artistName }: Pro
   return (
     <section className="px-4 md:px-10 pb-6 md:pb-8 mb-4">
       <div className="mb-4 flex items-center gap-2">
-        <h2
-          className="text-lg font-bold text-foreground/90"
-          style={{ fontFamily: "'Nunito Sans', sans-serif" }}
-        >
+        <h2 className="text-lg font-bold text-foreground/90 font-nunito">
           Latest Facts
         </h2>
         {loading && (

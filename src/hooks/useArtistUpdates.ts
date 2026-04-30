@@ -107,6 +107,13 @@ export function useArtistUpdates(
   // inFlightRef keys still held by the first run, while the first run's
   // cancelled=true closure suppressed its own setState. Content-keyed
   // deps keep the effect stable across identity-only re-renders.
+  //
+  // INVARIANT: order matters. We treat `[A, B] != [B, A]` as a real
+  // change because the rail renders artists in `topArtists` order.
+  // If the upstream `spotify-taste` ever returns artists in a non-
+  // deterministic order (e.g. set-based dedup), this signature would
+  // drift on every fetch and re-fire the effect for no reason. Today
+  // both spotify-taste and the localStorage profile preserve order.
   const topArtistsSig = (profile?.topArtists ?? []).slice(0, maxArtists).join("|");
 
   useEffect(() => {

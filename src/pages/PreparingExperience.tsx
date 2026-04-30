@@ -28,12 +28,19 @@ import { sanitizeRedirect } from "@/lib/routeUtils";
  *     wait the full warmup.
  */
 
+// Status messages cycle through the wait window. Thresholds are
+// PERCEIVED-PROGRESS milestones, not actual task durations — they're
+// tuned so the copy advances steadily even when the underlying
+// generation is silent (Gemini cold-start can be 0-30s of nothing).
+// All values are in ms relative to mount; the final step lands at 35s
+// (~78% of MAX_WAIT_MS = 45s) so the copy "Just a moment more" still
+// has 10s of runway before the auto-advance fires.
 const STATUS_STEPS = [
-  { threshold: 0, label: "Tuning into your top artists" },
-  { threshold: 3_000, label: "Pulling in their latest releases" },
-  { threshold: 10_000, label: "Reading the room — what they've been up to" },
-  { threshold: 22_000, label: "Hand-picking facts worth knowing" },
-  { threshold: 35_000, label: "Just a moment more" },
+  { threshold: 0,      label: "Tuning into your top artists" },           // immediate
+  { threshold: 3_000,  label: "Pulling in their latest releases" },       // 3s — Spotify call expected back
+  { threshold: 10_000, label: "Reading the room — what they've been up to" }, // 10s — Gemini grounding warmup
+  { threshold: 22_000, label: "Hand-picking facts worth knowing" },        // 22s — fact generation in flight
+  { threshold: 35_000, label: "Just a moment more" },                     // 35s — final stretch before timeout
 ];
 
 export default function PreparingExperience() {

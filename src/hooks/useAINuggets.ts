@@ -72,7 +72,14 @@ export function canonicalCacheKey(trackId: string, tier: string): string {
   if (parts.length < 5) return `${trackId}::${tier}`;
   parts[1] = safeDecode(parts[1]); // artist
   parts[2] = safeDecode(parts[2]); // title
-  parts[3] = ""; // album — blanked by canon (multiple entry points populate inconsistently)
+  // Album slot is intentionally blanked. The same recording can be
+  // reached via multiple entry points (album page, search, story rail,
+  // direct link) and they don't all populate the album field
+  // consistently. Keying on (artist, title, uri) only — without album
+  // — means every entry point reads/writes the same cache row for the
+  // same track, avoiding split-cache bugs where Listen would re-run a
+  // 30s pipeline because the same song happens to be in two albums.
+  parts[3] = "";
   parts[4] = safeDecode(parts[4]); // uri
   return `${parts.join("::")}::${tier}`;
 }
