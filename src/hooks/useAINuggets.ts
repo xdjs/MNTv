@@ -197,6 +197,12 @@ export function useAINuggets(
   // position when deciding whether to early-cancel mid-stream.
   const currentTimeRef = useRef(currentTime);
   currentTimeRef.current = currentTime;
+  // Same for isPlaying — without a ref the early-cancel closure sees
+  // whatever isPlaying was at the moment the effect fired and never
+  // updates. A user who pauses mid-stream would still trigger the
+  // cancel because the closure thinks they're still playing.
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
   // Track when the last generation attempt started — used to only debounce
   // on rapid skips (< 5s between tracks), not on first page load.
   const lastGenTimestampRef = useRef(0);
@@ -609,12 +615,20 @@ export function useAINuggets(
               // We treat the partial set as the final cache row — this
               // listen's full nugget budget got pruned to "what fits the
               // remaining playback window," not lost.
+              //
+              // NOTE on `aiNuggets.length`: this is a LOCAL `let` array
+              // (declared at line 545), pushed synchronously above on
+              // line 589 BEFORE this check runs. It's not React state,
+              // so the count is live — no ref-mirror needed.
+              // `isPlayingRef.current` and `currentTimeRef.current` ARE
+              // ref-mirrored because they come from React state via
+              // usePlayer() and would otherwise be stale closures.
               const MIN_EARLY_CANCEL_NUGGETS = 4;
               const EARLY_CANCEL_REMAINING_SEC = 45;
               const liveCurrentTime = currentTimeRef.current;
               const remainingSec = durationSec - liveCurrentTime;
               if (
-                isPlaying &&
+                isPlayingRef.current &&
                 aiNuggets.length >= MIN_EARLY_CANCEL_NUGGETS &&
                 remainingSec > 0 &&
                 remainingSec <= EARLY_CANCEL_REMAINING_SEC

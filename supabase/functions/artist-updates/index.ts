@@ -705,6 +705,9 @@ serve(async (req) => {
     token = await getSpotifyAppToken();
   } catch (e) {
     console.error("[artist-updates] Spotify token unavailable:", e);
+    // Release the sentinel — followers shouldn't poll forever on a
+    // transient Spotify-token failure.
+    await evictStaleRow(key);
     return new Response(JSON.stringify({ error: "spotify unavailable" }), {
       status: 502,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -713,6 +716,10 @@ serve(async (req) => {
 
   const artistInfo = await searchArtist(token, artist);
   if (!artistInfo) {
+    // Release the sentinel — this artist is unresolvable on Spotify, no
+    // amount of polling will produce a ready row. Followers should give
+    // up immediately on the next poll cycle.
+    await evictStaleRow(key);
     return new Response(JSON.stringify({ updates: [], reason: "artist-not-found" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -761,7 +768,13 @@ serve(async (req) => {
   });
 
   if (updates.length === 0) {
-    // Couldn't compose anything — don't cache; let a retry try again.
+    // Couldn't compose anything (sparse artist + Gemini returned 0
+    // facts, no recent release). We claimed the sentinel earlier via
+    // tryClaim() — must release it now so concurrent followers don't
+    // sit in waitForGeneration polling for a row that's never going
+    // to flip to 'ready'. Without this they'd timeout after 95s and
+    // re-claim+re-fail in a thundering loop.
+    await evictStaleRow(key);
     return new Response(JSON.stringify({ updates: [], reason: "compose-failed" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

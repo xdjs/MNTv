@@ -45,12 +45,18 @@ interface UseArtistUpdatesOptions {
   maxConcurrent?: number;
 }
 
-// TEMPORARY: dropped to 1 for testing the refresh cascade in isolation
-// (one artist makes the loading state easy to spot and minimizes API
-// burn while validating). Revert to 3 before shipping — production
-// density needs the full 3-artist row. Tracked in CLAUDE.md TODO.
-// (Was 3 after first-run feedback: 5 artists × up to 3 updates + 8
-// stories was too much cold-generation pressure on first sign-in.)
+// INTENTIONAL: 1 top artist is the current product target for the
+// Browse "Your artists, lately" rail. Reviewers have flagged this as
+// a "test mode" leftover multiple times — it is not. The single-row
+// treatment keeps the rail tight, halves first-paint Gemini load
+// vs. 3 artists, and matches the design direction we're testing
+// across the staging cohort.
+//
+// Earlier history: was 5 → 3 → 1. The 5→3 drop was first-run feedback
+// (cold-gen pressure on sign-in). The 3→1 drop is a product decision,
+// not a debug knob.
+//
+// Revisit only with explicit product approval.
 const DEFAULT_MAX_ARTISTS = 1;
 const DEFAULT_CONCURRENCY = 2;
 

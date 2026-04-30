@@ -50,11 +50,24 @@ export default function Connect() {
   // local but DB still has the row).
   const { profile } = useUserProfile();
   const redirectParam = sanitizeRedirect(searchParams.get("redirect"));
-  if (redirectParam) sessionStorage.setItem("musicnerd_redirect", redirectParam);
+  // Persist redirect across the OAuth round-trip so the post-callback
+  // mount of Connect can still read where to send the user. Side-effect
+  // moved into useEffect because writes in the render body run twice
+  // under React 18 StrictMode and again on every re-render.
+  useEffect(() => {
+    if (redirectParam) {
+      sessionStorage.setItem("musicnerd_redirect", redirectParam);
+    }
+  }, [redirectParam]);
   const storedRedirect = sanitizeRedirect(sessionStorage.getItem("musicnerd_redirect"));
-  if (sessionStorage.getItem("musicnerd_redirect") && !storedRedirect) {
-    sessionStorage.removeItem("musicnerd_redirect");
-  }
+  // Evict polluted sessionStorage entries (e.g. stale "/preparing" left
+  // over from a pre-fix run). Must also be in an effect — writes during
+  // render violate the rendering contract.
+  useEffect(() => {
+    if (sessionStorage.getItem("musicnerd_redirect") && !storedRedirect) {
+      sessionStorage.removeItem("musicnerd_redirect");
+    }
+  }, [storedRedirect]);
   const redirectUrl = redirectParam || storedRedirect;
   // Treat live profile state OR localStorage as authoritative — the live
   // state can lag a render behind localStorage immediately after
