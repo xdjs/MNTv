@@ -14,6 +14,7 @@ import { useAppleMusicToken } from "@/hooks/useAppleMusicToken";
 import { useSpotifyPostSigninSync } from "@/hooks/useSpotifyPostSigninSync";
 import { ensureSupabaseSession } from "@/lib/ensureSupabaseSession";
 import SpotifySyncingOverlay from "@/components/SpotifySyncingOverlay";
+import { useTierGate } from "@/contexts/TierGateContext";
 
 type Tier = "casual" | "curious" | "nerd";
 
@@ -94,6 +95,7 @@ export default function Connect() {
 function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
   const navigate = useNavigate();
   const { saveProfile } = useUserProfile();
+  const { confirmTier } = useTierGate();
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
   const [spotifyConnecting, setSpotifyConnecting] = useState(false);
@@ -275,6 +277,12 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
       tasteRefreshedAt: pendingTopArtists ? new Date().toISOString() : undefined,
     };
     saveProfile(profile);
+    // Confirm tier for this session — unblocks StoriesProvider /
+    // ArtistUpdatesProvider, which were holding pre-gen until the user
+    // explicitly picked a tier this login. Without this call /preparing
+    // would render its own tier-pick step on top of the user's choice
+    // here.
+    confirmTier(t);
     sessionStorage.removeItem("musicnerd_redirect");
     // Route through /preparing so artist-updates gets a warmup window
     // before Browse renders. Splash auto-advances when 1 artist-update

@@ -88,6 +88,13 @@ export function useSignOut() {
     sessionStorage.removeItem("spotify_pending_taste");
     sessionStorage.removeItem(LEGACY_PKCE_STATE_KEY);
     sessionStorage.removeItem(LEGACY_PKCE_VERIFIER_KEY);
+    // Tier-confirmed flag is per-session — clear it so the next login
+    // forces the tier-pick step (Pete: "I should be able to pick my
+    // tier every time I log in"). The window.location.href reload
+    // below would also clear it via tab context teardown, but the
+    // explicit removal keeps behavior consistent if that reload is
+    // ever swapped for a soft navigate.
+    sessionStorage.removeItem("musicnerd_tier_confirmed");
 
     // 5. Hard navigate. See module-level comment for why a full reload
     //    instead of React Router navigate().

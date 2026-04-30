@@ -21,6 +21,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { PlayerProvider } from "./contexts/PlayerContext";
 import { StoriesProvider } from "./contexts/StoriesContext";
 import { ArtistUpdatesProvider } from "./contexts/ArtistUpdatesContext";
+import { TierGateProvider } from "./contexts/TierGateContext";
 import NowPlayingBar from "./components/NowPlayingBar";
 import SpotifyReconnectBanner from "./components/SpotifyReconnectBanner";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -86,8 +87,9 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <PlayerProvider>
-            <StoriesProvider>
-              <ArtistUpdatesProvider>
+            <TierGateProvider>
+              <StoriesProvider>
+                <ArtistUpdatesProvider>
                 <RefreshIndicatorProvider>
                   <ErrorBoundary fallback={
                     <div className="min-h-screen bg-background flex items-center justify-center p-6">
@@ -109,8 +111,9 @@ const App = () => (
                     <GlobalRefreshIndicator />
                   </ErrorBoundary>
                 </RefreshIndicatorProvider>
-              </ArtistUpdatesProvider>
-            </StoriesProvider>
+                </ArtistUpdatesProvider>
+              </StoriesProvider>
+            </TierGateProvider>
           </PlayerProvider>
         </AuthProvider>
       </BrowserRouter>

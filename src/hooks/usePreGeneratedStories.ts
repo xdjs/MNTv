@@ -163,13 +163,19 @@ export function usePreGeneratedStories(
         if (!tierSwitched) {
           const { data: rows } = await supabase
             .from("nugget_cache")
-            .select("track_id, status")
+            .select("track_id, status, nuggets")
             .or(likePatterns.map((p) => `track_id.ilike.${p}`).join(","));
 
           if (cancelled) return;
 
           (rows || []).forEach((r) => {
-            if (r.status === "ready") {
+            // Require status='ready' AND a non-empty nuggets array. An
+            // empty 'ready' row would pin the story circle as "ready" but
+            // a tap would land on a blank Listen page — see the matching
+            // generatedAny check in the pre-gen invoke path below.
+            const nuggets = r.nuggets as unknown[] | null | undefined;
+            const hasContent = Array.isArray(nuggets) && nuggets.length > 0;
+            if (r.status === "ready" && hasContent) {
               // Extract artist::title from track_id to match story.trackKey
               const parts = String(r.track_id).split("::");
               if (parts.length >= 3) {
@@ -206,7 +212,7 @@ export function usePreGeneratedStories(
           kickedOffRef.current.add(kickKey);
           if (cancelled) return;
           try {
-            const { error } = await supabase.functions.invoke("generate-nuggets", {
+            const { data, error } = await supabase.functions.invoke("generate-nuggets", {
               body: {
                 artist: story.artist,
                 title: story.title,
@@ -230,8 +236,22 @@ export function usePreGeneratedStories(
               if (import.meta.env.DEV) console.warn(`[Stories] pre-gen failed for ${story.trackKey}:`, error.message);
               return;
             }
-            // Flip this story's ready flag and record cross-session success
-            // so a reload doesn't refetch.
+            // Bug fix: only treat the story as ready when the server actually
+            // produced nuggets. The JSON path of generate-nuggets returns a
+            // 200 with an empty `nuggets` array if every Writer attempt got
+            // stripped by the Validator (sparse / low-popularity artists do
+            // this regularly — e.g. "4 U" by Ty Symph). Marking the story
+            // ready in that case made the circle pink, but tapping it landed
+            // on a Listen page that had nothing to render. We now require a
+            // non-empty `nuggets` array before stamping the ledger.
+            const responseNuggets = (data as { nuggets?: unknown[] } | null)?.nuggets;
+            const generatedAny = Array.isArray(responseNuggets) && responseNuggets.length > 0;
+            if (!generatedAny) {
+              if (import.meta.env.DEV) {
+                console.warn(`[Stories] pre-gen returned 0 nuggets for ${story.trackKey} — leaving story in "warming" state`);
+              }
+              return;
+            }
             recordPregen(story.trackKey, tier);
             setStories((prev) =>
               prev.map((s) => (s.trackKey === story.trackKey ? { ...s, ready: true } : s)),
