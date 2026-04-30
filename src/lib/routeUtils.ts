@@ -30,5 +30,11 @@ export function sanitizeRedirect(url: string | null | undefined): string | null 
   //   "foo"            (no leading slash)
   if (!url.startsWith("/") || url.startsWith("//")) return null;
   if (url === "/" || url === "/connect" || url.startsWith("/preparing")) return null;
+  // Note: `/preparing` is matched as a prefix, so any future
+  // `/preparing-room` or `/preparing-artist` routes would also be
+  // rejected. That's intentional today — the splash family is the
+  // entire onboarding handoff surface and should never be a redirect
+  // destination — but if a non-onboarding `/preparing-…` route is
+  // ever added, switch this to an exact `=== "/preparing"` check.
   return url;
 }

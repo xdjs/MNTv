@@ -1,7 +1,8 @@
 import { useNavigate } from "react-router-dom";
-import { Loader2, Sparkles, Users, Disc } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import type { ArtistUpdate, ArtistUpdateGroup } from "@/hooks/useArtistUpdates";
 import { serviceParamFromProfile, withAppleStorefront } from "@/lib/appleStorefront";
+import { getArtistUpdateKindMeta } from "@/lib/artistUpdateKind";
 import type { UserProfile } from "@/mock/types";
 
 /**
@@ -175,8 +176,8 @@ interface UpdateCardProps {
 }
 
 function UpdateCard({ update, onOpen }: UpdateCardProps) {
-  const meta = kindMeta(update.kind);
-  const { kindLabel, chipClass, KindIcon } = meta;
+  const { kindLabel, KindIcon } = getArtistUpdateKindMeta(update.kind);
+  const { chipClass, borderAccent, cardBg, hoverGlow } = kindStyle(update.kind);
 
   // Release cards get a "poster" treatment — album art fills the tile
   // with a dark gradient so the title lockup is legible on any image.
@@ -218,7 +219,7 @@ function UpdateCard({ update, onOpen }: UpdateCardProps) {
   return (
     <button
       onClick={onOpen}
-      className={`shrink-0 w-[280px] md:w-[320px] text-left rounded-2xl bg-gradient-to-br ${meta.cardBg} border-l-4 ${meta.borderAccent} border-y border-r border-white/10 p-5 hover:border-white/25 active:scale-[0.98] transition-all ${meta.hoverGlow}`}
+      className={`shrink-0 w-[280px] md:w-[320px] text-left rounded-2xl bg-gradient-to-br ${cardBg} border-l-4 ${borderAccent} border-y border-r border-white/10 p-5 hover:border-white/25 active:scale-[0.98] transition-all ${hoverGlow}`}
       aria-label={`${kindLabel}: ${update.headline}`}
     >
       <div className="flex items-center gap-2 mb-3">
@@ -237,44 +238,41 @@ function UpdateCard({ update, onOpen }: UpdateCardProps) {
   );
 }
 
-interface KindMeta {
-  kindLabel: string;
+// Browse-specific styling per kind. Label + icon come from the shared
+// helper in src/lib/artistUpdateKind.ts so adding a new kind only
+// requires editing the shared file. Local styling stays here because
+// the rail uses an opinionated card treatment (border accent, gradient
+// bg, hover glow) that differs from the artist-profile chip.
+interface KindStyle {
   chipClass: string;
   borderAccent: string;
   cardBg: string;
   hoverGlow: string;
-  KindIcon: typeof Sparkles;
 }
 
-function kindMeta(kind: ArtistUpdate["kind"]): KindMeta {
+function kindStyle(kind: ArtistUpdate["kind"]): KindStyle {
   switch (kind) {
     case "new-release":
       return {
-        kindLabel: "New release",
         chipClass: "bg-rose-500/25 text-rose-100 ring-1 ring-rose-300/30",
         borderAccent: "border-l-rose-400/70",
         cardBg: "from-rose-500/10 to-white/[0.02]",
         hoverGlow: "hover:shadow-[0_0_24px_rgba(244,114,182,0.15)]",
-        KindIcon: Disc,
       };
     case "collab":
       return {
-        kindLabel: "Collab",
         chipClass: "bg-violet-500/25 text-violet-100 ring-1 ring-violet-300/30",
         borderAccent: "border-l-violet-400/70",
         cardBg: "from-violet-500/10 to-white/[0.02]",
         hoverGlow: "hover:shadow-[0_0_24px_rgba(167,139,250,0.18)]",
-        KindIcon: Users,
       };
     case "fact":
     default:
       return {
-        kindLabel: "Fact",
         chipClass: "bg-sky-500/25 text-sky-100 ring-1 ring-sky-300/30",
         borderAccent: "border-l-sky-400/70",
         cardBg: "from-sky-500/10 to-white/[0.02]",
         hoverGlow: "hover:shadow-[0_0_24px_rgba(125,211,252,0.15)]",
-        KindIcon: Sparkles,
       };
   }
 }

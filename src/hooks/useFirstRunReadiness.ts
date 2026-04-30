@@ -22,10 +22,14 @@ import { useArtistUpdatesContext } from "@/contexts/ArtistUpdatesContext";
  */
 
 const MIN_ARTISTS = 1;
-// Higher ceiling than the prior 15s — a single artist on a cold cache
-// can spend 30-60s in a Gemini call. Better to wait than to drop the
-// user onto Browse with an empty rail.
-const MAX_WAIT_MS = 90_000;
+// Splash ceiling. Cold-path single-artist generation lands in
+// ~30-60s, so 45s catches the median + most cold starts; longer ones
+// fall through to Browse and the rail finishes filling there via its
+// own per-row loading state. Earlier 90s ceiling was too punishing
+// — users with sub-cold connectivity were waiting almost a minute on
+// a screen with no value, and the 3s "Jump in" hatch sees little use
+// when the page advances on its own at ~45s anyway.
+const MAX_WAIT_MS = 45_000;
 
 export interface FirstRunReadiness {
   ready: boolean;

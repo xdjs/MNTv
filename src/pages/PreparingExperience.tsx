@@ -110,10 +110,7 @@ export default function PreparingExperience() {
           </motion.div>
 
           <div className="space-y-1.5">
-            <h1
-              className="text-xl md:text-2xl font-black text-white tracking-tight"
-              style={{ fontFamily: "'Nunito Sans', sans-serif" }}
-            >
+            <h1 className="text-xl md:text-2xl font-black text-white tracking-tight font-nunito">
               Setting up your music
             </h1>
             <div className="relative h-5 overflow-hidden">

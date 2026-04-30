@@ -477,14 +477,20 @@ const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 // How long a `status='generating'` sentinel is treated as live before
 // we assume the generator crashed/timed out and re-claim. Generation
-// itself takes 5-60s for cold Gemini; 90s gives real headroom.
-const STALE_GENERATION_MS = 90 * 1000;
+// itself takes 5-60s for cold Gemini; 55s caps below the Supabase
+// edge-function timeout floor (60s on free, 120s on paid) so a
+// follower can't end up holding the function alive past infra deadline.
+const STALE_GENERATION_MS = 55 * 1000;
 
-// How long followers wait for an in-flight generation to land before
-// giving up and generating themselves. Should be ≥ STALE_GENERATION_MS
-// so the leader has every chance to finish.
-const POLL_TIMEOUT_MS = 95 * 1000;
-const POLL_INTERVAL_MS = 1_000;
+// Poll deadline for followers waiting on the leader. Must stay below
+// the Supabase function timeout — 50s leaves headroom for the
+// post-poll cache write before the platform pulls the rug.
+const POLL_TIMEOUT_MS = 50 * 1000;
+// Exponential backoff caps DB read load while the leader runs.
+// Sequence is 1s, 2s, 4s, 8s, capped at POLL_INTERVAL_CAP_MS, which
+// keeps total reads to ~10 over the 50s window vs. ~50 with flat 1s.
+const POLL_INTERVAL_INITIAL_MS = 1_000;
+const POLL_INTERVAL_CAP_MS = 8_000;
 
 function cacheKey(artistName: string, tier: string): string {
   // Normalized (lowercased + trimmed) so whitespace / case variations
@@ -537,8 +543,16 @@ async function readCacheState(key: string): Promise<CacheState> {
 async function waitForGeneration(key: string): Promise<ArtistUpdate[] | null> {
   if (!cacheAdminClient) return null;
   const start = Date.now();
+  let delay = POLL_INTERVAL_INITIAL_MS;
   while (Date.now() - start < POLL_TIMEOUT_MS) {
-    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    // Cap remaining wait so the final sleep doesn't push us past the
+    // poll deadline (which is itself capped under the Supabase
+    // function timeout). Without this clamp a freshly-bumped 8s
+    // delay could fire after we should have given up.
+    const remaining = POLL_TIMEOUT_MS - (Date.now() - start);
+    const sleepMs = Math.min(delay, remaining);
+    if (sleepMs <= 0) break;
+    await new Promise((r) => setTimeout(r, sleepMs));
     const state = await readCacheState(key);
     if (state.kind === "ready") {
       console.info(`[artist-updates] poll resolved for ${key} in ${Date.now() - start}ms`);
@@ -549,7 +563,9 @@ async function waitForGeneration(key: string): Promise<ArtistUpdate[] | null> {
       // Fall through to caller so they can claim + generate.
       return null;
     }
-    // 'generating' — keep waiting
+    // 'generating' — keep waiting; double the delay (cap at ceiling)
+    // so total reads stay ~10 over the window instead of ~50.
+    delay = Math.min(delay * 2, POLL_INTERVAL_CAP_MS);
   }
   console.warn(`[artist-updates] poll timed out for ${key} after ${POLL_TIMEOUT_MS}ms`);
   return null;

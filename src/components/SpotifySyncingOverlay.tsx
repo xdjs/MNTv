@@ -111,10 +111,7 @@ function LoadingState({ label }: { label: string }) {
   return (
     <>
       <div className="space-y-1.5">
-        <h1
-          className="text-xl md:text-2xl font-black text-white tracking-tight"
-          style={{ fontFamily: "'Nunito Sans', sans-serif" }}
-        >
+        <h1 className="text-xl md:text-2xl font-black text-white tracking-tight font-nunito">
           Reading your music taste
         </h1>
         <div className="relative h-5 overflow-hidden">
@@ -168,10 +165,7 @@ function ErrorState({ error, onRetry }: { error: string; onRetry?: () => void })
   return (
     <div className="flex flex-col items-center gap-5">
       <div className="space-y-1.5">
-        <h1
-          className="text-xl md:text-2xl font-black text-white tracking-tight"
-          style={{ fontFamily: "'Nunito Sans', sans-serif" }}
-        >
+        <h1 className="text-xl md:text-2xl font-black text-white tracking-tight font-nunito">
           Hmm, that took too long
         </h1>
         <p className="text-sm text-white/70 max-w-xs">{error}</p>

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Loader2, Sparkles, Users, Disc } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import type { ArtistUpdate } from "@/hooks/useArtistUpdates";
+import { getArtistUpdateKindMeta } from "@/lib/artistUpdateKind";
 
 /**
  * "Latest Facts" section on the Artist Profile. Renders artist-level
@@ -113,7 +114,8 @@ interface FactCardProps {
 }
 
 function FactCard({ update, expanded, pulsing, onToggle, registerRef }: FactCardProps) {
-  const { kindLabel, kindClass, KindIcon } = kindMeta(update.kind);
+  const { kindLabel, KindIcon } = getArtistUpdateKindMeta(update.kind);
+  const chipClass = kindClass(update.kind);
   return (
     <div
       ref={registerRef}
@@ -129,7 +131,7 @@ function FactCard({ update, expanded, pulsing, onToggle, registerRef }: FactCard
         aria-expanded={expanded}
       >
         <span
-          className={`mt-0.5 shrink-0 inline-flex items-center gap-1 text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full ${kindClass}`}
+          className={`mt-0.5 shrink-0 inline-flex items-center gap-1 text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full ${chipClass}`}
         >
           <KindIcon className="w-3 h-3" />
           {kindLabel}
@@ -157,19 +159,15 @@ function FactCard({ update, expanded, pulsing, onToggle, registerRef }: FactCard
   );
 }
 
-function kindMeta(kind: ArtistUpdate["kind"]): {
-  kindLabel: string;
-  kindClass: string;
-  KindIcon: typeof Sparkles;
-} {
+// Local styling for the artist-profile chip. Label + icon come from
+// the shared helper in src/lib/artistUpdateKind.ts so adding a new
+// kind only edits one file.
+function kindClass(kind: ArtistUpdate["kind"]): string {
   switch (kind) {
-    case "new-release":
-      return { kindLabel: "New release", kindClass: "bg-rose-500/15 text-rose-300", KindIcon: Disc };
-    case "collab":
-      return { kindLabel: "Collab", kindClass: "bg-violet-500/15 text-violet-300", KindIcon: Users };
+    case "new-release": return "bg-rose-500/15 text-rose-300";
+    case "collab": return "bg-violet-500/15 text-violet-300";
     case "fact":
-    default:
-      return { kindLabel: "Fact", kindClass: "bg-sky-500/15 text-sky-300", KindIcon: Sparkles };
+    default: return "bg-sky-500/15 text-sky-300";
   }
 }
 
