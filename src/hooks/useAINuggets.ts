@@ -97,17 +97,18 @@ function makeSource(id: string, s: AINuggetData["source"]): Source {
 
 export function makeTimestamp(index: number, totalNuggets: number, durationSec: number) {
   // Nugget timestamps are reveal-times during playback. Three constraints:
-  //   1. First nugget pinned at `earlyStart` so the user sees content
-  //      almost immediately when the song starts (Pete's UX: "tap a
-  //      story, song plays, I'm displayed with the first nugget I
-  //      found"). Previously the first nugget landed at `earlyStart +
-  //      spacing` ≈ 49s into a 4-min Curious-tier listen — long enough
-  //      to look like nothing was happening even when cache was hit.
+  //   1. First nugget pinned at `earlyStart=0` so a story tap with a
+  //      cached first nugget shows it the moment the song starts —
+  //      Pete's exact mental model: "If a story is pink, that means
+  //      that if I click on it, the first thing that displays is that
+  //      nugget while the song is playing." A 3s buffer (or worse, the
+  //      old earlyStart+spacing≈49s) makes the user think nothing
+  //      happened.
   //   2. Last nugget pinned at `durationSec - endBuffer` so the user
   //      doesn't lose the final beat to a nugget appearing in the last
   //      few seconds of the track.
   //   3. Middle nuggets distributed evenly between.
-  const earlyStart = 3;
+  const earlyStart = 0;
   const endBuffer = 15;
   const usable = Math.max(durationSec - earlyStart - endBuffer, 30);
   // Denominator guards a 1-nugget track (would otherwise divide by 0
@@ -149,6 +150,55 @@ export function makeNugget(n: AINuggetData, nuggetId: string, sourceId: string, 
     headline: deriveHeadline(n.headline, n.text), text: n.text, kind: n.kind,
     listenFor: n.listenFor || false, sourceId,
     imageUrl: n.imageUrl, imageCaption: n.imageCaption,
+  };
+}
+
+/**
+ * Sparse-track fallback. Synthesizes a single honest, catalog-grounded
+ * nugget when both the nugget_cache lookup and the SSE pipeline come up
+ * empty. The Validator + source filter rightly strip fabricated content
+ * for very-low-popularity artists (Pete Rango, Cherele, Ty Symph, Dame
+ * Atlas, etc.) where Exa returns no usable journalism — but we don't
+ * want to leave the user staring at a blank Listen page after tapping a
+ * pre-warmed story.
+ *
+ * The nugget deliberately does NOT pretend to know things — no
+ * collaborators, no labels, no quotes, no fabricated context. It just
+ * names the track, invites the listen, and acknowledges that we'll add
+ * depth as new sources surface.
+ */
+export function makeSparseFallbackNugget(
+  artist: string,
+  title: string,
+  trackId: string,
+  durationSec: number,
+  coverArtUrl?: string,
+): { nugget: Nugget; source: Source } {
+  const nuggetId = `synth-nug-${trackId}-L1-0`;
+  const sourceId = `synth-src-${trackId}-L1-0`;
+  return {
+    nugget: {
+      id: nuggetId,
+      trackId,
+      // Pinned at 0 — same as makeTimestamp's earlyStart — so the
+      // synthetic fallback feels indistinguishable from a cache-hit
+      // first nugget when the user taps.
+      timestampSec: 0,
+      durationMs: 7000,
+      headline: `"${title}" by ${artist}`,
+      text: `One of your under-the-radar picks. There's not much press out there for this one yet, so we're letting the music do the talking — give it a real listen and we'll layer in the story as more sources surface.`,
+      kind: "track",
+      listenFor: false,
+      sourceId,
+      imageUrl: coverArtUrl,
+      imageCaption: title,
+    },
+    source: {
+      id: sourceId,
+      type: "catalog",
+      title,
+      publisher: "MusicNerd",
+    },
   };
 }
 
@@ -386,9 +436,10 @@ export function useAINuggets(
           newSources.set(sourceId, source);
 
           // Mirror the spacing logic in makeTimestamp: first seed nugget
-          // pinned at earlyStart (3s) so it shows almost immediately,
-          // last at duration - endBuffer, middle distributed evenly.
-          const earlyStart = 3;
+          // pinned at earlyStart (0s) so it shows the moment the song
+          // starts, last at duration - endBuffer, middle distributed
+          // evenly.
+          const earlyStart = 0;
           const endBuffer = 15;
           const usableDuration = Math.max(durationSec - earlyStart - endBuffer, 30);
           const seedDenom = Math.max(seedData.length - 1, 1);
@@ -452,10 +503,19 @@ export function useAINuggets(
         return;
       }
 
-      // ── Check nugget_cache for first listen ──────────────────────
-      // Skip DB cache when regenerateKey > 0 — that means the track was
-      // completed and the user is re-listening; always generate fresh.
-      if (currentListenCount <= 1 && regenerateKey === 0) {
+      // ── Check nugget_cache ──────────────────────────────────────
+      // Pete's invariant: if a cache row exists, ALWAYS serve it on
+      // tap so the user sees the first nugget the moment the song
+      // starts. Deeper-listen content variation can be a separate
+      // feature later; right now we'd rather show consistent content
+      // instantly than rotate variety at the cost of leaving the user
+      // staring at cover art for 15-30s while a fresh SSE pipeline
+      // runs. Previous gate (`currentListenCount <= 1 && regenerateKey === 0`)
+      // skipped the cache for any repeat listener, which broke the
+      // pink-ring-→-nugget-on-tap promise as soon as a track had been
+      // played more than once. `regenerateKey > 0` (manual user-driven
+      // refresh) still bypasses below if needed.
+      if (regenerateKey === 0) {
         const { data: cached } = await supabase
           .from("nugget_cache")
           .select("nuggets, sources, status")
@@ -468,16 +528,77 @@ export function useAINuggets(
           // predate the server-side/makeNugget headline guard.
           const cachedNuggets = (cached.nuggets as Nugget[]).map(sanitizeNugget);
           const cachedSources = new Map<string, Source>();
-          const rawSources = cached.sources as Record<string, Source>;
-          for (const [key, val] of Object.entries(rawSources)) {
-            cachedSources.set(key, val);
+          const rawSourcesObj = (cached.sources ?? {}) as Record<string, unknown>;
+          for (const [key, val] of Object.entries(rawSourcesObj)) {
+            // Skip meta keys (anything beginning with `_`) and non-Source
+            // shapes (e.g. artistSummary string, externalLinks array).
+            if (key.startsWith("_") || typeof val !== "object" || val === null || Array.isArray(val)) continue;
+            cachedSources.set(key, val as Source);
           }
           if (cancelledRef.current) return;
           setNuggets(cachedNuggets);
           setSources(cachedSources);
+          setFromCache(true);
 
           // Write to in-memory cache
           setNuggetCache(cacheKey, { nuggets: cachedNuggets, sources: cachedSources, listenCount: currentListenCount });
+
+          // Tier-aware fan-out. If pre-gen wrote a partial (e.g. 1
+          // nugget from the firstNuggetOnly fast path) but tier is
+          // curious / nerd which expect 6 / 9, kick off a single
+          // background invoke for the full set so additional nuggets
+          // come in WHILE the song plays. Best effort — if it fails
+          // the user just sees the partial for this listen.
+          const tierExpected = tier === "nerd" ? 9 : tier === "curious" ? 6 : 3;
+          if (cachedNuggets.length < tierExpected) {
+            (async () => {
+              if (import.meta.env.DEV) console.log(`[NuggetCache] Cache had ${cachedNuggets.length}/${tierExpected} for tier=${tier} — fanning out for full set`);
+              try {
+                const spotifyId = trackId.match(/spotify:track:([a-zA-Z0-9]{22})/)?.[1];
+                const appleId = trackId.match(/apple:song:(\d+)/)?.[1];
+                const { data: fanoutData, error: fanoutErr } = await supabase.functions.invoke("generate-nuggets", {
+                  body: {
+                    artist, title, album,
+                    listenCount: 1,
+                    previousNuggets: [],
+                    tier,
+                    userTopArtists: topArtists,
+                    userTopTracks: topTracks,
+                    spotifyTrackId: spotifyId,
+                    appleTrackId: appleId,
+                    durationSec,
+                  },
+                });
+                if (cancelledRef.current) return;
+                if (fanoutErr || !fanoutData) return;
+                const fanoutNuggets = (fanoutData as { nuggets?: Nugget[] }).nuggets;
+                if (!Array.isArray(fanoutNuggets) || fanoutNuggets.length <= cachedNuggets.length) return;
+                if (import.meta.env.DEV) console.log(`[NuggetCache] Fan-out filled in ${fanoutNuggets.length} nuggets`);
+                // Re-read DB to get the freshly-written cache row with
+                // its sources map (the response body's `sources` is
+                // not always fully populated for the JSON path).
+                const { data: refreshed } = await supabase
+                  .from("nugget_cache")
+                  .select("nuggets, sources")
+                  .eq("track_id", dbCacheKey)
+                  .maybeSingle();
+                if (cancelledRef.current) return;
+                const finalNuggets = (refreshed?.nuggets as Nugget[] | null) ?? fanoutNuggets;
+                const sanitized = finalNuggets.map(sanitizeNugget);
+                const finalSources = new Map<string, Source>();
+                const rawFinalSources = (refreshed?.sources ?? {}) as Record<string, unknown>;
+                for (const [k, v] of Object.entries(rawFinalSources)) {
+                  if (k.startsWith("_") || typeof v !== "object" || v === null || Array.isArray(v)) continue;
+                  finalSources.set(k, v as Source);
+                }
+                setNuggets(sanitized);
+                setSources(finalSources);
+                setNuggetCache(cacheKey, { nuggets: sanitized, sources: finalSources, listenCount: currentListenCount });
+              } catch (e) {
+                if (import.meta.env.DEV) console.warn("[NuggetCache] Fan-out threw:", e);
+              }
+            })();
+          }
 
           // Don't increment listen_count here — Listen.tsx handles that
           // after the 5-second playback threshold is met.
@@ -789,6 +910,14 @@ export function useAINuggets(
         aiArtistSummary = data?.artistSummary || "";
         aiExternalLinks = data?.externalLinks || [];
         aiNoTrackData = !!data?.noTrackData;
+        // Sparse-track guard. JSON path returns 200 with `nuggets: []`
+        // when the Validator + source filter strip everything (low-
+        // popularity artists). Throw so the catch block's synthetic
+        // fallback fires — otherwise we'd render an empty Listen page
+        // and call it success.
+        if (aiNuggets.length === 0) {
+          throw new Error("JSON path returned no nuggets (likely sparse-artist validation strip)");
+        }
       }
       if (aiNoTrackData) {
         if (import.meta.env.DEV) console.log("[NuggetGen] Sparse artist — no track data, nugget 2 is 'context' kind");
@@ -945,7 +1074,29 @@ export function useAINuggets(
         } catch (fbErr) {
           console.warn("[useAINuggets] cache fallback lookup threw:", fbErr);
         }
-        setError(e instanceof Error ? e.message : "Unknown error");
+        // Sparse-track synthetic fallback. SSE produced nothing AND no
+        // DB cache row exists — happens reliably for very-low-popularity
+        // artists where the Validator + source filter strip every
+        // Writer attempt. Better to surface ONE honest catalog-grounded
+        // nugget than leave the user staring at cover art with no
+        // content to read.
+        console.warn(`[useAINuggets] SSE failed and no cache row exists for ${dbCacheKey}; synthesizing catalog fallback`);
+        const synth = makeSparseFallbackNugget(artist, title, trackId, durationSec, coverArtUrl);
+        const synthSources = new Map<string, Source>([[synth.source.id, synth.source]]);
+        setNuggets([synth.nugget]);
+        setSources(synthSources);
+        setNuggetCache(cacheKey, { nuggets: [synth.nugget], sources: synthSources, listenCount: currentListenCount });
+        setError(null);
+        // Sentinel cleanup is still desired — synthetic nugget doesn't
+        // get persisted to the DB cache (no admin key on the client),
+        // so a future tap will retry the real pipeline. Drop through to
+        // the sentinel-delete below before returning.
+        if (sentinelClaimed) {
+          await Promise.resolve(
+            supabase.from("nugget_cache").delete().eq("track_id", dbCacheKey)
+          ).catch(() => {});
+        }
+        return;
       }
       // Remove the 'generating' sentinel so waiting clients don't poll indefinitely.
       if (sentinelClaimed) {

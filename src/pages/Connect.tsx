@@ -1,5 +1,5 @@
 import { useNavigate, useSearchParams, Navigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import PageTransition from "@/components/PageTransition";
@@ -7,7 +7,7 @@ import MusicNerdLogo from "@/components/MusicNerdLogo";
 import { useUserProfile, getStoredProfile } from "@/hooks/useMusicNerdState";
 import type { UserProfile } from "@/mock/types";
 import spotifyLogo from "@/assets/spotify-logo.png";
-import { signInWithSpotify, prewarmSpotifyTaste } from "@/hooks/useSpotifyAuth";
+import { signInWithSpotify, prewarmSpotifyTaste, SPOTIFY_OAUTH_PENDING_KEY } from "@/hooks/useSpotifyAuth";
 import { sanitizeRedirect } from "@/lib/routeUtils";
 import { initiateAppleMusicAuth, fetchAppleMusicTaste } from "@/hooks/useAppleMusicAuth";
 import { useAppleMusicToken } from "@/hooks/useAppleMusicToken";
@@ -96,6 +96,30 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
   const navigate = useNavigate();
   const { saveProfile } = useUserProfile();
   const { confirmTier } = useTierGate();
+  // Synchronous check: are we landing here from a fresh Spotify OAuth?
+  // Two signals, OR'd:
+  //   1. `signInWithSpotify` set sessionStorage["musicnerd_spotify_oauth_pending"]
+  //      right before the redirect. Survives the OAuth round-trip
+  //      (sessionStorage persists across the same-origin redirect-back).
+  //      Read synchronously here so the overlay is up on the very first
+  //      frame, before AuthContext finishes resolving the session.
+  //   2. `user.app_metadata.provider === "spotify"` — once auth
+  //      resolves, keeps the overlay up until tier-pick advances `step`.
+  // The flag is cleared in `handleTierSelect` (success path) and
+  // `useSignOut` (sign-out path). `useSpotifyPostSigninSync.onSynced`
+  // also clears it as belt-and-suspenders so a user who closes the tab
+  // mid-tier-pick doesn't carry the flag into the next sign-in.
+  const { user: authUser } = useAuth();
+  const oauthPendingOnMount = useMemo(() => {
+    try {
+      return sessionStorage.getItem(SPOTIFY_OAUTH_PENDING_KEY) === "1";
+    } catch {
+      return false;
+    }
+  }, []);
+  const isFreshSpotifyOAuth =
+    oauthPendingOnMount ||
+    (!!authUser && authUser.app_metadata?.provider === "spotify");
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
   const [spotifyConnecting, setSpotifyConnecting] = useState(false);
@@ -284,6 +308,8 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
     // here.
     confirmTier(t);
     sessionStorage.removeItem("musicnerd_redirect");
+    // Clear the OAuth-pending flag — we're past the post-signin window.
+    try { sessionStorage.removeItem(SPOTIFY_OAUTH_PENDING_KEY); } catch { /* ignore */ }
     // Route through /preparing so artist-updates gets a warmup window
     // before Browse renders. Splash auto-advances when 1 artist-update
     // row lands, or the 45s ceiling fires. Stories pre-gen runs in
@@ -306,8 +332,20 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
           through an error so the user always has a retry path — if we
           just dismissed on failure, they'd land back on step 0 and
           think their click did nothing. */}
+      {/* `isFreshSpotifyOAuth` is the synchronous mount-time check that
+          paves over the 600ms gap before `spotifySyncing` flips true.
+          It stays true until the sync resolves — at which point
+          `onSynced` advances `step` to 1, and from there the user is
+          past step 0 anyway, so the overlay doesn't need to keep
+          gating. We dismiss it once any of:
+            - sync flag flipped false (success or short-circuit), AND
+            - we're on step 1 or beyond (synced data populated). */}
       <SpotifySyncingOverlay
-        visible={spotifySyncing || !!spotifySyncError}
+        visible={
+          spotifySyncing ||
+          !!spotifySyncError ||
+          (isFreshSpotifyOAuth && step === 0)
+        }
         error={spotifySyncError}
         onRetry={retrySync}
       />

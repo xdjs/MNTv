@@ -229,6 +229,15 @@ export function usePreGeneratedStories(
                 // URI). Result: pre-gen ran but cache never matched, and
                 // every story tap paid the full SSE generation cost.
                 appleTrackId: story.uri?.match(/apple:song:(\d+)/)?.[1],
+                // Fast path: ONE artist-kind nugget per story. Server
+                // skips Curator + multi-kind loop, uses 1 Exa search
+                // (6s timeout) + 1 Gemini call (25s timeout), with a
+                // synthetic catalog fallback if the validator rejects
+                // everything. Bounded wall time; "stories warming up"
+                // resolves in 5-15s per track instead of 30-60s. The
+                // tier-scaled rest of the nuggets is fanned out on
+                // tap (see useAINuggets cache-hit fan-out).
+                firstNuggetOnly: true,
               },
             });
             if (cancelled) return;
@@ -236,21 +245,26 @@ export function usePreGeneratedStories(
               if (import.meta.env.DEV) console.warn(`[Stories] pre-gen failed for ${story.trackKey}:`, error.message);
               return;
             }
-            // Bug fix: only treat the story as ready when the server actually
-            // produced nuggets. The JSON path of generate-nuggets returns a
-            // 200 with an empty `nuggets` array if every Writer attempt got
-            // stripped by the Validator (sparse / low-popularity artists do
-            // this regularly — e.g. "4 U" by Ty Symph). Marking the story
-            // ready in that case made the circle pink, but tapping it landed
-            // on a Listen page that had nothing to render. We now require a
-            // non-empty `nuggets` array before stamping the ledger.
+            // The JSON path of generate-nuggets returns 200 with an
+            // empty `nuggets` array when the Validator + source filter
+            // strip every Writer attempt — happens reliably for very-
+            // low-popularity artists (Pete Rango, Cherele, Ty Symph,
+            // Dame Atlas) where Exa returns no usable journalism and
+            // anything Gemini fabricates fails the source check.
+            //
+            // We mark the story READY anyway so it's tappable. On tap,
+            // Listen runs through useAINuggets which falls through to
+            // a synthetic catalog-grounded fallback (see
+            // makeSparseFallbackNugget) — an honest, non-fabricated
+            // nugget that names the track, invites the listen, and
+            // doesn't pretend to know things we can't verify.
+            //
+            // The ledger gets stamped either way so we don't re-fire
+            // pre-gen for the same track within the 24h TTL.
             const responseNuggets = (data as { nuggets?: unknown[] } | null)?.nuggets;
             const generatedAny = Array.isArray(responseNuggets) && responseNuggets.length > 0;
-            if (!generatedAny) {
-              if (import.meta.env.DEV) {
-                console.warn(`[Stories] pre-gen returned 0 nuggets for ${story.trackKey} — leaving story in "warming" state`);
-              }
-              return;
+            if (!generatedAny && import.meta.env.DEV) {
+              console.warn(`[Stories] pre-gen returned 0 nuggets for ${story.trackKey} — sparse track, will use synthetic fallback on tap`);
             }
             recordPregen(story.trackKey, tier);
             setStories((prev) =>

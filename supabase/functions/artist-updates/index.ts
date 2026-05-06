@@ -34,17 +34,16 @@ const corsHeaders = {
 const FACTS_PER_ARTIST = 1;
 const RECENT_WINDOW_DAYS = 90;
 
-// Below this Spotify follower count we assume there's essentially no
-// press, interviews, or journalism about the artist — so any prompt
-// asking Gemini to recall specific stories about them will fabricate.
-// Pete Rango, Earl from Yonder, Qu33nK, etc. all land under this
-// threshold; well-known artists (Radiohead, Kendrick) sit three+
-// orders of magnitude above it. In sparse mode we pivot to catalog-
-// grounded nuggets (real track titles + genres from Spotify) instead
-// of open-ended story generation. This is a simpler signal than
-// generate-nuggets' Exa-citation-count approach; a proper parity fix
-// would add Exa here too but is scoped separately.
-const SPARSE_FOLLOWER_THRESHOLD = 5000;
+// Sparse-mode is now driven by actual research results, not follower
+// count — see the post-Exa branch in `serve`. Pete's correction
+// (2026-04-30): "Pete Rango and Cherele have tons of good information
+// out there even though they don't meet the [follower] criteria. Sparse
+// mode shouldn't be triggered just because they're under 5k followers,
+// only if our research doesn't find good information." The previous
+// `SPARSE_FOLLOWER_THRESHOLD = 5000` constant is gone with this
+// change; the only remaining reference is in the comment block at
+// `generateArtistFacts`'s sparse-mode prompt where the language is
+// historical and harmless.
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -273,9 +272,10 @@ function buildReleaseUpdate(
 // here we settle for a single artist-scoped search to keep wall-time
 // under the existing GEMINI_TIMEOUT_MS budget.
 //
-// Skipped on the sparse path — the SPARSE_FOLLOWER_THRESHOLD already
-// signals "no press exists", and the catalog-grounded prompt is what
-// prevents hallucination there.
+// Always run — sparse-mode is now decided AFTER seeing the result
+// (citation count + body-text mention), so we can't gate the call.
+// If the result comes back with no usable signal, callers swap to the
+// catalog-grounded sparse prompt and ignore these snippets.
 const EXA_TIMEOUT_MS = 8_000;
 
 async function researchArtistOnExa(
@@ -460,6 +460,13 @@ REQUIREMENTS WHEN USING EXA RESEARCH:
 - Quote sparingly. If you quote, attribute to a named source from the research and keep it under 12 words.
 - If the research contradicts what you "know" from training data, trust the research.
 - If the research is thin and you can't pull two concrete anchors, return zero nuggets — empty array is better than a generic fact.
+
+CITATION RULES — HARD constraints (do not break these):
+1. Every named publication, magazine, year, quote, person, venue, label, or producer in your nugget MUST literally appear in the EXA RESEARCH snippets above. Search Ctrl+F style: if it's not there verbatim, it's fabricated.
+2. Do NOT introduce a publication you "know" from training data (Attack Magazine, Pitchfork, Stereogum, Rolling Stone, Resident Advisor, etc.) unless that exact name appears in the research above.
+3. Do NOT cite a year, interview, quote, or specific incident that isn't in the research — even if it sounds plausible. The user can click "View Source" and discover the lie.
+4. If the only honest citation is the artist's own platform (Bandcamp / Soundcloud / their personal site), use that — don't dress it up as journalism.
+5. If the research is too thin to anchor any fact in two verifiable specifics, return zero nuggets. Empty is better than fabricated.
 `
     : "";
 
@@ -886,11 +893,20 @@ serve(async (req) => {
     });
   }
 
-  // 3. Sparse detection from Spotify's follower count. Below the
-  //    threshold we pull top tracks (for catalog grounding) and flip
-  //    the Gemini prompt into sparse-safe mode.
+  // 3. Sparse detection — driven by whether our research actually
+  //    surfaces material about the artist, NOT by follower count.
+  //    Pete's correction (2026-04-30): "Pete Rango and Cherele have
+  //    tons of good information out there even though they don't meet
+  //    the [follower] criteria. Sparse mode shouldn't be triggered
+  //    just because they're under 5k followers — only if our research
+  //    doesn't find good information."
+  //
+  //    We always run Exa now. Sparse-mode is determined post-hoc from
+  //    the result: if Exa returns no usable snippets and the artist
+  //    isn't even mentioned in what we got back, fall through to the
+  //    catalog-grounded sparse prompt + top-tracks fetch.
   const followers = artistInfo.followers?.total ?? 0;
-  const isSparse = followers < SPARSE_FOLLOWER_THRESHOLD;
+  const exaApiKey = Deno.env.get("EXA_API_KEY");
 
   // Wrap the post-claim generation flow in a try/catch so the sentinel
   // is always released — without this, an unexpected throw inside
@@ -903,20 +919,27 @@ serve(async (req) => {
   // throw mid-flow. catch + re-throw so the platform still sees a
   // 500 — we just want to make sure the sentinel doesn't outlive us.
   try {
-    // 4. Fetch Spotify data + (non-sparse only) Exa research in parallel,
-    //    then feed everything into Gemini. Exa adds 3-6s but anchors the
-    //    fact in real journalism instead of training-data trivia, which
-    //    was the source of "shallow" complaints. Sparse artists skip
-    //    Exa — by definition there's no journalism, and the catalog-
-    //    grounded prompt is what keeps them from hallucinating.
-    const exaApiKey = Deno.env.get("EXA_API_KEY");
+    // 4. Fetch Spotify data + Exa research in parallel. We run Exa
+    //    every time and decide sparse-mode AFTER seeing the result
+    //    (citation count + body-text mention). Top-tracks always
+    //    fetched too — cheap call, and the sparse-mode prompt needs
+    //    them as catalog grounding when we DO fall through.
     const [release, topTracks, exaResult] = await Promise.all([
       fetchRecentRelease(token, artistInfo.id),
-      isSparse ? fetchArtistTopTracks(token, artistInfo.id) : Promise.resolve([] as SpotifyTopTrack[]),
-      !isSparse && exaApiKey
+      fetchArtistTopTracks(token, artistInfo.id),
+      exaApiKey
         ? researchArtistOnExa(artistInfo.name, exaApiKey)
         : Promise.resolve({ snippets: "", citations: [] as { title: string; url: string }[] }),
     ]);
+
+    // Sparse iff: few/no usable Exa citations AND the artist's name
+    // doesn't appear in any snippet body. Mirrors the trigger in
+    // generate-nuggets/index.ts so behavior stays consistent across
+    // both Browse rails. A press article with a generic title still
+    // counts as research if it talks about the artist in the body.
+    const artistMentionedInBody = !!exaResult.snippets &&
+      exaResult.snippets.toLowerCase().includes(artistInfo.name.toLowerCase());
+    const isSparse = exaResult.citations.length <= 1 && !artistMentionedInBody;
 
     const facts = await generateArtistFacts({
       artistName: artistInfo.name,
@@ -925,12 +948,12 @@ serve(async (req) => {
       sparse: isSparse,
       genres: artistInfo.genres,
       topTracks: isSparse ? topTracks : undefined,
-      researchSnippets: exaResult.snippets,
+      researchSnippets: isSparse ? "" : exaResult.snippets,
     });
 
     const releaseAgeDays = release ? daysSince(release.release_date) : null;
     console.log(
-      `[artist-updates] ${artistInfo.name} (followers=${followers}${isSparse ? ", SPARSE" : ""}) → release=${
+      `[artist-updates] ${artistInfo.name} (followers=${followers}, exa=${exaResult.citations.length}c/${artistMentionedInBody ? "body" : "no-body"}${isSparse ? ", SPARSE" : ""}) → release=${
         release ? `${release.name} (${releaseAgeDays}d)` : "none"
       }, facts=${facts.length}, topTracks=${topTracks.length}`,
     );

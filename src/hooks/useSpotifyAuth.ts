@@ -37,6 +37,16 @@ const SPOTIFY_SCOPES =
  * (not configured in the dashboard) so rotating scopes doesn't need a
  * dashboard edit.
  */
+/**
+ * Set right before redirecting to Spotify. Connect.tsx reads this on
+ * mount to keep the syncing overlay visible from the very first frame
+ * after the OAuth callback — Supabase's `detectSessionInUrl` consumes
+ * the URL hash before React paints, so we can't detect the callback
+ * from `window.location.hash`. The flag is cleared once tier-pick
+ * completes (handleTierSelect) or sign-out fires.
+ */
+export const SPOTIFY_OAUTH_PENDING_KEY = "musicnerd_spotify_oauth_pending";
+
 export async function signInWithSpotify(): Promise<void> {
   // No dev-experience guard here anymore. `signInWithOAuth` doesn't
   // consume VITE_SPOTIFY_CLIENT_ID — Supabase's server-side provider
@@ -44,6 +54,13 @@ export async function signInWithSpotify(): Promise<void> {
   // `refreshSpotifyToken` below where it actually matters. The supabase
   // client itself already logs a dev warning for missing VITE_SUPABASE_*
   // vars (src/integrations/supabase/client.ts).
+  try {
+    sessionStorage.setItem(SPOTIFY_OAUTH_PENDING_KEY, "1");
+  } catch {
+    // Storage disabled — the overlay will still come up via the
+    // `user.app_metadata.provider === "spotify"` check, just one frame
+    // later than ideal. Acceptable degradation.
+  }
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "spotify",
     options: {
@@ -61,6 +78,9 @@ export async function signInWithSpotify(): Promise<void> {
     },
   });
   if (error) {
+    // Sign-in didn't even reach Spotify — clear the pending flag so we
+    // don't leave a stale signal that confuses the next Connect mount.
+    try { sessionStorage.removeItem(SPOTIFY_OAUTH_PENDING_KEY); } catch { /* ignore */ }
     console.error("[signInWithSpotify] failed:", error);
     throw error;
   }

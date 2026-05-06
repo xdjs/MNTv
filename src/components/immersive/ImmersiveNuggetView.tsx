@@ -159,10 +159,13 @@ export default function ImmersiveNuggetView({
   }, [trackKey]);
 
   // ── Unlock nuggets ─────────────────────────────────────────────────
-  // Fresh SSE: unlock every streamed nugget immediately so swipes work
-  // while the stream is still arriving (parity with desktop queue behavior).
-  // Cached: only unlock when currentTime crosses each timestamp, not on every
-  // ~4 Hz playback tick (~720 skipped invocations per track).
+  // INVARIANT (Pete's spec, 2026-05-06): the FIRST nugget always
+  // unlocks the moment nuggets arrive — no timestamp gating, no
+  // isFresh branching. The user just tapped a pink-ring story; they
+  // expect content on screen as the song starts. Only nuggets[1..N]
+  // gate on `currentTime >= timestampSec` so they pace through the
+  // track. Fresh-SSE behavior (unlock everything for swipe parity)
+  // still applies to the rest, just not to nugget #0.
   useEffect(() => {
     if (nuggets.length === 0) return;
 
@@ -175,22 +178,34 @@ export default function ImmersiveNuggetView({
       return;
     }
 
-    if (currentTime < nextUnlockTimeRef.current) return;
-
     setUnlockedIds((prev) => {
       const next = new Set(prev);
       let changed = false;
-      for (const n of nuggets) {
-        if (currentTime >= n.timestampSec && !next.has(n.id)) {
-          next.add(n.id);
-          changed = true;
+      // Always unlock nuggets[0] on first arrival.
+      if (nuggets[0] && !next.has(nuggets[0].id)) {
+        next.add(nuggets[0].id);
+        changed = true;
+      }
+      // Subsequent nuggets gate on currentTime, but only walk them
+      // when we've crossed the next pending timestamp (keeps this
+      // effect from doing real work on every 4 Hz playback tick).
+      if (currentTime >= nextUnlockTimeRef.current) {
+        for (let i = 1; i < nuggets.length; i++) {
+          const n = nuggets[i];
+          if (currentTime >= n.timestampSec && !next.has(n.id)) {
+            next.add(n.id);
+            changed = true;
+          }
         }
       }
       return changed ? next : prev;
     });
 
-    // Find the next timestamp that hasn't been unlocked yet
+    // Find the next timestamp that hasn't been unlocked yet (skip
+    // index 0 — already handled above). Used by the cheap-skip
+    // guard in the next render.
     const upcoming = nuggets
+      .slice(1)
       .filter((n) => n.timestampSec > currentTime)
       .sort((a, b) => a.timestampSec - b.timestampSec);
     nextUnlockTimeRef.current = upcoming.length > 0 ? upcoming[0].timestampSec : Infinity;
