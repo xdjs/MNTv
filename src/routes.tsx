@@ -13,9 +13,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
 import Onboarding from "@/pages/Onboarding";
 
-/** Small fallback shown during lazy-route Suspense + auth hydration. */
+/** Small fallback shown during lazy-route Suspense + auth hydration.
+ *  changed bg-background → bg-black so transitions
+ *  through this fallback don't visibly flash a different shade
+ *  between pages that use bg-black (PreparingExperience, immersive
+ *  Listen, etc). */
 export function LazyFallback() {
-  return <div className="min-h-screen bg-background" />;
+  return <div className="min-h-screen bg-black" />;
 }
 
 /**

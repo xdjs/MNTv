@@ -1,18 +1,20 @@
 import { useNavigate, useSearchParams, Navigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import PageTransition from "@/components/PageTransition";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import { useUserProfile, getStoredProfile } from "@/hooks/useMusicNerdState";
 import type { UserProfile } from "@/mock/types";
 import spotifyLogo from "@/assets/spotify-logo.png";
-import { signInWithSpotify, prewarmSpotifyTaste } from "@/hooks/useSpotifyAuth";
+import { signInWithSpotify, prewarmSpotifyTaste, SPOTIFY_OAUTH_PENDING_KEY } from "@/hooks/useSpotifyAuth";
 import { sanitizeRedirect } from "@/lib/routeUtils";
 import { initiateAppleMusicAuth, fetchAppleMusicTaste } from "@/hooks/useAppleMusicAuth";
 import { useAppleMusicToken } from "@/hooks/useAppleMusicToken";
 import { useSpotifyPostSigninSync } from "@/hooks/useSpotifyPostSigninSync";
 import { ensureSupabaseSession } from "@/lib/ensureSupabaseSession";
 import SpotifySyncingOverlay from "@/components/SpotifySyncingOverlay";
+import { useTierGate, TIER_CONFIRMED_STORAGE_KEY } from "@/contexts/TierGateContext";
 
 type Tier = "casual" | "curious" | "nerd";
 
@@ -69,11 +71,76 @@ export default function Connect() {
     }
   }, [storedRedirect]);
   const redirectUrl = redirectParam || storedRedirect;
-  // Treat live profile state OR localStorage as authoritative — the live
-  // state can lag a render behind localStorage immediately after
-  // saveProfile fires, so checking both closes the gap.
+  // Need BOTH a session AND a profile to short-circuit past the
+  // sign-in UI. Profile-only (e.g. session expired but localStorage
+  // is still seeded) used to ping-pong: gate Navigates to /preparing
+  // → ProtectedRoute on /preparing fails on missing session →
+  // redirects back to /connect → loop. With both checks, an expired
+  // session falls through to ConnectInner where the user can
+  // re-authenticate.
+  const { session, loading: authLoading } = useAuth();
   const hasProfile = !!profile || !!getStoredProfile();
-  if (hasProfile) {
+  // Captured once at mount via useRef so a later sessionStorage clear
+  // (handleTierSelect success path, or the 10s escape-hatch timer
+  // below) doesn't yank the blank fallback out from under a user
+  // whose auth is still resolving. Mirrors the pattern already used
+  // by ConnectInner's oauthPendingOnMount.
+  const oauthPendingFlag = useRef<boolean>(
+    (() => {
+      try {
+        return sessionStorage.getItem(SPOTIFY_OAUTH_PENDING_KEY) === "1";
+      } catch {
+        return false;
+      }
+    })(),
+  ).current;
+
+  // Returning user short-circuits via <Navigate> before ConnectInner
+  // mounts, so the OAuth-pending reset lives here at the parent
+  // level. The paint-order concern (PreparingExperience briefly
+  // showing stale tierConfirmed=true) is now handled upstream by
+  // signInWithSpotify, which clears the sessionStorage flag BEFORE
+  // the OAuth redirect — so by the time TierGateProvider's useState
+  // initializer runs after the round-trip, the flag is already gone.
+  // This effect is just belt-and-suspenders for any code path that
+  // somehow reaches /connect with the pending flag still set.
+  // CRITICAL: this hook MUST run before any early return to satisfy
+  // Rules of Hooks.
+  useEffect(() => {
+    let pending = false;
+    try { pending = sessionStorage.getItem(SPOTIFY_OAUTH_PENDING_KEY) === "1"; } catch { /* noop */ }
+    if (!pending) return;
+    try {
+      sessionStorage.removeItem(TIER_CONFIRMED_STORAGE_KEY);
+      sessionStorage.removeItem("musicnerd_artist_rotation_resolved");
+      window.dispatchEvent(new Event("musicnerd:tier-state-changed"));
+    } catch { /* noop */ }
+  }, []);
+
+  // Escape hatch: if the OAuth-pending blank fallback would otherwise
+  // hold the user on a black screen indefinitely (Supabase auth
+  // hanging on a network blip), drop the pending flag after 10s so
+  // ConnectInner mounts and the user has a visible retry path.
+  const [oauthEscapeTriggered, setOauthEscapeTriggered] = useState(false);
+  useEffect(() => {
+    if (!oauthPendingFlag) return;
+    if (!authLoading && session) return; // auth resolved; fallback will dismiss naturally
+    const t = setTimeout(() => {
+      try { sessionStorage.removeItem(SPOTIFY_OAUTH_PENDING_KEY); } catch { /* noop */ }
+      setOauthEscapeTriggered(true);
+    }, 10_000);
+    return () => clearTimeout(t);
+  }, [oauthPendingFlag, authLoading, session]);
+
+  // Blank fallback while session resolves after OAuth return — hides
+  // ConnectInner so SpotifySyncingOverlay doesn't flash between the
+  // Spotify accept screen and the tier picker. bg-black matches
+  // PreparingExperience exactly to avoid a color jump.
+  if (oauthPendingFlag && (authLoading || !session) && !oauthEscapeTriggered) {
+    return <div className="min-h-screen bg-black" />;
+  }
+
+  if (session && hasProfile) {
     // Route through /preparing so the artist-updates rail has a window
     // to populate before Browse renders. Without this, returning users
     // land on Browse with an empty rail and watch it fill in — the
@@ -88,6 +155,41 @@ export default function Connect() {
 function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
   const navigate = useNavigate();
   const { saveProfile } = useUserProfile();
+  const { confirmTier } = useTierGate();
+  // Synchronous check: are we landing here from a fresh Spotify OAuth?
+  // Two signals, OR'd:
+  //   1. `signInWithSpotify` set sessionStorage["musicnerd_spotify_oauth_pending"]
+  //      right before the redirect. Survives the OAuth round-trip
+  //      (sessionStorage persists across the same-origin redirect-back).
+  //      Read synchronously here so the overlay is up on the very first
+  //      frame, before AuthContext finishes resolving the session.
+  //   2. `user.app_metadata.provider === "spotify"` — once auth
+  //      resolves, keeps the overlay up until tier-pick advances `step`.
+  // The flag is cleared in `handleTierSelect` (success path) and
+  // `useSignOut` (sign-out path). `useSpotifyPostSigninSync.onSynced`
+  // also clears it as belt-and-suspenders so a user who closes the tab
+  // mid-tier-pick doesn't carry the flag into the next sign-in.
+  const { user: authUser } = useAuth();
+  // Captured once at mount via useRef. useMemo with [] would let React
+  // discard and recompute, which could re-read sessionStorage after
+  // handleTierSelect has cleared the flag.
+  const oauthPendingOnMount = useRef<boolean>(
+    (() => {
+      try {
+        return sessionStorage.getItem(SPOTIFY_OAUTH_PENDING_KEY) === "1";
+      } catch {
+        return false;
+      }
+    })(),
+  ).current;
+  const isFreshSpotifyOAuth =
+    oauthPendingOnMount ||
+    (!!authUser && authUser.app_metadata?.provider === "spotify");
+
+  // Tier-pick reset on fresh OAuth lives at the parent Connect level
+  // now (so it fires for returning users who short-circuit via
+  // <Navigate> before ConnectInner mounts).
+
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
   const [spotifyConnecting, setSpotifyConnecting] = useState(false);
@@ -97,7 +199,8 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
   const [pendingTopTracks, setPendingTopTracks] = useState<string[] | null>(null);
   const [pendingArtistImages, setPendingArtistImages] = useState<Record<string, string>>({});
   const [pendingArtistIds, setPendingArtistIds] = useState<Record<string, string>>({});
-  const [pendingTrackImages, setPendingTrackImages] = useState<{ title: string; artist: string; imageUrl: string; uri?: string }[]>([]);
+  const [pendingTrackImages, setPendingTrackImages] = useState<{ title: string; artist: string; collaborators?: string[]; imageUrl: string; uri?: string }[]>([]);
+  const [pendingLikedTracks, setPendingLikedTracks] = useState<{ title: string; artist: string; collaborators?: string[]; imageUrl: string; uri?: string; addedAt?: string | null }[]>([]);
   const [pendingDisplayName, setPendingDisplayName] = useState<string | null>(null);
   // hasMusicToken is live from localStorage so it survives the Spotify OAuth
   // redirect (React state is wiped on remount, but the token persists).
@@ -134,6 +237,7 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
       if (patch.artistImages) setPendingArtistImages(patch.artistImages);
       if (patch.artistIds) setPendingArtistIds(patch.artistIds);
       if (patch.trackImages) setPendingTrackImages(patch.trackImages);
+      if (patch.likedTracks) setPendingLikedTracks(patch.likedTracks);
       setStep(1);
     },
   });
@@ -258,6 +362,7 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
       artistImages: Object.keys(pendingArtistImages).length ? pendingArtistImages : undefined,
       artistIds: Object.keys(pendingArtistIds).length ? pendingArtistIds : undefined,
       trackImages: pendingTrackImages.length ? pendingTrackImages : undefined,
+      likedTracks: pendingLikedTracks.length ? pendingLikedTracks : undefined,
       lastFmUsername: lastFmUsername.trim() || undefined,
       calculatedTier: t,
       // Stamp tasteRefreshedAt explicitly — pendingTop* came from the
@@ -269,7 +374,15 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
       tasteRefreshedAt: pendingTopArtists ? new Date().toISOString() : undefined,
     };
     saveProfile(profile);
+    // Confirm tier for this session — unblocks StoriesProvider /
+    // ArtistUpdatesProvider, which were holding pre-gen until the user
+    // explicitly picked a tier this login. Without this call /preparing
+    // would render its own tier-pick step on top of the user's choice
+    // here.
+    confirmTier(t);
     sessionStorage.removeItem("musicnerd_redirect");
+    // Clear the OAuth-pending flag — we're past the post-signin window.
+    try { sessionStorage.removeItem(SPOTIFY_OAUTH_PENDING_KEY); } catch { /* ignore */ }
     // Route through /preparing so artist-updates gets a warmup window
     // before Browse renders. Splash auto-advances when 1 artist-update
     // row lands, or the 45s ceiling fires. Stories pre-gen runs in
@@ -292,8 +405,20 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
           through an error so the user always has a retry path — if we
           just dismissed on failure, they'd land back on step 0 and
           think their click did nothing. */}
+      {/* `isFreshSpotifyOAuth` is the synchronous mount-time check that
+          paves over the 600ms gap before `spotifySyncing` flips true.
+          It stays true until the sync resolves — at which point
+          `onSynced` advances `step` to 1, and from there the user is
+          past step 0 anyway, so the overlay doesn't need to keep
+          gating. We dismiss it once any of:
+            - sync flag flipped false (success or short-circuit), AND
+            - we're on step 1 or beyond (synced data populated). */}
       <SpotifySyncingOverlay
-        visible={spotifySyncing || !!spotifySyncError}
+        visible={
+          spotifySyncing ||
+          !!spotifySyncError ||
+          (isFreshSpotifyOAuth && step === 0)
+        }
         error={spotifySyncError}
         onRetry={retrySync}
       />

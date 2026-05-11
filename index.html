@@ -3,7 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- TODO: Set the document title to the name of your application -->
+    <!--
+      Pete 2026-05-11: inline html/body background so the document is
+      black from the very first paint — before Tailwind's CSS loads.
+      Without this, the browser briefly flashed the default white
+      between Spotify's OAuth redirect back to localhost and the moment
+      React mounted, which read as a "loading screen that shouldn't be
+      there" between Spotify accept and the tier picker.
+    -->
+    <style>html, body, #root { background: #000; color-scheme: dark; min-height: 100vh; margin: 0; }</style>
     <title>MusicNerdTV</title>
     <meta name="description" content="MusicNerdTV Prototype">
     <meta name="author" content="Lovable" />

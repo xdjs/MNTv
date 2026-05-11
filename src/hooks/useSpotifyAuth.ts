@@ -25,10 +25,17 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { TIER_CONFIRMED_STORAGE_KEY } from "@/contexts/TierGateContext";
 
 const SPOTIFY_CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID as string;
+// `user-library-read` was added 2026-05-10 so spotify-taste can call
+// /me/tracks (Liked Songs) to drive the Stories rail off the user's
+// most-recently-liked tracks instead of /me/top/tracks (which only
+// reflects play counts, not active liking). Existing users are
+// re-prompted once on next sign-in to consent to the new scope; the
+// grant persists for future sessions.
 const SPOTIFY_SCOPES =
-  "user-top-read user-read-recently-played user-read-private streaming user-read-playback-state user-modify-playback-state";
+  "user-top-read user-library-read user-read-recently-played user-read-private streaming user-read-playback-state user-modify-playback-state";
 
 // ── Supabase-managed OAuth ────────────────────────────────────────────────────
 
@@ -37,6 +44,16 @@ const SPOTIFY_SCOPES =
  * (not configured in the dashboard) so rotating scopes doesn't need a
  * dashboard edit.
  */
+/**
+ * Set right before redirecting to Spotify. Connect.tsx reads this on
+ * mount to keep the syncing overlay visible from the very first frame
+ * after the OAuth callback — Supabase's `detectSessionInUrl` consumes
+ * the URL hash before React paints, so we can't detect the callback
+ * from `window.location.hash`. The flag is cleared once tier-pick
+ * completes (handleTierSelect) or sign-out fires.
+ */
+export const SPOTIFY_OAUTH_PENDING_KEY = "musicnerd_spotify_oauth_pending";
+
 export async function signInWithSpotify(): Promise<void> {
   // No dev-experience guard here anymore. `signInWithOAuth` doesn't
   // consume VITE_SPOTIFY_CLIENT_ID — Supabase's server-side provider
@@ -44,11 +61,29 @@ export async function signInWithSpotify(): Promise<void> {
   // `refreshSpotifyToken` below where it actually matters. The supabase
   // client itself already logs a dev warning for missing VITE_SUPABASE_*
   // vars (src/integrations/supabase/client.ts).
+  try {
+    sessionStorage.setItem(SPOTIFY_OAUTH_PENDING_KEY, "1");
+    // Clear session-scoped flags BEFORE the OAuth redirect so that
+    // TierGateProvider's useState initializer reads the cleared
+    // state on the very first render of /preparing — no warming-
+    // spinner flash before the tier picker, no stale rotation cursor.
+    sessionStorage.removeItem(TIER_CONFIRMED_STORAGE_KEY);
+    sessionStorage.removeItem("musicnerd_artist_rotation_resolved");
+  } catch {
+    // Storage disabled — the overlay will still come up via the
+    // `user.app_metadata.provider === "spotify"` check, just one frame
+    // later than ideal. Acceptable degradation.
+  }
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "spotify",
     options: {
       scopes: SPOTIFY_SCOPES,
-      redirectTo: `${window.location.origin}/connect`,
+      // Returning users with cached profile land on the tier picker
+      // directly. Genuinely-new users bounce through /connect via
+      // ProtectedRoute for the onboarding sync.
+      // ⚠ /preparing MUST be in Supabase dashboard's allowed redirect
+      // URLs alongside /connect.
+      redirectTo: `${window.location.origin}/preparing`,
       // Force Spotify to re-prompt on every sign-in. Without this,
       // Spotify silently reuses the prior grant, so a user who
       // previously consented with a narrower scope set (before
@@ -61,6 +96,9 @@ export async function signInWithSpotify(): Promise<void> {
     },
   });
   if (error) {
+    // Sign-in didn't even reach Spotify — clear the pending flag so we
+    // don't leave a stale signal that confuses the next Connect mount.
+    try { sessionStorage.removeItem(SPOTIFY_OAUTH_PENDING_KEY); } catch { /* ignore */ }
     console.error("[signInWithSpotify] failed:", error);
     throw error;
   }
@@ -157,7 +195,8 @@ export async function fetchSpotifyTaste(accessToken: string): Promise<{
   topTracks: string[];
   artistImages: Record<string, string>;
   artistIds: Record<string, string>;
-  trackImages: { title: string; artist: string; imageUrl: string; uri?: string }[];
+  trackImages: { title: string; artist: string; collaborators?: string[]; imageUrl: string; uri?: string }[];
+  likedTracks: { title: string; artist: string; collaborators?: string[]; imageUrl: string; uri?: string; addedAt?: string | null }[];
   displayName: string | null;
 } | null> {
   const t0 = performance.now();
@@ -208,6 +247,7 @@ export async function fetchSpotifyTaste(accessToken: string): Promise<{
       artistImages: data.artistImages || {},
       artistIds: data.artistIds || {},
       trackImages: data.trackImages || [],
+      likedTracks: data.likedTracks || [],
       displayName: data.displayName || null,
     };
   } finally {

@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, LogOut, Heart } from "lucide-react";
+import { Search, LogOut, Heart, ChevronDown } from "lucide-react";
 import { Link } from "react-router-dom";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import TileRow from "@/components/TileRow";
@@ -8,18 +8,41 @@ import SearchOverlay from "@/components/SearchOverlay";
 import PageTransition from "@/components/PageTransition";
 import StoriesRail from "@/components/StoriesRail";
 import ArtistUpdatesSection from "@/components/ArtistUpdatesSection";
-import { useUserProfile, tierGreeting, tierBadgeLabel, tierBadgeColor, tierGlowClass } from "@/hooks/useMusicNerdState";
+import { useUserProfile, tierGreeting, tierBadgeLabel, tierGlowClass } from "@/hooks/useMusicNerdState";
 import { usePersonalizedCatalog } from "@/hooks/usePersonalizedCatalog";
 import { useTierAccent } from "@/hooks/useTierAccent";
 import { useSignOut } from "@/hooks/useSignOut";
 import { usePlayer } from "@/contexts/PlayerContext";
 import { useStoriesContext } from "@/contexts/StoriesContext";
 import { useArtistUpdatesContext } from "@/contexts/ArtistUpdatesContext";
+import { useTierGate } from "@/contexts/TierGateContext";
 
 export default function Browse() {
   const [searchOpen, setSearchOpen] = useState(false);
   const navigate = useNavigate();
   const { profile, saveProfile } = useUserProfile();
+  const { tierConfirmed, confirmTier } = useTierGate();
+  // Direct-navigating to /browse (refresh, bookmark, new tab) skips
+  // PreparingExperience and lands here with tierConfirmed=false.
+  // StoriesProvider + ArtistUpdatesProvider both gate pre-gen on
+  // tierConfirmed, so Browse would render empty rails. Route through
+  // /preparing for the picker.
+  //
+  // One-shot guard: fire the redirect at most once per mount. Without
+  // this, if a transient context re-emit ever flipped tierConfirmed
+  // false→true→false the user could be yanked out of Browse mid-
+  // session. The legitimate "needs to confirm tier" case happens
+  // exactly at mount; later flips during an active session are
+  // either bugs or expected (sign-out clears the flag, which is its
+  // own navigation path).
+  const tierRedirectFiredRef = useRef(false);
+  useEffect(() => {
+    if (tierRedirectFiredRef.current) return;
+    if (profile && !tierConfirmed) {
+      tierRedirectFiredRef.current = true;
+      navigate("/preparing?next=/browse", { replace: true });
+    }
+  }, [profile, tierConfirmed, navigate]);
   const { signOut } = useSignOut();
   const tier = profile?.calculatedTier;
   const { currentTrack, isPlaying, nowPlayingFocused, setNowPlayingFocused, setNowPlayingFocusIndex } = usePlayer();
@@ -104,29 +127,14 @@ export default function Browse() {
   const npbVisible = !!currentTrack;
   const lastRowRef = useRef(0);
 
-  // Auto-return to Listen after 10s idle when track is playing
-  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // removed the 10s-idle auto-return to /listen.
+  // It was forcing users out of Browse mid-scroll any time a new
+  // nugget arrived for the playing track. The mini-player tap is
+  // already a clear opt-in path back to the immersive view; new
+  // nuggets that arrived while away will be shown on return.
   const listenUrl = currentTrack
     ? `/listen/${currentTrack.trackId}?art=${encodeURIComponent(currentTrack.coverArtUrl)}`
     : null;
-
-  useEffect(() => {
-    if (!isPlaying || !listenUrl) return;
-    const resetIdle = () => {
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = setTimeout(() => navigate(listenUrl), 10000);
-    };
-    resetIdle();
-    window.addEventListener("keydown", resetIdle);
-    window.addEventListener("mousemove", resetIdle);
-    window.addEventListener("click", resetIdle);
-    return () => {
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-      window.removeEventListener("keydown", resetIdle);
-      window.removeEventListener("mousemove", resetIdle);
-      window.removeEventListener("click", resetIdle);
-    };
-  }, [isPlaying, listenUrl, navigate]);
 
   // Sign-out goes through the shared useSignOut hook so every caller
   // (this button, future settings menu, session-expired flows) ends the
@@ -270,7 +278,6 @@ export default function Browse() {
 
   const focusGlow = "tv-focus-glow";
   const glowClass = tier ? tierGlowClass(tier) : "";
-  const badgeColor = tier ? tierBadgeColor(tier) : "";
 
   return (
     <PageTransition>
@@ -323,11 +330,23 @@ export default function Browse() {
             >
               {tierGreeting(tier, userName)}
             </h1>
-            {tier && (
-              <span className={`text-xs font-bold px-3 py-1 rounded-full ${badgeColor}`}>
-                ● {tierBadgeLabel(tier)}
-              </span>
-            )}
+            {/* Tier picker — surfaces tier choice on every Browse mount so
+                returning users can change tier without going back through
+                Connect. Pete: "I should be able to pick my tier every
+                time I log in." */}
+            <TierPicker
+              tier={tier}
+              onSelect={(t) => {
+                if (!profile) return;
+                if (t !== tier) saveProfile({ ...profile, calculatedTier: t });
+                // Re-confirm so StoriesProvider + ArtistUpdatesProvider
+                // detect a tier switch and re-warm at the new tier.
+                // Without this, the dropdown saved the new tier but
+                // pre-gen never re-fired this session — "change it
+                // any time" wasn't actually live.
+                confirmTier(t);
+              }}
+            />
           </div>
           <p className="mt-1 text-muted-foreground text-lg">
             {profile?.streamingService
@@ -375,5 +394,78 @@ export default function Browse() {
         <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
       </div>
     </PageTransition>
+  );
+}
+
+// ── Tier picker ─────────────────────────────────────────────────────────
+// Pulled out of the header MusicNerdLogo (which "cycled" the tier on
+// click — a hidden interaction nobody discovered) into an explicit
+// dropdown inline with the greeting. Always visible on Browse so the
+// user can change tier on every login without going through Connect.
+
+interface TierPickerProps {
+  tier: "casual" | "curious" | "nerd" | undefined;
+  onSelect: (t: "casual" | "curious" | "nerd") => void;
+}
+
+const TIER_OPTIONS: Array<{ id: "casual" | "curious" | "nerd"; label: string; desc: string; color: string }> = [
+  { id: "casual", label: "Casual", desc: "Just here for the vibes", color: "text-green-400" },
+  { id: "curious", label: "Curious", desc: "I like the backstory", color: "text-blue-400" },
+  { id: "nerd", label: "Nerd Mode", desc: "Give me every detail", color: "text-pink-400" },
+];
+
+function TierPicker({ tier, onSelect }: TierPickerProps) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    // pointerdown unifies mouse + touch + pen. mousedown is mouse-only;
+    // on touch devices it's synthesized after touchstart/touchend, which
+    // can produce ordering quirks vs. the option's React click handler.
+    // pointerdown fires once per primary input regardless of source.
+    function onDocPointerDown(e: PointerEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("pointerdown", onDocPointerDown);
+    return () => document.removeEventListener("pointerdown", onDocPointerDown);
+  }, [open]);
+
+  if (!tier) return null;
+  const current = TIER_OPTIONS.find((t) => t.id === tier);
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-foreground/5 hover:bg-foreground/10 transition-colors ${current?.color ?? ""}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="Change tier"
+      >
+        <span>● {current?.label ?? tierBadgeLabel(tier)}</span>
+        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div
+          role="listbox"
+          className="absolute left-0 top-full mt-2 z-30 w-56 rounded-xl bg-background/95 backdrop-blur-xl ring-1 ring-foreground/10 shadow-2xl py-1.5"
+        >
+          {TIER_OPTIONS.map((opt) => {
+            const selected = opt.id === tier;
+            return (
+              <button
+                key={opt.id}
+                onClick={() => { onSelect(opt.id); setOpen(false); }}
+                role="option"
+                aria-selected={selected}
+                className={`w-full flex flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-foreground/5 transition-colors ${selected ? "bg-foreground/[0.04]" : ""}`}
+              >
+                <span className={`text-sm font-bold ${opt.color}`}>● {opt.label}{selected ? " — current" : ""}</span>
+                <span className="text-xs text-muted-foreground">{opt.desc}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

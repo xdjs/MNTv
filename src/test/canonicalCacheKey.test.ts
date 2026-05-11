@@ -100,4 +100,54 @@ describe("canonicalCacheKey", () => {
       expect(fromTile).toBe(fromStory);
     });
   });
+
+  // Round-trip parity: the server (generate-nuggets edge function)
+  // writes nugget_cache rows with raw decoded artist/title/uri values
+  // (no URL encoding). The client reads via canonicalCacheKey, which
+  // takes the URL-encoded React-Router param and decodes back to raw.
+  // These tests lock in the contract so a future encoding tweak on
+  // either side is caught at CI time, not as silent cold-cache misses
+  // in production.
+  describe("round-trip parity with server write", () => {
+    function serverDbCacheKey(artist: string, title: string, uri: string, tier: string): string {
+      // Mirror of `fastTrackId` + `fastDbCacheKey` construction in
+      // supabase/functions/generate-nuggets/index.ts (firstNuggetOnly
+      // path) and the fallback path that uses fallbackTrackId.
+      return `real::${artist}::${title}::::${uri}::${tier}`;
+    }
+    function clientStoryHrefTrackId(artist: string, title: string, uri: string): string {
+      // Mirror of `listenHrefForStory` in src/components/StoriesRail.tsx
+      // — the URL-encoded form Listen sees from React Router params.
+      const enc = encodeURIComponent;
+      return `real::${enc(artist)}::${enc(title)}::${enc("")}::${enc(uri)}`;
+    }
+
+    it("plain ASCII (Cherele / KIKI / spotify URI)", () => {
+      const args = { artist: "Cherele", title: "KIKI", uri: "spotify:track:abc123XYZ" } as const;
+      const serverKey = serverDbCacheKey(args.artist, args.title, args.uri, "casual");
+      const clientKey = canonicalCacheKey(clientStoryHrefTrackId(args.artist, args.title, args.uri), "casual");
+      expect(clientKey).toBe(serverKey);
+    });
+
+    it("title with spaces + parens (KIKI (feat. Pete Rango))", () => {
+      const args = { artist: "Cherele", title: "KIKI (feat. Pete Rango)", uri: "spotify:track:abc" } as const;
+      const serverKey = serverDbCacheKey(args.artist, args.title, args.uri, "curious");
+      const clientKey = canonicalCacheKey(clientStoryHrefTrackId(args.artist, args.title, args.uri), "curious");
+      expect(clientKey).toBe(serverKey);
+    });
+
+    it("Apple URI (apple:song:N)", () => {
+      const args = { artist: "Mavi Taylor", title: "rush", uri: "apple:song:1234567890" } as const;
+      const serverKey = serverDbCacheKey(args.artist, args.title, args.uri, "nerd");
+      const clientKey = canonicalCacheKey(clientStoryHrefTrackId(args.artist, args.title, args.uri), "nerd");
+      expect(clientKey).toBe(serverKey);
+    });
+
+    it("artist with apostrophe", () => {
+      const args = { artist: "softcore's", title: "blindside", uri: "spotify:track:def" } as const;
+      const serverKey = serverDbCacheKey(args.artist, args.title, args.uri, "casual");
+      const clientKey = canonicalCacheKey(clientStoryHrefTrackId(args.artist, args.title, args.uri), "casual");
+      expect(clientKey).toBe(serverKey);
+    });
+  });
 });

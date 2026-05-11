@@ -34,17 +34,16 @@ const corsHeaders = {
 const FACTS_PER_ARTIST = 1;
 const RECENT_WINDOW_DAYS = 90;
 
-// Below this Spotify follower count we assume there's essentially no
-// press, interviews, or journalism about the artist — so any prompt
-// asking Gemini to recall specific stories about them will fabricate.
-// Pete Rango, Earl from Yonder, Qu33nK, etc. all land under this
-// threshold; well-known artists (Radiohead, Kendrick) sit three+
-// orders of magnitude above it. In sparse mode we pivot to catalog-
-// grounded nuggets (real track titles + genres from Spotify) instead
-// of open-ended story generation. This is a simpler signal than
-// generate-nuggets' Exa-citation-count approach; a proper parity fix
-// would add Exa here too but is scoped separately.
-const SPARSE_FOLLOWER_THRESHOLD = 5000;
+// Sparse-mode is now driven by actual research results, not follower
+// count — see the post-Exa branch in `serve`. Pete's correction
+// (2026-04-30): "Pete Rango and Cherele have tons of good information
+// out there even though they don't meet the [follower] criteria. Sparse
+// mode shouldn't be triggered just because they're under 5k followers,
+// only if our research doesn't find good information." The previous
+// `SPARSE_FOLLOWER_THRESHOLD = 5000` constant is gone with this
+// change; the only remaining reference is in the comment block at
+// `generateArtistFacts`'s sparse-mode prompt where the language is
+// historical and harmless.
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -262,6 +261,86 @@ function buildReleaseUpdate(
   };
 }
 
+// ── Exa research (lightweight wrapper) ─────────────────────────────────
+//
+// One Exa /search call per non-sparse artist gives Gemini real journalism
+// to anchor a fact in. Without this, the row was effectively asking
+// gemini-2.5-flash to recall trivia from training data — Pete's
+// complaint: "really poor, feels like its not diving in doing research
+// like we do our regular nuggets." generate-nuggets uses 3 Exa calls
+// (artist / track / discovery) and a Curator+Writer+Validator pipeline;
+// here we settle for a single artist-scoped search to keep wall-time
+// under the existing GEMINI_TIMEOUT_MS budget.
+//
+// Always run — sparse-mode is now decided AFTER seeing the result
+// (citation count + body-text mention), so we can't gate the call.
+// If the result comes back with no usable signal, callers swap to the
+// catalog-grounded sparse prompt and ignore these snippets.
+const EXA_TIMEOUT_MS = 8_000;
+
+async function researchArtistOnExa(
+  artistName: string,
+  apiKey: string,
+): Promise<{ snippets: string; citations: { title: string; url: string }[] }> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), EXA_TIMEOUT_MS);
+  try {
+    const res = await fetch("https://api.exa.ai/search", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        query: `${artistName} interview production credits collaborators backstory`,
+        type: "auto",
+        numResults: 4,
+        livecrawl: "fallback",
+        contents: {
+          text: { maxCharacters: 3500 },
+          highlights: { numSentences: 3, highlightsPerUrl: 2 },
+        },
+        includeText: [artistName],
+        excludeDomains: ["facebook.com", "instagram.com", "tiktok.com"],
+      }),
+      signal: ctl.signal,
+    });
+    if (!res.ok) {
+      console.warn(`[artist-updates] Exa ${res.status} for ${artistName}:`, await res.text().catch(() => ""));
+      return { snippets: "", citations: [] };
+    }
+    const data = await res.json();
+    const results = (data?.results ?? []) as Array<{
+      title?: string;
+      url?: string;
+      text?: string;
+      highlights?: string[];
+    }>;
+    const citations = results
+      .filter((r) => r.url)
+      .map((r) => ({ title: r.title || "", url: r.url! }));
+    const snippets = results
+      .map((r, i) => {
+        const highlightBlock = r.highlights?.length
+          ? `\n[Key excerpts]:\n${r.highlights.map((h) => `• ${h}`).join("\n")}`
+          : "";
+        const body = (r.text || "").slice(0, 2500);
+        return `[Source ${i + 1}: "${r.title || "(no title)"}" — ${r.url}]${highlightBlock}\n${body}`;
+      })
+      .join("\n\n---\n\n");
+    return { snippets, citations };
+  } catch (e) {
+    if ((e as Error)?.name === "AbortError") {
+      console.warn(`[artist-updates] Exa timed out after ${EXA_TIMEOUT_MS}ms for ${artistName}`);
+    } else {
+      console.warn(`[artist-updates] Exa threw for ${artistName}:`, e);
+    }
+    return { snippets: "", citations: [] };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ── Gemini fact generation (batched: N facts in one call) ─────────────
 
 interface FactGenerationContext {
@@ -278,12 +357,16 @@ interface FactGenerationContext {
   /** Top tracks with album + release year — catalog grounding for
    *  sparse prompts. Ignored in non-sparse mode. */
   topTracks?: SpotifyTopTrack[];
+  /** Exa research snippets — multi-page text + highlights from journalism
+   *  about the artist. Empty string if Exa is unavailable or returned
+   *  nothing. Sparse mode skips Exa and ignores this field. */
+  researchSnippets?: string;
 }
 
 async function generateArtistFacts(
   ctx: FactGenerationContext,
 ): Promise<{ headline: string; body: string }[]> {
-  const { artistName, tier, count, sparse, genres, topTracks } = ctx;
+  const { artistName, tier, count, sparse, genres, topTracks, researchSnippets } = ctx;
   const apiKey = Deno.env.get("GOOGLE_AI_API_KEY");
   if (!apiKey) {
     console.warn("[artist-updates] GOOGLE_AI_API_KEY not set — skipping facts");
@@ -367,17 +450,37 @@ real track name from above. NEVER invent collaborators, labels, or
 quotes. NEVER claim anything that can't be verified from the list.`
     : "";
 
+  const exaResearchBlock = !sparse && researchSnippets
+    ? `\n\nEXA RESEARCH (multi-page journalism about ${artistName} — treat this as the PRIMARY ground truth, ahead of training data and ahead of Google Search):
+${researchSnippets}
+
+REQUIREMENTS WHEN USING EXA RESEARCH:
+- Pull the most specific, surprising, or non-obvious detail from the snippets above. Vague summaries fail the SWAP TEST — anchor every fact in something concrete that came out of the research.
+- Every fact MUST contain at least TWO of: a real person's name, a year/date, a place/venue, a song or album title, a label, a producer, an engineer, a co-writer, or a verifiable number. Vibe statements ("X has a unique sound") fail.
+- Quote sparingly. If you quote, attribute to a named source from the research and keep it under 12 words.
+- If the research contradicts what you "know" from training data, trust the research.
+- If the research is thin and you can't pull two concrete anchors, return zero nuggets — empty array is better than a generic fact.
+
+CITATION RULES — HARD constraints (do not break these):
+1. Every named publication, magazine, year, quote, person, venue, label, or producer in your nugget MUST literally appear in the EXA RESEARCH snippets above. Search Ctrl+F style: if it's not there verbatim, it's fabricated.
+2. Do NOT introduce a publication you "know" from training data (Attack Magazine, Pitchfork, Stereogum, Rolling Stone, Resident Advisor, etc.) unless that exact name appears in the research above.
+3. Do NOT cite a year, interview, quote, or specific incident that isn't in the research — even if it sounds plausible. The user can click "View Source" and discover the lie.
+4. If the only honest citation is the artist's own platform (Bandcamp / Soundcloud / their personal site), use that — don't dress it up as journalism.
+5. If the research is too thin to anchor any fact in two verifiable specifics, return zero nuggets. Empty is better than fabricated.
+`
+    : "";
+
   const prompt = `${CONSTITUTION_PREAMBLE}
 
 ${writerRules}
 
-${tierGuidance}${sparseGroundingBlock}
+${tierGuidance}${sparseGroundingBlock}${exaResearchBlock}
 
-You have Google Search available as a tool. USE IT FIRST to find
-verified, recent information about ${artistName} — interviews,
-production credits, label history, scene context, recent press. Pull
-the strongest grounded fact from what you find. Only fall back to the
-catalog data above if Google Search returns nothing usable.
+You also have Google Search available as a tool. USE IT to verify or
+extend the Exa research above — interviews, production credits, label
+history, scene context, recent press. Cross-check any specific name /
+year / venue / song title before committing to it. Only fall back to
+the catalog data above if both Exa and Google Search are empty.
 
 ARTIST NAME LOCK: refer to the artist as "${artistName}" throughout —
 that's their public/stage name and how the audience knows them.
@@ -487,7 +590,14 @@ function buildFactUpdate(
   headline: string,
   body: string,
   index: number,
+  citation?: { title: string; url: string },
 ): ArtistUpdate {
+  // Prefer an Exa citation if we have one — gives the fact a real
+  // article to click through to. Falls back to the generic MusicNerd
+  // source attribution when Exa was unavailable / sparse mode.
+  const source = citation && citation.url
+    ? { type: "web", title: citation.title, url: citation.url }
+    : { type: "generated", publisher: "MusicNerd" };
   return {
     artistId: artist.id,
     artistName: artist.name,
@@ -495,7 +605,7 @@ function buildFactUpdate(
     kind: "fact",
     headline,
     body,
-    source: { type: "generated", publisher: "MusicNerd" },
+    source,
     // Stable-ish id so the client can dedupe inside a cache row if we
     // ever regenerate. Uses the index within the fact set.
     nuggetId: `fact-${artist.id}-${index}`,
@@ -783,11 +893,20 @@ serve(async (req) => {
     });
   }
 
-  // 3. Sparse detection from Spotify's follower count. Below the
-  //    threshold we pull top tracks (for catalog grounding) and flip
-  //    the Gemini prompt into sparse-safe mode.
+  // 3. Sparse detection — driven by whether our research actually
+  //    surfaces material about the artist, NOT by follower count.
+  //    Pete's correction (2026-04-30): "Pete Rango and Cherele have
+  //    tons of good information out there even though they don't meet
+  //    the [follower] criteria. Sparse mode shouldn't be triggered
+  //    just because they're under 5k followers — only if our research
+  //    doesn't find good information."
+  //
+  //    We always run Exa now. Sparse-mode is determined post-hoc from
+  //    the result: if Exa returns no usable snippets and the artist
+  //    isn't even mentioned in what we got back, fall through to the
+  //    catalog-grounded sparse prompt + top-tracks fetch.
   const followers = artistInfo.followers?.total ?? 0;
-  const isSparse = followers < SPARSE_FOLLOWER_THRESHOLD;
+  const exaApiKey = Deno.env.get("EXA_API_KEY");
 
   // Wrap the post-claim generation flow in a try/catch so the sentinel
   // is always released — without this, an unexpected throw inside
@@ -800,14 +919,27 @@ serve(async (req) => {
   // throw mid-flow. catch + re-throw so the platform still sees a
   // 500 — we just want to make sure the sentinel doesn't outlive us.
   try {
-    // 4. Fetch Spotify data in parallel (release always, top tracks
-    //    only when sparse), then feed into Gemini. Running top-tracks
-    //    alongside release keeps wall time flat even on the sparse
-    //    path — the sequencing penalty is only on facts-after-tracks.
-    const [release, topTracks] = await Promise.all([
+    // 4. Fetch Spotify data + Exa research in parallel. We run Exa
+    //    every time and decide sparse-mode AFTER seeing the result
+    //    (citation count + body-text mention). Top-tracks always
+    //    fetched too — cheap call, and the sparse-mode prompt needs
+    //    them as catalog grounding when we DO fall through.
+    const [release, topTracks, exaResult] = await Promise.all([
       fetchRecentRelease(token, artistInfo.id),
-      isSparse ? fetchArtistTopTracks(token, artistInfo.id) : Promise.resolve([] as SpotifyTopTrack[]),
+      fetchArtistTopTracks(token, artistInfo.id),
+      exaApiKey
+        ? researchArtistOnExa(artistInfo.name, exaApiKey)
+        : Promise.resolve({ snippets: "", citations: [] as { title: string; url: string }[] }),
     ]);
+
+    // Sparse iff: few/no usable Exa citations AND the artist's name
+    // doesn't appear in any snippet body. Mirrors the trigger in
+    // generate-nuggets/index.ts so behavior stays consistent across
+    // both Browse rails. A press article with a generic title still
+    // counts as research if it talks about the artist in the body.
+    const artistMentionedInBody = !!exaResult.snippets &&
+      exaResult.snippets.toLowerCase().includes(artistInfo.name.toLowerCase());
+    const isSparse = exaResult.citations.length <= 1 && !artistMentionedInBody;
 
     const facts = await generateArtistFacts({
       artistName: artistInfo.name,
@@ -816,11 +948,12 @@ serve(async (req) => {
       sparse: isSparse,
       genres: artistInfo.genres,
       topTracks: isSparse ? topTracks : undefined,
+      researchSnippets: isSparse ? "" : exaResult.snippets,
     });
 
     const releaseAgeDays = release ? daysSince(release.release_date) : null;
     console.log(
-      `[artist-updates] ${artistInfo.name} (followers=${followers}${isSparse ? ", SPARSE" : ""}) → release=${
+      `[artist-updates] ${artistInfo.name} (followers=${followers}, exa=${exaResult.citations.length}c/${artistMentionedInBody ? "body" : "no-body"}${isSparse ? ", SPARSE" : ""}) → release=${
         release ? `${release.name} (${releaseAgeDays}d)` : "none"
       }, facts=${facts.length}, topTracks=${topTracks.length}`,
     );
@@ -833,7 +966,11 @@ serve(async (req) => {
     }
 
     facts.forEach((f, i) => {
-      updates.push(buildFactUpdate(artistInfo, f.headline, f.body, i));
+      // Round-robin through Exa citations so multiple facts on the same
+      // artist don't all link to the same article (we ask for 1 fact per
+      // artist today but this keeps it correct if FACTS_PER_ARTIST grows).
+      const citation = exaResult.citations[i % Math.max(exaResult.citations.length, 1)];
+      updates.push(buildFactUpdate(artistInfo, f.headline, f.body, i, citation));
     });
 
     if (updates.length === 0) {

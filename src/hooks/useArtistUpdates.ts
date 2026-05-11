@@ -45,20 +45,73 @@ interface UseArtistUpdatesOptions {
   maxConcurrent?: number;
 }
 
-// INTENTIONAL: 1 top artist is the current product target for the
-// Browse "Your artists, lately" rail. Reviewers have flagged this as
-// a "test mode" leftover multiple times — it is not. The single-row
-// treatment keeps the rail tight, halves first-paint Gemini load
-// vs. 3 artists, and matches the design direction we're testing
-// across the staging cohort.
-//
-// Earlier history: was 5 → 3 → 1. The 5→3 drop was first-run feedback
-// (cold-gen pressure on sign-in). The 3→1 drop is a product decision,
-// not a debug knob.
-//
-// Revisit only with explicit product approval.
-const DEFAULT_MAX_ARTISTS = 1;
+// 3 artists per session, drawn round-robin from the user's top-10 pool.
+// History: 5 → 3 → 1 → 3-with-rotation. The 1-artist phase kept Gemini
+// pressure low at first paint but made the rail feel static across
+// sessions; rotation gives variety without doubling cold-gen load
+// (cache hits in the second/third session keep most fetches warm).
+const DEFAULT_MAX_ARTISTS = 3;
 const DEFAULT_CONCURRENCY = 2;
+
+// Rotation pool: how many of the user's top artists we cycle through.
+// "rotate through top 10". Pool > slice gives us
+// enough material to feel fresh across ~3-4 sessions before repeats.
+const ROTATION_POOL_SIZE = 10;
+const LS_ROTATION_CURSOR_KEY = "musicnerd_artist_rotation_cursor";
+const SS_ROTATION_RESOLVED_KEY = "musicnerd_artist_rotation_resolved";
+
+// Cap at pool_size * 1000 so the persisted integer can't accidentally
+// climb toward Number.MAX_SAFE_INTEGER from runaway effects or test
+// loops. The modulo at slice time means any multiple of pool size is
+// functionally equivalent, so wrapping here is purely a precaution.
+const NEXT_CURSOR_CAP = ROTATION_POOL_SIZE * 1000;
+
+/**
+ * Returns the rotation start index for THIS session — stable across
+ * remounts within the same browser tab session, but advances by
+ * `sliceSize` between sessions.
+ *
+ * Storage:
+ *   - localStorage cursor: offset that advances each session, capped
+ *     at NEXT_CURSOR_CAP (1000× the pool) when written. Read on the
+ *     first call of each session. The cap-wrap is intentionally
+ *     non-monotonic (e.g. 9999 → 2 when sliceSize=3) — the slice-
+ *     time modulo collapses any residue to an equivalent pool index,
+ *     so a backward jump produces no visible rotation glitch.
+ *   - sessionStorage resolved value: caches the start index for this
+ *     session so multiple Browse mounts don't double-advance.
+ *
+ * Why both: localStorage gives session-to-session continuity (we keep
+ * advancing instead of resetting on tab close); sessionStorage gives
+ * within-session stability (a Browse remount mid-session shouldn't
+ * skip artists ahead). The modulo cap on write keeps the stored
+ * integer bounded — any multiple of pool size is functionally
+ * equivalent since the slice-time modulo collapses them.
+ */
+export function resolveRotationStart(sliceSize: number): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    const cached = sessionStorage.getItem(SS_ROTATION_RESOLVED_KEY);
+    if (cached !== null) {
+      const n = parseInt(cached, 10);
+      if (Number.isFinite(n) && n >= 0) return n;
+    }
+  } catch { /* noop */ }
+
+  let cursor = 0;
+  try {
+    const raw = localStorage.getItem(LS_ROTATION_CURSOR_KEY);
+    cursor = raw ? Math.max(0, parseInt(raw, 10) || 0) : 0;
+  } catch { /* noop */ }
+
+  try {
+    sessionStorage.setItem(SS_ROTATION_RESOLVED_KEY, String(cursor));
+    const next = (cursor + sliceSize) % NEXT_CURSOR_CAP;
+    localStorage.setItem(LS_ROTATION_CURSOR_KEY, String(next));
+  } catch { /* noop */ }
+
+  return cursor;
+}
 
 export interface UseArtistUpdatesResult {
   /** One entry per top artist, preserving input order. `updates` is null until that artist resolves. */
@@ -99,6 +152,33 @@ export function useArtistUpdates(
   // re-render doesn't re-fire in-flight requests.
   const inFlightRef = useRef<Set<string>>(new Set());
 
+  // Per-session rotation cursor — compute once at mount via useRef
+  // (resolveRotationStart writes to localStorage as a side effect).
+  const rotationStart = useRef<number>(resolveRotationStart(maxArtists)).current;
+
+  // The actual artist names we'll fetch this session: take a slice of
+  // size `maxArtists` from the top-`ROTATION_POOL_SIZE` pool starting
+  // at `rotationStart`, with wraparound.
+  const rotatedArtists = useMemo(() => {
+    const all = profile?.topArtists ?? [];
+    const pool = all.slice(0, ROTATION_POOL_SIZE);
+    if (pool.length === 0) return [] as string[];
+    const start = rotationStart % pool.length;
+    const out: string[] = [];
+    const seen = new Set<string>();
+    // Cap by min(maxArtists, pool.length) so a small pool (new account
+    // with < 3 top artists) doesn't wrap and render the same artist
+    // twice in the rail.
+    const sliceSize = Math.min(maxArtists, pool.length);
+    for (let i = 0; i < sliceSize; i++) {
+      const candidate = pool[(start + i) % pool.length];
+      if (seen.has(candidate)) continue;
+      seen.add(candidate);
+      out.push(candidate);
+    }
+    return out;
+  }, [profile?.topArtists, maxArtists, rotationStart]);
+
   // Stable content signature of the artist slice we're about to fetch.
   // useUserProfile re-renders with a new `profile.topArtists` array
   // identity every time the DB hydrate effect runs (even when the
@@ -109,22 +189,17 @@ export function useArtistUpdates(
   // deps keep the effect stable across identity-only re-renders.
   //
   // INVARIANT: order matters. We treat `[A, B] != [B, A]` as a real
-  // change because the rail renders artists in `topArtists` order.
-  // If the upstream `spotify-taste` ever returns artists in a non-
-  // deterministic order (e.g. set-based dedup), this signature would
-  // drift on every fetch and re-fire the effect for no reason. Today
-  // both spotify-taste and the localStorage profile preserve order.
-  const topArtistsSig = (profile?.topArtists ?? []).slice(0, maxArtists).join("|");
+  // change because the rail renders artists in rotation order.
+  const topArtistsSig = rotatedArtists.join("|");
 
   useEffect(() => {
-    const topArtists = profile?.topArtists ?? [];
-    if (!topArtists.length) {
+    if (!rotatedArtists.length) {
       setGroups([]);
       setReadyCount(0);
       return;
     }
 
-    const artists = topArtists.slice(0, maxArtists);
+    const artists = rotatedArtists;
     // Seed the groups with null-updates placeholders so Browse can
     // render one skeleton row per artist immediately while the edge
     // function calls are in flight.

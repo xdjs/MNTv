@@ -24,6 +24,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { clearStoredProfile } from "./useMusicNerdState";
 import { clearSpotifyToken } from "./useSpotifyToken";
 import { clearAppleMusicToken } from "./useAppleMusicToken";
+import { SPOTIFY_OAUTH_PENDING_KEY } from "./useSpotifyAuth";
+import { TIER_CONFIRMED_STORAGE_KEY } from "@/contexts/TierGateContext";
 
 // Legacy PKCE sessionStorage keys — the Supabase-managed OAuth flow
 // doesn't create these, but a tab that was mid-signin at cutover time
@@ -88,6 +90,17 @@ export function useSignOut() {
     sessionStorage.removeItem("spotify_pending_taste");
     sessionStorage.removeItem(LEGACY_PKCE_STATE_KEY);
     sessionStorage.removeItem(LEGACY_PKCE_VERIFIER_KEY);
+    // Tier-confirmed flag is per-session — clear it so the next login
+    // forces the tier-pick step (Pete: "I should be able to pick my
+    // tier every time I log in"). The window.location.href reload
+    // below would also clear it via tab context teardown, but the
+    // explicit removal keeps behavior consistent if that reload is
+    // ever swapped for a soft navigate.
+    sessionStorage.removeItem(TIER_CONFIRMED_STORAGE_KEY);
+    // Same logic for the Spotify OAuth-pending flag set by
+    // signInWithSpotify — must clear so the next sign-in doesn't pick
+    // up a stale "we're mid-OAuth" signal on Connect mount.
+    sessionStorage.removeItem(SPOTIFY_OAUTH_PENDING_KEY);
 
     // 5. Hard navigate. See module-level comment for why a full reload
     //    instead of React Router navigate().

@@ -396,13 +396,40 @@ export default function Listen() {
     })();
   }, [track, isPlaying, currentTime, player, trackId]);
 
-  // Use Spotify SDK album art when available (better than DiceBear for externally-changed tracks)
+  // Use Spotify SDK album art when available. Pete 2026-05-08: cover
+  // art was showing the PREVIOUS song's album art (Aaron Doh's "Love
+  // Lies" art for "Not Yourself"). Cause: track.coverArtUrl is locked
+  // in by the URL params at mount, but the SDK can switch tracks
+  // (auto-next, queue advance) without a route change. Previously we
+  // only swapped to the SDK's albumArtUrl when track.coverArtUrl was a
+  // DiceBear placeholder — which left real-but-stale URLs untouched.
+  // New rule: if the SDK is reporting a DIFFERENT track than what the
+  // route says, trust the SDK's albumArtUrl (it matches what's
+  // actually playing).
   const effectiveCoverArt = useMemo(() => {
-    if (spotifyStateTrack?.albumArtUrl && track?.coverArtUrl?.includes("dicebear.com")) {
+    if (!spotifyStateTrack?.albumArtUrl) {
+      return track?.coverArtUrl || "";
+    }
+    // SDK reports a different URI than what the route encoded — the
+    // user has crossed into a different track via SDK queue
+    // advancement. Use the SDK's art.
+    if (trackUri && spotifyStateTrack.spotifyUri && spotifyStateTrack.spotifyUri !== trackUri) {
+      return spotifyStateTrack.albumArtUrl;
+    }
+    // Title/artist mismatch is a softer signal that we're on a
+    // different track than expected; still trust the SDK.
+    if (
+      track?.title && spotifyStateTrack.title &&
+      track.title.trim().toLowerCase() !== spotifyStateTrack.title.trim().toLowerCase()
+    ) {
+      return spotifyStateTrack.albumArtUrl;
+    }
+    // Original DiceBear-replacement guard.
+    if (track?.coverArtUrl?.includes("dicebear.com")) {
       return spotifyStateTrack.albumArtUrl;
     }
     return track?.coverArtUrl || "";
-  }, [spotifyStateTrack?.albumArtUrl, track?.coverArtUrl]);
+  }, [spotifyStateTrack?.albumArtUrl, spotifyStateTrack?.spotifyUri, spotifyStateTrack?.title, trackUri, track?.coverArtUrl, track?.title]);
 
   // Register track-end handler on the global player
   useEffect(() => {
@@ -652,18 +679,31 @@ export default function Listen() {
   // timestampSec <= currentTime, so partial arrays are safe.
   const rawTrackNuggets = aiNuggets;
 
-  // Redistribute nugget timestamps based on actual player duration instead of
-  // the hardcoded 300s default. This ensures nuggets are evenly spaced across
-  // the real track length so all 3 show up even on short tracks.
+  // Redistribute nugget timestamps based on actual player duration instead
+  // of the hardcoded 300s default. The formula MUST mirror
+  // `makeTimestamp` in src/hooks/useAINuggets.ts and the server-side
+  // cache builder in supabase/functions/generate-nuggets/index.ts —
+  // first nugget pinned at earlyStart=0 (so a tap-on-pink-ring story
+  // shows nugget #0 the moment the song starts), last at
+  // durationSec - endBuffer, middle distributed evenly. The previous
+  // earlyStart=10 + spacing*(i+1) formula was overriding the server's
+  // cached timestamps and pushing nugget #0 to ~65s into a 4-min
+  // track — Pete: "I clicked the story and the song started playing
+  // but I was presented with no Nugget."
   const trackNuggets = useMemo(() => {
     if (rawTrackNuggets.length === 0 || realDuration <= 0) return rawTrackNuggets;
-    const earlyStart = 10;
-    const endBuffer = 10;
-    const usable = Math.max(realDuration - earlyStart - endBuffer, 20);
-    const spacing = usable / (rawTrackNuggets.length + 1);
+    // aligned with makeTimestamp +
+    // server cache builder — endBuffer=15, usable-min=30. Previously
+    // diverged at endBuffer=10/min=20, which would put the last nugget
+    // 5s closer to the song end than the cache build expected.
+    const earlyStart = 0;
+    const endBuffer = 15;
+    const usable = Math.max(realDuration - earlyStart - endBuffer, 30);
+    const denom = Math.max(rawTrackNuggets.length - 1, 1);
+    const spacing = usable / denom;
     return rawTrackNuggets.map((n, i) => ({
       ...n,
-      timestampSec: Math.floor(earlyStart + spacing * (i + 1)),
+      timestampSec: Math.min(Math.floor(earlyStart + spacing * i), realDuration - 10),
     }));
   }, [rawTrackNuggets, realDuration]);
 
@@ -1051,62 +1091,77 @@ export default function Listen() {
   }, [seek, trackNuggets]);
 
   // Nugget trigger logic — fires on playback tick or when new nuggets arrive.
-  // For fresh SSE generation (!aiFromCache), nuggets show immediately as they
-  // stream in. For cached tracks, they show at their timestamp markers.
+  // INVARIANT (Pete's spec, 2026-05-06): nugget #0 always shows
+  // immediately when nuggets land — no timestamp gating, no isPlaying
+  // gating, no aiFromCache gating. The user just tapped a story and
+  // expects content on screen as the song starts. Subsequent nuggets
+  // pace through the track via timestampSec.
+  //
+  // Reveal rule for nuggets[1..N]:
+  //   - No 8s auto-dismiss, no queue.
+  //   - When a new nugget triggers and one is already active, push
+  //     the active one into `dismissedNuggets` (so the playback-bar
+  //     re-open chip renders for it) and replace it.
+  //   - Last nugget stays on screen until track end / navigation.
   useEffect(() => {
     if (!nerdActive) return;
-    // Cached tracks: require playback to reach the timestamp
-    // Fresh generation: show as soon as the nugget arrives from SSE
+    if (trackNuggets.length === 0) return;
+
+    // First nugget — always trigger immediately if not yet shown.
+    const first = trackNuggets[0];
+    if (first && !shownNuggetIds.has(first.id)) {
+      if (activeNugget && activeNugget.id !== first.id) {
+        setDismissedNuggets((prev) => new Map(prev).set(activeNugget.id, activeNugget));
+      }
+      setActiveNugget(first);
+      setReopenedNuggetId(null);
+      setShownNuggetIds((s) => new Set(s).add(first.id));
+      return; // give state a tick before evaluating subsequent nuggets
+    }
+
+    // Subsequent nuggets — wait for playback to cross each timestamp
+    // (cached tracks) or arrive from SSE (fresh tracks). The
+    // `!isPlaying && aiFromCache` guard keeps cached-track unlock
+    // tied to actual playback so a paused track doesn't dump the
+    // whole rail at once.
+    if (!isPlaying && aiFromCache) return;
     const shouldTrigger = (n: typeof trackNuggets[0]) =>
       !aiFromCache || currentTime >= n.timestampSec;
-
-    // Cached tracks: wait for playback to reach each timestamp.
-    // Fresh SSE: show immediately even if paused — the user is waiting
-    // for content and should see nuggets the moment they arrive.
-    if (!isPlaying && aiFromCache) return;
-
-    for (const n of trackNuggets) {
+    // Collect every newly-eligible nugget for this tick first, then
+    // commit state once. If two nuggets' timestamps were both crossed
+    // in the same tick (e.g. after a seek or cache restore), the
+    // previous per-iter setActiveNugget calls clobbered each other
+    // and only the last one rendered — intermediates landed in
+    // shownNuggetIds but never showed as the active card. Now the
+    // intermediates are explicitly pushed into dismissedNuggets so
+    // they appear in the dismissed strip / nerd reel.
+    const newlyEligible: typeof trackNuggets = [];
+    for (let i = 1; i < trackNuggets.length; i++) {
+      const n = trackNuggets[i];
       if (shownNuggetIds.has(n.id)) continue;
-      if (shouldTrigger(n)) {
-        if (activeNugget) {
-          if (reopenedNuggetId) {
-            setDismissedNuggets((prev) => new Map(prev).set(activeNugget.id, activeNugget));
-            setActiveNugget(n);
-            setReopenedNuggetId(null);
-            setShownNuggetIds((s) => new Set(s).add(n.id));
-          } else {
-            setNuggetQueue((q) => (q.find((x) => x.id === n.id) ? q : [...q, n]));
-          }
-        } else {
-          setActiveNugget(n);
-          setReopenedNuggetId(null);
-          setShownNuggetIds((s) => new Set(s).add(n.id));
-        }
-      }
+      if (!shouldTrigger(n)) continue;
+      newlyEligible.push(n);
     }
+    if (newlyEligible.length === 0) return;
+    const finalActive = newlyEligible[newlyEligible.length - 1];
+    const intermediates = newlyEligible.slice(0, -1);
+    setDismissedNuggets((prev) => {
+      const next = new Map(prev);
+      if (activeNugget && activeNugget.id !== finalActive.id) {
+        next.set(activeNugget.id, activeNugget);
+      }
+      for (const n of intermediates) next.set(n.id, n);
+      return next;
+    });
+    setActiveNugget(finalActive);
+    setReopenedNuggetId(null);
+    setShownNuggetIds((s) => {
+      const next = new Set(s);
+      for (const n of newlyEligible) next.add(n.id);
+      return next;
+    });
   }, [currentTime, isPlaying, nerdActive, trackNuggets, activeNugget, shownNuggetIds, reopenedNuggetId, aiFromCache]);
 
-  // Auto-dismiss nugget: quick swap if queued, otherwise fade after 8s
-  useEffect(() => {
-    if (!activeNugget || deepDiveNugget || nuggetFocused) return;
-    const delay = nuggetQueue.length > 0 ? 6000 : 8000;
-    const timer = setTimeout(() => {
-      setDismissedNuggets((prev) => new Map(prev).set(activeNugget.id, activeNugget));
-      setActiveNugget(null);
-      setReopenedNuggetId(null);
-    }, delay);
-    return () => clearTimeout(timer);
-  }, [activeNugget, deepDiveNugget, nuggetFocused, nuggetQueue.length]);
-
-  useEffect(() => {
-    if (!activeNugget && nuggetQueue.length > 0) {
-      const next = nuggetQueue[0];
-      setNuggetQueue((q) => q.slice(1));
-      setActiveNugget(next);
-      setReopenedNuggetId(null);
-      setShownNuggetIds((s) => new Set(s).add(next.id));
-    }
-  }, [activeNugget, nuggetQueue]);
 
   const getSource = useCallback((sourceId: string): Source | undefined => {
     return aiSources.get(sourceId);
@@ -1227,7 +1282,7 @@ export default function Listen() {
               {topFocusIndex === 0 ? "Back" : "Open Companion"}
             </motion.p>
           )}
-          {!isMobile && <div className="flex flex-col items-center gap-1.5">
+          <div className="flex flex-col items-center gap-1.5">
             <MusicNerdLoadingOrchestrator
               aiLoading={aiLoading}
               aiError={aiError}
@@ -1244,13 +1299,15 @@ export default function Listen() {
                 }
               }}
             />
-            <button
-              onClick={() => setDevOpen((o) => !o)}
-              className="rounded-md bg-foreground/5 px-2.5 py-0.5 text-[10px] text-muted-foreground/50 hover:bg-foreground/10 hover:text-muted-foreground transition-colors"
-            >
-              DEV
-            </button>
-          </div>}
+            {!isMobile && (
+              <button
+                onClick={() => setDevOpen((o) => !o)}
+                className="rounded-md bg-foreground/5 px-2.5 py-0.5 text-[10px] text-muted-foreground/50 hover:bg-foreground/10 hover:text-muted-foreground transition-colors"
+              >
+                DEV
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Track info — fixed bottom-left, visible when playback bar is hidden */}
@@ -1317,17 +1374,22 @@ export default function Listen() {
           </motion.div>
         )}
 
-        {/* Centered album art */}
+        {/* Centered album art — responsive sizing scales with viewport so
+            it fills the frame on phones (where there's no foreground card
+            of its own) and on TVs. Sized off the smaller viewport axis
+            (min(70vw, 70vh)) so it stays square regardless of orientation
+            and never gets cropped against the playback bar. */}
         <motion.div
-          className="hidden md:flex absolute inset-0 z-[5] items-center justify-center pointer-events-none"
-          animate={{ opacity: barVisible ? 0.85 : 1, scale: barVisible ? 0.95 : 1 }}
+          className="absolute inset-0 z-[5] flex items-center justify-center pointer-events-none"
+          animate={{ opacity: barVisible ? 0.9 : 1, scale: barVisible ? 0.96 : 1 }}
           transition={{ duration: 0.7, ease: [0.4, 0, 0.2, 1] }}
         >
           <motion.img
             key={effectiveCoverArt}
             src={effectiveCoverArt}
             alt={`${track.title} cover art`}
-            className="w-[400px] h-[400px] rounded-2xl object-cover shadow-2xl shadow-black/50"
+            className="rounded-2xl object-cover shadow-2xl shadow-black/50"
+            style={{ width: "min(70vw, 70vh)", height: "min(70vw, 70vh)" }}
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
@@ -1337,10 +1399,17 @@ export default function Listen() {
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Floating nugget card — independent of bar visibility, anchored to timeline position */}
+        {/* Floating nugget card — independent of bar visibility, anchored to timeline position.
+            Bottom offsets must keep the card's bottom edge ABOVE the
+            playback bar's top edge or the headline's lower lines render
+            in the same vertical band as the timeline-marker dots. Live
+            measurement (vh=628): bar top sits at ~y=560, so anything
+            with bottom<68 ends up overlapping. 90/240 give a clear gap
+            in both states (bar hidden → mini-bar at bottom; bar visible
+            → full controls). */}
         <div
           className="fixed left-0 right-0 z-30 pointer-events-none transition-[bottom] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
-          style={{ bottom: barVisible ? 160 : 48 }}
+          style={{ bottom: barVisible ? 240 : 90 }}
         >
           {/* Layout wrapper matching progress bar track horizontal bounds */}
           <div className="px-4 md:px-10">
@@ -1621,20 +1690,12 @@ export default function Listen() {
         </div>
       )}
 
-      {/* "More coming" pill — surfaces while wave 2/3 generates silently in
-          the background so the user knows additional nuggets are on the way
-          without interrupting their current reading. */}
-      {track && waveLoading && (
-        <div
-          className="fixed left-1/2 -translate-x-1/2 bottom-24 z-[55] pointer-events-none"
-          style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
-        >
-          <div className="flex items-center gap-2 rounded-full px-3 py-1.5 bg-black/70 border border-white/10 text-xs text-white/80">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
-            <span>More coming…</span>
-          </div>
-        </div>
-      )}
+      {/* "More coming…" pill removed — the timeline-marker dots in
+          the playback bar already communicate how many nuggets are
+          on deck, and the pill was overlapping the active nugget's
+          headline on mobile. `waveLoading` state stays in
+          useAINuggets for any future use that doesn't compete with
+          content for screen real estate. */}
     </PageTransition>
   );
 }

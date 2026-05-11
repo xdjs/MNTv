@@ -1,3 +1,9 @@
+// ⚠ DEPLOY GUARD: This file contains in-progress prompt-quality work
+// (Task #28 — banned phrase lists, catalog-source allowlist, collaborator
+// context). Do NOT run `supabase functions deploy generate-nuggets`
+// from this branch. The deployed v57 (May 9) is the production cut;
+// the changes here ship in a separate dedicated PR once the new
+// prompts have been validated against Pete's 50-example test set.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getAppleDeveloperToken } from "../_shared/apple-token.ts";
@@ -1583,6 +1589,37 @@ const BANNED_PHRASES = [
   "immerse yourself", "the track's title provides", "provides a crucial clue",
   "isn't just", "wasn't just", "more than just", "not just another",
   "last.fm", "lastfm", "listener overlap", "listener data shows", "listener match",
+  // Corporate filler — Gemini's house style when it has nothing to say.
+  // These are the "Wikipedia voice" tells the constitution exists to kill.
+  // Pete 2026-05-08 round on Dame Atlas: "showcasing comprehensive artistic
+  // control", "dynamic artistic community", "close-knit scene where both
+  // artists thrive", "gravitate towards", "true creative partnership",
+  // "distinct creative vision", "deepening the track's narrative".
+  "showcasing", "showcases",
+  "comprehensive artistic control", "artistic control",
+  "dynamic artistic community", "vibrant artistic community",
+  "close-knit scene", "thriving scene",
+  "gravitate towards", "gravitate toward",
+  "creative partnership", "true creative partnership",
+  "distinct creative vision", "creative vision",
+  "deepening the track", "deepening the song",
+  "unique blend", "distinct blend",
+  "indicating a shared", "shared aesthetic",
+  "rendition", // restating "version" in flowery Gemini-ese
+  "this collaboration brought", "this track demonstrates", "this song demonstrates",
+  "highlights", "highlighting",
+  "where both artists thrive", "thrive together",
+  "both artists thrive", "where artists thrive",
+  "musical exploration", "artistic exploration", "creative exploration",
+  // Patronizing user-context phrasings. Pete 2026-05-08: "we're
+  // wasting time saying 'an artist already among your top listeners'
+  // why would me, a fan of that artist, need to be told that?" The
+  // listener already knows what they listen to. Re-stating it back is
+  // customer-service voice, not nerdy-friend voice.
+  "already among your top", "an artist you already", "you've had on rotation",
+  "you've been listening to", "as you already know", "as you know",
+  "you already listen to", "from your library", "an artist in your library",
+  "in your top listens", "among your favorites",
 ];
 
 // Hallucinated source indicators — publishers/types Gemini invents when it has no real sources
@@ -1623,6 +1660,34 @@ const KNOWN_REAL_PUBLISHERS = new Set([
   "exclaim", "paste", "under the radar", "clash", "diy",
   "the line of best fit", "the needle drop", "fantano",
 ]);
+
+// Catalog platforms — sources that are inherently verifiable metadata
+// rather than journalism. When publisher matches one of these, the
+// nugget is allowed to ship without a resolved article URL because
+// the source IS the platform itself (release date / track length /
+// album name are facts you read off the metadata, not facts that need
+// a citation). This unblocks honest sparse-artist nuggets like "Dame
+// Atlas released 'loved you more' three different ways in 2026" where
+// Spotify itself is the source of truth and there's no article to
+// link.
+const CATALOG_PLATFORMS = new Set([
+  "spotify", "bandcamp", "soundcloud", "apple music", "applemusic",
+  "youtube music", "tidal", "deezer", "genius", "discogs",
+  "musicbrainz", "last.fm", "lastfm", "musicnerd",
+  // The artist's own site — Gemini may attribute as the artist's name.
+  // We let those through if the rest of the nugget passes other checks.
+]);
+
+function isCatalogSource(sourceType: string, publisher: string): boolean {
+  const t = (sourceType || "").toLowerCase();
+  if (t === "catalog" || t === "youtube") return true;
+  const p = (publisher || "").toLowerCase().trim();
+  if (!p) return false;
+  for (const platform of CATALOG_PLATFORMS) {
+    if (p === platform || p.includes(platform)) return true;
+  }
+  return false;
+}
 
 function validateNuggetQuality(nuggets: GeminiNugget[], artist?: string): { valid: boolean; issues: string[]; hallucinated: boolean; vagueHeadlines: boolean; constitutionScores?: number[] } {
   const issues: string[] = [];
@@ -1800,6 +1865,7 @@ async function generateWithGemini(
   trackSearchSkipped?: boolean,
   discoverySearchSkipped?: boolean,
   timingTracker?: { ts: (label: string) => void; te: (label: string) => void },
+  collaborators: string[] = [],
 ): Promise<{ nuggets: GeminiNugget[]; artistSummary: string; groundingChunks: any[]; exaCitations?: ExaCitation[]; noTrackData?: boolean }> {
   const _ts = timingTracker?.ts || (() => {});
   const _te = timingTracker?.te || (() => {});
@@ -1858,6 +1924,23 @@ Use this to:
 - Calibrate assumed knowledge — if they already listen to this artist, skip basic biography
 - For the discovery nugget: recommend something adjacent to their existing taste that feels like an expert tip
 - Do NOT recommend artists already in their top artists list\n`
+    : "";
+
+  // Collaborator context — when the primary artist has thin coverage
+  // but a collaborator on the track is researchable, you may anchor a
+  // nugget in a verifiable fact about the collaborator's role on this
+  // track (e.g. "Pete Rango co-wrote 'X' with Ty Symph"). Pete's exact
+  // ask: "lead on the collaborator without making it all about the
+  // collaborator." So the track + primary artist remain the subject
+  // of the nugget; the collaborator is the angle / anchor, not the
+  // hero.
+  const collaboratorContext = collaborators.length > 0
+    ? `\nTRACK COLLABORATORS — "${title}" features ${collaborators.join(", ")} alongside ${artist}.
+- ${artist} is the primary artist and the SUBJECT of these nuggets.
+- Collaborator(s) are FAIR GAME as anchors for verifiable claims about how this track came together — co-write credit, production role, vocal feature, mix engineer, etc.
+- DO NOT make the nugget primarily about the collaborator. The user opened this song to learn about ${artist} + the track. Lead with the track / ${artist}; let the collaborator carry a specific fact you can verify.
+- Example shape: "Pete Rango brought the synth chord progression that ended up shaping '4 U'" — track stays the subject, collaborator carries the specific.
+- Never invent a collaborator's role. If you don't have a verifiable claim about what they contributed, don't claim one.\n`
     : "";
 
   // Build music context for accurate genre + discovery recommendations
@@ -2145,28 +2228,40 @@ ${musicDataContext}${adaptiveGuidance}
 DEPTH: ${depthInstruction}
 ANGLES: ${angles.join(", ")}
 ${nonRepeatInstruction}
-${tasteContext}
+${tasteContext}${collaboratorContext}
 
 VOICE: ${tierConfig.tone}
 ${tierConfig.assumedKnowledge}
 
 ${buildWriterNonNegotiables(artist)}
 
-STRUCTURE — produce 1-3 nuggets (always at least 1, up to 3 if strong). Prefer fewer strong nuggets over padded weak ones, but ALWAYS return at least one nugget grounded in whatever facts you have (Spotify catalog data, genre tags, track titles, release year, collaborators in research):
-1. **artist** (kind: "artist"): ${applyCollabBias
+STRUCTURE — produce ${tier === "nerd" ? "up to 9" : tier === "curious" ? "up to 6" : "up to 3"} nuggets total (target: ${tier === "nerd" ? "3 each of artist / track-or-context / discovery" : tier === "curious" ? "2 each of artist / track-or-context / discovery" : "1 each of artist / track-or-context / discovery"}). Floor: at least 1 nugget grounded in whatever facts you have (Spotify catalog data, genre tags, track titles, release year, collaborators). Quality > quantity — better to ship N strong nuggets than N+1 padded ones, but for a tier=${tier} listener, fill the slots when you have material.
+
+SHAPE VARIETY (CRITICAL — DO NOT IGNORE): Across the batch, vary structural shape. Pick from this menu and rotate — don't write three causal-chain nuggets in a row:
+  • causal-chain: "X happened because Y, then Z" (Phil Collins / talkback mic shape)
+  • inversion: "the song was meant for X but ended up Y" (Tyler / EARFQUAKE shape)
+  • confessional/quote: "[Artist] said: '...'" — direct speech that lands
+  • listen-for: "in the [bridge / second chorus / outro], you can hear [specific element]"
+  • catalog-stat: "this is [Artist]'s [Nth] release / [N-track] album / first feature with X"
+  • scene-connection: "[Artist] sits in the [scene/label/city] alongside [N1, N2]"
+  • user-bridge: "you've had [user's top artist] on rotation — [Artist] connects via [specific link]" (use sparingly, only when honest)
+Two of the same shape in one batch is a defect. If you only have material for one shape, write fewer nuggets — don't pad.
+
+KIND ASSIGNMENT (optional structural guide):
+- **artist** (kind: "artist"): ${applyCollabBias
       ? `Focus on the collaboration behind this track. Key creative partners: ${collabsForPrompt.join("; ")}. ONLY discuss work on "${title}" — do NOT reference other tracks or albums by ${artist}. Tell the story of their creative relationship — how they connected, what each brought to the table, and how this collaboration shaped the music. ${tier === "nerd" ? "Include specific production roles, studio dynamics, and technical contributions." : "Name specific people and moments."}`
       : tierConfig.artistFocus}. listenFor: false.
-2. **track OR context** — YOUR CHOICE based on what's most interesting:
+- **track OR context** — YOUR CHOICE based on what's most interesting:
    - Use kind "track" (listenFor: true) if you have a specific, surprising story about how "${title}" was made — recording, production, personnel, origin. ${tierConfig.trackFocus}
    - Use kind "context" (listenFor: false) if a different artist story would be more compelling — a separate chapter of their career that nugget 1 didn't cover.${curatedFacts.trackFacts.length === 0 ? `\n   No verified track facts exist, so "context" is likely the stronger choice. Pick from VERIFIED ARTIST FACTS — choose the most surprising fact NOT used in nugget 1. Do NOT describe the track's sound/mood/atmosphere.` : ""}
    Pick whichever makes the stronger nugget. If in doubt, pick "track".
-3. **discovery** (kind: "discovery"): ${tierConfig.discoveryFocus}. Be opinionated like a knowledgeable friend. listenFor: false.
+- **discovery** (kind: "discovery"): ${tierConfig.discoveryFocus}. Be opinionated like a knowledgeable friend. listenFor: false.
    HONESTY RULE: Only claim a connection you can verify from the research. If the source says "had demos with" or "worked on unreleased material," do NOT write "you've already heard their work on X" — that implies released music. State exactly what the source says.
 ${applyCollabBias ? `\nANTI-SATURATION RULE (MANDATORY):
 - Nugget 1 already covers: ${collabNames.join(", ")}.
 - Nugget 2 (track or context) MUST NOT center on ${collabNames.join(" or ")}. They may appear in passing, but the focus must be a different angle entirely.
 - Nugget 3 (discovery): recommend someone NOT already the focus of nuggets 1 or 2. Other collaborators in ${artist}'s circle are fair game — just pick someone who wasn't already discussed.` : ""}
-SOURCES: Match facts to [CIT N] citations via "citIndex". Do not invent URLs.
+SOURCES: Match facts to [CIT N] citations via "citIndex" when you have research material. For Spotify/Bandcamp/Soundcloud catalog facts (release dates, track counts, album names, feature credits), source.type = "catalog" with publisher = "Spotify" / "Bandcamp" / etc. — no citIndex needed. Do not invent URLs.
 ${imageInstructions}
 
 ALSO generate "artistSummary": 2-3 punchy sentences about ${artist}.
@@ -2176,8 +2271,8 @@ Return ONLY valid JSON:
   "artistSummary": "...",
   "nuggets": [
     {
-      "headline": "Tease the story — make them need to read more",
-      "text": "1-3 sentences building on the headline — each adds a new detail",
+      "headline": "Complete fact in one sentence, sentence case, names the artist by NAME (never 'their' / 'his' / 'her' / 'they' for the artist). No tease, no Title Case, no abstract-noun pattern.",
+      "text": "1-3 sentences. Each MUST add a new load-bearing noun or verb (person, place, time, instrument, label, role, action) NOT in the headline. NEVER use a pronoun for the artist — re-use the artist's name. No restatement, no padding ('creative partnership', 'distinct vision', 'unique blend', 'showcasing', 'gravitate towards', 'thriving scene'), no soft hedging.",
       "kind": "artist|track|context|discovery",
       "listenFor": false,
       ${imageFieldExample}
@@ -2198,7 +2293,16 @@ Return ONLY valid JSON:
     // Include Exa research if available; also enable Google Search grounding when no Exa
     const hasExaResearch = !!exaContext;
     const exaSection = hasExaResearch
-      ? `\nRESEARCH MATERIAL (cite by [CIT N] index):\n${exaContext}\n\nSOURCES: Match facts to [CIT N] via "citIndex". Do not invent URLs.\n`
+      ? `\nRESEARCH MATERIAL (cite by [CIT N] index):\n${exaContext}
+
+CITATION RULES — these are HARD constraints, not preferences:
+1. Every nugget body's source MUST be a real entry from RESEARCH MATERIAL above. Set "citIndex" to the [CIT N] you're citing. If no [CIT N] supports the fact, do not write that fact.
+2. The publisher you name in source.publisher MUST literally appear in the [CIT N] you reference (its title, URL, or text). Do NOT name a publisher you "know" from elsewhere — Attack Magazine, Pitchfork, Stereogum, etc. — unless that exact publisher is in the cited [CIT N].
+3. Do NOT name a specific year, quote, person, or interview unless it appears verbatim in the cited [CIT N] text. If you have an [CIT N] that mentions the artist generally but not the specific year/quote you want to cite, drop the year/quote.
+4. If the only honest citation is the artist's own platform (Bandcamp / Spotify / Soundcloud / their website), use that. Don't dress it up as a journalism citation.
+5. If RESEARCH MATERIAL is too thin to support a fact with two specific verifiable anchors (year + person, person + venue, song title + label, etc.), return fewer nuggets rather than fabricate.
+
+Do not invent URLs. Do not invent publishers. Do not invent years or quotes.\n`
       : "";
     const curatorBrief = curatedFacts
       ? `\nCURATOR NOTES: Origin=${curatedFacts.artistOrigin}. ${curatedFacts.warningsForWriter.join(". ")}\n`
@@ -2214,7 +2318,7 @@ ${musicDataContext}${adaptiveGuidance}
 DEPTH: ${depthInstruction}
 ANGLES: ${angles.join(", ")}
 ${nonRepeatInstruction}
-${tasteContext}
+${tasteContext}${collaboratorContext}
 
 ${transcriptContext ? `YOUTUBE TRANSCRIPTS:\n${videoListContext}\n${transcriptContext}\n` : (videoListContext ? `Available YouTube videos:\n${videoListContext}\n` : "")}
 
@@ -2483,7 +2587,17 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, imageCaption, imageQuery, listenCount, previousNuggets, tier: rawTier, userTopArtists: rawTopArtists, userTopTracks: rawTopTracks, spotifyArtistImageUrl: rawSpotifyArtistImageUrl, spotifyTrackId: rawSpotifyTrackId, appleTrackId: rawAppleTrackId, durationSec: rawDurationSec } = body;
+    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, imageCaption, imageQuery, listenCount, previousNuggets, tier: rawTier, userTopArtists: rawTopArtists, userTopTracks: rawTopTracks, spotifyArtistImageUrl: rawSpotifyArtistImageUrl, spotifyTrackId: rawSpotifyTrackId, appleTrackId: rawAppleTrackId, durationSec: rawDurationSec, firstNuggetOnly: rawFirstNuggetOnly, collaborators: rawCollaborators } = body;
+    const firstNuggetOnly = rawFirstNuggetOnly === true;
+    // Collaborators on the track (other Spotify artists besides the primary).
+    // Pete 2026-05-08: "Pete Rango is a collaborator on this track and there's
+    // plenty of information on Pete Rango so no need to hallucinate." When the
+    // primary artist is sparse, we use collaborator data to anchor real
+    // verifiable nuggets (e.g. "Pete Rango co-composed 'X' with Ty Symph") —
+    // can lead with the collaborator without making it ALL about them.
+    const safeCollaborators: string[] = Array.isArray(rawCollaborators)
+      ? rawCollaborators.slice(0, 5).map((c: unknown) => (typeof c === "string" ? c.slice(0, 100) : "")).filter(Boolean)
+      : [];
     // Default to 240s (avg song) when caller omits — used for cache-side
     // timestamp computation so pre-gen flows (which don't know duration yet)
     // can still produce a valid cached Nugget[] shape.
@@ -2627,6 +2741,286 @@ Return ONLY valid JSON:
       }
 
       return new Response(JSON.stringify(parsed), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── First-nugget-only fast path ────────────────────────────────
+    // Used by stories pre-gen on Browse: we want exactly ONE nugget
+    // cached per top track so the user sees content the moment they
+    // tap a pink-ring story, with the rest of the per-tier nuggets
+    // generated AFTER tap (Pete: "stories should have NEVER preloaded
+    // 3 nuggets... at least 1 nugget loaded for whatever nerd level
+    // profile you're on... when I click the pink circle, display that
+    // nugget while song plays and trigger the rest to start
+    // generating").
+    //
+    // Goals: minimal wall-time, minimal Gemini cost, honest sourcing.
+    // We skip the Curator + multi-kind loop entirely. Single Exa
+    // search for grounding, single Gemini call for one artist-kind
+    // nugget, validate, source-filter, cache, return.
+    if (firstNuggetOnly) {
+      const t0 = Date.now();
+      const EXA_API_KEY_FAST = Deno.env.get("EXA_API_KEY");
+
+      // 1. Optional Exa research — skipped silently if key missing.
+      //    Single artist-scoped search; cheaper than the 3-query Curator.
+      //    Wrapped in a hard 6s timeout because `searchExaPages` itself
+      //    has no abort logic — when Exa is slow (which happens often
+      //    for indie/sparse artists with thin crawled coverage) the
+      //    request hangs forever and the firstNuggetOnly call never
+      //    returns. That's exactly the "Pete Rango / Cherele stories
+      //    hang past 45s" symptom Pete reported. Falling back to
+      //    sparse-mode (no research) is fine — the synthetic cache
+      //    row will fire if Gemini also can't anchor anything.
+      const FAST_EXA_TIMEOUT_MS = 6_000;
+      let firstExaContext = "";
+      let firstExaCitations: ExaCitation[] = [];
+      if (EXA_API_KEY_FAST) {
+        try {
+          const exaPromise = searchExaPages(
+            `${artist} interview production credits collaborators`,
+            "first-nugget",
+            EXA_API_KEY_FAST,
+            0,
+            [artist],
+            ["facebook.com", "instagram.com", "tiktok.com"],
+            { numResults: 4 },
+          );
+          const exaResult = await Promise.race([
+            exaPromise,
+            new Promise<{ timedOut: true }>((resolve) =>
+              setTimeout(() => resolve({ timedOut: true }), FAST_EXA_TIMEOUT_MS),
+            ),
+          ]);
+          if ("timedOut" in exaResult) {
+            console.warn(`[firstNuggetOnly] Exa timed out after ${FAST_EXA_TIMEOUT_MS}ms for ${artist} — falling back to sparse mode`);
+          } else {
+            firstExaContext = exaResult.answer;
+            firstExaCitations = exaResult.citations;
+          }
+        } catch (e) {
+          console.warn(`[firstNuggetOnly] Exa failed for ${artist}:`, e);
+        }
+      }
+
+      // 2. Honest body-text mention check — same logic as the main
+      //    pipeline. If the artist isn't actually mentioned anywhere in
+      //    the research we got back, fall through to a synthetic-style
+      //    catalog-grounded prompt instead of pretending to journalism.
+      const artistLowerFast = artist.toLowerCase();
+      const sparseFast = firstExaCitations.length <= 1 &&
+        !(firstExaContext && firstExaContext.toLowerCase().includes(artistLowerFast));
+
+      const tierGuidanceFast = sparseFast
+        ? "Audience: tier-aware fan, but research is thin. Stick to verifiable basics from the catalog data and the user's own taste — name a real song or release, point at a connection to an artist already in their top list when honest."
+        : tier === "nerd"
+          ? "Audience: hardcore music nerd. Surface a deep production / session-credit / lineage detail."
+          : tier === "curious"
+            ? "Audience: curious fan. Lead with a specific person, collaborator, or cause-and-effect moment."
+            : "Audience: casual listener. Relatable origin, turning-point moment, or unlikely personal detail.";
+
+      const researchSectionFast = sparseFast
+        ? `\nNo external journalism is available about ${artist}. Use only:\n- Genre context (general, no specific publication claims)\n- The artist's name as it appears in their catalog\n- The user's top artists (for honest "if you like X, this maps to Y" framing): ${safeTopArtists.slice(0, 6).join(", ") || "(none)"}\nDo NOT name a publication, year, quote, person, venue, or label that you don't already know to be true from the catalog facts above.`
+        : `\nRESEARCH MATERIAL (cite by [CIT N] index):\n${firstExaContext}\n\nCITATION RULES — HARD constraints:\n1. source.citIndex MUST point to a real [CIT N] above. No citIndex → no nugget.\n2. source.publisher MUST literally appear in the [CIT N] you reference.\n3. Do NOT name a publication, year, quote, or person that doesn't appear verbatim in the cited [CIT N].\n4. If the only honest source is the artist's own platform (Bandcamp/Soundcloud/their site), use that — don't dress it up as journalism.`;
+
+      const fastPrompt = `${CONSTITUTION_PREAMBLE}
+
+The user is about to start playing "${title}" by ${artist}${album ? ` from "${album}"` : ""}. Give them ONE nugget — the strongest hook you have — to greet them when the song starts.
+
+${tierGuidanceFast}
+${researchSectionFast}
+
+Write ONE artist-kind nugget about ${artist}. It must pass the SWAP TEST: the headline is useless if you could swap in another artist's name and the sentence still works.
+
+Return JSON ONLY (no preamble, no markdown):
+{
+  "nuggets": [
+    {
+      "headline": "<single complete-fact sentence, sentence case, names ${artist} explicitly>",
+      "text": "<1-3 sentences of context — who/where/what-happened-next>",
+      "kind": "artist",
+      "listenFor": false,
+      "source": {
+        "type": "${sparseFast ? 'catalog' : 'article'}",
+        "title": "<source title from [CIT N], or '${artist} — primary platform' for catalog>",
+        "publisher": "<source publisher (must appear in [CIT N]), or 'MusicNerd' for catalog>",
+        ${sparseFast ? '' : '"citIndex": <integer matching the [CIT N] you cited>,'}
+        "quoteSnippet": ""
+      }
+    }
+  ]
+}
+
+Do not invent URLs. Do not invent publishers. Do not invent quotes.`;
+
+      // Pre-build the cache key + a catalog-grounded synthetic nugget
+      // so EVERY failure path below can fall back to caching it. Pete's
+      // hard requirement: a pink ring on the rail means there's a
+      // nugget waiting on tap. Returning empty broke that promise.
+      const fastUri = safeSpotifyTrackId ? `spotify:track:${safeSpotifyTrackId}`
+        : safeAppleTrackId ? `apple:song:${safeAppleTrackId}` : "";
+      const fastTrackId = `real::${artist}::${title}::::${fastUri}`;
+      const fastDbCacheKey = `${fastTrackId}::${tier}`;
+      const fastSourceId = `ai-src-${fastTrackId}-L1-0`;
+      const fastNuggetId = `ai-nug-${fastTrackId}-L1-0`;
+
+      async function buildSyntheticCacheRow(reasonLog: string) {
+        const synthNugget = {
+          id: fastNuggetId, trackId: fastTrackId, timestampSec: 0, durationMs: 7000,
+          headline: `"${title}" by ${artist}`,
+          text: `One of your under-the-radar picks. There's not much press out there for this one yet, so we're letting the music do the talking — give it a real listen and we'll layer in the story as more sources surface.`,
+          kind: "track" as const,
+          listenFor: false,
+          sourceId: fastSourceId,
+        };
+        const synthSources: Record<string, unknown> = {
+          [fastSourceId]: {
+            id: fastSourceId,
+            type: "catalog",
+            title,
+            publisher: "MusicNerd",
+            url: "",
+            verified: false,
+          },
+          _firstNuggetOnly: true,
+          _synthetic: true,
+        };
+        // AWAIT the upsert before returning. Earlier this was fire-and-
+        // forget for "perceived speed" but it created a race: client
+        // got the success response, marked the story ready (pink ring),
+        // then tapped — and Listen read the cache row before the write
+        // landed, hitting a miss and falling through to cold SSE. The
+        // synchronous-write trade is ~50-150ms of extra wall time for
+        // the guarantee that "pink ring → row exists".
+        if (cacheAdminClient) {
+          const { error } = await cacheAdminClient.from("nugget_cache").upsert(
+            { track_id: fastDbCacheKey, nuggets: [synthNugget], sources: synthSources, status: "ready" },
+            { onConflict: "track_id" },
+          );
+          if (error) console.warn(`[firstNuggetOnly] synthetic cache upsert failed for ${fastDbCacheKey}:`, error);
+        }
+        console.log(`[firstNuggetOnly] ${artist} - ${title} → synthetic (${reasonLog})`);
+        return new Response(JSON.stringify({ nuggets: [synthNugget], partial: true, synthetic: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const FIRST_TIMEOUT_MS = 25_000;
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), FIRST_TIMEOUT_MS);
+      let firstNugget: any = null;
+      try {
+        const fastUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GOOGLE_AI_API_KEY}`;
+        const res = await fetch(fastUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: fastPrompt }] }],
+            generationConfig: { temperature: sparseFast ? 0.55 : 0.7, responseMimeType: "application/json" },
+          }),
+          signal: ctl.signal,
+        });
+        clearTimeout(timer);
+        if (!res.ok) {
+          console.warn(`[firstNuggetOnly] Gemini ${res.status}:`, await res.text().catch(() => ""));
+          return buildSyntheticCacheRow(`gemini ${res.status}`);
+        }
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+        const parsed = JSON.parse(cleaned);
+        firstNugget = Array.isArray(parsed?.nuggets) && parsed.nuggets[0] ? parsed.nuggets[0] : null;
+      } catch (e) {
+        clearTimeout(timer);
+        if ((e as Error)?.name === "AbortError") {
+          console.warn(`[firstNuggetOnly] Gemini timed out after ${FIRST_TIMEOUT_MS}ms for ${artist} - ${title}`);
+        } else {
+          console.warn(`[firstNuggetOnly] failed for ${artist} - ${title}:`, e);
+        }
+        return buildSyntheticCacheRow("gemini threw");
+      }
+
+      if (!firstNugget || !firstNugget.headline || !firstNugget.text) {
+        return buildSyntheticCacheRow("gemini returned empty");
+      }
+
+      // 3. Resolve a real URL from Exa citations (if any) using the
+      //    same logic as the main pipeline. No Google fallback.
+      let resolvedUrl = "";
+      let resolvedTitle = firstNugget.source?.title || "";
+      let resolvedVerified = false;
+      if (firstExaCitations.length && typeof firstNugget.source?.citIndex === "number") {
+        const cit = firstExaCitations.find((c) => c.citIndex === firstNugget.source.citIndex);
+        if (cit) { resolvedUrl = cit.url; resolvedTitle = cit.title || resolvedTitle; resolvedVerified = true; }
+      }
+      if (!resolvedUrl && firstExaCitations.length) {
+        const pubLower = (firstNugget.source?.publisher || "").toLowerCase();
+        const titleLower = (firstNugget.source?.title || "").toLowerCase();
+        const m = firstExaCitations.find((c) =>
+          (pubLower && c.title.toLowerCase().includes(pubLower)) ||
+          (pubLower && c.url.toLowerCase().includes(pubLower)) ||
+          (titleLower && c.title.toLowerCase().includes(titleLower))
+        );
+        if (m) { resolvedUrl = m.url; resolvedTitle = m.title || resolvedTitle; resolvedVerified = true; }
+      }
+
+      // 4. Source-filter check — same rejection rules as the main path.
+      const sType = (firstNugget.source?.type || "").toLowerCase();
+      const sPub = (firstNugget.source?.publisher || "").toLowerCase();
+      const sUrl = resolvedUrl.toLowerCase();
+      const SEARCH_URL_RX = /\b(google\.[a-z.]+\/search|bing\.com\/search|duckduckgo\.com|search\.yahoo\.com)\b/i;
+      const isCatalog = isCatalogSource(sType, sPub);
+      const reject =
+        sType === "internal-data" || sType === "internal_data" || sType === "database" || sType === "editorial" ||
+        HALLUCINATED_PUBLISHERS.some((hp) => sPub.includes(hp)) ||
+        (sUrl && SEARCH_URL_RX.test(sUrl)) ||
+        (!sUrl && !!sPub && !isCatalog);
+      if (reject) {
+        console.warn(`[firstNuggetOnly] Rejected hallucinated source for ${artist} - ${title}: type=${sType} pub=${sPub} url=${sUrl || "(empty)"}`);
+        return buildSyntheticCacheRow("source rejected");
+      }
+
+      // 5. Build cache row. Single nugget at timestamp 0 so the
+      //    client's cache-hit reveal lands the moment the song starts.
+      //    Reuses the fastTrackId / fastDbCacheKey / fastSourceId /
+      //    fastNuggetId computed earlier so the synthetic-fallback path
+      //    and the real-content path write to the same key.
+      const cacheNuggets = [{
+        id: fastNuggetId, trackId: fastTrackId, timestampSec: 0, durationMs: 7000,
+        headline: firstNugget.headline,
+        text: firstNugget.text,
+        kind: "artist",
+        listenFor: false,
+        sourceId: fastSourceId,
+      }];
+      const cacheSources: Record<string, unknown> = {
+        [fastSourceId]: {
+          id: fastSourceId,
+          type: sparseFast ? "catalog" : (firstNugget.source?.type || "article"),
+          title: resolvedTitle || firstNugget.source?.title || "",
+          publisher: firstNugget.source?.publisher || (sparseFast ? "MusicNerd" : ""),
+          url: resolvedUrl,
+          verified: resolvedVerified,
+        },
+        // Mark the row as a "first-only" partial so Listen knows to fire
+        // the full pipeline AFTER tap to fill in the remaining nuggets.
+        _firstNuggetOnly: true,
+      };
+
+      if (cacheAdminClient) {
+        try {
+          await cacheAdminClient.from("nugget_cache").upsert(
+            { track_id: fastDbCacheKey, nuggets: cacheNuggets, sources: cacheSources, status: "ready" },
+            { onConflict: "track_id" },
+          );
+        } catch (e) {
+          console.warn(`[firstNuggetOnly] cache upsert failed for ${fastDbCacheKey}:`, e);
+        }
+      }
+
+      console.log(`[firstNuggetOnly] ${artist} - ${title} done in ${Date.now() - t0}ms (sparse=${sparseFast})`);
+      return new Response(JSON.stringify({ nuggets: cacheNuggets, partial: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -2890,10 +3284,25 @@ Return ONLY valid JSON:
     if (resolvedLastFmTags.length > 0) {
       console.log(`[Last.fm] Tags: ${resolvedLastFmTags.join(", ")}`);
     }
-    // Detect sparse data: if very few strict citations mention the artist, tell Gemini to be conservative
-    const isSparseData = exaCitationsStrict.length <= 2;
+    // Detect sparse data based on whether our research actually surfaced
+    // the artist — NOT on follower count or any out-of-band signal.
+    //
+    // Two checks because `exaCitationsStrict` only inspects the title /
+    // URL / author of a citation. A press piece with a generic title
+    // ("Best indie hip-hop of the week", "Underground spotlight: 2026")
+    // can discuss the artist at length in the body but score 0 strict
+    // citations, falsely tripping sparse-mode for genuinely-covered
+    // artists. We additionally scan the joined snippet text for a body-
+    // level mention of the artist name; if it shows up there, we have
+    // real research and skip the sparse pivot.
+    const artistLowerForSparse = artist.toLowerCase();
+    const artistMentionedInBody = !!exaPromptContext &&
+      exaPromptContext.toLowerCase().includes(artistLowerForSparse);
+    const isSparseData = exaCitationsStrict.length <= 2 && !artistMentionedInBody;
     if (isSparseData) {
-      console.log(`[SparseData] Only ${exaCitationsStrict.length} strict citations — enabling conservative mode`);
+      console.log(`[SparseData] Only ${exaCitationsStrict.length} strict citations and no body-text mention — enabling conservative mode`);
+    } else if (exaCitationsStrict.length <= 2 && artistMentionedInBody) {
+      console.log(`[SparseData] ${exaCitationsStrict.length} strict citations but body text mentions "${artist}" — keeping full mode`);
     }
 
     // Check SSE early — if the client wants SSE, we skip the batch Writer and
@@ -2913,7 +3322,7 @@ Return ONLY valid JSON:
       const result = await generateWithGemini(
         artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier, safeTopArtists, safeTopTracks,
         exaPromptContext, exaCitations, imageCandidates, isSparseData, resolvedSpotifyInfo, resolvedLastFmSimilar, resolvedLastFmTags,
-        trackSearchSkipped, discoverySearchSkipped, _tracker
+        trackSearchSkipped, discoverySearchSkipped, _tracker, safeCollaborators,
       );
       rawNuggets = result.nuggets;
       groundingChunks = result.groundingChunks;
@@ -3215,10 +3624,17 @@ Return ONLY valid JSON:
           }
         }
 
-        // Step 3: Fallback to Google search
+        // No URL was resolved from grounding chunks or curated citations.
+        // Historical behavior: fall back to a Google search URL with the
+        // claimed source title — but the user cannot verify a fabricated
+        // citation that way (Pete: "I clicked View Source and it just took
+        // me to Google search"), and worse, the Google-fallback nugget
+        // sometimes carries a fully fabricated specific (named publication,
+        // year, quote) that the validator missed. Instead: leave url empty
+        // and mark the nugget unverified so the post-source filter can drop
+        // it — except in the sparse-allow path which intentionally tolerates
+        // unverified sources for artists with genuinely thin coverage.
         if (!result.source.url) {
-          const q = `${source.title || ""} ${source.publisher || ""} ${artist} ${title}`.trim();
-          result.source.url = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
           result.source.verified = false;
         }
       }
@@ -3295,9 +3711,25 @@ Return ONLY valid JSON:
                   : "",
               ].filter(Boolean).join("\n") : "";
 
+              // Same hard citation rules as the batch path. Without these,
+              // Gemini freely cites publications it knows from training
+              // data ("Attack Magazine 2017 interview") that aren't in
+              // the actual research, producing nuggets whose sources
+              // can't be resolved to a real URL — and historically
+              // shipped "View Source" links that pointed at Google.
+              const citationRulesBlock = `
+
+CITATION RULES — HARD constraints:
+1. Every nugget's source.citIndex MUST point to a real [CIT N] in the research above. No citIndex → no nugget.
+2. source.publisher MUST literally appear in the [CIT N] you reference. Do NOT name a publisher (Attack Magazine, Pitchfork, etc.) you "know" elsewhere unless it's in the cited [CIT N].
+3. Do NOT name specific years, quotes, people, or interviews unless they appear verbatim in the cited [CIT N] text.
+4. If the only honest citation is the artist's own platform (Bandcamp/Spotify/their site), use that — don't dress it up as journalism.
+5. If research is too thin to support a fact with two verifiable anchors, return fewer nuggets rather than fabricate.
+
+Do not invent URLs. Do not invent publishers. Do not invent years or quotes.`;
               const researchSection = researchBlock
-                ? `RESEARCH BRIEF (verified):\n${researchBlock}`
-                : (exaPromptContext ? `RESEARCH MATERIAL (cite by [CIT N] index):\n${exaPromptContext}` : "");
+                ? `RESEARCH BRIEF (verified):\n${researchBlock}${citationRulesBlock}`
+                : (exaPromptContext ? `RESEARCH MATERIAL (cite by [CIT N] index):\n${exaPromptContext}${citationRulesBlock}` : "");
 
               const prevHeadlines = [...safePreviousNuggets];
               const generatedHeadlines: string[] = [];
@@ -3517,6 +3949,26 @@ Return ONLY valid JSON:
                   console.log(`[SSE] Skipping hallucinated publisher: ${def.kind}`);
                   continue;
                 }
+                // Mirror the post-source filter (line ~3674) so SSE-path
+                // nuggets get the same Google-search-URL rejection. A
+                // search-engine URL on a citation is a fabricated specific
+                // — drop the nugget rather than ship "View Source" that
+                // dumps the user on Google.
+                const sseSourceUrl = (assembled.source?.url || "").toLowerCase();
+                const SEARCH_URL_PATTERNS_SSE = [
+                  /\bgoogle\.[a-z.]+\/search\b/i,
+                  /\bbing\.com\/search\b/i,
+                  /\bduckduckgo\.com\b/i,
+                  /\bsearch\.yahoo\.com\b/i,
+                ];
+                if (sseSourceUrl && SEARCH_URL_PATTERNS_SSE.some(p => p.test(sseSourceUrl))) {
+                  console.log(`[SSE] Skipping unverified fabricated source for ${def.kind}: ${assembled.source?.url}`);
+                  continue;
+                }
+                if (!sseSourceUrl && publisher && !isCatalogSource(sourceType, publisher)) {
+                  console.log(`[SSE] Skipping nugget with claimed publisher but no URL and not a catalog platform for ${def.kind}: ${assembled.source?.publisher}`);
+                  continue;
+                }
                 // Previous behavior dropped any sparse-artist nugget whose
                 // source wasn't in KNOWN_REAL_PUBLISHERS (a small whitelist
                 // of famous music publications). That whitelist is too
@@ -3647,11 +4099,13 @@ Return ONLY valid JSON:
     const externalLinks = buildExternalLinks();
 
     // ── Fix 4: Post-generation source validation ──────────────────────
-    // Filter out nuggets with hallucinated/invalid source types or publishers.
-    // This is the last line of defense — catches anything the validator retry missed.
+    // Filter out nuggets with hallucinated/invalid source types, publishers,
+    // or URLs. This is the last line of defense — catches anything the
+    // validator retry missed.
     const validatedNuggets = nuggets.filter((n: any) => {
       const sourceType = (n.source?.type || "").toLowerCase();
       const publisher = (n.source?.publisher || "").toLowerCase();
+      const sourceUrl = (n.source?.url || "").toLowerCase();
       // Reject hallucinated source types
       if (sourceType === "internal-data" || sourceType === "internal_data" || sourceType === "database" || sourceType === "editorial") {
         console.log(`[SourceFilter] Removed nugget "${n.headline?.slice(0, 50)}" — hallucinated source type "${sourceType}"`);
@@ -3660,6 +4114,31 @@ Return ONLY valid JSON:
       // Reject hallucinated publishers
       if (HALLUCINATED_PUBLISHERS.some(hp => publisher.includes(hp))) {
         console.log(`[SourceFilter] Removed nugget "${n.headline?.slice(0, 50)}" — hallucinated publisher "${n.source?.publisher}"`);
+        return false;
+      }
+      // Reject search-engine URLs masquerading as article citations.
+      // Pete: "I clicked View Source and it just took me to Google search."
+      // Means the assembleNugget Google-fallback fired (no real article
+      // URL was resolved from grounding), which signals the named
+      // publication/quote in the body is unverified — almost always a
+      // hallucinated specific. Better to ship 0 nuggets than a nugget
+      // whose source the user can't verify.
+      const SEARCH_URL_PATTERNS = [
+        /\bgoogle\.[a-z.]+\/search\b/i,
+        /\bbing\.com\/search\b/i,
+        /\bduckduckgo\.com\b/i,
+        /\bsearch\.yahoo\.com\b/i,
+      ];
+      if (sourceUrl && SEARCH_URL_PATTERNS.some(p => p.test(sourceUrl))) {
+        console.log(`[SourceFilter] Removed nugget "${n.headline?.slice(0, 50)}" — search-engine URL "${n.source?.url}" indicates unverified fabricated source`);
+        return false;
+      }
+      // Reject completely missing source URL when the nugget claims a
+      // specific publisher. assembleNugget now leaves url empty (instead
+      // of falling back to Google) when it can't resolve a real URL —
+      // that's our signal that the publisher field is fabricated.
+      if (!sourceUrl && publisher && !isCatalogSource(sourceType, publisher)) {
+        console.log(`[SourceFilter] Removed nugget "${n.headline?.slice(0, 50)}" — claims publisher "${n.source?.publisher}" with no resolved article URL and not a catalog platform`);
         return false;
       }
       return true;
@@ -3682,30 +4161,45 @@ Return ONLY valid JSON:
     // Fix: the server writes here using the admin key (bypasses RLS). The
     // client's cache-read path is unchanged. Client's cache-write is now
     // redundant but harmless.
+    // Compute cache-key components once — used by both the success
+    // path (writes validatedNuggets) and the synthetic fallback below
+    // (writes ONE catalog-grounded nugget when the validator stripped
+    // everything). Pete's invariant: a pre-gen call must always result
+    // in a cache row so the pink ring → tap → instant nugget flow
+    // never breaks for sparse artists.
+    const fallbackUri = rawSpotifyTrackId ? `spotify:track:${rawSpotifyTrackId}`
+      : rawAppleTrackId ? `apple:song:${rawAppleTrackId}`
+      : "";
+    const fallbackTrackId = `real::${artist}::${title}::::${fallbackUri}`;
+    const fallbackTier = (rawTier === "curious" || rawTier === "nerd") ? rawTier : "casual";
+    const fallbackDbCacheKey = `${fallbackTrackId}::${fallbackTier}`;
+
     if (validatedNuggets.length > 0) {
       try {
-        const uri = rawSpotifyTrackId ? `spotify:track:${rawSpotifyTrackId}`
-          : rawAppleTrackId ? `apple:song:${rawAppleTrackId}`
-          : "";
-        // Blank the album slot in the cache key — different entry points
-        // (story rail vs tile vs search) populate album inconsistently,
-        // so keying on URI only means every path reads and writes the
-        // same row. MUST match canonicalCacheKey() in useAINuggets.ts.
-        const trackId = `real::${artist}::${title}::::${uri}`;
-        const tier = (rawTier === "curious" || rawTier === "nerd") ? rawTier : "casual";
-        const dbCacheKey = `${trackId}::${tier}`;
+        const uri = fallbackUri;
+        const trackId = fallbackTrackId;
+        const tier = fallbackTier;
+        const dbCacheKey = fallbackDbCacheKey;
 
         // Build full Nugget[] matching the shape client's cache-read expects.
-        // Timestamps are computed the same way client's makeTimestamp does:
-        // earlyStart + spacing * (index+1), clamped to leave an end buffer.
-        const earlyStart = 20;
+        // Timestamps MUST mirror src/hooks/useAINuggets.ts `makeTimestamp`:
+        //   - First nugget pinned at earlyStart=0 so a tap-on-pink-ring
+        //     story shows nugget #0 the moment the song starts (Pete's
+        //     model: "click pink circle → song plays AND first nugget
+        //     takes over screen"). Drift between this and the client
+        //     formula was the source of the "tapped, no nugget for 70+
+        //     seconds" bug — the background full pre-gen overwrote the
+        //     partial (timestamp=0) row with timestamps starting at ~71s.
+        //   - Subsequent nuggets distribute evenly to durationSec - endBuffer.
+        const earlyStart = 0;
         const endBuffer = 15;
         const usable = Math.max(cacheDurationSec - earlyStart - endBuffer, 30);
-        const spacing = usable / (validatedNuggets.length + 1);
+        const denom = Math.max(validatedNuggets.length - 1, 1);
+        const spacing = usable / denom;
         const cacheNuggets = validatedNuggets.map((n: any, i: number) => {
           const sourceId = `ai-src-${trackId}-L1-${i}`;
           const nuggetId = `ai-nug-${trackId}-L1-${i}`;
-          const ts = Math.min(Math.floor(earlyStart + spacing * (i + 1)), cacheDurationSec - 10);
+          const ts = Math.min(Math.floor(earlyStart + spacing * i), cacheDurationSec - 10);
           return {
             id: nuggetId, trackId, timestampSec: ts, durationMs: 7000,
             headline: n.headline || n.text?.slice(0, 80) || "Music Fact",
@@ -3736,6 +4230,120 @@ Return ONLY valid JSON:
         }
       } catch (e) {
         console.warn("[NuggetCache] server upsert threw (non-fatal):", e);
+      }
+    } else {
+      // Synthetic catalog-grounded fallback. Validator stripped every
+      // Writer attempt — happens reliably for very-low-popularity
+      // artists where Exa returns no journalism and the source filter
+      // rejects anything Gemini fabricates. Write tier-scaled synthetic
+      // nuggets so the user has the expected count to scroll through
+      // (Pete: "I clicked on Ty Symph's story, it displayed 1 nugget,
+      // but it never showed any more nuggets" — was happening because
+      // we wrote 1 synthetic for nerd-tier user expecting 9).
+      try {
+        const tierCount = fallbackTier === "nerd" ? 9 : fallbackTier === "curious" ? 6 : 3;
+        const earlyStart = 0;
+        const endBuffer = 15;
+        const usable = Math.max(cacheDurationSec - earlyStart - endBuffer, 30);
+        const denom = Math.max(tierCount - 1, 1);
+        const spacing = usable / denom;
+
+        // Catalog-grounded angles. Honest copy that doesn't fabricate
+        // specifics. Cycles through the angles to fill the tier count
+        // so a nerd-tier user sees varied content even when AI fails.
+        const synthAngles = [
+          {
+            kind: "artist" as const,
+            headline: `"${title}" sits in ${artist}'s catalog`,
+            text: `${artist} is one of the artists you keep coming back to. Press play and let this one breathe — we'll layer in the deeper story as press and credits surface.`,
+          },
+          {
+            kind: "track" as const,
+            headline: `Listen for the texture on "${title}"`,
+            text: `Independent releases like this one don't always have a paper trail yet. Use this listen to notice the production choices firsthand: the rhythm, the space between sounds, the vocal phrasing.`,
+          },
+          {
+            kind: "discovery" as const,
+            headline: `If you like ${artist}, lean into this one`,
+            text: `${artist} is the kind of artist whose catalog rewards repeat listens. We don't have a deep brief on this track yet, but the song speaks for itself — give it room.`,
+          },
+          {
+            kind: "artist" as const,
+            headline: `${artist} is operating outside the press cycle`,
+            text: `Smaller releases stay below journalism's radar — that's not a flaw, that's where new sounds get to develop. You're hearing this one early.`,
+          },
+          {
+            kind: "track" as const,
+            headline: `Ride out "${title}" — there's craft underneath`,
+            text: `Even without a press kit, you can hear the choices: the mix, the arrangement, the way the artist is sitting in the pocket. Listen close.`,
+          },
+          {
+            kind: "discovery" as const,
+            headline: `Make a mental bookmark`,
+            text: `Tracks like this one get rediscovered later. We'll keep researching as new sources land — for now, sit with the song.`,
+          },
+          {
+            kind: "artist" as const,
+            headline: `Independent artists, real talent`,
+            text: `${artist} doesn't need press validation to make this work. The track's the credential.`,
+          },
+          {
+            kind: "track" as const,
+            headline: `Production pays attention here`,
+            text: `Listen for what the producer is doing with the low end and the silence — those are usually the tells.`,
+          },
+          {
+            kind: "discovery" as const,
+            headline: `Add this to your repeat playlists`,
+            text: `Songs like "${title}" often grow on you. We'll add depth as more sources surface; the song is the foundation.`,
+          },
+        ];
+
+        const synthNuggets = [];
+        const synthSources: Record<string, unknown> = { _synthetic: true };
+        for (let i = 0; i < tierCount; i++) {
+          const angle = synthAngles[i % synthAngles.length];
+          const sourceId = `ai-src-${fallbackTrackId}-L1-${i}`;
+          const nuggetId = `ai-nug-${fallbackTrackId}-L1-${i}`;
+          const ts = Math.min(Math.floor(earlyStart + spacing * i), cacheDurationSec - 10);
+          synthNuggets.push({
+            id: nuggetId,
+            trackId: fallbackTrackId,
+            timestampSec: ts,
+            durationMs: 7000,
+            headline: angle.headline,
+            text: angle.text,
+            kind: angle.kind,
+            listenFor: false,
+            sourceId,
+          });
+          synthSources[sourceId] = {
+            id: sourceId,
+            type: "catalog",
+            title,
+            publisher: "MusicNerd",
+            url: "",
+            verified: false,
+          };
+        }
+        if (cacheAdminClient) {
+          const { error: synthErr } = await cacheAdminClient.from("nugget_cache").upsert(
+            { track_id: fallbackDbCacheKey, nuggets: synthNuggets, sources: synthSources, status: "ready" },
+            { onConflict: "track_id" },
+          );
+          if (synthErr) {
+            console.warn(`[NuggetCache] synthetic upsert failed for ${fallbackDbCacheKey}:`, synthErr.message);
+          } else {
+            console.log(`[NuggetCache] ${tierCount} synthetic catalog nuggets written for ${fallbackDbCacheKey.slice(0, 80)}`);
+          }
+        }
+        // Return the synthetic nuggets to the client too so usePreGeneratedStories
+        // sees a non-empty nuggets array and marks the story ready.
+        return new Response(JSON.stringify({ nuggets: synthNuggets, artistSummary: "", externalLinks: [], synthetic: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (e) {
+        console.warn("[NuggetCache] synthetic fallback threw:", e);
       }
     }
 

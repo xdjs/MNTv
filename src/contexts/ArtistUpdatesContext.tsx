@@ -4,6 +4,8 @@ import {
   useArtistUpdates,
   type ArtistUpdateGroup,
 } from "@/hooks/useArtistUpdates";
+import { useTierGate } from "@/contexts/TierGateContext";
+import { useReleasePreGen } from "@/hooks/useReleasePreGen";
 
 /**
  * Hoists the "Your artists, lately" fetch above the route tree so
@@ -40,8 +42,21 @@ const ArtistUpdatesContext = createContext<ArtistUpdatesContextValue>({
 
 export function ArtistUpdatesProvider({ children }: { children: ReactNode }) {
   const { profile } = useUserProfile();
+  const { tierConfirmed } = useTierGate();
   const tier = (profile?.calculatedTier as "casual" | "curious" | "nerd") || "casual";
-  const { groups, loading, totalCount, readyCount } = useArtistUpdates(profile, { tier });
+  // Mirror StoriesProvider: hold off on the artist-updates fan-out until
+  // the user has confirmed tier this session, so the warm-up runs at the
+  // right tier and we don't burn Gemini at the previously-persisted tier
+  // when the user intends to switch on this login.
+  const profileForUpdates = tierConfirmed ? profile : null;
+  const { groups, loading, totalCount, readyCount } = useArtistUpdates(profileForUpdates, { tier });
+  // Pre-gen the first nugget for any new-release / collab tracks
+  // surfaced by the rail, mirroring the stories-rail pattern. Without
+  // this, tapping a NEW RELEASE card lands on a Listen page with a
+  // cold cache (Pete's "and then trigger the rest of the nuggets to
+  // start generating" expectation breaks here too). Gated on
+  // tierConfirmed so we don't pre-gen at a stale tier.
+  useReleasePreGen(groups, tier, tierConfirmed);
   return (
     <ArtistUpdatesContext.Provider value={{ groups, loading, totalCount, readyCount }}>
       {children}

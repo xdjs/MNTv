@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { ExternalLink } from "lucide-react";
+import { isSafeUrl } from "@/lib/urlSafety";
 
 interface NuggetSource {
   type: string;
@@ -83,7 +84,7 @@ export default function NuggetCategoryCard({ label, nuggets, colorClass }: Props
             </div>
 
             {/* Source link */}
-            {nugget.source?.url && (
+            {isSafeUrl(nugget.source?.url) && (
               <a
                 href={nugget.source.url}
                 target="_blank"
