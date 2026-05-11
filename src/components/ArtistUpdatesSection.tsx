@@ -74,7 +74,7 @@ function ArtistUpdatesSectionInner({
     }
   }
 
-  function openArtistAtNugget(update: ArtistUpdate) {
+  const openArtistAtNugget = useCallback((update: ArtistUpdate) => {
     // New-release / collab cards: tap should land on Listen for the
     // released track, not the artist profile. We need at minimum a
     // track-level title from the edge function (set only when it
@@ -116,7 +116,16 @@ function ArtistUpdatesSectionInner({
       profile?.streamingService,
     );
     navigate(path);
-  }
+  }, [profile?.streamingService, activeService, artistIds, navigate]);
+
+  // Stable modal onOpen so the memoized ExpandedUpdateModal isn't
+  // forced to re-render every parent tick. Depends on expandedUpdate
+  // (correct: closes over which card to open) and openArtistAtNugget.
+  const modalOnOpen = useCallback(() => {
+    if (!expandedUpdate) return;
+    setExpandedKey(null);
+    openArtistAtNugget(expandedUpdate);
+  }, [expandedUpdate, openArtistAtNugget]);
 
   return (
     <section className="mb-6 md:mb-10">
@@ -155,17 +164,7 @@ function ArtistUpdatesSectionInner({
             update={expandedUpdate}
             layoutId={cardKey(expandedUpdate)}
             onClose={modalOnClose}
-            onOpen={() => {
-              // Capture into a non-null local before the setState so a
-              // later React batching change couldn't theoretically
-              // invoke openArtistAtNugget(null). The outer AnimatePresence
-              // gate already ensures expandedUpdate is non-null here,
-              // but this is the cheap belt-and-suspenders form.
-              const u = expandedUpdate;
-              if (!u) return;
-              setExpandedKey(null);
-              openArtistAtNugget(u);
-            }}
+            onOpen={modalOnOpen}
           />
         )}
       </AnimatePresence>

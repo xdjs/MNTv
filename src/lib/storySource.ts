@@ -125,7 +125,10 @@ export function selectStorySource(
   }
 
   // No window had ≥ targetCount. Try ALL liked tracks (any age, just
-  // unvisited + has URI).
+  // unvisited + has URI). Order is preserved from `liked`, which
+  // spotify-taste returns sorted `added_at desc` (newest first) per
+  // Spotify's /me/tracks default. If that contract ever changes, the
+  // freshest-first guarantee silently breaks here.
   const allLikedUnvisited = liked.filter(
     (l) => !!l.uri && !visitedMap.has(trackKey(l)),
   );
