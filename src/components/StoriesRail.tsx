@@ -61,6 +61,11 @@ export default function StoriesRail({ stories }: StoriesRailProps) {
   // Auto-mark any story as visited if it matches the currently-playing track.
   // Catches the case where the user navigated to the Listen page via Browse
   // tiles or search (not the story tap).
+  // Functional updater so we don't have to list `visited` as a dep —
+  // listing visited would make this effect re-run on every tap (which
+  // updates visited), and even though the early-return inside guards
+  // against an infinite loop, the cleaner form is to receive `prev`
+  // and let setVisited decide whether to bail.
   useEffect(() => {
     if (!currentTrack) return;
     const match = stories.find(
@@ -69,9 +74,11 @@ export default function StoriesRail({ stories }: StoriesRailProps) {
         s.title.toLowerCase() === currentTrack.title.toLowerCase(),
     );
     if (!match) return;
-    if (visited.has(match.trackKey)) return;
-    setVisited(markVisited(match.trackKey, visited));
-  }, [currentTrack?.artist, currentTrack?.title, stories, visited]);
+    setVisited((prev) => {
+      if (prev.has(match.trackKey)) return prev;
+      return markVisited(match.trackKey, prev);
+    });
+  }, [currentTrack?.artist, currentTrack?.title, stories]);
 
   // Hide visited stories entirely (Pete 2026-05-10 spec: "it should
   // clear from my stories"). StoriesContext's cascade selector then

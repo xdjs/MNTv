@@ -483,7 +483,14 @@ export default function ImmersiveNuggetView({
         </div>
       </div>
     );
-  }, [getNuggetImage, activeNugget, activeSource, isTypewriterDone, handleTypewriterComplete, deepDiveText, deepDiveFollowUp, deepDiveLoading, deepDiveRateLimited, handleTellMeMore, bookmarks, artist, trackTitle, nuggets.length, activeIndex, unlockedCount]);
+    // Deps intentionally narrow: nuggets.length / activeIndex /
+    // unlockedCount are NOT referenced inside this card body — they
+    // drive the dots row + nav arrows which are sibling components.
+    // Listing them here would invalidate the heavy card-content memo
+    // on every pacer unlock and every swipe (4 Hz on cached tracks),
+    // re-rendering the image / typewriter / deep-dive button for no
+    // visible change.
+  }, [getNuggetImage, activeNugget, activeSource, isTypewriterDone, handleTypewriterComplete, deepDiveText, deepDiveFollowUp, deepDiveLoading, deepDiveRateLimited, handleTellMeMore, bookmarks, artist, trackTitle]);
 
   return (
     <motion.div

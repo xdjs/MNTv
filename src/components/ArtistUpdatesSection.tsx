@@ -66,7 +66,11 @@ function ArtistUpdatesSectionInner({
   // cardKey is a pure function — see module-level definition below.
 
   // Find the currently-expanded update so we can render its expanded
-  // content. Search across all groups since expandedKey is global.
+  // content. Linear scan across groups since expandedKey is global.
+  // Worst case is O(artists × updates_per_artist) ≈ 3 × 3 = 9 today.
+  // Fine at this scale; if DEFAULT_MAX_ARTISTS or per-artist cap grow
+  // significantly, switch to a Map keyed by cardKey built once per
+  // render.
   let expandedUpdate: ArtistUpdate | null = null;
   if (expandedKey) {
     for (const g of groups) {
@@ -157,10 +161,13 @@ function ArtistUpdatesSectionInner({
             layoutId={cardKey(expandedUpdate)}
             onClose={modalOnClose}
             onOpen={() => {
-              // onOpen needs the current expandedUpdate; not stable
-              // across renders, but the modal's effect deps only
-              // include onClose so that's the one that mattered.
+              // Capture into a non-null local before the setState so a
+              // later React batching change couldn't theoretically
+              // invoke openArtistAtNugget(null). The outer AnimatePresence
+              // gate already ensures expandedUpdate is non-null here,
+              // but this is the cheap belt-and-suspenders form.
               const u = expandedUpdate;
+              if (!u) return;
               setExpandedKey(null);
               openArtistAtNugget(u);
             }}
@@ -471,7 +478,11 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpda
                 <ExternalLink className="w-3.5 h-3.5" />
                 {ctaLabel}
               </button>
-              {update.source?.url && (
+              {update.source?.url && /^https?:\/\//i.test(update.source.url) && (
+                // Scheme guard: only render the anchor if the URL is
+                // http(s). The url originates from Exa / Gemini output
+                // — without this a hallucinated `javascript:` or
+                // `data:` scheme would be a navigable XSS vector.
                 <a
                   href={update.source.url}
                   target="_blank"

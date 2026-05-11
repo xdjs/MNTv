@@ -6,12 +6,17 @@
 //    days or more. Tap a story → it clears from my stories and
 //    presents a new track."
 //
-// Cascade order (each window keeps tracks from PRIOR windows excluded):
+// Cascade order — windows are nested (30d includes the 15d subset),
+// so cross-window deduplication is done by `seenKeys` in the
+// accumulator loop below, NOT by inWindow() itself. The accumulator
+// walks freshest-first and only adds a track the first time it's
+// seen, so a track in both the 15d and 30d windows is counted once
+// and attributed to the 15d window.
 //   1. liked-in-last-15d, unvisited
-//   2. liked-in-last-30d, unvisited
-//   3. liked-in-last-60d, unvisited
-//   4. liked-in-last-365d, unvisited
-//   5. all liked tracks, unvisited
+//   2. liked-in-last-30d, unvisited  (minus any already taken from 15d)
+//   3. liked-in-last-60d, unvisited  (minus any already taken from 15d/30d)
+//   4. liked-in-last-365d, unvisited (minus any already taken from prior)
+//   5. all liked tracks, unvisited   (catch-all if 365d cap is too tight)
 //   6. fall back to topTracks/trackImages (the old short_term top-track list)
 //
 // Returns up to `targetCount` tracks. Caller (StoriesContext) hands the

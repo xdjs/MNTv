@@ -80,8 +80,20 @@ export default function Connect() {
   // re-authenticate.
   const { session, loading: authLoading } = useAuth();
   const hasProfile = !!profile || !!getStoredProfile();
-  let oauthPendingFlag = false;
-  try { oauthPendingFlag = sessionStorage.getItem(SPOTIFY_OAUTH_PENDING_KEY) === "1"; } catch { /* noop */ }
+  // Captured once at mount via useRef so a later sessionStorage clear
+  // (handleTierSelect success path, or the 10s escape-hatch timer
+  // below) doesn't yank the blank fallback out from under a user
+  // whose auth is still resolving. Mirrors the pattern already used
+  // by ConnectInner's oauthPendingOnMount.
+  const oauthPendingFlag = useRef<boolean>(
+    (() => {
+      try {
+        return sessionStorage.getItem(SPOTIFY_OAUTH_PENDING_KEY) === "1";
+      } catch {
+        return false;
+      }
+    })(),
+  ).current;
 
   // Returning user short-circuits via <Navigate> before ConnectInner
   // mounts, so the OAuth-pending reset lives here at the parent
