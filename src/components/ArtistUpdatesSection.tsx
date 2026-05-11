@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, X, ExternalLink } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -58,23 +58,7 @@ function ArtistUpdatesSectionInner({
 
   const showProgress = totalCount > 0 && readyCount < totalCount;
 
-  // Stable id: prefer the Gemini-supplied nuggetId, fall back to a
-  // hash of artist+kind+headline. Pete 2026-05-11 (review note 12):
-  // hash instead of raw concat so headlines containing `::` (or two
-  // similar headlines from the same artist) can't produce a collision
-  // that makes Framer Motion morph the wrong card.
-  const cardKey = useCallback((u: ArtistUpdate) => {
-    if (u.nuggetId) return u.nuggetId;
-    const seed = `${u.artistName}|${u.kind}|${u.headline}`;
-    // FNV-1a 32-bit. Collision rate ~2^-32 is far below "two cards
-    // from the same artist with similar headlines."
-    let h = 0x811c9dc5;
-    for (let i = 0; i < seed.length; i++) {
-      h ^= seed.charCodeAt(i);
-      h = Math.imul(h, 0x01000193);
-    }
-    return `card-${(h >>> 0).toString(36)}`;
-  }, []);
+  // cardKey is a pure function — see module-level definition below.
 
   // Find the currently-expanded update so we can render its expanded
   // content. Search across all groups since expandedKey is global.
@@ -156,7 +140,6 @@ function ArtistUpdatesSectionInner({
               key={group.artistName}
               group={group}
               onExpand={(u) => setExpandedKey(cardKey(u))}
-              cardKey={cardKey}
             />
           );
         })}
@@ -183,15 +166,31 @@ function ArtistUpdatesSectionInner({
 const ArtistUpdatesSection = memo(ArtistUpdatesSectionInner);
 export default ArtistUpdatesSection;
 
+// ── cardKey ───────────────────────────────────────────────────────────
+// Stable id for a card — prefers the Gemini-supplied nuggetId, falls
+// back to an FNV-1a hash of artist|kind|headline (collision rate
+// ~2^-32, far below "two cards from the same artist with similar
+// headlines" can produce). Pure function, module-level so nothing in
+// the render tree allocates a new wrapper each pass.
+function cardKey(u: ArtistUpdate): string {
+  if (u.nuggetId) return u.nuggetId;
+  const seed = `${u.artistName}|${u.kind}|${u.headline}`;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return `card-${(h >>> 0).toString(36)}`;
+}
+
 // ── Per-artist row ────────────────────────────────────────────────────
 
 interface ArtistRowProps {
   group: ArtistUpdateGroup;
   onExpand: (u: ArtistUpdate) => void;
-  cardKey: (u: ArtistUpdate) => string;
 }
 
-function ArtistRow({ group, onExpand, cardKey }: ArtistRowProps) {
+function ArtistRow({ group, onExpand }: ArtistRowProps) {
   const loading = group.updates === null;
   const updates = group.updates ?? [];
   // Prefer a fact update's image for the row header avatar — that's the
@@ -340,7 +339,11 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpda
         return;
       }
       if (e.key !== "Tab") return;
+      // role="dialog" lives on the inner pointer-events-auto card; the
+      // outer flex wrapper is just a centering layer.
       const root = closeBtnRef.current?.closest('[role="dialog"]');
+      // (closest('[role="dialog"]') still finds the inner card after
+      // the ARIA move because the close button is a descendant.)
       if (!root) return;
       const focusable = Array.from(
         root.querySelectorAll<HTMLElement>(
@@ -378,12 +381,12 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpda
       />
       <motion.div
         layoutId={layoutId}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
         className="fixed inset-0 z-[61] flex items-center justify-center p-4 pointer-events-none"
       >
         <motion.div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
           className="relative w-full max-w-md max-h-[85vh] rounded-3xl overflow-hidden bg-black ring-1 ring-white/10 shadow-[0_20px_80px_rgba(0,0,0,0.6)] pointer-events-auto flex flex-col"
         >
           {/* Hero image — keeps the same layoutId for the morph */}

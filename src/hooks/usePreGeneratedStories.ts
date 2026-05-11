@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { usePlayer } from "@/contexts/PlayerContext";
-import { buildClientNuggetCacheKey } from "@/lib/nuggetCacheKey";
-import type { Nugget, Source, UserProfile } from "@/mock/types";
+import { buildPreGenCacheKey, preparePreGenCacheEntry, PREGEN_INVOKE_TIMEOUT_MS } from "@/lib/preGenCachePrefill";
+import type { UserProfile } from "@/mock/types";
 
 // Each story = one user-top-track worth of pre-generated nuggets. Tapping a
 // story on Browse navigates to Listen for that track, which hits the same
@@ -238,15 +238,8 @@ export function usePreGeneratedStories(
           if (cancelled) return;
           const t0 = Date.now();
           try {
-            // Hard ceiling on each pre-gen invoke. supabase-js's
-            // functions.invoke has no built-in client-side timeout; if
-            // the function hangs (e.g. Exa or Gemini wedged), the
-            // throttled worker slot stays blocked forever. The full
-            // pipeline is bounded by FUNCTION_TIMEOUT_MS=90s on the
-            // server, so 95s here is a strict superset that still
-            // unblocks the slot if anything slips past the server's
-            // own watchdog.
-            const PREGEN_INVOKE_TIMEOUT_MS = 95_000;
+            // PREGEN_INVOKE_TIMEOUT_MS is shared with useReleasePreGen
+            // via @/lib/preGenCachePrefill — see that file for why 95s.
             const invokePromise = supabase.functions.invoke("generate-nuggets", {
               body: {
                 artist: story.artist,
@@ -333,51 +326,21 @@ export function usePreGeneratedStories(
             recordPregen(story.trackKey, tier);
 
             // Pre-fill in-memory cache so a tap on the pink ring shows
-            // the nugget instantly — bypasses the DB cache entirely
-            // (which may have silently failed server-side). Key format
-            // is centralized in `buildClientNuggetCacheKey` so this
-            // can't drift from useAINuggets's read.
-            const memCacheKey = buildClientNuggetCacheKey({
+            // the nugget instantly. Helper centralizes shape validation
+            // and key construction so useReleasePreGen stays in sync.
+            const memCacheKey = buildPreGenCacheKey({
               artist: story.artist,
               title: story.title,
               uri: story.uri,
               tier,
-              regenerateKey: 0,
             });
-            const sourcesMap = new Map<string, Source>();
-            if (responseSources && typeof responseSources === "object") {
-              for (const [k, v] of Object.entries(responseSources)) {
-                if (k.startsWith("_") || typeof v !== "object" || v === null || Array.isArray(v)) continue;
-                sourcesMap.set(k, v as Source);
-              }
+            const cacheEntry = preparePreGenCacheEntry(data);
+            if (cacheEntry) {
+              setNuggetCache(memCacheKey, cacheEntry);
+              if (import.meta.env.DEV) console.log(`[Stories] in-mem cache primed for ${story.trackKey} (key=${memCacheKey.slice(0, 80)}…)`);
+            } else if (import.meta.env.DEV) {
+              console.warn(`[Stories] response nuggets failed shape validation for ${story.trackKey} — skipping in-mem prefill`);
             }
-            // Pete 2026-05-11 (review note 7): runtime-validate the
-            // shape before populating the in-mem cache. The edge
-            // function's response type is just `unknown[]` and a
-            // missing required field (id, trackId, timestampSec)
-            // would silently corrupt the cache and crash the Listen
-            // page on tap. Drop malformed entries; if everything
-            // dropped, skip the prefill entirely so the tap path
-            // falls back to a fresh DB lookup.
-            const validNuggets = (responseNuggets ?? []).filter((n): n is Nugget => {
-              if (!n || typeof n !== "object") return false;
-              const o = n as Record<string, unknown>;
-              return typeof o.id === "string"
-                && typeof o.trackId === "string"
-                && typeof o.timestampSec === "number"
-                && typeof o.headline === "string"
-                && typeof o.text === "string";
-            });
-            if (validNuggets.length === 0) {
-              if (import.meta.env.DEV) console.warn(`[Stories] response nuggets failed shape validation for ${story.trackKey} — skipping in-mem prefill`);
-            } else {
-              setNuggetCache(memCacheKey, {
-                nuggets: validNuggets,
-                sources: sourcesMap,
-                listenCount: 1,
-              });
-            }
-            if (import.meta.env.DEV) console.log(`[Stories] in-mem cache primed for ${story.trackKey} (key=${memCacheKey.slice(0, 80)}…)`);
 
             setStories((prev) =>
               prev.map((s) => (s.trackKey === story.trackKey ? { ...s, ready: true } : s)),

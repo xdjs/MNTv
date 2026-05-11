@@ -1,5 +1,5 @@
 import { useNavigate, useSearchParams, Navigate } from "react-router-dom";
-import { useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import PageTransition from "@/components/PageTransition";
@@ -83,39 +83,25 @@ export default function Connect() {
   let oauthPendingFlag = false;
   try { oauthPendingFlag = sessionStorage.getItem(SPOTIFY_OAUTH_PENDING_KEY) === "1"; } catch { /* noop */ }
 
-  // Pete 2026-05-10: returning user short-circuits via <Navigate>
-  // BEFORE ConnectInner mounts, so a useEffect inside ConnectInner
-  // would never fire. The OAuth-pending reset has to live here at
-  // the parent level. Using useLayoutEffect (not useEffect) so the
-  // tier-confirmed clear lands BEFORE Navigate's useEffect triggers
-  // the route change — otherwise PreparingExperience briefly mounts
-  // with stale tierConfirmed=true and flashes the warming spinner
-  // before re-rendering with the picker.
+  // Returning user short-circuits via <Navigate> before ConnectInner
+  // mounts, so the OAuth-pending reset lives here at the parent
+  // level. The paint-order concern (PreparingExperience briefly
+  // showing stale tierConfirmed=true) is now handled upstream by
+  // signInWithSpotify, which clears the sessionStorage flag BEFORE
+  // the OAuth redirect — so by the time TierGateProvider's useState
+  // initializer runs after the round-trip, the flag is already gone.
+  // This effect is just belt-and-suspenders for any code path that
+  // somehow reaches /connect with the pending flag still set.
   // CRITICAL: this hook MUST run before any early return to satisfy
-  // Rules of Hooks (the hook count must match across all renders).
-  useLayoutEffect(() => {
+  // Rules of Hooks.
+  useEffect(() => {
     let pending = false;
     try { pending = sessionStorage.getItem(SPOTIFY_OAUTH_PENDING_KEY) === "1"; } catch { /* noop */ }
     if (!pending) return;
     try {
       sessionStorage.removeItem("musicnerd_tier_confirmed");
-      // Force fresh artist rotation: drop the per-session resolved
-      // cursor so resolveRotationStart() reads + advances localStorage
-      // again on the next mount. Net effect — every sign-in shows the
-      // next 3 artists in the top-10 pool.
       sessionStorage.removeItem("musicnerd_artist_rotation_resolved");
-      // Notify TierGateContext to re-read sessionStorage and update
-      // its React state, otherwise PreparingExperience would still
-      // see tierConfirmed=true from the previous render and briefly
-      // show the warming spinner. Pete 2026-05-11 (review note 8):
-      // queueMicrotask defers the dispatch out of the layout-effect
-      // synchronous phase so TierGateProvider's setTierConfirmed
-      // doesn't fire while Connect is still mid-render — eliminates
-      // the dev-time "Cannot update a component while rendering a
-      // different component" warning.
-      queueMicrotask(() => {
-        window.dispatchEvent(new Event("musicnerd:tier-state-changed"));
-      });
+      window.dispatchEvent(new Event("musicnerd:tier-state-changed"));
     } catch { /* noop */ }
   }, []);
 

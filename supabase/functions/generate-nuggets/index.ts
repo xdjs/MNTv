@@ -1,3 +1,9 @@
+// ⚠ DEPLOY GUARD: This file contains in-progress prompt-quality work
+// (Task #28 — banned phrase lists, catalog-source allowlist, collaborator
+// context). Do NOT run `supabase functions deploy generate-nuggets`
+// from this branch. The deployed v57 (May 9) is the production cut;
+// the changes here ship in a separate dedicated PR once the new
+// prompts have been validated against Pete's 50-example test set.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getAppleDeveloperToken } from "../_shared/apple-token.ts";

@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { usePlayer } from "@/contexts/PlayerContext";
+import { buildPreGenCacheKey, preparePreGenCacheEntry, PREGEN_INVOKE_TIMEOUT_MS } from "@/lib/preGenCachePrefill";
 import type { ArtistUpdateGroup } from "@/hooks/useArtistUpdates";
 
 /**
@@ -30,6 +32,12 @@ export function useReleasePreGen(
   enabled: boolean,
 ): void {
   const firedRef = useRef<Set<string>>(new Set());
+  // Pete 2026-05-11 (review note 1): release-card taps need the same
+  // in-mem cache prefill that story taps get, otherwise tapping a NEW
+  // RELEASE pays a DB lookup + possibly cold SSE. Helper centralizes
+  // shape validation + key construction; we just need access to
+  // setNuggetCache via PlayerContext.
+  const { setNuggetCache } = usePlayer();
 
   useEffect(() => {
     if (!enabled) return;
@@ -80,13 +88,16 @@ export function useReleasePreGen(
       // synthetic boilerplate too often). Server runs Curator +
       // Writer + Validator, caches all 3-9 tier-scaled nuggets.
       // Best-effort: no awaiting. Tap reads the cache row.
-      // Pete 2026-05-11 (review note 5): same 95s client-side
-      // ceiling as usePreGeneratedStories so a hung Gemini call
-      // doesn't hold a Promise reference open indefinitely. The
-      // server itself caps at 90s (FUNCTION_TIMEOUT_MS); 95s is a
-      // strict superset that catches anything slipping past the
-      // server watchdog.
-      const PREGEN_INVOKE_TIMEOUT_MS = 95_000;
+      // PREGEN_INVOKE_TIMEOUT_MS is shared with usePreGeneratedStories
+      // via @/lib/preGenCachePrefill — see that file for why 95s.
+      // Build the URI we'll persist into the cache key. Stories use
+      // story.uri directly; we need the same resolved URI so the
+      // server-side write key matches what useAINuggets reads on tap.
+      const cacheUri = spotifyTrackId
+        ? `spotify:track:${spotifyTrackId}`
+        : appleTrackId
+          ? `apple:song:${appleTrackId}`
+          : "";
       const invokePromise = supabase.functions.invoke("generate-nuggets", {
         body: {
           artist: target.artist,
@@ -111,6 +122,22 @@ export function useReleasePreGen(
             if (import.meta.env.DEV) {
               console.warn(`[ReleasePreGen] TIMEOUT after ${PREGEN_INVOKE_TIMEOUT_MS}ms — ${target.artist} - ${target.title}`);
             }
+            return;
+          }
+          // Pete 2026-05-11 (review note 1): same in-mem cache prefill
+          // as the stories rail so a tap on a NEW RELEASE / collab
+          // card lands on Listen with an instant first nugget.
+          const data = (result as { data?: unknown }).data;
+          const cacheEntry = preparePreGenCacheEntry(data);
+          if (cacheEntry) {
+            const memCacheKey = buildPreGenCacheKey({
+              artist: target.artist,
+              title: target.title,
+              uri: cacheUri,
+              tier,
+            });
+            setNuggetCache(memCacheKey, cacheEntry);
+            if (import.meta.env.DEV) console.log(`[ReleasePreGen] in-mem cache primed for ${target.artist} - ${target.title}`);
           }
         })
         .catch((e) => {

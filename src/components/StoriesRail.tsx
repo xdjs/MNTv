@@ -109,11 +109,12 @@ export default function StoriesRail({ stories }: StoriesRailProps) {
   if (visibleStories.length === 0) return null;
 
   const handleTap = (s: Story) => {
-    // Pete 2026-05-11 (review note 10): markVisited dispatches the
-    // musicnerd:visited-changed event, which our own listener already
-    // catches and calls setVisited(readVisited()). Skipping the
-    // direct setVisited here avoids a redundant render.
-    markVisited(s.trackKey, visited);
+    // Update local state synchronously with the returned map so the
+    // story disappears in the same React tick as the navigation. The
+    // event listener also fires from markVisited but is async — if
+    // navigate ever becomes soft/animated, the rail would briefly
+    // flicker the still-visible story without this synchronous call.
+    setVisited(markVisited(s.trackKey, visited));
     navigate(listenHrefForStory(s));
   };
 

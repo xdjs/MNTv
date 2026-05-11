@@ -81,22 +81,36 @@ export function selectStorySource(
     });
   };
 
-  // Cascade through 15d → 30d → 60d → 365d. Returns the FIRST window
-  // that contains AT LEAST `targetCount` tracks. A window with fewer
-  // is skipped entirely — we'd rather show 5 tracks from the 30d
-  // window than 4 from the 15d window, since the user expects a full
-  // rail. Trade-off: a few fresh sub-targetCount likes don't get
-  // priority over a denser older window. Pete 2026-05-11 (review
-  // note 4): if we want freshness-bias instead, accumulate across
-  // windows and short-circuit when total >= targetCount.
+  // Cascade through 15d → 30d → 60d → 365d, accumulating the freshest
+  // tracks first and falling back to wider windows only to fill the
+  // remaining slots. A user with 4 likes in 15d and 8 likes in 30d
+  // sees the 4 freshest first, then 1 from the 30d window — the
+  // freshest content always surfaces, the rail still hits targetCount.
+  // The `source` label reflects the WIDEST window we had to consult
+  // so observability still tells us "this user's freshness profile."
+  // Pete 2026-05-11 (review note 2): switched from skip-on-partial
+  // to accumulate-freshest-first per the WCAG/UX argument that fresh
+  // is what the user actually wants.
+  const accumulated: LikedTrack[] = [];
+  const seenKeys = new Set<string>();
+  let widestWindow = 0;
   for (const days of WINDOWS_DAYS) {
+    if (accumulated.length >= targetCount) break;
+    widestWindow = days;
     const windowTracks = inWindow(days);
-    if (windowTracks.length >= targetCount) {
-      return {
-        tracks: windowTracks.slice(0, targetCount).map(toTrack),
-        source: `liked-${days}d` as StorySourceResult["source"],
-      };
+    for (const t of windowTracks) {
+      const k = trackKey(t);
+      if (seenKeys.has(k)) continue;
+      accumulated.push(t);
+      seenKeys.add(k);
+      if (accumulated.length >= targetCount) break;
     }
+  }
+  if (accumulated.length >= targetCount) {
+    return {
+      tracks: accumulated.slice(0, targetCount).map(toTrack),
+      source: `liked-${widestWindow}d` as StorySourceResult["source"],
+    };
   }
 
   // No window had ≥ targetCount. Try ALL liked tracks (any age, just
