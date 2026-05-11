@@ -140,7 +140,7 @@ function FactCard({ update, expanded, pulsing, onToggle, registerRef }: FactCard
       {expanded && (
         <div className="px-4 pb-4 -mt-1 flex flex-col gap-2">
           <p className="text-sm leading-relaxed text-white/70">{update.body}</p>
-          {update.source?.url && (
+          {update.source?.url && /^https?:\/\//i.test(update.source.url) && (
             <a
               href={update.source.url}
               target="_blank"

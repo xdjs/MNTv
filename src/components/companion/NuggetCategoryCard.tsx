@@ -83,7 +83,7 @@ export default function NuggetCategoryCard({ label, nuggets, colorClass }: Props
             </div>
 
             {/* Source link */}
-            {nugget.source?.url && (
+            {nugget.source?.url && /^https?:\/\//i.test(nugget.source.url) && (
               <a
                 href={nugget.source.url}
                 target="_blank"

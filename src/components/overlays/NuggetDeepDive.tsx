@@ -346,7 +346,7 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
             {entries.length === 0 ? "Tell me more" : "Keep exploring"}
           </button>
 
-          {source?.url && (
+          {source?.url && /^https?:\/\//i.test(source.url) && (
             <a
               ref={buttonRefs[1] as React.RefObject<HTMLAnchorElement>}
               href={source.url}

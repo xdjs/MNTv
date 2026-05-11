@@ -21,7 +21,7 @@ export default function Browse() {
   const [searchOpen, setSearchOpen] = useState(false);
   const navigate = useNavigate();
   const { profile, saveProfile } = useUserProfile();
-  const { tierConfirmed } = useTierGate();
+  const { tierConfirmed, confirmTier } = useTierGate();
   // Direct-navigating to /browse (refresh, bookmark, new tab) skips
   // PreparingExperience and lands here with tierConfirmed=false.
   // StoriesProvider + ArtistUpdatesProvider both gate pre-gen on
@@ -339,6 +339,12 @@ export default function Browse() {
               onSelect={(t) => {
                 if (!profile) return;
                 if (t !== tier) saveProfile({ ...profile, calculatedTier: t });
+                // Re-confirm so StoriesProvider + ArtistUpdatesProvider
+                // detect a tier switch and re-warm at the new tier.
+                // Without this, the dropdown saved the new tier but
+                // pre-gen never re-fired this session — "change it
+                // any time" wasn't actually live.
+                confirmTier(t);
               }}
             />
           </div>
