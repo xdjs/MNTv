@@ -75,7 +75,14 @@ export function useReleasePreGen(
       // synthetic boilerplate too often). Server runs Curator +
       // Writer + Validator, caches all 3-9 tier-scaled nuggets.
       // Best-effort: no awaiting. Tap reads the cache row.
-      supabase.functions.invoke("generate-nuggets", {
+      // Pete 2026-05-11 (review note 5): same 95s client-side
+      // ceiling as usePreGeneratedStories so a hung Gemini call
+      // doesn't hold a Promise reference open indefinitely. The
+      // server itself caps at 90s (FUNCTION_TIMEOUT_MS); 95s is a
+      // strict superset that catches anything slipping past the
+      // server watchdog.
+      const PREGEN_INVOKE_TIMEOUT_MS = 95_000;
+      const invokePromise = supabase.functions.invoke("generate-nuggets", {
         body: {
           artist: target.artist,
           title: target.title,
@@ -86,11 +93,25 @@ export function useReleasePreGen(
           spotifyTrackId,
           appleTrackId,
         },
-      }).catch((e) => {
-        if (import.meta.env.DEV) {
-          console.warn(`[ReleasePreGen] failed for ${target.artist} - ${target.title}:`, e);
-        }
       });
+      Promise.race([
+        invokePromise,
+        new Promise<{ timedOut: true }>((resolve) =>
+          setTimeout(() => resolve({ timedOut: true }), PREGEN_INVOKE_TIMEOUT_MS),
+        ),
+      ])
+        .then((result) => {
+          if (typeof result === "object" && result !== null && "timedOut" in result) {
+            if (import.meta.env.DEV) {
+              console.warn(`[ReleasePreGen] TIMEOUT after ${PREGEN_INVOKE_TIMEOUT_MS}ms — ${target.artist} - ${target.title}`);
+            }
+          }
+        })
+        .catch((e) => {
+          if (import.meta.env.DEV) {
+            console.warn(`[ReleasePreGen] failed for ${target.artist} - ${target.title}:`, e);
+          }
+        });
     }
     // Depend on groups identity — useArtistUpdates re-renders only
     // when the per-artist `updates` arrays settle, so this fires once

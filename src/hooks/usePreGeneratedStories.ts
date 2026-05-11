@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { usePlayer } from "@/contexts/PlayerContext";
+import { buildClientNuggetCacheKey } from "@/lib/nuggetCacheKey";
 import type { Nugget, Source, UserProfile } from "@/mock/types";
 
 // Each story = one user-top-track worth of pre-generated nuggets. Tapping a
@@ -130,8 +131,7 @@ export function usePreGeneratedStories(
       setStories([]);
       return;
     }
-    // Production-visible — Pete needs these to debug story hangs.
-    console.log(`[Stories] effect run — ${profile.trackImages.length} top tracks, tier=${tier}`);
+    if (import.meta.env.DEV) console.log(`[Stories] effect run — ${profile.trackImages.length} top tracks, tier=${tier}`);
     const tierSwitched = prevTierRef.current !== null && prevTierRef.current !== tier;
     prevTierRef.current = tier;
     // Per-effect-run dedup. Local to this effect so a re-run (profile
@@ -286,16 +286,16 @@ export function usePreGeneratedStories(
               ),
             ]);
             if ("timedOut" in raceResult) {
-              console.warn(`[Stories] TIMEOUT after ${PREGEN_INVOKE_TIMEOUT_MS}ms — ${story.trackKey} (slot freed)`);
+              if (import.meta.env.DEV) console.warn(`[Stories] TIMEOUT after ${PREGEN_INVOKE_TIMEOUT_MS}ms — ${story.trackKey} (slot freed)`);
               return;
             }
             const { data, error } = raceResult;
             if (cancelled) {
-              console.log(`[Stories] cancelled mid-flight after ${Date.now() - t0}ms — ${story.trackKey}`);
+              if (import.meta.env.DEV) console.log(`[Stories] cancelled mid-flight after ${Date.now() - t0}ms — ${story.trackKey}`);
               return;
             }
             if (error) {
-              console.warn(`[Stories] ERROR after ${Date.now() - t0}ms — ${story.trackKey}:`, error.message);
+              if (import.meta.env.DEV) console.warn(`[Stories] ERROR after ${Date.now() - t0}ms — ${story.trackKey}:`, error.message);
               return;
             }
             // The JSON path of generate-nuggets returns 200 with an
@@ -318,7 +318,7 @@ export function usePreGeneratedStories(
             const responseSources = (data as { sources?: Record<string, unknown> } | null)?.sources;
             const generatedAny = Array.isArray(responseNuggets) && responseNuggets.length > 0;
             const synthetic = (data as { synthetic?: boolean } | null)?.synthetic === true;
-            console.log(`[Stories] OK after ${Date.now() - t0}ms — ${story.trackKey} (${responseNuggets?.length ?? 0} nuggets${synthetic ? ", synthetic" : ""})`);
+            if (import.meta.env.DEV) console.log(`[Stories] OK after ${Date.now() - t0}ms — ${story.trackKey} (${responseNuggets?.length ?? 0} nuggets${synthetic ? ", synthetic" : ""})`);
 
             // INVARIANT (Pete 2026-05-10 re-affirmed): pink ring = tap
             // will show a nugget. If the server returned 0 nuggets,
@@ -326,7 +326,7 @@ export function usePreGeneratedStories(
             // bef9302 that 56a65f7 accidentally regressed. A blank
             // tap is worse than a still-warming ring.
             if (!generatedAny) {
-              console.warn(`[Stories] response had no nuggets — leaving ${story.trackKey} in warming state`);
+              if (import.meta.env.DEV) console.warn(`[Stories] response had no nuggets — leaving ${story.trackKey} in warming state`);
               return;
             }
 
@@ -334,15 +334,16 @@ export function usePreGeneratedStories(
 
             // Pre-fill in-memory cache so a tap on the pink ring shows
             // the nugget instantly — bypasses the DB cache entirely
-            // (which may have silently failed server-side). Cache key
-            // MUST match useAINuggets's key format:
-            // `${rawTrackId}::${tier}::${regenerateKey}`, where
-            // rawTrackId is the URL-encoded form Listen receives from
-            // React Router params (mirrors listenHrefForStory in
-            // StoriesRail.tsx).
-            const enc = encodeURIComponent;
-            const rawTrackId = `real::${enc(story.artist)}::${enc(story.title)}::${enc("")}::${enc(story.uri ?? "")}`;
-            const memCacheKey = `${rawTrackId}::${tier}::0`;
+            // (which may have silently failed server-side). Key format
+            // is centralized in `buildClientNuggetCacheKey` so this
+            // can't drift from useAINuggets's read.
+            const memCacheKey = buildClientNuggetCacheKey({
+              artist: story.artist,
+              title: story.title,
+              uri: story.uri,
+              tier,
+              regenerateKey: 0,
+            });
             const sourcesMap = new Map<string, Source>();
             if (responseSources && typeof responseSources === "object") {
               for (const [k, v] of Object.entries(responseSources)) {
@@ -350,18 +351,39 @@ export function usePreGeneratedStories(
                 sourcesMap.set(k, v as Source);
               }
             }
-            setNuggetCache(memCacheKey, {
-              nuggets: responseNuggets as unknown as Nugget[],
-              sources: sourcesMap,
-              listenCount: 1,
+            // Pete 2026-05-11 (review note 7): runtime-validate the
+            // shape before populating the in-mem cache. The edge
+            // function's response type is just `unknown[]` and a
+            // missing required field (id, trackId, timestampSec)
+            // would silently corrupt the cache and crash the Listen
+            // page on tap. Drop malformed entries; if everything
+            // dropped, skip the prefill entirely so the tap path
+            // falls back to a fresh DB lookup.
+            const validNuggets = (responseNuggets ?? []).filter((n): n is Nugget => {
+              if (!n || typeof n !== "object") return false;
+              const o = n as Record<string, unknown>;
+              return typeof o.id === "string"
+                && typeof o.trackId === "string"
+                && typeof o.timestampSec === "number"
+                && typeof o.headline === "string"
+                && typeof o.text === "string";
             });
-            console.log(`[Stories] in-mem cache primed for ${story.trackKey} (key=${memCacheKey.slice(0, 80)}…)`);
+            if (validNuggets.length === 0) {
+              if (import.meta.env.DEV) console.warn(`[Stories] response nuggets failed shape validation for ${story.trackKey} — skipping in-mem prefill`);
+            } else {
+              setNuggetCache(memCacheKey, {
+                nuggets: validNuggets,
+                sources: sourcesMap,
+                listenCount: 1,
+              });
+            }
+            if (import.meta.env.DEV) console.log(`[Stories] in-mem cache primed for ${story.trackKey} (key=${memCacheKey.slice(0, 80)}…)`);
 
             setStories((prev) =>
               prev.map((s) => (s.trackKey === story.trackKey ? { ...s, ready: true } : s)),
             );
           } catch (e) {
-            console.warn(`[Stories] THREW after ${Date.now() - t0}ms — ${story.trackKey}:`, e);
+            if (import.meta.env.DEV) console.warn(`[Stories] THREW after ${Date.now() - t0}ms — ${story.trackKey}:`, e);
           }
         });
       } finally {
@@ -371,7 +393,7 @@ export function usePreGeneratedStories(
 
     return () => {
       cancelled = true;
-      console.log(`[Stories] effect cleanup — cancelling in-flight pre-gen`);
+      if (import.meta.env.DEV) console.log(`[Stories] effect cleanup — cancelling in-flight pre-gen`);
     };
     // Content-keyed deps: `trackSig` (stable string fingerprint of the
     // top-N artist/title/uri tuples) instead of `profile?.trackImages`

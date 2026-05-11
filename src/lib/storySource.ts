@@ -81,10 +81,14 @@ export function selectStorySource(
     });
   };
 
-  // Cascade through 15d → 30d → 60d → 365d, returning the first
-  // window that has ≥ targetCount tracks. A partially-filled window
-  // still wins if no later window has more — we don't aggregate
-  // across windows, we pick the freshest one with enough material.
+  // Cascade through 15d → 30d → 60d → 365d. Returns the FIRST window
+  // that contains AT LEAST `targetCount` tracks. A window with fewer
+  // is skipped entirely — we'd rather show 5 tracks from the 30d
+  // window than 4 from the 15d window, since the user expects a full
+  // rail. Trade-off: a few fresh sub-targetCount likes don't get
+  // priority over a denser older window. Pete 2026-05-11 (review
+  // note 4): if we want freshness-bias instead, accumulate across
+  // windows and short-circuit when total >= targetCount.
   for (const days of WINDOWS_DAYS) {
     const windowTracks = inWindow(days);
     if (windowTracks.length >= targetCount) {

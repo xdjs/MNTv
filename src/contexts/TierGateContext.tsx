@@ -56,8 +56,8 @@ export function TierGateProvider({ children }: { children: ReactNode }) {
     function onConfirmEvent() {
       setTierConfirmed(readSessionFlag());
     }
-    window.addEventListener("musicnerd:tier-confirmed", onConfirmEvent);
-    return () => window.removeEventListener("musicnerd:tier-confirmed", onConfirmEvent);
+    window.addEventListener("musicnerd:tier-state-changed", onConfirmEvent);
+    return () => window.removeEventListener("musicnerd:tier-state-changed", onConfirmEvent);
   }, []);
 
   const confirmTier = useCallback(
@@ -74,7 +74,7 @@ export function TierGateProvider({ children }: { children: ReactNode }) {
         // Storage disabled — fall through; in-memory state still flips.
       }
       setTierConfirmed(true);
-      window.dispatchEvent(new Event("musicnerd:tier-confirmed"));
+      window.dispatchEvent(new Event("musicnerd:tier-state-changed"));
     },
     [profile, saveProfile],
   );
@@ -86,7 +86,7 @@ export function TierGateProvider({ children }: { children: ReactNode }) {
       // Storage disabled — fall through.
     }
     setTierConfirmed(false);
-    window.dispatchEvent(new Event("musicnerd:tier-confirmed"));
+    window.dispatchEvent(new Event("musicnerd:tier-state-changed"));
   }, []);
 
   return (

@@ -109,7 +109,11 @@ export default function StoriesRail({ stories }: StoriesRailProps) {
   if (visibleStories.length === 0) return null;
 
   const handleTap = (s: Story) => {
-    setVisited(markVisited(s.trackKey, visited));
+    // Pete 2026-05-11 (review note 10): markVisited dispatches the
+    // musicnerd:visited-changed event, which our own listener already
+    // catches and calls setVisited(readVisited()). Skipping the
+    // direct setVisited here avoids a redundant render.
+    markVisited(s.trackKey, visited);
     navigate(listenHrefForStory(s));
   };
 

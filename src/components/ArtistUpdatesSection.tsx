@@ -309,6 +309,8 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpda
       ? `Listen to "${update.relatedTrackTitle}"`
       : `Open ${update.artistName}`;
 
+  const titleId = `expanded-${layoutId.replace(/[^a-zA-Z0-9_-]/g, "_")}-title`;
+
   return (
     <>
       <motion.div
@@ -318,9 +320,13 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpda
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
         onClick={onClose}
+        aria-hidden="true"
       />
       <motion.div
         layoutId={layoutId}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         className="fixed inset-0 z-[61] flex items-center justify-center p-4 pointer-events-none"
       >
         <motion.div
@@ -365,7 +371,7 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpda
             <p className="text-[10px] uppercase tracking-widest text-white/40 mb-2">
               {update.artistName}
             </p>
-            <h3 className="text-xl font-black text-white leading-tight mb-3">
+            <h3 id={titleId} className="text-xl font-black text-white leading-tight mb-3">
               {update.headline}
             </h3>
             <p className="text-sm text-white/75 leading-relaxed mb-4">

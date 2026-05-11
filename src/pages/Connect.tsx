@@ -108,7 +108,7 @@ export default function Connect() {
       // its React state, otherwise PreparingExperience would still
       // see tierConfirmed=true from the previous render and briefly
       // show the warming spinner.
-      window.dispatchEvent(new Event("musicnerd:tier-confirmed"));
+      window.dispatchEvent(new Event("musicnerd:tier-state-changed"));
     } catch { /* noop */ }
   }, []);
 

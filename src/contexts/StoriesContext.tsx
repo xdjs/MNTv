@@ -76,8 +76,9 @@ export function StoriesProvider({ children }: { children: ReactNode }) {
 
   const { stories, loading } = usePreGeneratedStories(profileForPreGen, { tier, maxStories: TARGET_STORY_COUNT });
 
-  // Production-visible: log which cascade stage we're on.
+  // DEV-only: log which cascade stage we're on.
   useEffect(() => {
+    if (!import.meta.env.DEV) return;
     if (!profile || !tierConfirmed) return;
     console.log(`[Stories] source=${sourceResult.source} (${sourceResult.tracks.length} tracks)`);
   }, [sourceResult.source, sourceResult.tracks.length, profile, tierConfirmed]);

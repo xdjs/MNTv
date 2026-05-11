@@ -336,7 +336,12 @@ export function useAINuggets(
 
     // ── In-memory cache check ──────────────────────────────────────
     // Include regenerateKey so repeat listens (which bump the key) always
-    // miss the cache and trigger fresh generation.
+    // miss the cache and trigger fresh generation. Format MUST match
+    // what usePreGeneratedStories writes via buildClientNuggetCacheKey
+    // (`real::enc(artist)::enc(title)::enc("")::enc(uri)::tier::regen`).
+    // Listen receives `trackId` already URL-encoded from React Router
+    // wildcard params, so concatenating directly produces the same
+    // string the helper builds from raw artist/title/uri.
     const cacheKey = `${trackId}::${tier}::${regenerateKey}`;
 
     const cached = getNuggetCache(cacheKey);
@@ -1028,7 +1033,13 @@ export function useAINuggets(
         const synthSources = new Map<string, Source>([[synth.source.id, synth.source]]);
         setNuggets([synth.nugget]);
         setSources(synthSources);
-        setNuggetCache(cacheKey, { nuggets: [synth.nugget], sources: synthSources, listenCount: currentListenCount });
+        // Pete 2026-05-11 (review note 2): do NOT write synthetic fallbacks
+        // to the in-memory client cache. Otherwise re-visiting the same
+        // track in the same session would serve the synthetic from memory
+        // forever and never retry the real SSE pipeline. The DB cache
+        // also doesn't get a synthetic write here (no admin key on the
+        // client), so leaving the in-mem cache empty means a future
+        // mount will go through the full pipeline again.
         setError(null);
         // Sentinel cleanup is still desired — synthetic nugget doesn't
         // get persisted to the DB cache (no admin key on the client),

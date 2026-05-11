@@ -692,14 +692,18 @@ export default function Listen() {
   // but I was presented with no Nugget."
   const trackNuggets = useMemo(() => {
     if (rawTrackNuggets.length === 0 || realDuration <= 0) return rawTrackNuggets;
+    // Pete 2026-05-11 (review note 11): aligned with makeTimestamp +
+    // server cache builder — endBuffer=15, usable-min=30. Previously
+    // diverged at endBuffer=10/min=20, which would put the last nugget
+    // 5s closer to the song end than the cache build expected.
     const earlyStart = 0;
-    const endBuffer = 10;
-    const usable = Math.max(realDuration - earlyStart - endBuffer, 20);
+    const endBuffer = 15;
+    const usable = Math.max(realDuration - earlyStart - endBuffer, 30);
     const denom = Math.max(rawTrackNuggets.length - 1, 1);
     const spacing = usable / denom;
     return rawTrackNuggets.map((n, i) => ({
       ...n,
-      timestampSec: Math.min(Math.floor(earlyStart + spacing * i), realDuration - 5),
+      timestampSec: Math.min(Math.floor(earlyStart + spacing * i), realDuration - 10),
     }));
   }, [rawTrackNuggets, realDuration]);
 
