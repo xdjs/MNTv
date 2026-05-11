@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import type { ArtistUpdate } from "@/hooks/useArtistUpdates";
 import { getArtistUpdateKindMeta } from "@/lib/artistUpdateKind";
+import { isSafeUrl } from "@/lib/urlSafety";
 
 /**
  * "Latest Facts" section on the Artist Profile. Renders artist-level
@@ -140,7 +141,7 @@ function FactCard({ update, expanded, pulsing, onToggle, registerRef }: FactCard
       {expanded && (
         <div className="px-4 pb-4 -mt-1 flex flex-col gap-2">
           <p className="text-sm leading-relaxed text-white/70">{update.body}</p>
-          {update.source?.url && /^https?:\/\//i.test(update.source.url) && (
+          {isSafeUrl(update.source?.url) && (
             <a
               href={update.source.url}
               target="_blank"

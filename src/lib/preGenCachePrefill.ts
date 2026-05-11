@@ -1,5 +1,7 @@
 import type { Nugget, Source } from "@/mock/types";
 import { buildClientNuggetCacheKey } from "./nuggetCacheKey";
+import { isValidSourceShape } from "@/hooks/useAINuggets";
+import { isSafeUrl } from "./urlSafety";
 
 /** Hard ceiling per pre-gen invoke. Mirrors the server's
  *  FUNCTION_TIMEOUT_MS=90s with a small superset so anything that
@@ -57,8 +59,13 @@ export function preparePreGenCacheEntry(
   const sourcesMap = new Map<string, Source>();
   if (data.sources && typeof data.sources === "object") {
     for (const [k, v] of Object.entries(data.sources)) {
-      if (k.startsWith("_") || typeof v !== "object" || v === null || Array.isArray(v)) continue;
-      sourcesMap.set(k, v as Source);
+      if (k.startsWith("_")) continue;
+      // Match the JSONB-read path in useAINuggets so a `javascript:`
+      // URL or a malformed source can't survive the pre-gen cache and
+      // surface at a render site that trusts cached data.
+      if (!isValidSourceShape(v)) continue;
+      if (!isSafeUrl(v.url)) continue;
+      sourcesMap.set(k, v);
     }
   }
 

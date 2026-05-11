@@ -4,6 +4,7 @@ import { ChevronRight, ExternalLink, ArrowLeft, Loader2 } from "lucide-react";
 import type { Nugget, Source } from "@/mock/types";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
 import { supabase } from "@/integrations/supabase/client";
+import { isSafeUrl } from "@/lib/urlSafety";
 
 interface Props {
   nugget: Nugget;
@@ -346,7 +347,7 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
             {entries.length === 0 ? "Tell me more" : "Keep exploring"}
           </button>
 
-          {source?.url && /^https?:\/\//i.test(source.url) && (
+          {isSafeUrl(source?.url) && (
             <a
               ref={buttonRefs[1] as React.RefObject<HTMLAnchorElement>}
               href={source.url}

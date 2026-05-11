@@ -126,7 +126,13 @@ export function selectStorySource(
     // duplicates of their 15d window.
     if (contributedFromThisWindow) widestWindow = days;
   }
-  if (accumulated.length >= targetCount) {
+  // widestWindow > 0 belt: defensive against the targetCount = 0
+  // edge case where the outer loop's `accumulated.length >= targetCount`
+  // break trips on entry, leaving widestWindow at its initial 0 and
+  // producing an undocumented "liked-0d" source label (cast through
+  // the type assertion). Falling through here lets the catch-all
+  // branches return "liked-all" or "top-tracks" instead.
+  if (accumulated.length >= targetCount && widestWindow > 0) {
     return {
       tracks: accumulated.slice(0, targetCount).map(toTrack),
       source: `liked-${widestWindow}d` as StorySourceResult["source"],

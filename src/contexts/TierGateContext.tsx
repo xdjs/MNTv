@@ -25,7 +25,6 @@ import type { UserProfile } from "@/mock/types";
 // Exported so external clean-up paths (useSignOut, Connect's OAuth
 // reset) can clear the flag without re-declaring the literal.
 export const TIER_CONFIRMED_STORAGE_KEY = "musicnerd_tier_confirmed";
-const STORAGE_KEY = TIER_CONFIRMED_STORAGE_KEY;
 
 interface TierGateContextValue {
   tierConfirmed: boolean;
@@ -41,7 +40,7 @@ const TierGateContext = createContext<TierGateContextValue>({
 
 function readSessionFlag(): boolean {
   try {
-    return sessionStorage.getItem(STORAGE_KEY) === "1";
+    return sessionStorage.getItem(TIER_CONFIRMED_STORAGE_KEY) === "1";
   } catch {
     // Storage disabled — degrade to "always require confirmation".
     return false;
@@ -72,7 +71,7 @@ export function TierGateProvider({ children }: { children: ReactNode }) {
         saveProfile({ ...profile, calculatedTier: tier });
       }
       try {
-        sessionStorage.setItem(STORAGE_KEY, "1");
+        sessionStorage.setItem(TIER_CONFIRMED_STORAGE_KEY, "1");
       } catch {
         // Storage disabled — fall through; in-memory state still flips.
       }
@@ -84,7 +83,7 @@ export function TierGateProvider({ children }: { children: ReactNode }) {
 
   const resetTierConfirmation = useCallback(() => {
     try {
-      sessionStorage.removeItem(STORAGE_KEY);
+      sessionStorage.removeItem(TIER_CONFIRMED_STORAGE_KEY);
     } catch {
       // Storage disabled — fall through.
     }

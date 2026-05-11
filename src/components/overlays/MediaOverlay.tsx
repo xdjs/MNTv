@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { X, Play, ExternalLink, Youtube } from "lucide-react";
 import type { Source } from "@/mock/types";
+import { isSafeUrl } from "@/lib/urlSafety";
 
 interface Props {
   source: Source;
@@ -90,7 +91,7 @@ export default function MediaOverlay({ source, onClose }: Props) {
           >
             Return to Listening
           </button>
-          {source.url && /^https?:\/\//i.test(source.url) && (
+          {isSafeUrl(source.url) && (
             <a
               href={source.url}
               target="_blank"

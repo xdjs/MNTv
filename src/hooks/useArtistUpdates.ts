@@ -77,7 +77,7 @@ const SS_ROTATION_RESOLVED_KEY = "musicnerd_artist_rotation_resolved";
  * skip artists ahead). The cursor only modulos by pool size at slice
  * time, so it can grow unbounded — that's fine, JS handles it.
  */
-function resolveRotationStart(sliceSize: number): number {
+export function resolveRotationStart(sliceSize: number): number {
   if (typeof window === "undefined") return 0;
   try {
     const cached = sessionStorage.getItem(SS_ROTATION_RESOLVED_KEY);
@@ -95,7 +95,14 @@ function resolveRotationStart(sliceSize: number): number {
 
   try {
     sessionStorage.setItem(SS_ROTATION_RESOLVED_KEY, String(cursor));
-    localStorage.setItem(LS_ROTATION_CURSOR_KEY, String(cursor + sliceSize));
+    // Cap at pool_size * 1000 to keep the stored integer well below
+    // Number.MAX_SAFE_INTEGER. The modulo at slice time means any
+    // multiple of pool size is functionally equivalent, so wrapping
+    // here is purely a precaution against accidental growth from
+    // unusual usage patterns (test loops, runaway effects).
+    const NEXT_CURSOR_CAP = ROTATION_POOL_SIZE * 1000;
+    const next = (cursor + sliceSize) % NEXT_CURSOR_CAP;
+    localStorage.setItem(LS_ROTATION_CURSOR_KEY, String(next));
   } catch { /* noop */ }
 
   return cursor;

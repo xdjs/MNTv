@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import type { ArtistUpdate, ArtistUpdateGroup } from "@/hooks/useArtistUpdates";
 import { serviceParamFromProfile, withAppleStorefront } from "@/lib/appleStorefront";
 import { getArtistUpdateKindMeta } from "@/lib/artistUpdateKind";
+import { isSafeUrl } from "@/lib/urlSafety";
 import type { UserProfile } from "@/mock/types";
 
 /**
@@ -465,7 +466,7 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpda
                 <ExternalLink className="w-3.5 h-3.5" />
                 {ctaLabel}
               </button>
-              {update.source?.url && /^https?:\/\//i.test(update.source.url) && (
+              {isSafeUrl(update.source?.url) && (
                 // Scheme guard: only render the anchor if the URL is
                 // http(s). The url originates from Exa / Gemini output
                 // — without this a hallucinated `javascript:` or
