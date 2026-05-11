@@ -144,6 +144,22 @@ export function sanitizeNugget(n: Nugget): Nugget {
   return headline === n.headline ? n : { ...n, headline };
 }
 
+/**
+ * Narrow-validate a `sources` JSONB value from nugget_cache before casting
+ * to `Source`. Required keys: `id` + `type` (both strings) — these are
+ * what every downstream consumer reads. Optional fields aren't checked;
+ * if the row lacks them the UI falls back to safe defaults.
+ *
+ * Without this guard a malformed row (manual DB edit, partial migration,
+ * server bug) would silently corrupt the client cache and crash whatever
+ * tries to read `source.title` / `source.url`.
+ */
+export function isValidSourceShape(v: unknown): v is Source {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+  const o = v as Record<string, unknown>;
+  return typeof o.id === "string" && typeof o.type === "string";
+}
+
 export function makeNugget(n: AINuggetData, nuggetId: string, sourceId: string, trackId: string, timestampSec: number): Nugget {
   return {
     id: nuggetId, trackId, timestampSec, durationMs: 7000,
@@ -234,7 +250,10 @@ async function pollForReadyNuggets(
     if (data?.status === "ready" && (data.nuggets as Nugget[] | null)?.length) {
       const nuggs = (data.nuggets as Nugget[]).map(sanitizeNugget);
       const srcs = new Map<string, Source>();
-      for (const [key, val] of Object.entries(data.sources as Record<string, Source>)) {
+      const rawSourcesObj = (data.sources ?? {}) as Record<string, unknown>;
+      for (const [key, val] of Object.entries(rawSourcesObj)) {
+        if (key.startsWith("_")) continue;
+        if (!isValidSourceShape(val)) continue;
         srcs.set(key, val);
       }
       return { nuggets: nuggs, sources: srcs };
@@ -535,10 +554,12 @@ export function useAINuggets(
           const cachedSources = new Map<string, Source>();
           const rawSourcesObj = (cached.sources ?? {}) as Record<string, unknown>;
           for (const [key, val] of Object.entries(rawSourcesObj)) {
-            // Skip meta keys (anything beginning with `_`) and non-Source
-            // shapes (e.g. artistSummary string, externalLinks array).
-            if (key.startsWith("_") || typeof val !== "object" || val === null || Array.isArray(val)) continue;
-            cachedSources.set(key, val as Source);
+            // Skip meta keys (anything beginning with `_`) and any value
+            // that doesn't satisfy the Source shape contract — a
+            // malformed row would otherwise silently corrupt the cache.
+            if (key.startsWith("_")) continue;
+            if (!isValidSourceShape(val)) continue;
+            cachedSources.set(key, val);
           }
           if (cancelledRef.current) return;
           setNuggets(cachedNuggets);
