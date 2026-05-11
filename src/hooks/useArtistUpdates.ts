@@ -60,6 +60,12 @@ const ROTATION_POOL_SIZE = 10;
 const LS_ROTATION_CURSOR_KEY = "musicnerd_artist_rotation_cursor";
 const SS_ROTATION_RESOLVED_KEY = "musicnerd_artist_rotation_resolved";
 
+// Cap at pool_size * 1000 so the persisted integer can't accidentally
+// climb toward Number.MAX_SAFE_INTEGER from runaway effects or test
+// loops. The modulo at slice time means any multiple of pool size is
+// functionally equivalent, so wrapping here is purely a precaution.
+const NEXT_CURSOR_CAP = ROTATION_POOL_SIZE * 1000;
+
 /**
  * Returns the rotation start index for THIS session — stable across
  * remounts within the same browser tab session, but advances by
@@ -95,12 +101,6 @@ export function resolveRotationStart(sliceSize: number): number {
 
   try {
     sessionStorage.setItem(SS_ROTATION_RESOLVED_KEY, String(cursor));
-    // Cap at pool_size * 1000 to keep the stored integer well below
-    // Number.MAX_SAFE_INTEGER. The modulo at slice time means any
-    // multiple of pool size is functionally equivalent, so wrapping
-    // here is purely a precaution against accidental growth from
-    // unusual usage patterns (test loops, runaway effects).
-    const NEXT_CURSOR_CAP = ROTATION_POOL_SIZE * 1000;
     const next = (cursor + sliceSize) % NEXT_CURSOR_CAP;
     localStorage.setItem(LS_ROTATION_CURSOR_KEY, String(next));
   } catch { /* noop */ }

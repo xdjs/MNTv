@@ -1,6 +1,6 @@
 import type { Nugget, Source } from "@/mock/types";
 import { buildClientNuggetCacheKey } from "./nuggetCacheKey";
-import { isValidSourceShape } from "@/hooks/useAINuggets";
+import { isValidSourceShape } from "./sourceShape";
 import { isSafeUrl } from "./urlSafety";
 
 /** Hard ceiling per pre-gen invoke. Mirrors the server's

@@ -144,35 +144,11 @@ export function sanitizeNugget(n: Nugget): Nugget {
   return headline === n.headline ? n : { ...n, headline };
 }
 
-/**
- * Narrow-validate a `sources` JSONB value from nugget_cache before
- * casting to `Source`. Verifies every REQUIRED field on the Source
- * type (`id`, `type`, `title`, `publisher`, `url`) is a string —
- * downstream consumers commonly call `source.url.startsWith(...)`
- * and `source.title.toLowerCase()` without null-guarding, so a
- * malformed row that's missing any of those would crash the page
- * rather than be silently dropped.
- *
- * Optional fields (`embedId`, `thumbnailUrl`, etc.) aren't checked
- * here — the type marks them optional, so consumers must already
- * null-guard those reads.
- *
- * NOTE: URL scheme (`javascript:`, `data:`) is NOT validated here —
- * that's a render-time concern. Every call site that renders
- * `source.url` in an `<a href>` / `window.open()` MUST enforce the
- * `^https?://` allowlist independently. Today that gate lives in
- * `ExpandedUpdateModal`; if you add a new render site, replicate it
- * there too or this turns into an XSS vector.
- */
-export function isValidSourceShape(v: unknown): v is Source {
-  if (!v || typeof v !== "object" || Array.isArray(v)) return false;
-  const o = v as Record<string, unknown>;
-  return typeof o.id === "string"
-    && typeof o.type === "string"
-    && typeof o.title === "string"
-    && typeof o.publisher === "string"
-    && typeof o.url === "string";
-}
+// Lives in @/lib/sourceShape now. Re-exported here so the existing
+// import surface (and the isValidSourceShape.test.ts file) keeps
+// working. New callers should import directly from @/lib/sourceShape.
+import { isValidSourceShape } from "@/lib/sourceShape";
+export { isValidSourceShape };
 
 export function makeNugget(n: AINuggetData, nuggetId: string, sourceId: string, trackId: string, timestampSec: number): Nugget {
   return {
