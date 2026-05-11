@@ -227,7 +227,7 @@ describe("useNuggetPacer", () => {
   });
 
   it("cancelPending drops the existing queue but auto-advance resumes when new nuggets arrive", () => {
-    // Pete 2026-05-10: changed behavior — a swipe used to permanently
+    // changed behavior — a swipe used to permanently
     // disable auto-advance for the rest of the track, which silently
     // killed wave 2/3 reveal. Now cancelPending clears the in-flight
     // queue (so a manual swipe doesn't get yanked one beat later)

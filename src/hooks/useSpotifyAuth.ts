@@ -62,12 +62,10 @@ export async function signInWithSpotify(): Promise<void> {
   // vars (src/integrations/supabase/client.ts).
   try {
     sessionStorage.setItem(SPOTIFY_OAUTH_PENDING_KEY, "1");
-    // Pete 2026-05-11: clear session-scoped flags BEFORE the OAuth
-    // redirect so that when the user returns, TierGateProvider's
-    // useState initializer reads sessionStorage and gets the correct
-    // value (false) on the very first render of /preparing — no
-    // warming-spinner flash before the tier picker, no rotation
-    // cursor reuse from the prior session.
+    // Clear session-scoped flags BEFORE the OAuth redirect so that
+    // TierGateProvider's useState initializer reads the cleared
+    // state on the very first render of /preparing — no warming-
+    // spinner flash before the tier picker, no stale rotation cursor.
     sessionStorage.removeItem("musicnerd_tier_confirmed");
     sessionStorage.removeItem("musicnerd_artist_rotation_resolved");
   } catch {
@@ -79,13 +77,11 @@ export async function signInWithSpotify(): Promise<void> {
     provider: "spotify",
     options: {
       scopes: SPOTIFY_SCOPES,
-      // Pete 2026-05-11: redirect Spotify OAuth straight to /preparing
-      // so returning users land on the tier picker without flashing
-      // any Connect UI. /preparing's ProtectedRoute will bounce to
-      // /connect for genuinely-new users (no profile cached) so they
-      // still get the onboarding sync flow. The /preparing route MUST
-      // be present in the Supabase Authentication dashboard's allowed
-      // redirect URLs alongside /connect.
+      // Returning users with cached profile land on the tier picker
+      // directly. Genuinely-new users bounce through /connect via
+      // ProtectedRoute for the onboarding sync.
+      // ⚠ /preparing MUST be in Supabase dashboard's allowed redirect
+      // URLs alongside /connect.
       redirectTo: `${window.location.origin}/preparing`,
       // Force Spotify to re-prompt on every sign-in. Without this,
       // Spotify silently reuses the prior grant, so a user who

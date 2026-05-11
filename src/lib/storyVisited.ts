@@ -3,12 +3,9 @@
 // exclusion) and StoriesRail (display filter — visited stories
 // disappear) read from here so they stay in sync.
 //
-// Storage: localStorage. 7d TTL (Pete 2026-05-10) — long enough that
-// a user who circles back later in the week doesn't see the same
-// story they already explored, short enough that a tap from the prior
-// month doesn't permanently bury a track. Entries older than the TTL
-// are pruned on read. Per-device (no DB roundtrip needed for the rail
-// to react to taps).
+// Storage: localStorage with 7d TTL. Entries older than the TTL are
+// pruned on read. Per-device (no DB roundtrip needed for the rail to
+// react to taps).
 
 const VISITED_KEY = "musicnerd_visited_stories";
 const VISITED_TTL_MS = 7 * 24 * 60 * 60 * 1000;

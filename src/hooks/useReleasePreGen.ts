@@ -32,20 +32,14 @@ export function useReleasePreGen(
   enabled: boolean,
 ): void {
   const firedRef = useRef<Set<string>>(new Set());
-  // Pete 2026-05-11 (review note 1): release-card taps need the same
-  // in-mem cache prefill that story taps get, otherwise tapping a NEW
-  // RELEASE pays a DB lookup + possibly cold SSE. Helper centralizes
-  // shape validation + key construction; we just need access to
-  // setNuggetCache via PlayerContext.
+  // In-mem cache prefill so release-card taps are instant, matching
+  // the story-rail UX.
   const { setNuggetCache } = usePlayer();
 
   useEffect(() => {
     if (!enabled) return;
     if (!groups.length) return;
-    // Pete 2026-05-11 (review note 10): track unmount so the
-    // fire-and-forget Promise chain ignores results that arrive after
-    // the component is gone. Prevents post-unmount setState warnings
-    // and keeps logs clean if the user navigates away mid-pre-gen.
+    // Drop late-arriving results after unmount.
     let cancelled = false;
 
     // Walk the groups, find release / collab cards with a resolved
@@ -124,9 +118,6 @@ export function useReleasePreGen(
             }
             return;
           }
-          // Pete 2026-05-11 (review note 1): same in-mem cache prefill
-          // as the stories rail so a tap on a NEW RELEASE / collab
-          // card lands on Listen with an instant first nugget.
           const data = (result as { data?: unknown }).data;
           const cacheEntry = preparePreGenCacheEntry(data);
           if (cacheEntry) {

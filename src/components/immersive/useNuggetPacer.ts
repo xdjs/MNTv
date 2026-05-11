@@ -59,7 +59,7 @@ export function useNuggetPacer<T extends NuggetIdentity>({
   };
 
   const scheduleNext = () => {
-    // Pete 2026-05-10: removed userTookOverRef gate. Previously a
+    // removed userTookOverRef gate. Previously a
     // single manual swipe permanently disabled auto-advance for the
     // rest of the track, which silently broke the "nuggets keep
     // arriving as the song plays" UX. Auto-advance now resumes after

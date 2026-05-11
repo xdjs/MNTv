@@ -40,7 +40,7 @@ export function StoriesProvider({ children }: { children: ReactNode }) {
   const { tierConfirmed } = useTierGate();
   const tier = (profile?.calculatedTier as "casual" | "curious" | "nerd") || "casual";
 
-  // Pete 2026-05-11 (review note 3): visited state is held in React
+  // visited state is held in React
   // state (not read inside useMemo) — useMemo can be discarded by
   // React at any time, so doing localStorage I/O inside it is
   // semantically unsound. We read once at mount, then update via the

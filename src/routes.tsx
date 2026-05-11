@@ -14,7 +14,7 @@ import { useUserProfile } from "@/hooks/useMusicNerdState";
 import Onboarding from "@/pages/Onboarding";
 
 /** Small fallback shown during lazy-route Suspense + auth hydration.
- *  Pete 2026-05-11: changed bg-background → bg-black so transitions
+ *  changed bg-background → bg-black so transitions
  *  through this fallback don't visibly flash a different shade
  *  between pages that use bg-black (PreparingExperience, immersive
  *  Listen, etc). */

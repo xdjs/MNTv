@@ -119,7 +119,7 @@ export default function MusicNerdLoadingOrchestrator({
       clearTimers();
       setFlyCoords(null);
       isRestoredRef.current = false;
-      // Check cache for new track. Pete 2026-05-10: rapid skip
+      // Check cache for new track. rapid skip
       // sequences landed on a track whose phaseCache said "ready"
       // (visited before), so we restored straight to ready and the
       // researching pill never showed — even though aiLoading was
@@ -175,7 +175,7 @@ export default function MusicNerdLoadingOrchestrator({
   }, [phase, hasNuggets, aiLoading]);
 
   // ── aiLoading flips false→true mid-track: re-enter the state machine ──
-  // Pete 2026-05-11: when skipping tracks, aiLoading sometimes
+  // when skipping tracks, aiLoading sometimes
   // momentarily lags one tick behind the trackId change. The track
   // -change effect ran with stale aiLoading=false, drove phase to
   // "ready" instantly, and never showed the researching pill — even

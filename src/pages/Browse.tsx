@@ -22,7 +22,7 @@ export default function Browse() {
   const navigate = useNavigate();
   const { profile, saveProfile } = useUserProfile();
   const { tierConfirmed } = useTierGate();
-  // Pete 2026-05-10: direct-navigating to /browse (refresh, bookmark,
+  // direct-navigating to /browse (refresh, bookmark,
   // new tab) skips PreparingExperience and lands here with
   // tierConfirmed=false. StoriesProvider + ArtistUpdatesProvider both
   // gate pre-gen on tierConfirmed, so Browse would render empty rails
@@ -117,7 +117,7 @@ export default function Browse() {
   const npbVisible = !!currentTrack;
   const lastRowRef = useRef(0);
 
-  // Pete 2026-05-11: removed the 10s-idle auto-return to /listen.
+  // removed the 10s-idle auto-return to /listen.
   // It was forcing users out of Browse mid-scroll any time a new
   // nugget arrived for the playing track. The mini-player tap is
   // already a clear opt-in path back to the immersive view; new

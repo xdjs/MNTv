@@ -132,11 +132,10 @@ export default function Connect() {
     return () => clearTimeout(t);
   }, [oauthPendingFlag, authLoading, session]);
 
-  // Pete 2026-05-11: while session is still resolving after OAuth
-  // return, hide ConnectInner (and its SpotifySyncingOverlay) by
-  // returning a blank screen. The bg-black matches PreparingExperience's
-  // background EXACTLY so there's no visible color jump between this
-  // fallback and the tier picker that appears next.
+  // Blank fallback while session resolves after OAuth return — hides
+  // ConnectInner so SpotifySyncingOverlay doesn't flash between the
+  // Spotify accept screen and the tier picker. bg-black matches
+  // PreparingExperience exactly to avoid a color jump.
   if (oauthPendingFlag && (authLoading || !session) && !oauthEscapeTriggered) {
     return <div className="min-h-screen bg-black" />;
   }
@@ -171,11 +170,9 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
   // also clears it as belt-and-suspenders so a user who closes the tab
   // mid-tier-pick doesn't carry the flag into the next sign-in.
   const { user: authUser } = useAuth();
-  // Pete 2026-05-11 (review note 2): useMemo with empty deps is NOT a
-  // stable initializer — React is free to discard and recompute, which
-  // would re-read sessionStorage AFTER the flag has been cleared by
-  // handleTierSelect. Using useRef.current pins the value to the first
-  // mount.
+  // Captured once at mount via useRef. useMemo with [] would let React
+  // discard and recompute, which could re-read sessionStorage after
+  // handleTierSelect has cleared the flag.
   const oauthPendingOnMount = useRef<boolean>(
     (() => {
       try {

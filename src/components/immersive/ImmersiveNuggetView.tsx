@@ -186,7 +186,7 @@ export default function ImmersiveNuggetView({
         next.add(nuggets[0].id);
         changed = true;
       }
-      // Pete 2026-05-10: removed the nextUnlockTimeRef shortcut.
+      // removed the nextUnlockTimeRef shortcut.
       // The previous optimization gated this loop on
       // `currentTime >= nextUnlockTimeRef.current`, which got stuck
       // at Infinity after the first unlock pass with only 1 nugget.
@@ -379,13 +379,10 @@ export default function ImmersiveNuggetView({
     const { url: imgUrl, isNuggetImage } = getNuggetImage();
     return (
       <div className="w-full h-full overflow-y-auto scrollbar-hide">
-        {/* Pete 2026-05-10 layout spec: hero image fills the entire
-            visible viewport with a single bottom-fade gradient. The
-            headline overlays the bottom of the image (absolute
-            positioned within the image container), so the image
-            shows through behind the text — no hard black box, no
-            visible seam. Body lives BELOW this h-full container in
-            scroll flow, off-screen at scroll=0. */}
+        {/* Hero image fills the visible viewport with a single
+            bottom-fade gradient; headline overlays the bottom of the
+            image (no separate-box seam). Body lives below the h-full
+            container so it's off-screen at scroll=0. */}
         <div className="h-full relative">
           {imgUrl && (
             <img
@@ -542,7 +539,6 @@ export default function ImmersiveNuggetView({
             >
               <SwipeableNuggetStack
                 unlockedCount={unlockedCount}
-                totalCount={nuggets.length}
                 activeIndex={activeIndex}
                 onSwipe={handleSwipe}
               >

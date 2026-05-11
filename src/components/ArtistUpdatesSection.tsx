@@ -47,11 +47,6 @@ function ArtistUpdatesSectionInner({
 }: Props) {
   const navigate = useNavigate();
   const activeService = serviceParamFromProfile(profile?.streamingService);
-  // Pete 2026-05-11: clicking a card now opens an expanded popup
-  // instead of navigating immediately. The popup shares a layoutId
-  // with the source card so Framer Motion morphs between them. The
-  // user can then choose to open the linked Listen / Artist page from
-  // a CTA inside the popup, or dismiss to stay on Browse.
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   // Stable onClose reference so ExpandedUpdateModal's focus-trap
   // effect doesn't re-fire on every parent re-render (which would
@@ -260,12 +255,8 @@ interface UpdateCardProps {
   onClick: () => void;
 }
 
-// Pete 2026-05-11 redesign: every card is now image-backed (artist
-// photo or release cover, whichever the edge function returned in
-// `artistImageUrl`). Tapping a card triggers a Framer-Motion
-// shared-layout transition into ExpandedUpdateModal — no immediate
-// navigation. The modal offers an explicit "Open" CTA when the user
-// wants to follow through.
+// Image-backed for every kind. Tap morphs into ExpandedUpdateModal
+// via Framer Motion layoutId — no immediate navigation.
 function UpdateCard({ update, layoutId, onClick }: UpdateCardProps) {
   const { kindLabel, KindIcon } = getArtistUpdateKindMeta(update.kind);
   const { chipClass } = kindStyle(update.kind);
@@ -349,12 +340,9 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpda
 
   const titleId = `expanded-${layoutId.replace(/[^a-zA-Z0-9_-]/g, "_")}-title`;
 
-  // Pete 2026-05-11 (review note 4): WCAG focus management.
-  // - Esc dismisses the modal
-  // - Focus is moved to the close button on open and restored to the
-  //   originally-focused card on close.
-  // - Tab/Shift+Tab is contained within the modal via querySelectorAll
-  //   on focusable descendants (lighter than pulling in @radix/dialog).
+  // WCAG focus management: Esc dismisses, focus moves to close button
+  // on open and restores on close, Tab/Shift+Tab cycles within the
+  // dialog only.
   useEffect(() => {
     previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
     closeBtnRef.current?.focus();

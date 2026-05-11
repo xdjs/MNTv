@@ -1033,7 +1033,7 @@ export function useAINuggets(
         const synthSources = new Map<string, Source>([[synth.source.id, synth.source]]);
         setNuggets([synth.nugget]);
         setSources(synthSources);
-        // Pete 2026-05-11 (review note 2): do NOT write synthetic fallbacks
+        // do NOT write synthetic fallbacks
         // to the in-memory client cache. Otherwise re-visiting the same
         // track in the same session would serve the synthetic from memory
         // forever and never retry the real SSE pipeline. The DB cache
@@ -1041,23 +1041,15 @@ export function useAINuggets(
         // client), so leaving the in-mem cache empty means a future
         // mount will go through the full pipeline again.
         setError(null);
-        // Sentinel cleanup is still desired — synthetic nugget doesn't
-        // get persisted to the DB cache (no admin key on the client),
-        // so a future tap will retry the real pipeline. Drop through to
-        // the sentinel-delete below before returning.
+        // Sentinel cleanup so a future tap retries the real pipeline.
         if (sentinelClaimed) {
-          await Promise.resolve(
-            supabase.from("nugget_cache").delete().eq("track_id", dbCacheKey)
-          ).catch(() => {});
+          try { await supabase.from("nugget_cache").delete().eq("track_id", dbCacheKey); } catch { /* noop */ }
         }
         return;
       }
       // Remove the 'generating' sentinel so waiting clients don't poll indefinitely.
       if (sentinelClaimed) {
-        // Wrap in Promise.resolve so .catch() is available (PostgrestFilterBuilder is PromiseLike, not Promise).
-        await Promise.resolve(
-          supabase.from("nugget_cache").delete().eq("track_id", dbCacheKey)
-        ).catch(() => {});
+        try { await supabase.from("nugget_cache").delete().eq("track_id", dbCacheKey); } catch { /* noop */ }
       }
     } finally {
       if (!cancelledRef.current) {
@@ -1090,7 +1082,7 @@ export function useAINuggets(
     if (cancelledRef.current) return;               // track changed / unmount
     if (Date.now() < waveCooldownUntilRef.current) return;  // recent failure, cooldown
 
-    // Tap fan-out (Pete 2026-05-10): if we served from cache but only
+    // Tap fan-out if we served from cache but only
     // have a single nugget (firstNuggetOnly partial), the user still
     // needs the rest of the tier-scaled set generated. Previously
     // `fromCache` blocked all wave extension which left every story

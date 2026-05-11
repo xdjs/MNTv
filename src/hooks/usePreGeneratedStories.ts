@@ -30,10 +30,8 @@ interface PreGenOptions {
 // users engage with the first few stories anyway; generating 8 on
 // cold sign-in was a lot of Gemini traffic we don't need.
 const DEFAULT_MAX_STORIES = 5;
-// 2 — Pete 2026-05-10: with concurrency=5 stories were stuck warming
-// (Gemini queues, full pipeline timing out at 95s for indie artists).
-// Two parallel calls keep Gemini cold-start manageable so each call
-// resolves in its own budget rather than fighting for compute.
+// 2 parallel — higher concurrency saturates Gemini cold-start and
+// pushes individual calls past the 95s ceiling.
 const DEFAULT_CONCURRENCY = 2;
 
 // Cross-session dedup — persists "we already fired pre-gen for this
@@ -95,11 +93,8 @@ export function usePreGeneratedStories(
 ): { stories: Story[]; loading: boolean } {
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(false);
-  // Pre-gen response also seeds the in-memory client cache, so a tap
-  // on a pink ring shows the nugget instantly without a DB roundtrip
-  // (and survives any DB cache write that silently failed server-side
-  // — Pete 2026-05-10 hit this when stories went pink but tap showed
-  // nothing because the row was never written).
+  // Seed the in-memory client cache from pre-gen response so a tap
+  // is instant even if the DB cache write silently failed server-side.
   const { setNuggetCache } = usePlayer();
 
   // Content-stable signature of the slice we'll seed from. Used as
@@ -258,16 +253,11 @@ export function usePreGeneratedStories(
                 // URI). Result: pre-gen ran but cache never matched, and
                 // every story tap paid the full SSE generation cost.
                 appleTrackId: story.uri?.match(/apple:song:(\d+)/)?.[1],
-                // Fast path: one artist-kind nugget per story so rings
-                // go pink in 5-15s instead of 25-50s. Pete 2026-05-10:
-                // re-enabling after the full-pipeline experiment left
-                // stories stuck warming. The synthetic safety net at
-                // every server-side failure (Exa empty / Gemini
-                // timeout / source rejected) guarantees a cache row,
-                // so a tap on a pink ring shows SOMETHING instantly.
-                // Quality iteration on synthetic copy is a separate
-                // task — getting the ring + tap pipeline reliable
-                // first.
+                // Fast path: one artist-kind nugget per story (5-15s
+                // vs 25-50s full pipeline). Server-side synthetic
+                // safety net guarantees a cache row even on Exa /
+                // Gemini failure, so the pink ring → instant tap
+                // promise holds.
                 firstNuggetOnly: true,
               },
             });
@@ -313,11 +303,9 @@ export function usePreGeneratedStories(
             const synthetic = (data as { synthetic?: boolean } | null)?.synthetic === true;
             if (import.meta.env.DEV) console.log(`[Stories] OK after ${Date.now() - t0}ms — ${story.trackKey} (${responseNuggets?.length ?? 0} nuggets${synthetic ? ", synthetic" : ""})`);
 
-            // INVARIANT (Pete 2026-05-10 re-affirmed): pink ring = tap
-            // will show a nugget. If the server returned 0 nuggets,
-            // we MUST NOT mark ready — that's the bug-fix from
-            // bef9302 that 56a65f7 accidentally regressed. A blank
-            // tap is worse than a still-warming ring.
+            // INVARIANT: pink ring = tap will show a nugget. If the
+            // server returned 0 nuggets, we MUST NOT mark ready —
+            // a blank tap is worse than a still-warming ring.
             if (!generatedAny) {
               if (import.meta.env.DEV) console.warn(`[Stories] response had no nuggets — leaving ${story.trackKey} in warming state`);
               return;

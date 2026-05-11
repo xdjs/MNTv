@@ -692,7 +692,7 @@ export default function Listen() {
   // but I was presented with no Nugget."
   const trackNuggets = useMemo(() => {
     if (rawTrackNuggets.length === 0 || realDuration <= 0) return rawTrackNuggets;
-    // Pete 2026-05-11 (review note 11): aligned with makeTimestamp +
+    // aligned with makeTimestamp +
     // server cache builder — endBuffer=15, usable-min=30. Previously
     // diverged at endBuffer=10/min=20, which would put the last nugget
     // 5s closer to the song end than the cache build expected.

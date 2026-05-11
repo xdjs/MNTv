@@ -132,7 +132,7 @@ export default function PreparingExperience() {
     elapsed >= step.threshold ? step : acc,
   );
 
-  // Pete 2026-05-11: removed PageTransition wrapper here — its
+  // removed PageTransition wrapper here — its
   // 500ms fade-in/scale-up made the OAuth-return → tier picker
   // transition feel slow and "weird" (perceived as a loading state
   // rather than a smooth handoff). The aurora gradient and the

@@ -93,7 +93,7 @@ export function selectStorySource(
   // freshest content always surfaces, the rail still hits targetCount.
   // The `source` label reflects the WIDEST window we had to consult
   // so observability still tells us "this user's freshness profile."
-  // Pete 2026-05-11 (review note 2): switched from skip-on-partial
+  // switched from skip-on-partial
   // to accumulate-freshest-first per the WCAG/UX argument that fresh
   // is what the user actually wants.
   const accumulated: LikedTrack[] = [];

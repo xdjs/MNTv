@@ -11,10 +11,6 @@ const MemoizedContent = memo(({ render }: { render: () => ReactNode }) => <>{ren
 // active nugget changes, not on every finger movement).
 interface SwipeableNuggetStackProps {
   unlockedCount: number;
-  /** Optional: total nuggets the track is expected to have (e.g.
-   *  tier-scaled count) so we can render dim dots for nuggets that
-   *  haven't unlocked yet. Falls back to `unlockedCount` if omitted. */
-  totalCount?: number;
   activeIndex: number;
   onSwipe: (newIndex: number) => void;
   disabled?: boolean;
@@ -25,13 +21,11 @@ const SWIPE_THRESHOLD = 40;
 
 export default function SwipeableNuggetStack({
   unlockedCount,
-  totalCount,
   activeIndex,
   onSwipe,
   disabled = false,
   children,
 }: SwipeableNuggetStackProps) {
-  const dotCount = Math.max(unlockedCount, totalCount ?? 0);
   const [dragX, setDragX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   // phase: "idle" | "exit" (old card fading out) | "enter" (new card fading in)

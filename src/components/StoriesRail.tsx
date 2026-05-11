@@ -5,12 +5,9 @@ import type { Story } from "@/hooks/usePreGeneratedStories";
 import { usePlayer } from "@/contexts/PlayerContext";
 import { readVisited, markVisited, type VisitedMap } from "@/lib/storyVisited";
 
-// Visited tracking lives in src/lib/storyVisited so StoriesContext's
-// cascade selector and this rail share the same data. Pete 2026-05-10:
-// "If I already listened to a track in my story, from me as the user
-// pressing that story, it should clear from my stories and present a
-// new track" — so visited stories now DISAPPEAR (was: dimmed). The
-// cascade replaces the slot from the next eligible liked track.
+// Visited tracking shared with StoriesContext via src/lib/storyVisited.
+// Tapping a story marks it visited and removes it from the rail; the
+// cascade selector refills the slot from the next eligible liked track.
 
 /**
  * StoriesRail: Instagram-style horizontal row of "stories" at the top of
@@ -80,7 +77,7 @@ export default function StoriesRail({ stories }: StoriesRailProps) {
     });
   }, [currentTrack?.artist, currentTrack?.title, stories]);
 
-  // Hide visited stories entirely (Pete 2026-05-10 spec: "it should
+  // Hide visited stories entirely (spec: "it should
   // clear from my stories"). StoriesContext's cascade selector then
   // refills the slot with the next eligible liked track. Until the
   // cascade hands a fresh story, the rail just renders fewer cards —

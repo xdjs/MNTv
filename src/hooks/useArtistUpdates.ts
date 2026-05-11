@@ -54,7 +54,7 @@ const DEFAULT_MAX_ARTISTS = 3;
 const DEFAULT_CONCURRENCY = 2;
 
 // Rotation pool: how many of the user's top artists we cycle through.
-// Pete 2026-05-10: "rotate through top 10". Pool > slice gives us
+// "rotate through top 10". Pool > slice gives us
 // enough material to feel fresh across ~3-4 sessions before repeats.
 const ROTATION_POOL_SIZE = 10;
 const LS_ROTATION_CURSOR_KEY = "musicnerd_artist_rotation_cursor";
@@ -140,13 +140,8 @@ export function useArtistUpdates(
   // re-render doesn't re-fire in-flight requests.
   const inFlightRef = useRef<Set<string>>(new Set());
 
-  // Per-session rotation cursor. Pete 2026-05-11 (review note 7):
-  // useRef guarantees the side-effecting resolveRotationStart() runs
-  // exactly once per mount, even under React Strict Mode where useMemo
-  // can be invoked twice. resolveRotationStart is also internally
-  // idempotent via sessionStorage caching, so a Strict-Mode double-
-  // invocation is safe — but useRef is the semantically correct tool
-  // for "compute once on mount, never again."
+  // Per-session rotation cursor — compute once at mount via useRef
+  // (resolveRotationStart writes to localStorage as a side effect).
   const rotationStart = useRef<number>(resolveRotationStart(maxArtists)).current;
 
   // The actual artist names we'll fetch this session: take a slice of
