@@ -1,11 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { isValidSourceShape } from "@/hooks/useAINuggets";
+import { isValidSourceShape } from "@/lib/sourceShape";
 
-// `isValidSourceShape` gates DB → in-memory Map conversion in
-// useAINuggets. Source type requires { id, type, title, publisher, url }
-// all to be strings. Anything missing causes downstream consumers
-// (which call `.startsWith()` / `.toLowerCase()` without null-guarding)
-// to crash. Tests below lock the contract.
+// `isValidSourceShape` gates DB → in-memory Map conversion in the
+// nugget cache and pre-gen prefill paths. The Source type requires
+// { id, type, title, publisher, url } all to be strings. Anything
+// missing causes downstream consumers (which call `.startsWith()` /
+// `.toLowerCase()` without null-guarding) to crash. Tests below
+// lock the contract. Points at @/lib/sourceShape now that the
+// function lives in lib/; useAINuggets re-exports for back-compat.
 
 describe("isValidSourceShape", () => {
   const valid = {
