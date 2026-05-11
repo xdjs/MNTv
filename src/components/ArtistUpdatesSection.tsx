@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, X, ExternalLink } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -53,6 +53,11 @@ function ArtistUpdatesSectionInner({
   // user can then choose to open the linked Listen / Artist page from
   // a CTA inside the popup, or dismiss to stay on Browse.
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  // Stable onClose reference so ExpandedUpdateModal's focus-trap
+  // effect doesn't re-fire on every parent re-render (which would
+  // pull focus back to the close button mid-interaction whenever
+  // readyCount/groups update from useArtistUpdatesContext).
+  const modalOnClose = useCallback(() => setExpandedKey(null), []);
 
   if (groups.length === 0) return null;
 
@@ -147,12 +152,15 @@ function ArtistUpdatesSectionInner({
 
       <AnimatePresence>
         {expandedUpdate && (
-          <ExpandedUpdateModal
+          <ExpandedUpdateModalMemoized
             update={expandedUpdate}
             layoutId={cardKey(expandedUpdate)}
-            onClose={() => setExpandedKey(null)}
+            onClose={modalOnClose}
             onOpen={() => {
-              const u = expandedUpdate!;
+              // onOpen needs the current expandedUpdate; not stable
+              // across renders, but the modal's effect deps only
+              // include onClose so that's the one that mattered.
+              const u = expandedUpdate;
               setExpandedKey(null);
               openArtistAtNugget(u);
             }}
@@ -313,6 +321,17 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpda
   const closeBtnRef = useRef<HTMLButtonElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
+  // Lock document scroll while the modal is open. Without this, the
+  // Browse page scrolls behind the open modal on mobile/trackpad —
+  // the modal itself uses position:fixed so its position is stable,
+  // but the body underneath remains scrollable and the user can
+  // accidentally scroll the rail behind the dialog.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   // CTA wording matches what the open path actually does: release /
   // collab cards land on Listen for the related track; fact cards
   // open the artist profile.
@@ -470,6 +489,12 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpda
     </>
   );
 }
+
+// Memoized export. The parent passes a stable onClose (useCallback)
+// but onOpen is recreated each render — without memo the modal would
+// re-render on every parent re-render, which is harmless on its own
+// but adds noise during layout-shared transitions.
+const ExpandedUpdateModalMemoized = memo(ExpandedUpdateModal);
 
 // Browse-specific styling per kind. Label + icon come from the shared
 // helper in src/lib/artistUpdateKind.ts so adding a new kind only

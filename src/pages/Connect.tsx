@@ -1,5 +1,5 @@
 import { useNavigate, useSearchParams, Navigate } from "react-router-dom";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import PageTransition from "@/components/PageTransition";
@@ -105,12 +105,27 @@ export default function Connect() {
     } catch { /* noop */ }
   }, []);
 
+  // Escape hatch: if the OAuth-pending blank fallback would otherwise
+  // hold the user on a black screen indefinitely (Supabase auth
+  // hanging on a network blip), drop the pending flag after 10s so
+  // ConnectInner mounts and the user has a visible retry path.
+  const [oauthEscapeTriggered, setOauthEscapeTriggered] = useState(false);
+  useEffect(() => {
+    if (!oauthPendingFlag) return;
+    if (!authLoading && session) return; // auth resolved; fallback will dismiss naturally
+    const t = setTimeout(() => {
+      try { sessionStorage.removeItem(SPOTIFY_OAUTH_PENDING_KEY); } catch { /* noop */ }
+      setOauthEscapeTriggered(true);
+    }, 10_000);
+    return () => clearTimeout(t);
+  }, [oauthPendingFlag, authLoading, session]);
+
   // Pete 2026-05-11: while session is still resolving after OAuth
   // return, hide ConnectInner (and its SpotifySyncingOverlay) by
   // returning a blank screen. The bg-black matches PreparingExperience's
   // background EXACTLY so there's no visible color jump between this
   // fallback and the tier picker that appears next.
-  if (oauthPendingFlag && (authLoading || !session)) {
+  if (oauthPendingFlag && (authLoading || !session) && !oauthEscapeTriggered) {
     return <div className="min-h-screen bg-black" />;
   }
 

@@ -96,15 +96,21 @@ export function selectStorySource(
   let widestWindow = 0;
   for (const days of WINDOWS_DAYS) {
     if (accumulated.length >= targetCount) break;
-    widestWindow = days;
     const windowTracks = inWindow(days);
+    let contributedFromThisWindow = false;
     for (const t of windowTracks) {
       const k = trackKey(t);
       if (seenKeys.has(k)) continue;
       accumulated.push(t);
       seenKeys.add(k);
+      contributedFromThisWindow = true;
       if (accumulated.length >= targetCount) break;
     }
+    // Only update widestWindow when this window actually contributed
+    // a track — otherwise the `source` label would falsely report
+    // e.g. "liked-30d" for a user whose 30d window only contained
+    // duplicates of their 15d window.
+    if (contributedFromThisWindow) widestWindow = days;
   }
   if (accumulated.length >= targetCount) {
     return {
