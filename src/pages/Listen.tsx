@@ -396,13 +396,40 @@ export default function Listen() {
     })();
   }, [track, isPlaying, currentTime, player, trackId]);
 
-  // Use Spotify SDK album art when available (better than DiceBear for externally-changed tracks)
+  // Use Spotify SDK album art when available. Pete 2026-05-08: cover
+  // art was showing the PREVIOUS song's album art (Aaron Doh's "Love
+  // Lies" art for "Not Yourself"). Cause: track.coverArtUrl is locked
+  // in by the URL params at mount, but the SDK can switch tracks
+  // (auto-next, queue advance) without a route change. Previously we
+  // only swapped to the SDK's albumArtUrl when track.coverArtUrl was a
+  // DiceBear placeholder — which left real-but-stale URLs untouched.
+  // New rule: if the SDK is reporting a DIFFERENT track than what the
+  // route says, trust the SDK's albumArtUrl (it matches what's
+  // actually playing).
   const effectiveCoverArt = useMemo(() => {
-    if (spotifyStateTrack?.albumArtUrl && track?.coverArtUrl?.includes("dicebear.com")) {
+    if (!spotifyStateTrack?.albumArtUrl) {
+      return track?.coverArtUrl || "";
+    }
+    // SDK reports a different URI than what the route encoded — the
+    // user has crossed into a different track via SDK queue
+    // advancement. Use the SDK's art.
+    if (trackUri && spotifyStateTrack.spotifyUri && spotifyStateTrack.spotifyUri !== trackUri) {
+      return spotifyStateTrack.albumArtUrl;
+    }
+    // Title/artist mismatch is a softer signal that we're on a
+    // different track than expected; still trust the SDK.
+    if (
+      track?.title && spotifyStateTrack.title &&
+      track.title.trim().toLowerCase() !== spotifyStateTrack.title.trim().toLowerCase()
+    ) {
+      return spotifyStateTrack.albumArtUrl;
+    }
+    // Original DiceBear-replacement guard.
+    if (track?.coverArtUrl?.includes("dicebear.com")) {
       return spotifyStateTrack.albumArtUrl;
     }
     return track?.coverArtUrl || "";
-  }, [spotifyStateTrack?.albumArtUrl, track?.coverArtUrl]);
+  }, [spotifyStateTrack?.albumArtUrl, spotifyStateTrack?.spotifyUri, spotifyStateTrack?.title, trackUri, track?.coverArtUrl, track?.title]);
 
   // Register track-end handler on the global player
   useEffect(() => {

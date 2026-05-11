@@ -15,11 +15,24 @@ import { useSignOut } from "@/hooks/useSignOut";
 import { usePlayer } from "@/contexts/PlayerContext";
 import { useStoriesContext } from "@/contexts/StoriesContext";
 import { useArtistUpdatesContext } from "@/contexts/ArtistUpdatesContext";
+import { useTierGate } from "@/contexts/TierGateContext";
 
 export default function Browse() {
   const [searchOpen, setSearchOpen] = useState(false);
   const navigate = useNavigate();
   const { profile, saveProfile } = useUserProfile();
+  const { tierConfirmed } = useTierGate();
+  // Pete 2026-05-10: direct-navigating to /browse (refresh, bookmark,
+  // new tab) skips PreparingExperience and lands here with
+  // tierConfirmed=false. StoriesProvider + ArtistUpdatesProvider both
+  // gate pre-gen on tierConfirmed, so Browse would render empty rails
+  // and look broken. Route through /preparing — which shows the picker
+  // when needed — and let it hand back to /browse.
+  useEffect(() => {
+    if (profile && !tierConfirmed) {
+      navigate("/preparing?next=/browse", { replace: true });
+    }
+  }, [profile, tierConfirmed, navigate]);
   const { signOut } = useSignOut();
   const tier = profile?.calculatedTier;
   const { currentTrack, isPlaying, nowPlayingFocused, setNowPlayingFocused, setNowPlayingFocusIndex } = usePlayer();
@@ -104,29 +117,14 @@ export default function Browse() {
   const npbVisible = !!currentTrack;
   const lastRowRef = useRef(0);
 
-  // Auto-return to Listen after 10s idle when track is playing
-  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Pete 2026-05-11: removed the 10s-idle auto-return to /listen.
+  // It was forcing users out of Browse mid-scroll any time a new
+  // nugget arrived for the playing track. The mini-player tap is
+  // already a clear opt-in path back to the immersive view; new
+  // nuggets that arrived while away will be shown on return.
   const listenUrl = currentTrack
     ? `/listen/${currentTrack.trackId}?art=${encodeURIComponent(currentTrack.coverArtUrl)}`
     : null;
-
-  useEffect(() => {
-    if (!isPlaying || !listenUrl) return;
-    const resetIdle = () => {
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = setTimeout(() => navigate(listenUrl), 10000);
-    };
-    resetIdle();
-    window.addEventListener("keydown", resetIdle);
-    window.addEventListener("mousemove", resetIdle);
-    window.addEventListener("click", resetIdle);
-    return () => {
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-      window.removeEventListener("keydown", resetIdle);
-      window.removeEventListener("mousemove", resetIdle);
-      window.removeEventListener("click", resetIdle);
-    };
-  }, [isPlaying, listenUrl, navigate]);
 
   // Sign-out goes through the shared useSignOut hook so every caller
   // (this button, future settings menu, session-expired flows) ends the

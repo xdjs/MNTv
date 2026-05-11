@@ -1583,6 +1583,37 @@ const BANNED_PHRASES = [
   "immerse yourself", "the track's title provides", "provides a crucial clue",
   "isn't just", "wasn't just", "more than just", "not just another",
   "last.fm", "lastfm", "listener overlap", "listener data shows", "listener match",
+  // Corporate filler — Gemini's house style when it has nothing to say.
+  // These are the "Wikipedia voice" tells the constitution exists to kill.
+  // Pete 2026-05-08 round on Dame Atlas: "showcasing comprehensive artistic
+  // control", "dynamic artistic community", "close-knit scene where both
+  // artists thrive", "gravitate towards", "true creative partnership",
+  // "distinct creative vision", "deepening the track's narrative".
+  "showcasing", "showcases",
+  "comprehensive artistic control", "artistic control",
+  "dynamic artistic community", "vibrant artistic community",
+  "close-knit scene", "thriving scene",
+  "gravitate towards", "gravitate toward",
+  "creative partnership", "true creative partnership",
+  "distinct creative vision", "creative vision",
+  "deepening the track", "deepening the song",
+  "unique blend", "distinct blend",
+  "indicating a shared", "shared aesthetic",
+  "rendition", // restating "version" in flowery Gemini-ese
+  "this collaboration brought", "this track demonstrates", "this song demonstrates",
+  "highlights", "highlighting",
+  "where both artists thrive", "thrive together",
+  "both artists thrive", "where artists thrive",
+  "musical exploration", "artistic exploration", "creative exploration",
+  // Patronizing user-context phrasings. Pete 2026-05-08: "we're
+  // wasting time saying 'an artist already among your top listeners'
+  // why would me, a fan of that artist, need to be told that?" The
+  // listener already knows what they listen to. Re-stating it back is
+  // customer-service voice, not nerdy-friend voice.
+  "already among your top", "an artist you already", "you've had on rotation",
+  "you've been listening to", "as you already know", "as you know",
+  "you already listen to", "from your library", "an artist in your library",
+  "in your top listens", "among your favorites",
 ];
 
 // Hallucinated source indicators — publishers/types Gemini invents when it has no real sources
@@ -1623,6 +1654,34 @@ const KNOWN_REAL_PUBLISHERS = new Set([
   "exclaim", "paste", "under the radar", "clash", "diy",
   "the line of best fit", "the needle drop", "fantano",
 ]);
+
+// Catalog platforms — sources that are inherently verifiable metadata
+// rather than journalism. When publisher matches one of these, the
+// nugget is allowed to ship without a resolved article URL because
+// the source IS the platform itself (release date / track length /
+// album name are facts you read off the metadata, not facts that need
+// a citation). This unblocks honest sparse-artist nuggets like "Dame
+// Atlas released 'loved you more' three different ways in 2026" where
+// Spotify itself is the source of truth and there's no article to
+// link.
+const CATALOG_PLATFORMS = new Set([
+  "spotify", "bandcamp", "soundcloud", "apple music", "applemusic",
+  "youtube music", "tidal", "deezer", "genius", "discogs",
+  "musicbrainz", "last.fm", "lastfm", "musicnerd",
+  // The artist's own site — Gemini may attribute as the artist's name.
+  // We let those through if the rest of the nugget passes other checks.
+]);
+
+function isCatalogSource(sourceType: string, publisher: string): boolean {
+  const t = (sourceType || "").toLowerCase();
+  if (t === "catalog" || t === "youtube") return true;
+  const p = (publisher || "").toLowerCase().trim();
+  if (!p) return false;
+  for (const platform of CATALOG_PLATFORMS) {
+    if (p === platform || p.includes(platform)) return true;
+  }
+  return false;
+}
 
 function validateNuggetQuality(nuggets: GeminiNugget[], artist?: string): { valid: boolean; issues: string[]; hallucinated: boolean; vagueHeadlines: boolean; constitutionScores?: number[] } {
   const issues: string[] = [];
@@ -1800,6 +1859,7 @@ async function generateWithGemini(
   trackSearchSkipped?: boolean,
   discoverySearchSkipped?: boolean,
   timingTracker?: { ts: (label: string) => void; te: (label: string) => void },
+  collaborators: string[] = [],
 ): Promise<{ nuggets: GeminiNugget[]; artistSummary: string; groundingChunks: any[]; exaCitations?: ExaCitation[]; noTrackData?: boolean }> {
   const _ts = timingTracker?.ts || (() => {});
   const _te = timingTracker?.te || (() => {});
@@ -1858,6 +1918,23 @@ Use this to:
 - Calibrate assumed knowledge — if they already listen to this artist, skip basic biography
 - For the discovery nugget: recommend something adjacent to their existing taste that feels like an expert tip
 - Do NOT recommend artists already in their top artists list\n`
+    : "";
+
+  // Collaborator context — when the primary artist has thin coverage
+  // but a collaborator on the track is researchable, you may anchor a
+  // nugget in a verifiable fact about the collaborator's role on this
+  // track (e.g. "Pete Rango co-wrote 'X' with Ty Symph"). Pete's exact
+  // ask: "lead on the collaborator without making it all about the
+  // collaborator." So the track + primary artist remain the subject
+  // of the nugget; the collaborator is the angle / anchor, not the
+  // hero.
+  const collaboratorContext = collaborators.length > 0
+    ? `\nTRACK COLLABORATORS — "${title}" features ${collaborators.join(", ")} alongside ${artist}.
+- ${artist} is the primary artist and the SUBJECT of these nuggets.
+- Collaborator(s) are FAIR GAME as anchors for verifiable claims about how this track came together — co-write credit, production role, vocal feature, mix engineer, etc.
+- DO NOT make the nugget primarily about the collaborator. The user opened this song to learn about ${artist} + the track. Lead with the track / ${artist}; let the collaborator carry a specific fact you can verify.
+- Example shape: "Pete Rango brought the synth chord progression that ended up shaping '4 U'" — track stays the subject, collaborator carries the specific.
+- Never invent a collaborator's role. If you don't have a verifiable claim about what they contributed, don't claim one.\n`
     : "";
 
   // Build music context for accurate genre + discovery recommendations
@@ -2145,28 +2222,40 @@ ${musicDataContext}${adaptiveGuidance}
 DEPTH: ${depthInstruction}
 ANGLES: ${angles.join(", ")}
 ${nonRepeatInstruction}
-${tasteContext}
+${tasteContext}${collaboratorContext}
 
 VOICE: ${tierConfig.tone}
 ${tierConfig.assumedKnowledge}
 
 ${buildWriterNonNegotiables(artist)}
 
-STRUCTURE — produce 1-3 nuggets (always at least 1, up to 3 if strong). Prefer fewer strong nuggets over padded weak ones, but ALWAYS return at least one nugget grounded in whatever facts you have (Spotify catalog data, genre tags, track titles, release year, collaborators in research):
-1. **artist** (kind: "artist"): ${applyCollabBias
+STRUCTURE — produce ${tier === "nerd" ? "up to 9" : tier === "curious" ? "up to 6" : "up to 3"} nuggets total (target: ${tier === "nerd" ? "3 each of artist / track-or-context / discovery" : tier === "curious" ? "2 each of artist / track-or-context / discovery" : "1 each of artist / track-or-context / discovery"}). Floor: at least 1 nugget grounded in whatever facts you have (Spotify catalog data, genre tags, track titles, release year, collaborators). Quality > quantity — better to ship N strong nuggets than N+1 padded ones, but for a tier=${tier} listener, fill the slots when you have material.
+
+SHAPE VARIETY (CRITICAL — DO NOT IGNORE): Across the batch, vary structural shape. Pick from this menu and rotate — don't write three causal-chain nuggets in a row:
+  • causal-chain: "X happened because Y, then Z" (Phil Collins / talkback mic shape)
+  • inversion: "the song was meant for X but ended up Y" (Tyler / EARFQUAKE shape)
+  • confessional/quote: "[Artist] said: '...'" — direct speech that lands
+  • listen-for: "in the [bridge / second chorus / outro], you can hear [specific element]"
+  • catalog-stat: "this is [Artist]'s [Nth] release / [N-track] album / first feature with X"
+  • scene-connection: "[Artist] sits in the [scene/label/city] alongside [N1, N2]"
+  • user-bridge: "you've had [user's top artist] on rotation — [Artist] connects via [specific link]" (use sparingly, only when honest)
+Two of the same shape in one batch is a defect. If you only have material for one shape, write fewer nuggets — don't pad.
+
+KIND ASSIGNMENT (optional structural guide):
+- **artist** (kind: "artist"): ${applyCollabBias
       ? `Focus on the collaboration behind this track. Key creative partners: ${collabsForPrompt.join("; ")}. ONLY discuss work on "${title}" — do NOT reference other tracks or albums by ${artist}. Tell the story of their creative relationship — how they connected, what each brought to the table, and how this collaboration shaped the music. ${tier === "nerd" ? "Include specific production roles, studio dynamics, and technical contributions." : "Name specific people and moments."}`
       : tierConfig.artistFocus}. listenFor: false.
-2. **track OR context** — YOUR CHOICE based on what's most interesting:
+- **track OR context** — YOUR CHOICE based on what's most interesting:
    - Use kind "track" (listenFor: true) if you have a specific, surprising story about how "${title}" was made — recording, production, personnel, origin. ${tierConfig.trackFocus}
    - Use kind "context" (listenFor: false) if a different artist story would be more compelling — a separate chapter of their career that nugget 1 didn't cover.${curatedFacts.trackFacts.length === 0 ? `\n   No verified track facts exist, so "context" is likely the stronger choice. Pick from VERIFIED ARTIST FACTS — choose the most surprising fact NOT used in nugget 1. Do NOT describe the track's sound/mood/atmosphere.` : ""}
    Pick whichever makes the stronger nugget. If in doubt, pick "track".
-3. **discovery** (kind: "discovery"): ${tierConfig.discoveryFocus}. Be opinionated like a knowledgeable friend. listenFor: false.
+- **discovery** (kind: "discovery"): ${tierConfig.discoveryFocus}. Be opinionated like a knowledgeable friend. listenFor: false.
    HONESTY RULE: Only claim a connection you can verify from the research. If the source says "had demos with" or "worked on unreleased material," do NOT write "you've already heard their work on X" — that implies released music. State exactly what the source says.
 ${applyCollabBias ? `\nANTI-SATURATION RULE (MANDATORY):
 - Nugget 1 already covers: ${collabNames.join(", ")}.
 - Nugget 2 (track or context) MUST NOT center on ${collabNames.join(" or ")}. They may appear in passing, but the focus must be a different angle entirely.
 - Nugget 3 (discovery): recommend someone NOT already the focus of nuggets 1 or 2. Other collaborators in ${artist}'s circle are fair game — just pick someone who wasn't already discussed.` : ""}
-SOURCES: Match facts to [CIT N] citations via "citIndex". Do not invent URLs.
+SOURCES: Match facts to [CIT N] citations via "citIndex" when you have research material. For Spotify/Bandcamp/Soundcloud catalog facts (release dates, track counts, album names, feature credits), source.type = "catalog" with publisher = "Spotify" / "Bandcamp" / etc. — no citIndex needed. Do not invent URLs.
 ${imageInstructions}
 
 ALSO generate "artistSummary": 2-3 punchy sentences about ${artist}.
@@ -2176,8 +2265,8 @@ Return ONLY valid JSON:
   "artistSummary": "...",
   "nuggets": [
     {
-      "headline": "Tease the story — make them need to read more",
-      "text": "1-3 sentences building on the headline — each adds a new detail",
+      "headline": "Complete fact in one sentence, sentence case, names the artist by NAME (never 'their' / 'his' / 'her' / 'they' for the artist). No tease, no Title Case, no abstract-noun pattern.",
+      "text": "1-3 sentences. Each MUST add a new load-bearing noun or verb (person, place, time, instrument, label, role, action) NOT in the headline. NEVER use a pronoun for the artist — re-use the artist's name. No restatement, no padding ('creative partnership', 'distinct vision', 'unique blend', 'showcasing', 'gravitate towards', 'thriving scene'), no soft hedging.",
       "kind": "artist|track|context|discovery",
       "listenFor": false,
       ${imageFieldExample}
@@ -2223,7 +2312,7 @@ ${musicDataContext}${adaptiveGuidance}
 DEPTH: ${depthInstruction}
 ANGLES: ${angles.join(", ")}
 ${nonRepeatInstruction}
-${tasteContext}
+${tasteContext}${collaboratorContext}
 
 ${transcriptContext ? `YOUTUBE TRANSCRIPTS:\n${videoListContext}\n${transcriptContext}\n` : (videoListContext ? `Available YouTube videos:\n${videoListContext}\n` : "")}
 
@@ -2492,8 +2581,17 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, imageCaption, imageQuery, listenCount, previousNuggets, tier: rawTier, userTopArtists: rawTopArtists, userTopTracks: rawTopTracks, spotifyArtistImageUrl: rawSpotifyArtistImageUrl, spotifyTrackId: rawSpotifyTrackId, appleTrackId: rawAppleTrackId, durationSec: rawDurationSec, firstNuggetOnly: rawFirstNuggetOnly } = body;
+    const { artist, title, album, deepDive, context, sourceTitle, sourcePublisher, imageCaption, imageQuery, listenCount, previousNuggets, tier: rawTier, userTopArtists: rawTopArtists, userTopTracks: rawTopTracks, spotifyArtistImageUrl: rawSpotifyArtistImageUrl, spotifyTrackId: rawSpotifyTrackId, appleTrackId: rawAppleTrackId, durationSec: rawDurationSec, firstNuggetOnly: rawFirstNuggetOnly, collaborators: rawCollaborators } = body;
     const firstNuggetOnly = rawFirstNuggetOnly === true;
+    // Collaborators on the track (other Spotify artists besides the primary).
+    // Pete 2026-05-08: "Pete Rango is a collaborator on this track and there's
+    // plenty of information on Pete Rango so no need to hallucinate." When the
+    // primary artist is sparse, we use collaborator data to anchor real
+    // verifiable nuggets (e.g. "Pete Rango co-composed 'X' with Ty Symph") —
+    // can lead with the collaborator without making it ALL about them.
+    const safeCollaborators: string[] = Array.isArray(rawCollaborators)
+      ? rawCollaborators.slice(0, 5).map((c: unknown) => (typeof c === "string" ? c.slice(0, 100) : "")).filter(Boolean)
+      : [];
     // Default to 240s (avg song) when caller omits — used for cache-side
     // timestamp computation so pre-gen flows (which don't know duration yet)
     // can still produce a valid cached Nugget[] shape.
@@ -2866,11 +2964,12 @@ Do not invent URLs. Do not invent publishers. Do not invent quotes.`;
       const sPub = (firstNugget.source?.publisher || "").toLowerCase();
       const sUrl = resolvedUrl.toLowerCase();
       const SEARCH_URL_RX = /\b(google\.[a-z.]+\/search|bing\.com\/search|duckduckgo\.com|search\.yahoo\.com)\b/i;
+      const isCatalog = isCatalogSource(sType, sPub);
       const reject =
         sType === "internal-data" || sType === "internal_data" || sType === "database" || sType === "editorial" ||
         HALLUCINATED_PUBLISHERS.some((hp) => sPub.includes(hp)) ||
         (sUrl && SEARCH_URL_RX.test(sUrl)) ||
-        (!sUrl && !!sPub && sType !== "youtube" && sType !== "catalog");
+        (!sUrl && !!sPub && !isCatalog);
       if (reject) {
         console.warn(`[firstNuggetOnly] Rejected hallucinated source for ${artist} - ${title}: type=${sType} pub=${sPub} url=${sUrl || "(empty)"}`);
         return buildSyntheticCacheRow("source rejected");
@@ -3217,7 +3316,7 @@ Do not invent URLs. Do not invent publishers. Do not invent quotes.`;
       const result = await generateWithGemini(
         artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier, safeTopArtists, safeTopTracks,
         exaPromptContext, exaCitations, imageCandidates, isSparseData, resolvedSpotifyInfo, resolvedLastFmSimilar, resolvedLastFmTags,
-        trackSearchSkipped, discoverySearchSkipped, _tracker
+        trackSearchSkipped, discoverySearchSkipped, _tracker, safeCollaborators,
       );
       rawNuggets = result.nuggets;
       groundingChunks = result.groundingChunks;
@@ -3860,8 +3959,8 @@ Return ONLY valid JSON:
                   console.log(`[SSE] Skipping unverified fabricated source for ${def.kind}: ${assembled.source?.url}`);
                   continue;
                 }
-                if (!sseSourceUrl && publisher && sourceType !== "youtube" && sourceType !== "catalog") {
-                  console.log(`[SSE] Skipping nugget with claimed publisher but no URL for ${def.kind}: ${assembled.source?.publisher}`);
+                if (!sseSourceUrl && publisher && !isCatalogSource(sourceType, publisher)) {
+                  console.log(`[SSE] Skipping nugget with claimed publisher but no URL and not a catalog platform for ${def.kind}: ${assembled.source?.publisher}`);
                   continue;
                 }
                 // Previous behavior dropped any sparse-artist nugget whose
@@ -4032,8 +4131,8 @@ Return ONLY valid JSON:
       // specific publisher. assembleNugget now leaves url empty (instead
       // of falling back to Google) when it can't resolve a real URL —
       // that's our signal that the publisher field is fabricated.
-      if (!sourceUrl && publisher && sourceType !== "youtube" && sourceType !== "catalog") {
-        console.log(`[SourceFilter] Removed nugget "${n.headline?.slice(0, 50)}" — claims publisher "${n.source?.publisher}" with no resolved article URL`);
+      if (!sourceUrl && publisher && !isCatalogSource(sourceType, publisher)) {
+        console.log(`[SourceFilter] Removed nugget "${n.headline?.slice(0, 50)}" — claims publisher "${n.source?.publisher}" with no resolved article URL and not a catalog platform`);
         return false;
       }
       return true;
@@ -4130,31 +4229,97 @@ Return ONLY valid JSON:
       // Synthetic catalog-grounded fallback. Validator stripped every
       // Writer attempt — happens reliably for very-low-popularity
       // artists where Exa returns no journalism and the source filter
-      // rejects anything Gemini fabricates. Cache ONE honest nugget so
-      // the pre-gen still produces a row; pink ring on the rail = real
-      // cache row = instant content on tap.
+      // rejects anything Gemini fabricates. Write tier-scaled synthetic
+      // nuggets so the user has the expected count to scroll through
+      // (Pete: "I clicked on Ty Symph's story, it displayed 1 nugget,
+      // but it never showed any more nuggets" — was happening because
+      // we wrote 1 synthetic for nerd-tier user expecting 9).
       try {
-        const synthSourceId = `ai-src-${fallbackTrackId}-L1-0`;
-        const synthNuggetId = `ai-nug-${fallbackTrackId}-L1-0`;
-        const synthNuggets = [{
-          id: synthNuggetId, trackId: fallbackTrackId, timestampSec: 0, durationMs: 7000,
-          headline: `"${title}" by ${artist}`,
-          text: `One of your under-the-radar picks. There's not much press out there for this one yet, so we're letting the music do the talking — give it a real listen and we'll layer in the story as more sources surface.`,
-          kind: "track" as const,
-          listenFor: false,
-          sourceId: synthSourceId,
-        }];
-        const synthSources: Record<string, unknown> = {
-          [synthSourceId]: {
-            id: synthSourceId,
+        const tierCount = fallbackTier === "nerd" ? 9 : fallbackTier === "curious" ? 6 : 3;
+        const earlyStart = 0;
+        const endBuffer = 15;
+        const usable = Math.max(cacheDurationSec - earlyStart - endBuffer, 30);
+        const denom = Math.max(tierCount - 1, 1);
+        const spacing = usable / denom;
+
+        // Catalog-grounded angles. Honest copy that doesn't fabricate
+        // specifics. Cycles through the angles to fill the tier count
+        // so a nerd-tier user sees varied content even when AI fails.
+        const synthAngles = [
+          {
+            kind: "artist" as const,
+            headline: `"${title}" sits in ${artist}'s catalog`,
+            text: `${artist} is one of the artists you keep coming back to. Press play and let this one breathe — we'll layer in the deeper story as press and credits surface.`,
+          },
+          {
+            kind: "track" as const,
+            headline: `Listen for the texture on "${title}"`,
+            text: `Independent releases like this one don't always have a paper trail yet. Use this listen to notice the production choices firsthand: the rhythm, the space between sounds, the vocal phrasing.`,
+          },
+          {
+            kind: "discovery" as const,
+            headline: `If you like ${artist}, lean into this one`,
+            text: `${artist} is the kind of artist whose catalog rewards repeat listens. We don't have a deep brief on this track yet, but the song speaks for itself — give it room.`,
+          },
+          {
+            kind: "artist" as const,
+            headline: `${artist} is operating outside the press cycle`,
+            text: `Smaller releases stay below journalism's radar — that's not a flaw, that's where new sounds get to develop. You're hearing this one early.`,
+          },
+          {
+            kind: "track" as const,
+            headline: `Ride out "${title}" — there's craft underneath`,
+            text: `Even without a press kit, you can hear the choices: the mix, the arrangement, the way the artist is sitting in the pocket. Listen close.`,
+          },
+          {
+            kind: "discovery" as const,
+            headline: `Make a mental bookmark`,
+            text: `Tracks like this one get rediscovered later. We'll keep researching as new sources land — for now, sit with the song.`,
+          },
+          {
+            kind: "artist" as const,
+            headline: `Independent artists, real talent`,
+            text: `${artist} doesn't need press validation to make this work. The track's the credential.`,
+          },
+          {
+            kind: "track" as const,
+            headline: `Production pays attention here`,
+            text: `Listen for what the producer is doing with the low end and the silence — those are usually the tells.`,
+          },
+          {
+            kind: "discovery" as const,
+            headline: `Add this to your repeat playlists`,
+            text: `Songs like "${title}" often grow on you. We'll add depth as more sources surface; the song is the foundation.`,
+          },
+        ];
+
+        const synthNuggets = [];
+        const synthSources: Record<string, unknown> = { _synthetic: true };
+        for (let i = 0; i < tierCount; i++) {
+          const angle = synthAngles[i % synthAngles.length];
+          const sourceId = `ai-src-${fallbackTrackId}-L1-${i}`;
+          const nuggetId = `ai-nug-${fallbackTrackId}-L1-${i}`;
+          const ts = Math.min(Math.floor(earlyStart + spacing * i), cacheDurationSec - 10);
+          synthNuggets.push({
+            id: nuggetId,
+            trackId: fallbackTrackId,
+            timestampSec: ts,
+            durationMs: 7000,
+            headline: angle.headline,
+            text: angle.text,
+            kind: angle.kind,
+            listenFor: false,
+            sourceId,
+          });
+          synthSources[sourceId] = {
+            id: sourceId,
             type: "catalog",
             title,
             publisher: "MusicNerd",
             url: "",
             verified: false,
-          },
-          _synthetic: true,
-        };
+          };
+        }
         if (cacheAdminClient) {
           const { error: synthErr } = await cacheAdminClient.from("nugget_cache").upsert(
             { track_id: fallbackDbCacheKey, nuggets: synthNuggets, sources: synthSources, status: "ready" },
@@ -4163,10 +4328,10 @@ Return ONLY valid JSON:
           if (synthErr) {
             console.warn(`[NuggetCache] synthetic upsert failed for ${fallbackDbCacheKey}:`, synthErr.message);
           } else {
-            console.log(`[NuggetCache] synthetic catalog row written for ${fallbackDbCacheKey.slice(0, 80)}`);
+            console.log(`[NuggetCache] ${tierCount} synthetic catalog nuggets written for ${fallbackDbCacheKey.slice(0, 80)}`);
           }
         }
-        // Return the synthetic nugget to the client too so usePreGeneratedStories
+        // Return the synthetic nuggets to the client too so usePreGeneratedStories
         // sees a non-empty nuggets array and marks the story ready.
         return new Response(JSON.stringify({ nuggets: synthNuggets, artistSummary: "", externalLinks: [], synthetic: true }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },

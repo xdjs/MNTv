@@ -16,7 +16,14 @@ const ArtistProfile = lazy(() => import("./pages/ArtistProfile"));
 const AlbumDetail = lazy(() => import("./pages/AlbumDetail"));
 const Listen = lazy(() => import("./pages/Listen"));
 const Profile = lazy(() => import("./pages/Profile"));
-const PreparingExperience = lazy(() => import("./pages/PreparingExperience"));
+// Pete 2026-05-11: PreparingExperience is eager-loaded because it's
+// the immediate destination after Spotify OAuth + on every Browse
+// re-entry that needs tier confirmation. A Suspense fallback flash
+// between Connect's Navigate and the tier picker felt like a "loading
+// screen that doesn't belong" — bundling it with the main chunk
+// guarantees no chunk-fetch delay on this path.
+import PreparingExperienceEager from "./pages/PreparingExperience";
+const PreparingExperience = PreparingExperienceEager;
 import { AuthProvider } from "./contexts/AuthContext";
 import { PlayerProvider } from "./contexts/PlayerContext";
 import { StoriesProvider } from "./contexts/StoriesContext";

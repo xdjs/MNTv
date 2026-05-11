@@ -543,63 +543,6 @@ export function useAINuggets(
           // Write to in-memory cache
           setNuggetCache(cacheKey, { nuggets: cachedNuggets, sources: cachedSources, listenCount: currentListenCount });
 
-          // Tier-aware fan-out. If pre-gen wrote a partial (e.g. 1
-          // nugget from the firstNuggetOnly fast path) but tier is
-          // curious / nerd which expect 6 / 9, kick off a single
-          // background invoke for the full set so additional nuggets
-          // come in WHILE the song plays. Best effort — if it fails
-          // the user just sees the partial for this listen.
-          const tierExpected = tier === "nerd" ? 9 : tier === "curious" ? 6 : 3;
-          if (cachedNuggets.length < tierExpected) {
-            (async () => {
-              if (import.meta.env.DEV) console.log(`[NuggetCache] Cache had ${cachedNuggets.length}/${tierExpected} for tier=${tier} — fanning out for full set`);
-              try {
-                const spotifyId = trackId.match(/spotify:track:([a-zA-Z0-9]{22})/)?.[1];
-                const appleId = trackId.match(/apple:song:(\d+)/)?.[1];
-                const { data: fanoutData, error: fanoutErr } = await supabase.functions.invoke("generate-nuggets", {
-                  body: {
-                    artist, title, album,
-                    listenCount: 1,
-                    previousNuggets: [],
-                    tier,
-                    userTopArtists: topArtists,
-                    userTopTracks: topTracks,
-                    spotifyTrackId: spotifyId,
-                    appleTrackId: appleId,
-                    durationSec,
-                  },
-                });
-                if (cancelledRef.current) return;
-                if (fanoutErr || !fanoutData) return;
-                const fanoutNuggets = (fanoutData as { nuggets?: Nugget[] }).nuggets;
-                if (!Array.isArray(fanoutNuggets) || fanoutNuggets.length <= cachedNuggets.length) return;
-                if (import.meta.env.DEV) console.log(`[NuggetCache] Fan-out filled in ${fanoutNuggets.length} nuggets`);
-                // Re-read DB to get the freshly-written cache row with
-                // its sources map (the response body's `sources` is
-                // not always fully populated for the JSON path).
-                const { data: refreshed } = await supabase
-                  .from("nugget_cache")
-                  .select("nuggets, sources")
-                  .eq("track_id", dbCacheKey)
-                  .maybeSingle();
-                if (cancelledRef.current) return;
-                const finalNuggets = (refreshed?.nuggets as Nugget[] | null) ?? fanoutNuggets;
-                const sanitized = finalNuggets.map(sanitizeNugget);
-                const finalSources = new Map<string, Source>();
-                const rawFinalSources = (refreshed?.sources ?? {}) as Record<string, unknown>;
-                for (const [k, v] of Object.entries(rawFinalSources)) {
-                  if (k.startsWith("_") || typeof v !== "object" || v === null || Array.isArray(v)) continue;
-                  finalSources.set(k, v as Source);
-                }
-                setNuggets(sanitized);
-                setSources(finalSources);
-                setNuggetCache(cacheKey, { nuggets: sanitized, sources: finalSources, listenCount: currentListenCount });
-              } catch (e) {
-                if (import.meta.env.DEV) console.warn("[NuggetCache] Fan-out threw:", e);
-              }
-            })();
-          }
-
           // Don't increment listen_count here — Listen.tsx handles that
           // after the 5-second playback threshold is met.
 
@@ -1134,8 +1077,17 @@ export function useAINuggets(
     if (!durationSec || durationSec < 90) return;   // track too short
     if (!isPlaying) return;                         // paused — wait
     if (cancelledRef.current) return;               // track changed / unmount
-    if (fromCache) return;                          // cached tracks don't wave-extend
     if (Date.now() < waveCooldownUntilRef.current) return;  // recent failure, cooldown
+
+    // Tap fan-out (Pete 2026-05-10): if we served from cache but only
+    // have a single nugget (firstNuggetOnly partial), the user still
+    // needs the rest of the tier-scaled set generated. Previously
+    // `fromCache` blocked all wave extension which left every story
+    // tap at exactly 1 nugget. Allow wave 2 when below the tier's
+    // expected count.
+    const expectedForTier = tier === "nerd" ? 9 : tier === "curious" ? 6 : 3;
+    const isPartialCache = fromCache && nuggets.length < expectedForTier;
+    if (fromCache && !isPartialCache) return;       // full-set cache, nothing to extend
 
     const lastTimestamp = Math.max(...nuggets.map((n) => n.timestampSec));
     if (currentTime < lastTimestamp + 5) return;    // user still consuming

@@ -15,6 +15,7 @@ export type SpotifyProfilePatch = Pick<
   | "artistImages"
   | "artistIds"
   | "trackImages"
+  | "likedTracks"
 >;
 
 /**
@@ -39,5 +40,6 @@ export async function completeSpotifyConnect(
     artistImages: taste.artistImages,
     artistIds: taste.artistIds,
     trackImages: taste.trackImages,
+    likedTracks: taste.likedTracks,
   };
 }

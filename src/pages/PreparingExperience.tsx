@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
-import PageTransition from "@/components/PageTransition";
 import { useUserProfile, getStoredProfile } from "@/hooks/useMusicNerdState";
 import { useFirstRunReadiness, MAX_WAIT_MS } from "@/hooks/useFirstRunReadiness";
 import { sanitizeRedirect } from "@/lib/routeUtils";
@@ -133,8 +132,14 @@ export default function PreparingExperience() {
     elapsed >= step.threshold ? step : acc,
   );
 
+  // Pete 2026-05-11: removed PageTransition wrapper here — its
+  // 500ms fade-in/scale-up made the OAuth-return → tier picker
+  // transition feel slow and "weird" (perceived as a loading state
+  // rather than a smooth handoff). The aurora gradient and the
+  // tier-picker section's own motion.div still animate in below;
+  // dropping the page-level animation lets the picker land instantly.
   return (
-    <PageTransition>
+    <div>
       <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-black px-6">
         {/* Aurora background — slow drift so the screen never feels
             frozen while artist-updates generates. Same gradient stops
@@ -277,6 +282,6 @@ export default function PreparingExperience() {
           </motion.div>
         )}
       </div>
-    </PageTransition>
+    </div>
   );
 }

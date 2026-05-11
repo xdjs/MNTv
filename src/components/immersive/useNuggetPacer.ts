@@ -59,14 +59,18 @@ export function useNuggetPacer<T extends NuggetIdentity>({
   };
 
   const scheduleNext = () => {
-    if (userTookOverRef.current) return;
+    // Pete 2026-05-10: removed userTookOverRef gate. Previously a
+    // single manual swipe permanently disabled auto-advance for the
+    // rest of the track, which silently broke the "nuggets keep
+    // arriving as the song plays" UX. Auto-advance now resumes after
+    // any swipe — the minDisplayMs window still gives the user time
+    // to read what they swiped to.
     if (advanceTimerRef.current) return;
     if (pendingQueueRef.current.length === 0) return;
     const elapsed = Date.now() - nuggetShownAtRef.current;
     const wait = Math.max(0, minDisplayMsRef.current - elapsed);
     advanceTimerRef.current = setTimeout(() => {
       advanceTimerRef.current = null;
-      if (userTookOverRef.current) return;
       const next = pendingQueueRef.current.shift();
       if (next !== undefined) {
         nuggetShownAtRef.current = Date.now();
@@ -80,12 +84,20 @@ export function useNuggetPacer<T extends NuggetIdentity>({
   // causing a new identity every render. The body only reads refs, which
   // are themselves stable, so an empty dep list is safe.
   const cancelPending = useCallback(() => {
+    // Cancel the in-flight advance timer (so a manual swipe doesn't
+    // get yanked one beat later by a queued auto-advance), but DO NOT
+    // permanently disable auto-advance. Previously this set
+    // userTookOverRef=true and never reset it until track change,
+    // which silently killed wave 2/3 nugget reveal as the song
+    // progressed.
     pendingQueueRef.current = [];
     if (advanceTimerRef.current) {
       clearTimeout(advanceTimerRef.current);
       advanceTimerRef.current = null;
     }
-    userTookOverRef.current = true;
+    // Stamp shown-at to NOW so the next auto-advance still respects
+    // the minDisplayMs window after the manual swipe.
+    nuggetShownAtRef.current = Date.now();
   }, []);
 
   // Track change: reset before any unlockedIds effect runs for the new track.
@@ -116,11 +128,6 @@ export function useNuggetPacer<T extends NuggetIdentity>({
 
     const newlyAdded = unlockedIndices.slice(oldCount);
     prevUnlockedCountRef.current = newCount;
-
-    // After a manual swipe we don't auto-advance for the rest of the track,
-    // but we still update prevUnlockedCount so a future track-change reset
-    // starts fresh.
-    if (userTookOverRef.current) return;
 
     if (oldCount === 0) {
       const [first, ...rest] = newlyAdded;

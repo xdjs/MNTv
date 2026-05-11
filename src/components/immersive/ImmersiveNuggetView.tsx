@@ -186,16 +186,20 @@ export default function ImmersiveNuggetView({
         next.add(nuggets[0].id);
         changed = true;
       }
-      // Subsequent nuggets gate on currentTime, but only walk them
-      // when we've crossed the next pending timestamp (keeps this
-      // effect from doing real work on every 4 Hz playback tick).
-      if (currentTime >= nextUnlockTimeRef.current) {
-        for (let i = 1; i < nuggets.length; i++) {
-          const n = nuggets[i];
-          if (currentTime >= n.timestampSec && !next.has(n.id)) {
-            next.add(n.id);
-            changed = true;
-          }
+      // Pete 2026-05-10: removed the nextUnlockTimeRef shortcut.
+      // The previous optimization gated this loop on
+      // `currentTime >= nextUnlockTimeRef.current`, which got stuck
+      // at Infinity after the first unlock pass with only 1 nugget.
+      // When wave 2 landed and added new nuggets to state, the gate
+      // had a stale Infinity value and the loop was never re-entered
+      // even though the new nuggets had timestamps long since
+      // crossed. Just walk all nuggets every tick — there are at
+      // most ~9 of them, this is microsecond work.
+      for (let i = 1; i < nuggets.length; i++) {
+        const n = nuggets[i];
+        if (currentTime >= n.timestampSec && !next.has(n.id)) {
+          next.add(n.id);
+          changed = true;
         }
       }
       return changed ? next : prev;
@@ -284,6 +288,42 @@ export default function ImmersiveNuggetView({
     setDeepDiveFollowUp(null);
   }, [cancelPacerQueue]);
 
+  // Keyboard navigation — left/right arrows step between unlocked
+  // nuggets. Useful on desktop / DevTools mobile-emulation where
+  // touch swipes don't fire on a mouse drag (Pete: "easy way to
+  // navigate between nuggets when I'm in inspector view to replicate
+  // a phone interface"). Up/Down opens / re-opens the card if the
+  // user dismissed it.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      // Don't hijack typing in any input / textarea / contenteditable
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      if (unlockedCount === 0) return;
+      if (e.key === "ArrowRight") {
+        const next = activeIndex + 1;
+        if (next < unlockedCount) {
+          e.preventDefault();
+          handleSwipe(next);
+        }
+      } else if (e.key === "ArrowLeft") {
+        const prev = activeIndex - 1;
+        if (prev >= 0) {
+          e.preventDefault();
+          handleSwipe(prev);
+        }
+      } else if (e.key === "ArrowUp" || e.key === "Enter") {
+        // Re-open dismissed card.
+        if (nuggetDismissed) {
+          e.preventDefault();
+          setNuggetDismissed(false);
+        }
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeIndex, unlockedCount, nuggetDismissed, handleSwipe]);
+
   const handleTypewriterComplete = useCallback(() => {
     if (activeNugget) setTypewriterDoneIds((prev) => new Set(prev).add(activeNugget.id));
   }, [activeNugget]);
@@ -339,9 +379,14 @@ export default function ImmersiveNuggetView({
     const { url: imgUrl, isNuggetImage } = getNuggetImage();
     return (
       <div className="w-full h-full overflow-y-auto scrollbar-hide">
-        {/* Sticky image hero — stays pinned while body text scrolls over it.
-            Prevents the gap/overlay break when scrolling up. */}
-        <div className="sticky top-0 w-full h-full">
+        {/* Pete 2026-05-10 layout spec: hero image fills the entire
+            visible viewport with a single bottom-fade gradient. The
+            headline overlays the bottom of the image (absolute
+            positioned within the image container), so the image
+            shows through behind the text — no hard black box, no
+            visible seam. Body lives BELOW this h-full container in
+            scroll flow, off-screen at scroll=0. */}
+        <div className="h-full relative">
           {imgUrl && (
             <img
               src={imgUrl}
@@ -354,41 +399,43 @@ export default function ImmersiveNuggetView({
               }}
             />
           )}
-          <div className="absolute inset-0" style={{
-            background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.6) 25%, rgba(0,0,0,0.15) 55%, transparent 80%)",
+          {/* Single bottom-fade gradient — image visible at top,
+              fading to near-black at the bottom where the headline
+              overlays. */}
+          <div className="absolute inset-0 pointer-events-none" style={{
+            background: "linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.78) 18%, rgba(0,0,0,0.4) 38%, rgba(0,0,0,0.1) 60%, transparent 80%)",
           }} />
-        </div>
-
-        {/* Body overlaps the bottom of the sticky image just enough to show
-            the headline on initial view — the paragraph stays below the fold
-            until the user scrolls. Headline sits at the top of this scrolling
-            block so it travels up with the paragraph when scrolling. No
-            bg-black — the transparent gradient lets the hero show through. */}
-        <div className="px-5 pb-5 -mt-36 relative z-10 pt-16" style={{
-          backgroundImage: "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.55) 25%, rgba(0,0,0,0.85) 50%, rgb(0,0,0) 75%)",
-        }}>
-          <span className="text-[10px] uppercase tracking-[0.2em] text-white/60 mb-2 block" style={{ textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>
-            {activeNugget ? (KIND_LABELS[activeNugget.kind] || activeNugget.kind) : ""}
-          </span>
-          <div className="min-h-[3.5rem] mb-4">
-          {activeNugget && (
-            isTypewriterDone ? (
-              <h2 className="text-xl font-bold leading-tight text-white" style={{ textShadow: "0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.5)" }}>
-                {activeNugget.headline || activeNugget.text}
-              </h2>
-            ) : (
-              <TypewriterText
-                text={activeNugget.headline || activeNugget.text}
-                speed={35}
-                paused={false}
-                onComplete={handleTypewriterComplete}
-                as="h2"
-                className="text-xl font-bold leading-tight text-white block"
-                style={{ textShadow: "0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.5)" }}
-              />
-            )
-          )}
+          {/* Headline overlays the bottom of the image — no separate
+              background, the gradient above provides the legibility
+              backdrop. */}
+          <div className="absolute bottom-0 left-0 right-0 px-5 pb-5 z-10">
+            <span className="text-[10px] uppercase tracking-[0.2em] text-white/60 mb-2 block" style={{ textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>
+              {activeNugget ? (KIND_LABELS[activeNugget.kind] || activeNugget.kind) : ""}
+            </span>
+            <div className="min-h-[3.5rem]">
+            {activeNugget && (
+              isTypewriterDone ? (
+                <h2 className="text-xl font-bold leading-tight text-white" style={{ textShadow: "0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.5)" }}>
+                  {activeNugget.headline || activeNugget.text}
+                </h2>
+              ) : (
+                <TypewriterText
+                  text={activeNugget.headline || activeNugget.text}
+                  speed={35}
+                  paused={false}
+                  onComplete={handleTypewriterComplete}
+                  as="h2"
+                  className="text-xl font-bold leading-tight text-white block"
+                  style={{ textShadow: "0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.5)" }}
+                />
+              )
+            )}
+            </div>
           </div>
+        </div>
+        {/* Body section — lives BELOW the h-full hero+headline frame,
+            so it's off-screen at scroll=0. User scrolls down to read. */}
+        <div className="px-5 pt-6 pb-8 bg-black relative z-10">
           <p className="text-sm leading-relaxed text-white/60 mb-4">
             {activeNugget?.text}
           </p>
@@ -436,7 +483,7 @@ export default function ImmersiveNuggetView({
         </div>
       </div>
     );
-  }, [getNuggetImage, activeNugget, activeSource, isTypewriterDone, handleTypewriterComplete, deepDiveText, deepDiveFollowUp, deepDiveLoading, deepDiveRateLimited, handleTellMeMore, bookmarks, artist, trackTitle]);
+  }, [getNuggetImage, activeNugget, activeSource, isTypewriterDone, handleTypewriterComplete, deepDiveText, deepDiveFollowUp, deepDiveLoading, deepDiveRateLimited, handleTellMeMore, bookmarks, artist, trackTitle, nuggets.length, activeIndex, unlockedCount]);
 
   return (
     <motion.div
@@ -488,6 +535,7 @@ export default function ImmersiveNuggetView({
             >
               <SwipeableNuggetStack
                 unlockedCount={unlockedCount}
+                totalCount={nuggets.length}
                 activeIndex={activeIndex}
                 onSwipe={handleSwipe}
               >
@@ -528,6 +576,28 @@ export default function ImmersiveNuggetView({
           )}
         </AnimatePresence>
       </div>
+
+      {/* Position-indicator dots — own row, never overlaps body text.
+          Pete 2026-05-08: "dots right above the mini player ...
+          headline and nugget amount counter should never be covered
+          by the mini player." Active bright, unlocked dim, locked
+          very-dim. Hidden when there's only one nugget. */}
+      {nuggets.length > 1 && (
+        <div className="relative z-20 bg-black flex justify-center items-center gap-1.5 pt-5 pb-3 pointer-events-none">
+          {Array.from({ length: nuggets.length }, (_, i) => {
+            const isActive = i === activeIndex;
+            const isUnlocked = i < unlockedCount;
+            return (
+              <div
+                key={i}
+                className={`w-1.5 h-1.5 rounded-full transition-colors duration-200 ${
+                  isActive ? "bg-white/85" : isUnlocked ? "bg-white/35" : "bg-white/12"
+                }`}
+              />
+            );
+          })}
+        </div>
+      )}
 
       {/* Mini player */}
       <div className="relative z-20 bg-black" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>

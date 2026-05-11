@@ -101,7 +101,34 @@ export interface UserProfile {
   // Image maps — artist name → image URL, track "title — artist" → album art URL
   artistImages?: Record<string, string>;
   artistIds?: Record<string, string>;   // artist name → service-specific artist ID
-  trackImages?: { title: string; artist: string; imageUrl: string; uri?: string }[];
+  trackImages?: {
+    title: string;
+    /** Primary artist (Spotify's first artist for the track). Used as the
+     *  research target / cache key. */
+    artist: string;
+    /** Other artists on the track. Server uses these to anchor nuggets
+     *  for sparse primary artists (e.g. "4 U" by Ty Symph feat. Pete
+     *  Rango — Ty Symph is sparse, Pete Rango is researchable). Rail
+     *  display joins `artist + collaborators` for the visible label. */
+    collaborators?: string[];
+    imageUrl: string;
+    uri?: string;
+  }[];
+  /** Liked Songs from Spotify's /me/tracks endpoint, sorted by added_at
+   *  desc. Drives the Stories rail with a cascade window: 15d → 30d →
+   *  60d → 365d → fall back to topTracks/trackImages. Same shape as
+   *  trackImages so the rail can treat them interchangeably. `addedAt`
+   *  is the user's like timestamp (ISO 8601). Empty array = either the
+   *  user hasn't liked anything OR user-library-read scope wasn't
+   *  granted (in which case the rail falls back to topTracks). */
+  likedTracks?: {
+    title: string;
+    artist: string;
+    collaborators?: string[];
+    imageUrl: string;
+    uri?: string;
+    addedAt?: string | null;
+  }[];
   /** ISO timestamp of the last successful Spotify-taste fetch. Drives the
    *  background refresh TTL (`useBackgroundTasteRefresh`). Undefined for
    *  pre-feature profiles → treated as stale and refreshed on next load. */

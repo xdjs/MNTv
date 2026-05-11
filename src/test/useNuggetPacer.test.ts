@@ -226,7 +226,12 @@ describe("useNuggetPacer", () => {
     expect(onShow).not.toHaveBeenCalled();
   });
 
-  it("cancelPending drops queued nuggets and stops auto-advance for the rest of the track", () => {
+  it("cancelPending drops the existing queue but auto-advance resumes when new nuggets arrive", () => {
+    // Pete 2026-05-10: changed behavior — a swipe used to permanently
+    // disable auto-advance for the rest of the track, which silently
+    // killed wave 2/3 reveal. Now cancelPending clears the in-flight
+    // queue (so a manual swipe doesn't get yanked one beat later)
+    // but newly-unlocked nuggets still auto-advance.
     const onShow = vi.fn();
     const nuggets = [{ id: "a" }, { id: "b" }, { id: "c" }];
 
@@ -249,21 +254,23 @@ describe("useNuggetPacer", () => {
       result.current.cancelPending();
     });
 
-    // Pending advance to "b" should never fire.
+    // Pending advance to "b" should never fire — it was queued
+    // before the swipe.
     act(() => {
       vi.advanceTimersByTime(60_000);
     });
     expect(onShow).toHaveBeenCalledTimes(1);
 
-    // Nugget "c" arrives — pacer should NOT auto-advance now that the user
-    // has taken over.
+    // Nugget "c" arrives later — pacer SHOULD auto-advance to it,
+    // since the cancellation only dropped the prior queue, not the
+    // ability to advance going forward.
     act(() => {
       rerender({ unlockedIds: new Set(["a", "b", "c"]) });
     });
     act(() => {
       vi.advanceTimersByTime(60_000);
     });
-    expect(onShow).toHaveBeenCalledTimes(1);
+    expect(onShow.mock.calls.map((c) => c[0])).toEqual([0, 2]);
   });
 
   it("cancelPending's takeover resets on track change", () => {

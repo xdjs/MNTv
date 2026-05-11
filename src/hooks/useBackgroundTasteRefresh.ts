@@ -30,7 +30,13 @@ import { supabase } from "@/integrations/supabase/client";
  *   - Otherwise skip
  */
 
-const TASTE_TTL_MS = 24 * 60 * 60 * 1000;
+// 6h TTL pairs with the rotation work (2026-05-10): we cycle 3 of the
+// user's top-10 artists per session, but if the underlying top-artists
+// list itself is stale, rotation just reshuffles the same dated names.
+// Tighter TTL means a few-times-a-day visitor sees a freshly-pulled
+// pool to rotate through. Cheap fetch (top-artists/top-tracks/likes,
+// no Gemini), so going under 24h doesn't add meaningful cost.
+const TASTE_TTL_MS = 6 * 60 * 60 * 1000;
 
 interface BackgroundTasteRefreshState {
   /** True from the moment the fetch starts until it resolves (success or
@@ -107,6 +113,7 @@ export function useBackgroundTasteRefresh(): BackgroundTasteRefreshState {
             artistImages: taste.artistImages,
             artistIds: taste.artistIds,
             trackImages: taste.trackImages,
+            likedTracks: taste.likedTracks,
             spotifyDisplayName: taste.displayName ?? undefined,
           },
           user.id

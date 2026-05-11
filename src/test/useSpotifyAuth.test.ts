@@ -34,7 +34,7 @@ describe("signInWithSpotify", () => {
       provider: "spotify",
       options: {
         scopes:
-          "user-top-read user-read-recently-played user-read-private streaming user-read-playback-state user-modify-playback-state",
+          "user-top-read user-library-read user-read-recently-played user-read-private streaming user-read-playback-state user-modify-playback-state",
         redirectTo: "http://127.0.0.1:8080/connect",
         // Regression guard: show_dialog must be forwarded so Spotify
         // re-prompts on every sign-in and scope upgrades take effect.

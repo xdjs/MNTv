@@ -70,10 +70,11 @@ export function useReleasePreGen(
       // same release.
       if (!spotifyTrackId && !appleTrackId) continue;
 
-      // Mirror stories rail: firstNuggetOnly fast path. Server
-      // returns ONE nugget for this track, caches it, marks the row
-      // ready. By the time the user taps, the cache row exists and
-      // the first nugget loads instantly; the rest fans out on tap.
+      // Full pipeline pre-gen, mirroring the stories rail (which
+      // moved off firstNuggetOnly because the fast path produced
+      // synthetic boilerplate too often). Server runs Curator +
+      // Writer + Validator, caches all 3-9 tier-scaled nuggets.
+      // Best-effort: no awaiting. Tap reads the cache row.
       supabase.functions.invoke("generate-nuggets", {
         body: {
           artist: target.artist,
@@ -84,7 +85,6 @@ export function useReleasePreGen(
           tier,
           spotifyTrackId,
           appleTrackId,
-          firstNuggetOnly: true,
         },
       }).catch((e) => {
         if (import.meta.env.DEV) {

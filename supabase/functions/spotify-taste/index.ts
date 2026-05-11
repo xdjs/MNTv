@@ -34,43 +34,66 @@ serve(async (req) => {
 
     const authHeader = { Authorization: `Bearer ${accessToken}` };
 
-    // Parallel: top artists (medium ~6mo + short ~4wk) and top tracks.
-    // Limits are sized to what Browse actually renders:
-    //   - 3 artists are shown in "Your artists, lately" (ArtistUpdatesSection)
-    //   - The remaining ≤5 are only used as seeds for lastfm-recommendations
-    //   - Tracks drive the "Your Top Tracks" rail (first 15)
-    // Fetching 20 artists previously meant ~12 were cold ballast.
-    const [artistsMediumRes, artistsShortRes, tracksMediumRes, profileRes] = await Promise.all([
+    // Parallel: top artists (short ~4wk × 2 windows for round-robin
+    // pool depth), top tracks (short_term — Pete 2026-05-10: "lets do
+    // short term so the rail reflects what the user has been on
+    // lately"), liked songs (Liked Songs sorted by added_at desc), and
+    // the user's profile. Limits sized to what Browse renders:
+    //   - 3 artists per session in "Your artists, lately" with
+    //     round-robin across the top-10 pool, so we need ≥10 artists
+    //   - Liked tracks fuel the Stories rail with cascade window
+    //     (15d → 30d → 60d → 365d → fall back to topTracks)
+    //   - Top tracks remain the fallback when liked is empty
+    const [artistsShortRes, artistsMediumRes, tracksShortRes, likedRes, profileRes] = await Promise.all([
+      fetch("https://api.spotify.com/v1/me/top/artists?limit=10&time_range=short_term", { headers: authHeader }),
+      // Backstop: medium_term fills out the artist pool when short_term
+      // returns < 10 (newer accounts don't have 4-week play history).
       fetch("https://api.spotify.com/v1/me/top/artists?limit=10&time_range=medium_term", { headers: authHeader }),
-      fetch("https://api.spotify.com/v1/me/top/artists?limit=5&time_range=short_term", { headers: authHeader }),
-      fetch("https://api.spotify.com/v1/me/top/tracks?limit=20&time_range=medium_term", { headers: authHeader }),
+      fetch("https://api.spotify.com/v1/me/top/tracks?limit=20&time_range=short_term", { headers: authHeader }),
+      // Liked Songs — sorted by added_at desc by Spotify's default. We
+      // request 50 to give the cascade window plenty to chew through
+      // before falling back to topTracks. Requires user-library-read
+      // scope (added 2026-05-10 in useSpotifyAuth.ts).
+      fetch("https://api.spotify.com/v1/me/tracks?limit=50", { headers: authHeader }),
       fetch("https://api.spotify.com/v1/me", { headers: authHeader }),
     ]);
 
-    if (!artistsMediumRes.ok) {
-      // Capture the actual Spotify response body + status so we can see
-      // *why* the call failed (401 expired token vs 403 missing scope vs
-      // dev-mode deprecation). Without this, the client sees a generic 500.
-      const body = await artistsMediumRes.text().catch(() => "<unreadable>");
+    // Use short_term as the primary signal; medium_term is a backstop
+    // for newer accounts. We tolerate medium failure (just an empty
+    // pool) but bail if BOTH short and medium fail — that means the
+    // token is broken.
+    if (!artistsShortRes.ok && !artistsMediumRes.ok) {
+      const body = await artistsShortRes.text().catch(() => "<unreadable>");
       console.error(
-        `[spotify-taste] /me/top/artists failed: status=${artistsMediumRes.status} body=${body.slice(0, 500)}`,
+        `[spotify-taste] /me/top/artists failed (both short & medium): status=${artistsShortRes.status} body=${body.slice(0, 500)}`,
       );
       return new Response(
         JSON.stringify({
           error: "Spotify API error",
-          spotifyStatus: artistsMediumRes.status,
+          spotifyStatus: artistsShortRes.status,
           spotifyBody: body.slice(0, 500),
         }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    const [artistsMedium, artistsShort, tracksData, profileData] = await Promise.all([
-      artistsMediumRes.json(),
+    const [artistsShort, artistsMedium, tracksData, likedData, profileData] = await Promise.all([
       artistsShortRes.ok ? artistsShortRes.json() : { items: [] },
-      tracksMediumRes.ok ? tracksMediumRes.json() : { items: [] },
+      artistsMediumRes.ok ? artistsMediumRes.json() : { items: [] },
+      tracksShortRes.ok ? tracksShortRes.json() : { items: [] },
+      likedRes.ok ? likedRes.json() : { items: [] },
       profileRes.ok ? profileRes.json() : {},
     ]);
+
+    // If liked-songs failed because the scope wasn't granted (403) or
+    // any other reason, log and continue with empty likedData. The rail
+    // falls back to topTracks downstream.
+    if (!likedRes.ok) {
+      const body = await likedRes.text().catch(() => "<unreadable>");
+      console.warn(
+        `[spotify-taste] /me/tracks (liked songs) failed: status=${likedRes.status} body=${body.slice(0, 200)} — falling back to top tracks`,
+      );
+    }
 
     // Build artist map: name → best image URL, and name → Spotify ID
     const artistImageMap: Record<string, string> = {};
@@ -105,14 +128,55 @@ serve(async (req) => {
       if (artistImageMap[name]) artistImages[name] = artistImageMap[name];
     }
 
-    // Tracks with album art and URIs
-    const topTracks = (tracksData.items || []).slice(0, 15).map((t: any) => ({
-      title: t.name as string,
-      artist: t.artists?.[0]?.name || "",
-      imageUrl: t.album?.images?.find((i: any) => i.width && i.width <= 320)?.url
-        || t.album?.images?.[0]?.url || "",
-      uri: t.uri || "",
-    }));
+    // Tracks with album art, URIs, and collaborator structure.
+    //   artist: primary (first) artist — used for cache keys + the
+    //           server's primary research target. Stable, matches
+    //           Spotify's "main" artist for that release.
+    //   collaborators: every other artist on the track. Server uses
+    //           this to anchor sparse-artist nuggets in the
+    //           collaborator's verifiable info (Pete 2026-05-08:
+    //           "Pete Rango is a collaborator on this track and there's
+    //           plenty of information on Pete Rango so no need to
+    //           hallucinate"). Display: rail shows "Ty Symph, Pete
+    //           Rango" by joining `artist + collaborators`.
+    const topTracks = (tracksData.items || []).slice(0, 15).map((t: any) => {
+      const names = Array.isArray(t.artists)
+        ? t.artists.map((a: { name?: string }) => a?.name).filter(Boolean)
+        : [];
+      const primary = names[0] || "";
+      const collaborators = names.slice(1);
+      return {
+        title: t.name as string,
+        artist: primary,
+        collaborators,
+        imageUrl: t.album?.images?.find((i: any) => i.width && i.width <= 320)?.url
+          || t.album?.images?.[0]?.url || "",
+        uri: t.uri || "",
+      };
+    });
+
+    // Liked Songs (Saved Tracks) — Spotify returns each item as
+    // `{ added_at, track }`. We carry `addedAt` so the client can
+    // window the cascade (15d → 30d → 60d → 365d → fall back to
+    // topTracks). Same { artist, collaborators } shape as topTracks
+    // so downstream code can treat them interchangeably.
+    const likedTracks = (likedData.items || []).map((item: any) => {
+      const t = item.track || {};
+      const names = Array.isArray(t.artists)
+        ? t.artists.map((a: { name?: string }) => a?.name).filter(Boolean)
+        : [];
+      const primary = names[0] || "";
+      const collaborators = names.slice(1);
+      return {
+        title: t.name as string,
+        artist: primary,
+        collaborators,
+        imageUrl: t.album?.images?.find((i: any) => i.width && i.width <= 320)?.url
+          || t.album?.images?.[0]?.url || "",
+        uri: t.uri || "",
+        addedAt: typeof item.added_at === "string" ? item.added_at : null,
+      };
+    }).filter((t: { uri: string; title: string }) => t.uri && t.title);
 
     // Flat track strings for backward compat
     const topTrackStrings = topTracks.map(
@@ -126,6 +190,7 @@ serve(async (req) => {
         artistImages,
         artistIds: artistIdMap,
         trackImages: topTracks,
+        likedTracks,
         displayName: profileData.display_name || null,
         country: profileData.country || null,
       }),

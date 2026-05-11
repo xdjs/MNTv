@@ -1,5 +1,5 @@
 import { useNavigate, useSearchParams, Navigate } from "react-router-dom";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import PageTransition from "@/components/PageTransition";
@@ -78,8 +78,49 @@ export default function Connect() {
   // redirects back to /connect → loop. With both checks, an expired
   // session falls through to ConnectInner where the user can
   // re-authenticate.
-  const { session } = useAuth();
+  const { session, loading: authLoading } = useAuth();
   const hasProfile = !!profile || !!getStoredProfile();
+  let oauthPendingFlag = false;
+  try { oauthPendingFlag = sessionStorage.getItem(SPOTIFY_OAUTH_PENDING_KEY) === "1"; } catch { /* noop */ }
+
+  // Pete 2026-05-10: returning user short-circuits via <Navigate>
+  // BEFORE ConnectInner mounts, so a useEffect inside ConnectInner
+  // would never fire. The OAuth-pending reset has to live here at
+  // the parent level. Using useLayoutEffect (not useEffect) so the
+  // tier-confirmed clear lands BEFORE Navigate's useEffect triggers
+  // the route change — otherwise PreparingExperience briefly mounts
+  // with stale tierConfirmed=true and flashes the warming spinner
+  // before re-rendering with the picker.
+  // CRITICAL: this hook MUST run before any early return to satisfy
+  // Rules of Hooks (the hook count must match across all renders).
+  useLayoutEffect(() => {
+    let pending = false;
+    try { pending = sessionStorage.getItem(SPOTIFY_OAUTH_PENDING_KEY) === "1"; } catch { /* noop */ }
+    if (!pending) return;
+    try {
+      sessionStorage.removeItem("musicnerd_tier_confirmed");
+      // Force fresh artist rotation: drop the per-session resolved
+      // cursor so resolveRotationStart() reads + advances localStorage
+      // again on the next mount. Net effect — every sign-in shows the
+      // next 3 artists in the top-10 pool.
+      sessionStorage.removeItem("musicnerd_artist_rotation_resolved");
+      // Notify TierGateContext to re-read sessionStorage and update
+      // its React state, otherwise PreparingExperience would still
+      // see tierConfirmed=true from the previous render and briefly
+      // show the warming spinner.
+      window.dispatchEvent(new Event("musicnerd:tier-confirmed"));
+    } catch { /* noop */ }
+  }, []);
+
+  // Pete 2026-05-11: while session is still resolving after OAuth
+  // return, hide ConnectInner (and its SpotifySyncingOverlay) by
+  // returning a blank screen. The bg-black matches PreparingExperience's
+  // background EXACTLY so there's no visible color jump between this
+  // fallback and the tier picker that appears next.
+  if (oauthPendingFlag && (authLoading || !session)) {
+    return <div className="min-h-screen bg-black" />;
+  }
+
   if (session && hasProfile) {
     // Route through /preparing so the artist-updates rail has a window
     // to populate before Browse renders. Without this, returning users
@@ -120,6 +161,11 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
   const isFreshSpotifyOAuth =
     oauthPendingOnMount ||
     (!!authUser && authUser.app_metadata?.provider === "spotify");
+
+  // Tier-pick reset on fresh OAuth lives at the parent Connect level
+  // now (so it fires for returning users who short-circuit via
+  // <Navigate> before ConnectInner mounts).
+
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
   const [spotifyConnecting, setSpotifyConnecting] = useState(false);
@@ -129,7 +175,8 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
   const [pendingTopTracks, setPendingTopTracks] = useState<string[] | null>(null);
   const [pendingArtistImages, setPendingArtistImages] = useState<Record<string, string>>({});
   const [pendingArtistIds, setPendingArtistIds] = useState<Record<string, string>>({});
-  const [pendingTrackImages, setPendingTrackImages] = useState<{ title: string; artist: string; imageUrl: string; uri?: string }[]>([]);
+  const [pendingTrackImages, setPendingTrackImages] = useState<{ title: string; artist: string; collaborators?: string[]; imageUrl: string; uri?: string }[]>([]);
+  const [pendingLikedTracks, setPendingLikedTracks] = useState<{ title: string; artist: string; collaborators?: string[]; imageUrl: string; uri?: string; addedAt?: string | null }[]>([]);
   const [pendingDisplayName, setPendingDisplayName] = useState<string | null>(null);
   // hasMusicToken is live from localStorage so it survives the Spotify OAuth
   // redirect (React state is wiped on remount, but the token persists).
@@ -166,6 +213,7 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
       if (patch.artistImages) setPendingArtistImages(patch.artistImages);
       if (patch.artistIds) setPendingArtistIds(patch.artistIds);
       if (patch.trackImages) setPendingTrackImages(patch.trackImages);
+      if (patch.likedTracks) setPendingLikedTracks(patch.likedTracks);
       setStep(1);
     },
   });
@@ -290,6 +338,7 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
       artistImages: Object.keys(pendingArtistImages).length ? pendingArtistImages : undefined,
       artistIds: Object.keys(pendingArtistIds).length ? pendingArtistIds : undefined,
       trackImages: pendingTrackImages.length ? pendingTrackImages : undefined,
+      likedTracks: pendingLikedTracks.length ? pendingLikedTracks : undefined,
       lastFmUsername: lastFmUsername.trim() || undefined,
       calculatedTier: t,
       // Stamp tasteRefreshedAt explicitly — pendingTop* came from the
