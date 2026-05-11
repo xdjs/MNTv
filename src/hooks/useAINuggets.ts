@@ -156,6 +156,13 @@ export function sanitizeNugget(n: Nugget): Nugget {
  * Optional fields (`embedId`, `thumbnailUrl`, etc.) aren't checked
  * here — the type marks them optional, so consumers must already
  * null-guard those reads.
+ *
+ * NOTE: URL scheme (`javascript:`, `data:`) is NOT validated here —
+ * that's a render-time concern. Every call site that renders
+ * `source.url` in an `<a href>` / `window.open()` MUST enforce the
+ * `^https?://` allowlist independently. Today that gate lives in
+ * `ExpandedUpdateModal`; if you add a new render site, replicate it
+ * there too or this turns into an XSS vector.
  */
 export function isValidSourceShape(v: unknown): v is Source {
   if (!v || typeof v !== "object" || Array.isArray(v)) return false;

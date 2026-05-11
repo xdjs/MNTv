@@ -44,32 +44,27 @@ describe("isValidSourceShape", () => {
   });
 
   it("rejects when id is missing", () => {
-    const { id, ...rest } = valid;
-    void id;
+    const { id: _id, ...rest } = valid;
     expect(isValidSourceShape(rest)).toBe(false);
   });
 
   it("rejects when type is missing", () => {
-    const { type, ...rest } = valid;
-    void type;
+    const { type: _type, ...rest } = valid;
     expect(isValidSourceShape(rest)).toBe(false);
   });
 
   it("rejects when title is missing", () => {
-    const { title, ...rest } = valid;
-    void title;
+    const { title: _title, ...rest } = valid;
     expect(isValidSourceShape(rest)).toBe(false);
   });
 
   it("rejects when publisher is missing", () => {
-    const { publisher, ...rest } = valid;
-    void publisher;
+    const { publisher: _publisher, ...rest } = valid;
     expect(isValidSourceShape(rest)).toBe(false);
   });
 
   it("rejects when url is missing — most important case, this is what crashed pages pre-guard", () => {
-    const { url, ...rest } = valid;
-    void url;
+    const { url: _url, ...rest } = valid;
     expect(isValidSourceShape(rest)).toBe(false);
   });
 
