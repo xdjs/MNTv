@@ -34,6 +34,11 @@ export function useReleasePreGen(
   useEffect(() => {
     if (!enabled) return;
     if (!groups.length) return;
+    // Pete 2026-05-11 (review note 10): track unmount so the
+    // fire-and-forget Promise chain ignores results that arrive after
+    // the component is gone. Prevents post-unmount setState warnings
+    // and keeps logs clean if the user navigates away mid-pre-gen.
+    let cancelled = false;
 
     // Walk the groups, find release / collab cards with a resolved
     // track-level URI + title (the edge function only sets these when
@@ -101,6 +106,7 @@ export function useReleasePreGen(
         ),
       ])
         .then((result) => {
+          if (cancelled) return;
           if (typeof result === "object" && result !== null && "timedOut" in result) {
             if (import.meta.env.DEV) {
               console.warn(`[ReleasePreGen] TIMEOUT after ${PREGEN_INVOKE_TIMEOUT_MS}ms — ${target.artist} - ${target.title}`);
@@ -108,11 +114,13 @@ export function useReleasePreGen(
           }
         })
         .catch((e) => {
+          if (cancelled) return;
           if (import.meta.env.DEV) {
             console.warn(`[ReleasePreGen] failed for ${target.artist} - ${target.title}:`, e);
           }
         });
     }
+    return () => { cancelled = true; };
     // Depend on groups identity — useArtistUpdates re-renders only
     // when the per-artist `updates` arrays settle, so this fires once
     // per group resolution. firedRef dedups across re-renders.

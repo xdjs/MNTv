@@ -140,10 +140,14 @@ export function useArtistUpdates(
   // re-render doesn't re-fire in-flight requests.
   const inFlightRef = useRef<Set<string>>(new Set());
 
-  // Per-session rotation cursor. Resolved once per browser session
-  // (sessionStorage-backed), so a remount of Browse within the same
-  // session reuses the same start index — no double-advancing.
-  const rotationStart = useMemo(() => resolveRotationStart(maxArtists), [maxArtists]);
+  // Per-session rotation cursor. Pete 2026-05-11 (review note 7):
+  // useRef guarantees the side-effecting resolveRotationStart() runs
+  // exactly once per mount, even under React Strict Mode where useMemo
+  // can be invoked twice. resolveRotationStart is also internally
+  // idempotent via sessionStorage caching, so a Strict-Mode double-
+  // invocation is safe — but useRef is the semantically correct tool
+  // for "compute once on mount, never again."
+  const rotationStart = useRef<number>(resolveRotationStart(maxArtists)).current;
 
   // The actual artist names we'll fetch this session: take a slice of
   // size `maxArtists` from the top-`ROTATION_POOL_SIZE` pool starting

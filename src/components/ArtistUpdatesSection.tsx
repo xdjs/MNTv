@@ -1,4 +1,4 @@
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, X, ExternalLink } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -59,11 +59,22 @@ function ArtistUpdatesSectionInner({
   const showProgress = totalCount > 0 && readyCount < totalCount;
 
   // Stable id: prefer the Gemini-supplied nuggetId, fall back to a
-  // composite of artist+kind+headline so cards without nuggetId still
-  // animate cleanly (and don't share a layoutId with other cards).
-  const cardKey = useCallback((u: ArtistUpdate) =>
-    u.nuggetId ?? `${u.artistName}::${u.kind}::${u.headline}`,
-    []);
+  // hash of artist+kind+headline. Pete 2026-05-11 (review note 12):
+  // hash instead of raw concat so headlines containing `::` (or two
+  // similar headlines from the same artist) can't produce a collision
+  // that makes Framer Motion morph the wrong card.
+  const cardKey = useCallback((u: ArtistUpdate) => {
+    if (u.nuggetId) return u.nuggetId;
+    const seed = `${u.artistName}|${u.kind}|${u.headline}`;
+    // FNV-1a 32-bit. Collision rate ~2^-32 is far below "two cards
+    // from the same artist with similar headlines."
+    let h = 0x811c9dc5;
+    for (let i = 0; i < seed.length; i++) {
+      h ^= seed.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+    return `card-${(h >>> 0).toString(36)}`;
+  }, []);
 
   // Find the currently-expanded update so we can render its expanded
   // content. Search across all groups since expandedKey is global.
@@ -300,6 +311,8 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpda
   const { kindLabel, KindIcon } = getArtistUpdateKindMeta(update.kind);
   const { chipClass } = kindStyle(update.kind);
   const img = update.artistImageUrl;
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   // CTA wording matches what the open path actually does: release /
   // collab cards land on Listen for the related track; fact cards
@@ -310,6 +323,47 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpda
       : `Open ${update.artistName}`;
 
   const titleId = `expanded-${layoutId.replace(/[^a-zA-Z0-9_-]/g, "_")}-title`;
+
+  // Pete 2026-05-11 (review note 4): WCAG focus management.
+  // - Esc dismisses the modal
+  // - Focus is moved to the close button on open and restored to the
+  //   originally-focused card on close.
+  // - Tab/Shift+Tab is contained within the modal via querySelectorAll
+  //   on focusable descendants (lighter than pulling in @radix/dialog).
+  useEffect(() => {
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+    closeBtnRef.current?.focus();
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const root = closeBtnRef.current?.closest('[role="dialog"]');
+      if (!root) return;
+      const focusable = Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      previouslyFocusedRef.current?.focus?.();
+    };
+  }, [onClose]);
 
   return (
     <>
@@ -353,6 +407,7 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpda
               {kindLabel}
             </span>
             <button
+              ref={closeBtnRef}
               onClick={onClose}
               className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white/80 hover:text-white hover:bg-black/60 active:scale-90 transition-all"
               aria-label="Close"

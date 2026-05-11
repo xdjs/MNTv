@@ -40,13 +40,14 @@ export function StoriesProvider({ children }: { children: ReactNode }) {
   const { tierConfirmed } = useTierGate();
   const tier = (profile?.calculatedTier as "casual" | "curious" | "nerd") || "casual";
 
-  // Visited-set version counter. Bumped on each "musicnerd:visited-changed"
-  // event so the source selection re-runs (and the rail recomputes its
-  // pool) when a story is tapped. Bare ref read won't trigger a render,
-  // so we mirror the changes into state.
-  const [visitedVersion, setVisitedVersion] = useState(0);
+  // Pete 2026-05-11 (review note 3): visited state is held in React
+  // state (not read inside useMemo) — useMemo can be discarded by
+  // React at any time, so doing localStorage I/O inside it is
+  // semantically unsound. We read once at mount, then update via the
+  // event listener for taps + cross-tab writes.
+  const [visitedMap, setVisitedMap] = useState<ReturnType<typeof readVisited>>(() => readVisited());
   useEffect(() => {
-    function onChanged() { setVisitedVersion((v) => v + 1); }
+    function onChanged() { setVisitedMap(readVisited()); }
     window.addEventListener("musicnerd:visited-changed", onChanged);
     window.addEventListener("storage", onChanged); // cross-tab visited writes
     return () => {
@@ -55,15 +56,12 @@ export function StoriesProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Build the source list synchronously based on current profile +
-  // visited state. This is the input to pre-gen.
-  const sourceResult = useMemo(() => {
-    const visited = readVisited();
-    return selectStorySource(profile, TARGET_STORY_COUNT, visited);
-    // visitedVersion is intentionally a dep so re-tap recomputes the
-    // cascade. profile changes (taste refresh) also re-trigger.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile, profile?.likedTracks, profile?.trackImages, visitedVersion]);
+  // Build the source list from current profile + visited state. Pure
+  // function of inputs — React can discard and recompute freely.
+  const sourceResult = useMemo(
+    () => selectStorySource(profile, TARGET_STORY_COUNT, visitedMap),
+    [profile, visitedMap],
+  );
 
   // Synthesize a stand-in profile for pre-gen — same shape, just with
   // trackImages narrowed to the cascade-selected tracks. The hook

@@ -1,5 +1,5 @@
 import { useNavigate, useSearchParams, Navigate } from "react-router-dom";
-import { useState, useEffect, useLayoutEffect, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import PageTransition from "@/components/PageTransition";
@@ -107,8 +107,15 @@ export default function Connect() {
       // Notify TierGateContext to re-read sessionStorage and update
       // its React state, otherwise PreparingExperience would still
       // see tierConfirmed=true from the previous render and briefly
-      // show the warming spinner.
-      window.dispatchEvent(new Event("musicnerd:tier-state-changed"));
+      // show the warming spinner. Pete 2026-05-11 (review note 8):
+      // queueMicrotask defers the dispatch out of the layout-effect
+      // synchronous phase so TierGateProvider's setTierConfirmed
+      // doesn't fire while Connect is still mid-render — eliminates
+      // the dev-time "Cannot update a component while rendering a
+      // different component" warning.
+      queueMicrotask(() => {
+        window.dispatchEvent(new Event("musicnerd:tier-state-changed"));
+      });
     } catch { /* noop */ }
   }, []);
 
@@ -151,13 +158,20 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
   // also clears it as belt-and-suspenders so a user who closes the tab
   // mid-tier-pick doesn't carry the flag into the next sign-in.
   const { user: authUser } = useAuth();
-  const oauthPendingOnMount = useMemo(() => {
-    try {
-      return sessionStorage.getItem(SPOTIFY_OAUTH_PENDING_KEY) === "1";
-    } catch {
-      return false;
-    }
-  }, []);
+  // Pete 2026-05-11 (review note 2): useMemo with empty deps is NOT a
+  // stable initializer — React is free to discard and recompute, which
+  // would re-read sessionStorage AFTER the flag has been cleared by
+  // handleTierSelect. Using useRef.current pins the value to the first
+  // mount.
+  const oauthPendingOnMount = useRef<boolean>(
+    (() => {
+      try {
+        return sessionStorage.getItem(SPOTIFY_OAUTH_PENDING_KEY) === "1";
+      } catch {
+        return false;
+      }
+    })(),
+  ).current;
   const isFreshSpotifyOAuth =
     oauthPendingOnMount ||
     (!!authUser && authUser.app_metadata?.provider === "spotify");
