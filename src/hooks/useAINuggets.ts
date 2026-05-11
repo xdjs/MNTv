@@ -7,10 +7,9 @@ import { getSeedListenNuggets } from "@/data/seedNuggets";
 import { isValidSourceShape } from "@/lib/sourceShape";
 import { isSafeUrl } from "@/lib/urlSafety";
 
-// Back-compat re-export. The validator lives in @/lib/sourceShape
-// now (so non-hook utilities can use it without crossing the
-// hook/lib boundary). The existing test file and any older imports
-// from this module keep working.
+// Back-compat re-export for any consumer that imported
+// isValidSourceShape from this module before it moved to
+// @/lib/sourceShape. New callers should prefer the lib path.
 export { isValidSourceShape };
 
 interface AINuggetData {

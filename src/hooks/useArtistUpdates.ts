@@ -73,8 +73,11 @@ const NEXT_CURSOR_CAP = ROTATION_POOL_SIZE * 1000;
  *
  * Storage:
  *   - localStorage cursor: offset that advances each session, capped
- *     at NEXT_CURSOR_CAP (10× the pool) when written. Read on the
- *     first call of each session.
+ *     at NEXT_CURSOR_CAP (1000× the pool) when written. Read on the
+ *     first call of each session. The cap-wrap is intentionally
+ *     non-monotonic (e.g. 9999 → 2 when sliceSize=3) — the slice-
+ *     time modulo collapses any residue to an equivalent pool index,
+ *     so a backward jump produces no visible rotation glitch.
  *   - sessionStorage resolved value: caches the start index for this
  *     session so multiple Browse mounts don't double-advance.
  *
