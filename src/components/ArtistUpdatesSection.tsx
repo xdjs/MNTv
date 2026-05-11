@@ -1,6 +1,7 @@
-import { memo } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2 } from "lucide-react";
+import { Loader2, X, ExternalLink } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import type { ArtistUpdate, ArtistUpdateGroup } from "@/hooks/useArtistUpdates";
 import { serviceParamFromProfile, withAppleStorefront } from "@/lib/appleStorefront";
 import { getArtistUpdateKindMeta } from "@/lib/artistUpdateKind";
@@ -46,12 +47,34 @@ function ArtistUpdatesSectionInner({
 }: Props) {
   const navigate = useNavigate();
   const activeService = serviceParamFromProfile(profile?.streamingService);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  // Stable onClose reference so ExpandedUpdateModal's focus-trap
+  // effect doesn't re-fire on every parent re-render (which would
+  // pull focus back to the close button mid-interaction whenever
+  // readyCount/groups update from useArtistUpdatesContext).
+  const modalOnClose = useCallback(() => setExpandedKey(null), []);
 
   if (groups.length === 0) return null;
 
   const showProgress = totalCount > 0 && readyCount < totalCount;
 
-  function openArtistAtNugget(update: ArtistUpdate) {
+  // cardKey is a pure function — see module-level definition below.
+
+  // Find the currently-expanded update so we can render its expanded
+  // content. Linear scan across groups since expandedKey is global.
+  // Worst case is O(artists × updates_per_artist) ≈ 3 × 3 = 9 today.
+  // Fine at this scale; if DEFAULT_MAX_ARTISTS or per-artist cap grow
+  // significantly, switch to a Map keyed by cardKey built once per
+  // render.
+  let expandedUpdate: ArtistUpdate | null = null;
+  if (expandedKey) {
+    for (const g of groups) {
+      const found = g.updates?.find((u) => cardKey(u) === expandedKey);
+      if (found) { expandedUpdate = found; break; }
+    }
+  }
+
+  const openArtistAtNugget = useCallback((update: ArtistUpdate) => {
     // New-release / collab cards: tap should land on Listen for the
     // released track, not the artist profile. We need at minimum a
     // track-level title from the edge function (set only when it
@@ -93,7 +116,16 @@ function ArtistUpdatesSectionInner({
       profile?.streamingService,
     );
     navigate(path);
-  }
+  }, [profile?.streamingService, activeService, artistIds, navigate]);
+
+  // Stable modal onOpen so the memoized ExpandedUpdateModal isn't
+  // forced to re-render every parent tick. Depends on expandedUpdate
+  // (correct: closes over which card to open) and openArtistAtNugget.
+  const modalOnOpen = useCallback(() => {
+    if (!expandedUpdate) return;
+    setExpandedKey(null);
+    openArtistAtNugget(expandedUpdate);
+  }, [expandedUpdate, openArtistAtNugget]);
 
   return (
     <section className="mb-6 md:mb-10">
@@ -120,11 +152,22 @@ function ArtistUpdatesSectionInner({
             <ArtistRow
               key={group.artistName}
               group={group}
-              onOpen={openArtistAtNugget}
+              onExpand={(u) => setExpandedKey(cardKey(u))}
             />
           );
         })}
       </div>
+
+      <AnimatePresence>
+        {expandedUpdate && (
+          <ExpandedUpdateModalMemoized
+            update={expandedUpdate}
+            layoutId={cardKey(expandedUpdate)}
+            onClose={modalOnClose}
+            onOpen={modalOnOpen}
+          />
+        )}
+      </AnimatePresence>
     </section>
   );
 }
@@ -132,14 +175,31 @@ function ArtistUpdatesSectionInner({
 const ArtistUpdatesSection = memo(ArtistUpdatesSectionInner);
 export default ArtistUpdatesSection;
 
+// ── cardKey ───────────────────────────────────────────────────────────
+// Stable id for a card — prefers the Gemini-supplied nuggetId, falls
+// back to an FNV-1a hash of artist|kind|headline (collision rate
+// ~2^-32, far below "two cards from the same artist with similar
+// headlines" can produce). Pure function, module-level so nothing in
+// the render tree allocates a new wrapper each pass.
+function cardKey(u: ArtistUpdate): string {
+  if (u.nuggetId) return u.nuggetId;
+  const seed = `${u.artistName}|${u.kind}|${u.headline}`;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return `card-${(h >>> 0).toString(36)}`;
+}
+
 // ── Per-artist row ────────────────────────────────────────────────────
 
 interface ArtistRowProps {
   group: ArtistUpdateGroup;
-  onOpen: (u: ArtistUpdate) => void;
+  onExpand: (u: ArtistUpdate) => void;
 }
 
-function ArtistRow({ group, onOpen }: ArtistRowProps) {
+function ArtistRow({ group, onExpand }: ArtistRowProps) {
   const loading = group.updates === null;
   const updates = group.updates ?? [];
   // Prefer a fact update's image for the row header avatar — that's the
@@ -175,9 +235,10 @@ function ArtistRow({ group, onOpen }: ArtistRowProps) {
           ? Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
           : updates.map((u) => (
               <UpdateCard
-                key={u.nuggetId ?? `${u.kind}-${u.headline}`}
+                key={cardKey(u)}
+                layoutId={cardKey(u)}
                 update={u}
-                onOpen={() => onOpen(u)}
+                onClick={() => onExpand(u)}
               />
             ))}
       </div>
@@ -189,71 +250,249 @@ function ArtistRow({ group, onOpen }: ArtistRowProps) {
 
 interface UpdateCardProps {
   update: ArtistUpdate;
-  onOpen: () => void;
+  layoutId: string;
+  onClick: () => void;
 }
 
-function UpdateCard({ update, onOpen }: UpdateCardProps) {
+// Image-backed for every kind. Tap morphs into ExpandedUpdateModal
+// via Framer Motion layoutId — no immediate navigation.
+function UpdateCard({ update, layoutId, onClick }: UpdateCardProps) {
   const { kindLabel, KindIcon } = getArtistUpdateKindMeta(update.kind);
-  const { chipClass, borderAccent, cardBg, hoverGlow } = kindStyle(update.kind);
+  const { chipClass } = kindStyle(update.kind);
+  const img = update.artistImageUrl;
 
-  // Release cards get a "poster" treatment — album art fills the tile
-  // with a dark gradient so the title lockup is legible on any image.
-  // Fact cards stay text-led but pick up a kind-tinted left border and
-  // subtle glow so the row has visual rhythm instead of a uniform wall.
-  if (update.kind === "new-release" && update.artistImageUrl) {
-    return (
-      <button
-        onClick={onOpen}
-        className="relative shrink-0 w-[280px] md:w-[320px] h-44 md:h-48 text-left rounded-2xl overflow-hidden group active:scale-[0.98] transition-transform"
-        aria-label={`${kindLabel}: ${update.headline}`}
-      >
-        <img
-          src={update.artistImageUrl}
+  return (
+    <motion.button
+      layoutId={layoutId}
+      onClick={onClick}
+      className="relative shrink-0 w-[280px] md:w-[320px] h-44 md:h-48 text-left rounded-2xl overflow-hidden group active:scale-[0.98] transition-transform"
+      aria-label={`${kindLabel}: ${update.headline}`}
+    >
+      {img ? (
+        <motion.img
+          layoutId={`${layoutId}::img`}
+          src={img}
           alt=""
           className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500"
           onError={(e) => {
             (e.currentTarget as HTMLImageElement).style.display = "none";
           }}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/10" />
-        <div className="absolute inset-0 ring-1 ring-inset ring-white/10 rounded-2xl pointer-events-none" />
-        <span className={`absolute top-3 left-3 inline-flex items-center gap-1 text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full backdrop-blur-sm ${chipClass}`}>
-          <KindIcon className="w-3 h-3" />
-          {kindLabel}
-        </span>
-        <div className="absolute bottom-0 left-0 right-0 p-4">
-          <h3 className="text-base md:text-lg font-black text-white leading-tight line-clamp-2 mb-1 drop-shadow">
-            {update.headline}
-          </h3>
-          <p className="text-xs text-white/70 leading-relaxed line-clamp-1">
-            {update.body}
-          </p>
-        </div>
-      </button>
-    );
-  }
-
-  return (
-    <button
-      onClick={onOpen}
-      className={`shrink-0 w-[280px] md:w-[320px] text-left rounded-2xl bg-gradient-to-br ${cardBg} border-l-4 ${borderAccent} border-y border-r border-white/10 p-5 hover:border-white/25 active:scale-[0.98] transition-all ${hoverGlow}`}
-      aria-label={`${kindLabel}: ${update.headline}`}
-    >
-      <div className="flex items-center gap-2 mb-3">
-        <span className={`inline-flex items-center gap-1 text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full ${chipClass}`}>
-          <KindIcon className="w-3 h-3" />
-          {kindLabel}
-        </span>
+      ) : (
+        <motion.div
+          layoutId={`${layoutId}::img`}
+          className="absolute inset-0 bg-gradient-to-br from-rose-500/30 via-violet-500/20 to-sky-500/15"
+        />
+      )}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-black/10" />
+      <div className="absolute inset-0 ring-1 ring-inset ring-white/10 rounded-2xl pointer-events-none" />
+      <span className={`absolute top-3 left-3 inline-flex items-center gap-1 text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full backdrop-blur-sm ${chipClass}`}>
+        <KindIcon className="w-3 h-3" />
+        {kindLabel}
+      </span>
+      <div className="absolute bottom-0 left-0 right-0 p-4">
+        <h3 className="text-base md:text-lg font-black text-white leading-tight line-clamp-2 mb-1 drop-shadow">
+          {update.headline}
+        </h3>
+        <p className="text-xs text-white/70 leading-relaxed line-clamp-1">
+          {update.body}
+        </p>
       </div>
-      <h3 className="text-base md:text-lg font-black text-white leading-snug line-clamp-3 mb-2">
-        {update.headline}
-      </h3>
-      <p className="text-sm text-white/65 leading-relaxed line-clamp-3">
-        {update.body}
-      </p>
-    </button>
+    </motion.button>
   );
 }
+
+// ── Expanded popup ────────────────────────────────────────────────────
+
+interface ExpandedUpdateModalProps {
+  update: ArtistUpdate;
+  layoutId: string;
+  onClose: () => void;
+  onOpen: () => void;
+}
+
+function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpdateModalProps) {
+  const { kindLabel, KindIcon } = getArtistUpdateKindMeta(update.kind);
+  const { chipClass } = kindStyle(update.kind);
+  const img = update.artistImageUrl;
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
+  // Lock document scroll while the modal is open. Without this, the
+  // Browse page scrolls behind the open modal on mobile/trackpad —
+  // the modal itself uses position:fixed so its position is stable,
+  // but the body underneath remains scrollable and the user can
+  // accidentally scroll the rail behind the dialog.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  // CTA wording matches what the open path actually does: release /
+  // collab cards land on Listen for the related track; fact cards
+  // open the artist profile.
+  const ctaLabel =
+    (update.kind === "new-release" || update.kind === "collab") && update.relatedTrackTitle
+      ? `Listen to "${update.relatedTrackTitle}"`
+      : `Open ${update.artistName}`;
+
+  const titleId = `expanded-${layoutId.replace(/[^a-zA-Z0-9_-]/g, "_")}-title`;
+
+  // WCAG focus management: Esc dismisses, focus moves to close button
+  // on open and restores on close, Tab/Shift+Tab cycles within the
+  // dialog only.
+  useEffect(() => {
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+    closeBtnRef.current?.focus();
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      // role="dialog" lives on the inner pointer-events-auto card; the
+      // outer flex wrapper is just a centering layer.
+      const root = closeBtnRef.current?.closest('[role="dialog"]');
+      // (closest('[role="dialog"]') still finds the inner card after
+      // the ARIA move because the close button is a descendant.)
+      if (!root) return;
+      const focusable = Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      previouslyFocusedRef.current?.focus?.();
+    };
+  }, [onClose]);
+
+  return (
+    <>
+      <motion.div
+        className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <motion.div
+        layoutId={layoutId}
+        className="fixed inset-0 z-[61] flex items-center justify-center p-4 pointer-events-none"
+      >
+        <motion.div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          className="relative w-full max-w-md max-h-[85vh] rounded-3xl overflow-hidden bg-black ring-1 ring-white/10 shadow-[0_20px_80px_rgba(0,0,0,0.6)] pointer-events-auto flex flex-col"
+        >
+          {/* Hero image — keeps the same layoutId for the morph */}
+          <div className="relative h-56 md:h-64 flex-shrink-0">
+            {img ? (
+              <motion.img
+                layoutId={`${layoutId}::img`}
+                src={img}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            ) : (
+              <motion.div
+                layoutId={`${layoutId}::img`}
+                className="absolute inset-0 bg-gradient-to-br from-rose-500/30 via-violet-500/20 to-sky-500/15"
+              />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
+            <span className={`absolute top-3 left-3 inline-flex items-center gap-1 text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full backdrop-blur-sm ${chipClass}`}>
+              <KindIcon className="w-3 h-3" />
+              {kindLabel}
+            </span>
+            <button
+              ref={closeBtnRef}
+              onClick={onClose}
+              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white/80 hover:text-white hover:bg-black/60 active:scale-90 transition-all"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <motion.div
+            className="overflow-y-auto px-5 pt-4 pb-5 scrollbar-hide"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.18, duration: 0.25 }}
+          >
+            <p className="text-[10px] uppercase tracking-widest text-white/40 mb-2">
+              {update.artistName}
+            </p>
+            <h3 id={titleId} className="text-xl font-black text-white leading-tight mb-3">
+              {update.headline}
+            </h3>
+            <p className="text-sm text-white/75 leading-relaxed mb-4">
+              {update.body}
+            </p>
+
+            {update.source?.title && (
+              <p className="text-[11px] text-white/40 mb-4">
+                Source: {update.source.publisher
+                  ? `${update.source.title} · ${update.source.publisher}`
+                  : update.source.title}
+              </p>
+            )}
+
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={onOpen}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary/25 text-primary text-sm font-semibold hover:bg-primary/35 active:scale-95 transition-all"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                {ctaLabel}
+              </button>
+              {update.source?.url && /^https?:\/\//i.test(update.source.url) && (
+                // Scheme guard: only render the anchor if the URL is
+                // http(s). The url originates from Exa / Gemini output
+                // — without this a hallucinated `javascript:` or
+                // `data:` scheme would be a navigable XSS vector.
+                <a
+                  href={update.source.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/10 text-white/70 text-sm hover:bg-white/15 active:scale-95 transition-all"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Source
+                </a>
+              )}
+            </div>
+          </motion.div>
+        </motion.div>
+      </motion.div>
+    </>
+  );
+}
+
+// Memoized export. The parent passes a stable onClose (useCallback)
+// but onOpen is recreated each render — without memo the modal would
+// re-render on every parent re-render, which is harmless on its own
+// but adds noise during layout-shared transitions.
+const ExpandedUpdateModalMemoized = memo(ExpandedUpdateModal);
 
 // Browse-specific styling per kind. Label + icon come from the shared
 // helper in src/lib/artistUpdateKind.ts so adding a new kind only

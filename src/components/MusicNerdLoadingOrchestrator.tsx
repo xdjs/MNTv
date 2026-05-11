@@ -119,13 +119,20 @@ export default function MusicNerdLoadingOrchestrator({
       clearTimers();
       setFlyCoords(null);
       isRestoredRef.current = false;
-      // Check cache for new track
+      // Check cache for new track. rapid skip
+      // sequences landed on a track whose phaseCache said "ready"
+      // (visited before), so we restored straight to ready and the
+      // researching pill never showed — even though aiLoading was
+      // true because a fresh generation was in flight. The fix:
+      // when aiLoading is currently true, drop ANY cached
+      // post-hidden phase and let the state machine drive from
+      // hidden → pill → ready normally.
       const cached = phaseCache.get(trackId);
-      if (cached && cached !== "hidden") {
+      if (cached && cached !== "hidden" && !aiLoadingRef.current) {
         const restored = cached === "ready" ? "ready"
-          : cached === "pulsating" ? (aiLoadingRef.current ? "pulsating" : "ready")
-          : cached === "morphFly" ? (aiLoadingRef.current ? "pulsating" : "ready")
-          : cached === "pill" ? (aiLoadingRef.current ? "pill" : "ready")
+          : cached === "pulsating" ? "ready"
+          : cached === "morphFly" ? "ready"
+          : cached === "pill" ? "ready"
           : "hidden";
         isRestoredRef.current = restored !== "hidden";
         setPhaseAndRef(restored);
@@ -166,6 +173,24 @@ export default function MusicNerdLoadingOrchestrator({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, hasNuggets, aiLoading]);
+
+  // ── aiLoading flips false→true mid-track: re-enter the state machine ──
+  // when skipping tracks, aiLoading sometimes
+  // momentarily lags one tick behind the trackId change. The track
+  // -change effect ran with stale aiLoading=false, drove phase to
+  // "ready" instantly, and never showed the researching pill — even
+  // though aiLoading flipped true a tick later for the new track's
+  // generation. Detect the false→true transition and force phase
+  // back to "hidden" so the state machine schedules the pill again.
+  const prevAiLoadingRef = useRef(aiLoading);
+  useEffect(() => {
+    const prev = prevAiLoadingRef.current;
+    prevAiLoadingRef.current = aiLoading;
+    if (!prev && aiLoading && phaseRef.current !== "hidden") {
+      clearTimers();
+      setPhaseAndRef("hidden");
+    }
+  }, [aiLoading, clearTimers, setPhaseAndRef]);
 
   // ── aiLoading goes false during pulsating → ready ──
   useEffect(() => {

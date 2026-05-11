@@ -3,36 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import type { Story } from "@/hooks/usePreGeneratedStories";
 import { usePlayer } from "@/contexts/PlayerContext";
+import { readVisited, markVisited, type VisitedMap } from "@/lib/storyVisited";
 
-// Persisted visited set: Instagram-style "watched" state. Stories the user
-// has tapped (or is currently playing) get dimmed and move to the end of
-// the rail. Persists across reload for 24h so reopening the app doesn't
-// reset the visual hierarchy.
-const VISITED_KEY = "musicnerd_visited_stories";
-const VISITED_TTL_MS = 24 * 60 * 60 * 1000;
-
-function readVisited(): Map<string, number> {
-  try {
-    const raw = localStorage.getItem(VISITED_KEY);
-    if (!raw) return new Map();
-    const parsed = JSON.parse(raw) as Record<string, number>;
-    const now = Date.now();
-    const out = new Map<string, number>();
-    for (const [k, ts] of Object.entries(parsed)) {
-      if (typeof ts === "number" && now - ts < VISITED_TTL_MS) out.set(k, ts);
-    }
-    return out;
-  } catch {
-    return new Map();
-  }
-}
-function writeVisited(m: Map<string, number>): void {
-  try {
-    const obj: Record<string, number> = {};
-    m.forEach((v, k) => { obj[k] = v; });
-    localStorage.setItem(VISITED_KEY, JSON.stringify(obj));
-  } catch { /* noop */ }
-}
+// Visited tracking shared with StoriesContext via src/lib/storyVisited.
+// Tapping a story marks it visited and removes it from the rail; the
+// cascade selector refills the slot from the next eligible liked track.
 
 /**
  * StoriesRail: Instagram-style horizontal row of "stories" at the top of
@@ -61,16 +36,33 @@ function listenHrefForStory(s: Story): string {
 export default function StoriesRail({ stories }: StoriesRailProps) {
   const navigate = useNavigate();
   const { currentTrack } = usePlayer();
-  const [visited, setVisited] = useState<Map<string, number>>(() => readVisited());
+  const [visited, setVisited] = useState<VisitedMap>(() => readVisited());
   // Track which stories have JUST flipped to ready so we can pulse them once.
   // Previous-ready state persists in a ref so we don't pulse on every render.
   const prevReadyRef = useRef<Set<string>>(new Set());
   const [justReadyIds, setJustReadyIds] = useState<Set<string>>(new Set());
 
+  // Listen for visited writes from anywhere (handleTap below, the
+  // currently-playing-track effect, or another tab) so the rail stays
+  // in sync with what StoriesContext's cascade is using.
+  useEffect(() => {
+    function refresh() { setVisited(readVisited()); }
+    window.addEventListener("musicnerd:visited-changed", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("musicnerd:visited-changed", refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+
   // Auto-mark any story as visited if it matches the currently-playing track.
   // Catches the case where the user navigated to the Listen page via Browse
-  // tiles or search (not the story tap), so the story's visual state still
-  // reflects "you've engaged with this track."
+  // tiles or search (not the story tap).
+  // Functional updater so we don't have to list `visited` as a dep —
+  // listing visited would make this effect re-run on every tap (which
+  // updates visited), and even though the early-return inside guards
+  // against an infinite loop, the cleaner form is to receive `prev`
+  // and let setVisited decide whether to bail.
   useEffect(() => {
     if (!currentTrack) return;
     const match = stories.find(
@@ -81,25 +73,22 @@ export default function StoriesRail({ stories }: StoriesRailProps) {
     if (!match) return;
     setVisited((prev) => {
       if (prev.has(match.trackKey)) return prev;
-      const next = new Map(prev);
-      next.set(match.trackKey, Date.now());
-      writeVisited(next);
-      return next;
+      return markVisited(match.trackKey, prev);
     });
   }, [currentTrack?.artist, currentTrack?.title, stories]);
 
-  // Sort unwatched first, watched last — mirrors Instagram's visual hierarchy
-  // where new stories crowd the front and seen ones trail behind.
-  const sorted = useMemo(() => {
-    return [...stories].sort((a, b) => {
-      const av = visited.has(a.trackKey) ? 1 : 0;
-      const bv = visited.has(b.trackKey) ? 1 : 0;
-      return av - bv;
-    });
-  }, [stories, visited]);
+  // Hide visited stories entirely (spec: "it should
+  // clear from my stories"). StoriesContext's cascade selector then
+  // refills the slot with the next eligible liked track. Until the
+  // cascade hands a fresh story, the rail just renders fewer cards —
+  // no dimmed placeholders.
+  const visibleStories = useMemo(
+    () => stories.filter((s) => !visited.has(s.trackKey)),
+    [stories, visited],
+  );
 
   useEffect(() => {
-    const nowReady = new Set(stories.filter((s) => s.ready).map((s) => s.trackKey));
+    const nowReady = new Set(visibleStories.filter((s) => s.ready).map((s) => s.trackKey));
     const newlyReady = new Set<string>();
     nowReady.forEach((k) => { if (!prevReadyRef.current.has(k)) newlyReady.add(k); });
     prevReadyRef.current = nowReady;
@@ -119,21 +108,21 @@ export default function StoriesRail({ stories }: StoriesRailProps) {
       });
     }, 1200);
     return () => clearTimeout(timer);
-  }, [stories]);
+  }, [visibleStories]);
 
-  if (stories.length === 0) return null;
+  if (visibleStories.length === 0) return null;
 
   const handleTap = (s: Story) => {
-    setVisited((prev) => {
-      const next = new Map(prev);
-      next.set(s.trackKey, Date.now());
-      writeVisited(next);
-      return next;
-    });
+    // Update local state synchronously with the returned map so the
+    // story disappears in the same React tick as the navigation. The
+    // event listener also fires from markVisited but is async — if
+    // navigate ever becomes soft/animated, the rail would briefly
+    // flicker the still-visible story without this synchronous call.
+    setVisited(markVisited(s.trackKey, visited));
     navigate(listenHrefForStory(s));
   };
 
-  const warmingCount = stories.filter((s) => !s.ready).length;
+  const warmingCount = visibleStories.filter((s) => !s.ready).length;
 
   return (
     <div className="mb-4 md:mb-6">
@@ -153,25 +142,18 @@ export default function StoriesRail({ stories }: StoriesRailProps) {
           msOverflowStyle: "none",
         }}
       >
-        {sorted.map((s) => {
-          const isVisited = visited.has(s.trackKey);
+        {visibleStories.map((s) => {
           const justReady = justReadyIds.has(s.trackKey);
           return (
             <button
               key={s.trackKey}
               onClick={() => handleTap(s)}
-              className={`flex flex-col items-center shrink-0 active:scale-95 transition-transform ${
-                isVisited ? "opacity-60" : ""
-              }`}
+              className="flex flex-col items-center shrink-0 active:scale-95 transition-transform"
               aria-label={`Open ${s.artist} — ${s.title}`}
             >
               <div
                 className={`relative w-16 h-16 md:w-20 md:h-20 rounded-full p-[2px] transition-colors ${
-                  s.ready
-                    ? isVisited
-                      ? "bg-white/20"
-                      : "bg-gradient-to-tr from-rose-500 to-pink-400"
-                    : "bg-white/15"
+                  s.ready ? "bg-gradient-to-tr from-rose-500 to-pink-400" : "bg-white/15"
                 } ${justReady ? "animate-pulse-once" : ""}`}
                 style={justReady ? { animation: "mn-pulse 0.9s ease-out 1" } : undefined}
               >
@@ -193,7 +175,7 @@ export default function StoriesRail({ stories }: StoriesRailProps) {
                 )}
               </div>
               <p className="mt-2 text-[11px] text-white/80 max-w-[80px] truncate">
-                {s.artist}
+                {[s.artist, ...(s.collaborators ?? [])].filter(Boolean).join(", ")}
               </p>
             </button>
           );

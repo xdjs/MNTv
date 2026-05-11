@@ -16,7 +16,8 @@ const ArtistProfile = lazy(() => import("./pages/ArtistProfile"));
 const AlbumDetail = lazy(() => import("./pages/AlbumDetail"));
 const Listen = lazy(() => import("./pages/Listen"));
 const Profile = lazy(() => import("./pages/Profile"));
-const PreparingExperience = lazy(() => import("./pages/PreparingExperience"));
+// Eager-loaded: avoids Suspense flash on the OAuth → tier-picker handoff.
+import PreparingExperience from "./pages/PreparingExperience";
 import { AuthProvider } from "./contexts/AuthContext";
 import { PlayerProvider } from "./contexts/PlayerContext";
 import { StoriesProvider } from "./contexts/StoriesContext";

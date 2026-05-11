@@ -33,7 +33,10 @@ interface TasteData {
   topTracks?: string[];
   artistImages?: Record<string, string>;
   artistIds?: Record<string, string>;
-  trackImages?: { title: string; artist: string; imageUrl: string }[];
+  trackImages?: UserProfile["trackImages"];
+  /** Liked Songs (added 2026-05-10). Drives Stories rail with cascade
+   *  window. Persisted in the same per-service blob so no migration. */
+  likedTracks?: UserProfile["likedTracks"];
   /** ISO timestamp of the last successful Spotify-taste fetch. Persisted
    *  inside the per-service blob so the DB column shape stays unchanged. */
   refreshedAt?: string;
@@ -99,6 +102,7 @@ async function loadProfileFromDB(userId: string): Promise<UserProfile | null> {
     artistImages: taste?.artistImages ?? undefined,
     artistIds: taste?.artistIds ?? undefined,
     trackImages: taste?.trackImages ?? undefined,
+    likedTracks: taste?.likedTracks ?? undefined,
     tasteRefreshedAt: taste?.refreshedAt ?? undefined,
     calculatedTier: (data.tier as UserProfile["calculatedTier"]) || "casual",
   };
@@ -134,6 +138,7 @@ async function saveProfileToDB(p: UserProfile, userId: string): Promise<void> {
           artistImages: p.artistImages ?? {},
           artistIds: p.artistIds ?? {},
           trackImages: p.trackImages ?? [],
+          likedTracks: p.likedTracks ?? [],
           refreshedAt: p.tasteRefreshedAt,
         }
       : null;
@@ -294,6 +299,7 @@ export async function applyTastePatch(
     artistImages?: Record<string, string>;
     artistIds?: Record<string, string>;
     trackImages?: UserProfile["trackImages"];
+    likedTracks?: UserProfile["likedTracks"];
     spotifyDisplayName?: string;
   },
   userId: string | null
@@ -307,6 +313,7 @@ export async function applyTastePatch(
     artistImages: patch.artistImages ?? current.artistImages,
     artistIds: patch.artistIds ?? current.artistIds,
     trackImages: patch.trackImages ?? current.trackImages,
+    likedTracks: patch.likedTracks ?? current.likedTracks,
     spotifyDisplayName: patch.spotifyDisplayName ?? current.spotifyDisplayName,
     tasteRefreshedAt: new Date().toISOString(),
   };

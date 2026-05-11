@@ -95,6 +95,10 @@ export function useSignOut() {
     // explicit removal keeps behavior consistent if that reload is
     // ever swapped for a soft navigate.
     sessionStorage.removeItem("musicnerd_tier_confirmed");
+    // Same logic for the Spotify OAuth-pending flag set by
+    // signInWithSpotify — must clear so the next sign-in doesn't pick
+    // up a stale "we're mid-OAuth" signal on Connect mount.
+    sessionStorage.removeItem("musicnerd_spotify_oauth_pending");
 
     // 5. Hard navigate. See module-level comment for why a full reload
     //    instead of React Router navigate().

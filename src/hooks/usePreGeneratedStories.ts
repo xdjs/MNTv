@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { usePlayer } from "@/contexts/PlayerContext";
+import { buildPreGenCacheKey, preparePreGenCacheEntry, PREGEN_INVOKE_TIMEOUT_MS } from "@/lib/preGenCachePrefill";
 import type { UserProfile } from "@/mock/types";
 
 // Each story = one user-top-track worth of pre-generated nuggets. Tapping a
@@ -9,7 +11,8 @@ import type { UserProfile } from "@/mock/types";
 // circle uses it to show "hot" vs "still warming" at a glance.
 export interface Story {
   trackKey: string;            // stable id = "artist::title"
-  artist: string;
+  artist: string;              // primary artist (used for cache key)
+  collaborators?: string[];    // other artists on the track
   title: string;
   imageUrl: string;
   uri?: string;                // spotify:track:... or apple:song:...
@@ -27,6 +30,8 @@ interface PreGenOptions {
 // users engage with the first few stories anyway; generating 8 on
 // cold sign-in was a lot of Gemini traffic we don't need.
 const DEFAULT_MAX_STORIES = 5;
+// 2 parallel — higher concurrency saturates Gemini cold-start and
+// pushes individual calls past the 95s ceiling.
 const DEFAULT_CONCURRENCY = 2;
 
 // Cross-session dedup — persists "we already fired pre-gen for this
@@ -88,10 +93,24 @@ export function usePreGeneratedStories(
 ): { stories: Story[]; loading: boolean } {
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(false);
-  // Track tracks we've already kicked off generation for in this session so
-  // re-renders (profile hydration, tier switch) don't retrigger the same
-  // pre-gen request. Keyed by `artist::title::tier`.
-  const kickedOffRef = useRef<Set<string>>(new Set());
+  // Seed the in-memory client cache from pre-gen response so a tap
+  // is instant even if the DB cache write silently failed server-side.
+  const { setNuggetCache } = usePlayer();
+
+  // Content-stable signature of the slice we'll seed from. Used as
+  // the effect's dep instead of the array reference so re-emits from
+  // useUserProfile (DB hydration, background taste refresh, applyTastePatch)
+  // that don't actually change the top-N content don't re-run the effect
+  // and cancel in-flight pre-gen. Pete's diagnostic console (2026-05-08)
+  // showed 3 cleanup cycles in 30 seconds — every cleanup killed
+  // in-flight invokes mid-Gemini, which is why stories stayed warming
+  // even though their server-side calls eventually completed. Mirror
+  // of the same pattern used in useArtistUpdates.
+  const trackSig = (profile?.trackImages ?? [])
+    .filter((t) => !!t.uri)
+    .slice(0, maxStories)
+    .map((t) => `${t.artist}::${t.title}::${t.uri}`)
+    .join("|");
   // Detect tier switches (vs initial mount). When the user explicitly
   // changes tier — Casual → Curious — they want to see ALL stories
   // re-warm with the new depth, not silently inherit any stray cache row
@@ -107,18 +126,17 @@ export function usePreGeneratedStories(
       setStories([]);
       return;
     }
+    if (import.meta.env.DEV) console.log(`[Stories] effect run — ${profile.trackImages.length} top tracks, tier=${tier}`);
     const tierSwitched = prevTierRef.current !== null && prevTierRef.current !== tier;
     prevTierRef.current = tier;
-    // On a tier switch, drop kickedOffRef entries scoped to the new tier
-    // so we'll actually re-fire pre-gen. Without this, a user who toggles
-    // curious → casual → curious would see the second curious switch
-    // bail in runThrottled (kicked-off in the first curious run) and the
-    // skipped cache lookup leaves stories stuck in warming forever.
-    if (tierSwitched) {
-      kickedOffRef.current.forEach((key) => {
-        if (key.endsWith(`::${tier}`)) kickedOffRef.current.delete(key);
-      });
-    }
+    // Per-effect-run dedup. Local to this effect so a re-run (profile
+    // re-hydration changing trackImages identity, etc.) starts fresh
+    // and re-fires invokes that the previous cancelled run never
+    // completed. The previous cross-run ref-based dedup created a
+    // stuck-warming bug: cancelled run added entries → re-run saw
+    // them as already kicked off → skipped → setStories(ready) from
+    // run 1 never fired → infinite warming.
+    const kickedOffThisRun = new Set<string>();
 
     // Seed stories from the top-tracks list, preserving order. Require a
     // URI so tapping the story can actually start playback — otherwise we'd
@@ -129,6 +147,7 @@ export function usePreGeneratedStories(
       .map((t) => ({
         trackKey: `${t.artist}::${t.title}`,
         artist: t.artist,
+        collaborators: t.collaborators,
         title: t.title,
         imageUrl: t.imageUrl,
         uri: t.uri,
@@ -184,37 +203,42 @@ export function usePreGeneratedStories(
             }
           });
 
-          // Flip ready flags on stories that have cached nuggets OR that we've
-          // pre-gen'd within the last 24h (treat them as hot without re-querying
-          // every reload, even if cache key lookup happened to miss).
+          // Flip ready flags ONLY for stories with a verified cache row
+          // (status='ready' AND non-empty nuggets). The ledger is used
+          // below to skip RE-FIRING pre-gen, but never to mark a story
+          // ready by itself — a stale ledger entry whose cache row is
+          // gone (TTL, manual cleanup, key drift) was the source of
+          // the "pink ring lies" bug Pete keeps hitting.
           setStories((prev) =>
-            prev.map((s) => {
-              const fromCache = readyKeys.has(s.trackKey);
-              const fromLedger = wasPregennedRecently(s.trackKey, tier);
-              return fromCache || fromLedger ? { ...s, ready: true } : s;
-            }),
+            prev.map((s) =>
+              readyKeys.has(s.trackKey) ? { ...s, ready: true } : s,
+            ),
           );
         }
 
-        // 2. Kick off pre-gen for the rest, throttled. Skip tracks we've
-        // already pre-gen'd recently (cross-session dedup via ledger).
-        // On tier switch, regenerate ALL stories — bypass the ledger so a
-        // recently-pregenned (but old-tier) entry doesn't suppress the
-        // re-warm.
+        // 2. Kick off pre-gen for tracks WITHOUT a verified cache row.
+        // We deliberately do NOT short-circuit on the ledger here:
+        // a ledger entry whose cache row never landed (silent server
+        // upsert failure / row deleted) would otherwise leave the
+        // story stuck warming forever. Re-firing on every session
+        // until the cache is actually populated is the correct
+        // recovery path. On tier switch, regenerate ALL stories.
         const needsGen = tierSwitched
           ? seeded
-          : seeded.filter(
-              (s) => !readyKeys.has(s.trackKey) && !wasPregennedRecently(s.trackKey, tier),
-            );
+          : seeded.filter((s) => !readyKeys.has(s.trackKey));
         await runThrottled(needsGen, maxConcurrent, async (story) => {
           const kickKey = `${story.trackKey}::${tier}`;
-          if (kickedOffRef.current.has(kickKey)) return;
-          kickedOffRef.current.add(kickKey);
+          if (kickedOffThisRun.has(kickKey)) return;
+          kickedOffThisRun.add(kickKey);
           if (cancelled) return;
+          const t0 = Date.now();
           try {
-            const { data, error } = await supabase.functions.invoke("generate-nuggets", {
+            // PREGEN_INVOKE_TIMEOUT_MS is shared with useReleasePreGen
+            // via @/lib/preGenCachePrefill — see that file for why 95s.
+            const invokePromise = supabase.functions.invoke("generate-nuggets", {
               body: {
                 artist: story.artist,
+                collaborators: story.collaborators,
                 title: story.title,
                 album: "",
                 listenCount: 1,
@@ -229,35 +253,88 @@ export function usePreGeneratedStories(
                 // URI). Result: pre-gen ran but cache never matched, and
                 // every story tap paid the full SSE generation cost.
                 appleTrackId: story.uri?.match(/apple:song:(\d+)/)?.[1],
+                // Fast path: one artist-kind nugget per story (5-15s
+                // vs 25-50s full pipeline). Server-side synthetic
+                // safety net guarantees a cache row even on Exa /
+                // Gemini failure, so the pink ring → instant tap
+                // promise holds.
+                firstNuggetOnly: true,
               },
             });
-            if (cancelled) return;
+            type InvokeResult = Awaited<typeof invokePromise>;
+            const raceResult = await Promise.race<InvokeResult | { timedOut: true }>([
+              invokePromise,
+              new Promise<{ timedOut: true }>((resolve) =>
+                setTimeout(() => resolve({ timedOut: true }), PREGEN_INVOKE_TIMEOUT_MS),
+              ),
+            ]);
+            if ("timedOut" in raceResult) {
+              if (import.meta.env.DEV) console.warn(`[Stories] TIMEOUT after ${PREGEN_INVOKE_TIMEOUT_MS}ms — ${story.trackKey} (slot freed)`);
+              return;
+            }
+            const { data, error } = raceResult;
+            if (cancelled) {
+              if (import.meta.env.DEV) console.log(`[Stories] cancelled mid-flight after ${Date.now() - t0}ms — ${story.trackKey}`);
+              return;
+            }
             if (error) {
-              if (import.meta.env.DEV) console.warn(`[Stories] pre-gen failed for ${story.trackKey}:`, error.message);
+              if (import.meta.env.DEV) console.warn(`[Stories] ERROR after ${Date.now() - t0}ms — ${story.trackKey}:`, error.message);
               return;
             }
-            // Bug fix: only treat the story as ready when the server actually
-            // produced nuggets. The JSON path of generate-nuggets returns a
-            // 200 with an empty `nuggets` array if every Writer attempt got
-            // stripped by the Validator (sparse / low-popularity artists do
-            // this regularly — e.g. "4 U" by Ty Symph). Marking the story
-            // ready in that case made the circle pink, but tapping it landed
-            // on a Listen page that had nothing to render. We now require a
-            // non-empty `nuggets` array before stamping the ledger.
+            // The JSON path of generate-nuggets returns 200 with an
+            // empty `nuggets` array when the Validator + source filter
+            // strip every Writer attempt — happens reliably for very-
+            // low-popularity artists (Pete Rango, Cherele, Ty Symph,
+            // Dame Atlas) where Exa returns no usable journalism and
+            // anything Gemini fabricates fails the source check.
+            //
+            // We mark the story READY anyway so it's tappable. On tap,
+            // Listen runs through useAINuggets which falls through to
+            // a synthetic catalog-grounded fallback (see
+            // makeSparseFallbackNugget) — an honest, non-fabricated
+            // nugget that names the track, invites the listen, and
+            // doesn't pretend to know things we can't verify.
+            //
+            // The ledger gets stamped either way so we don't re-fire
+            // pre-gen for the same track within the 24h TTL.
             const responseNuggets = (data as { nuggets?: unknown[] } | null)?.nuggets;
+            const responseSources = (data as { sources?: Record<string, unknown> } | null)?.sources;
             const generatedAny = Array.isArray(responseNuggets) && responseNuggets.length > 0;
+            const synthetic = (data as { synthetic?: boolean } | null)?.synthetic === true;
+            if (import.meta.env.DEV) console.log(`[Stories] OK after ${Date.now() - t0}ms — ${story.trackKey} (${responseNuggets?.length ?? 0} nuggets${synthetic ? ", synthetic" : ""})`);
+
+            // INVARIANT: pink ring = tap will show a nugget. If the
+            // server returned 0 nuggets, we MUST NOT mark ready —
+            // a blank tap is worse than a still-warming ring.
             if (!generatedAny) {
-              if (import.meta.env.DEV) {
-                console.warn(`[Stories] pre-gen returned 0 nuggets for ${story.trackKey} — leaving story in "warming" state`);
-              }
+              if (import.meta.env.DEV) console.warn(`[Stories] response had no nuggets — leaving ${story.trackKey} in warming state`);
               return;
             }
+
             recordPregen(story.trackKey, tier);
+
+            // Pre-fill in-memory cache so a tap on the pink ring shows
+            // the nugget instantly. Helper centralizes shape validation
+            // and key construction so useReleasePreGen stays in sync.
+            const memCacheKey = buildPreGenCacheKey({
+              artist: story.artist,
+              title: story.title,
+              uri: story.uri,
+              tier,
+            });
+            const cacheEntry = preparePreGenCacheEntry(data);
+            if (cacheEntry) {
+              setNuggetCache(memCacheKey, cacheEntry);
+              if (import.meta.env.DEV) console.log(`[Stories] in-mem cache primed for ${story.trackKey} (key=${memCacheKey.slice(0, 80)}…)`);
+            } else if (import.meta.env.DEV) {
+              console.warn(`[Stories] response nuggets failed shape validation for ${story.trackKey} — skipping in-mem prefill`);
+            }
+
             setStories((prev) =>
               prev.map((s) => (s.trackKey === story.trackKey ? { ...s, ready: true } : s)),
             );
           } catch (e) {
-            if (import.meta.env.DEV) console.warn(`[Stories] pre-gen threw for ${story.trackKey}:`, e);
+            if (import.meta.env.DEV) console.warn(`[Stories] THREW after ${Date.now() - t0}ms — ${story.trackKey}:`, e);
           }
         });
       } finally {
@@ -265,14 +342,29 @@ export function usePreGeneratedStories(
       }
     })();
 
-    return () => { cancelled = true; };
-    // Depend on the trackImages array identity rather than its length so a
-    // same-length profile replacement (e.g. user switches accounts, or
-    // SpotifyCallback writes a different top-8 tracks set of the same size)
-    // triggers a fresh pre-gen pass. Length-only was a silent trap: two
-    // 8-track taste profiles wouldn't re-run and the second user would
-    // stare at the first user's warmed stories.
-  }, [profile?.trackImages, tier, maxStories, maxConcurrent]);
+    return () => {
+      cancelled = true;
+      if (import.meta.env.DEV) console.log(`[Stories] effect cleanup — cancelling in-flight pre-gen`);
+    };
+    // Content-keyed deps: `trackSig` (stable string fingerprint of the
+    // top-N artist/title/uri tuples) instead of `profile?.trackImages`
+    // (whose array identity changes on every useUserProfile re-emit
+    // even when content is identical). Listing trackImages directly
+    // forced this effect to cancel-and-restart on every DB hydrate,
+    // background taste refresh, etc. — wedging in-flight pre-gen
+    // calls so stories never marked ready even when the server
+    // eventually completed them.
+    //
+    // We still want a real content change (different top-N tracks
+    // after a user switch / SpotifyCallback) to re-run; trackSig
+    // captures that without re-running on identity-only churn.
+    //
+    // `setNuggetCache` is also used inside but omitted — it's
+    // `useCallback(..., [])`-stable in PlayerContext, so adding it
+    // would only add noise. If that ever changes, this suppression
+    // becomes a stale-closure trap.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackSig, tier, maxStories, maxConcurrent]);
 
   return { stories, loading };
 }

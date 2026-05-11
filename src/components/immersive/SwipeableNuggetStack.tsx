@@ -166,23 +166,15 @@ export default function SwipeableNuggetStack({
         <MemoizedContent render={children} />
       </div>
 
-      {/* Dot indicators */}
-      {unlockedCount > 1 && phase === "idle" && !isDragging && (
-        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 flex gap-1.5 pointer-events-none">
-          {Array.from({ length: unlockedCount }, (_, i) => (
-            <div
-              key={i}
-              className={`w-1.5 h-1.5 rounded-full transition-colors duration-200 ${
-                i === activeIndex ? "bg-white/70" : "bg-white/20"
-              }`}
-            />
-          ))}
-        </div>
-      )}
+      {/* Position-indicator dots removed from this overlay. They now
+          live in ImmersiveNuggetView as their own flex row between
+          the swipe area and the mini player so they never sit on top
+          of the body text. */}
 
-      {/* Nav buttons — tap or swipe. Hit target is larger than the visible
-          chevron so the buttons are easy to tap on mobile. Mirrors the swipe
-          gesture transition. */}
+      {/* Nav buttons — tap, swipe, or click. Hit target is larger than
+          the visible chevron so the buttons are easy to tap on mobile
+          AND easy to click with a mouse on desktop / DevTools mobile
+          emulation (where touch swipes don't fire on mouse drag). */}
       {phase === "idle" && !isDragging && unlockedCount > 1 && (
         <>
           {canGoLeft && (
@@ -190,7 +182,7 @@ export default function SwipeableNuggetStack({
               type="button"
               onClick={() => advance(-1)}
               aria-label="Previous nugget"
-              className="absolute left-0 top-1/2 -translate-y-1/2 z-20 h-16 w-10 flex items-center justify-center opacity-30 hover:opacity-70 active:opacity-90 transition-opacity"
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-20 h-16 w-10 flex items-center justify-center opacity-50 hover:opacity-90 active:opacity-100 transition-opacity"
             >
               <svg width="8" height="24" viewBox="0 0 8 24" fill="none"><path d="M7 1L1 12L7 23" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
             </button>
@@ -200,7 +192,7 @@ export default function SwipeableNuggetStack({
               type="button"
               onClick={() => advance(1)}
               aria-label="Next nugget"
-              className="absolute right-0 top-1/2 -translate-y-1/2 z-20 h-16 w-10 flex items-center justify-center opacity-30 hover:opacity-70 active:opacity-90 transition-opacity"
+              className="absolute right-0 top-1/2 -translate-y-1/2 z-20 h-16 w-10 flex items-center justify-center opacity-50 hover:opacity-90 active:opacity-100 transition-opacity"
             >
               <svg width="8" height="24" viewBox="0 0 8 24" fill="none"><path d="M1 1L7 12L1 23" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
             </button>
