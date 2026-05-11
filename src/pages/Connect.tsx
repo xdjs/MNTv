@@ -14,7 +14,7 @@ import { useAppleMusicToken } from "@/hooks/useAppleMusicToken";
 import { useSpotifyPostSigninSync } from "@/hooks/useSpotifyPostSigninSync";
 import { ensureSupabaseSession } from "@/lib/ensureSupabaseSession";
 import SpotifySyncingOverlay from "@/components/SpotifySyncingOverlay";
-import { useTierGate } from "@/contexts/TierGateContext";
+import { useTierGate, TIER_CONFIRMED_STORAGE_KEY } from "@/contexts/TierGateContext";
 
 type Tier = "casual" | "curious" | "nerd";
 
@@ -111,7 +111,7 @@ export default function Connect() {
     try { pending = sessionStorage.getItem(SPOTIFY_OAUTH_PENDING_KEY) === "1"; } catch { /* noop */ }
     if (!pending) return;
     try {
-      sessionStorage.removeItem("musicnerd_tier_confirmed");
+      sessionStorage.removeItem(TIER_CONFIRMED_STORAGE_KEY);
       sessionStorage.removeItem("musicnerd_artist_rotation_resolved");
       window.dispatchEvent(new Event("musicnerd:tier-state-changed"));
     } catch { /* noop */ }

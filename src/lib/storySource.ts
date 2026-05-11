@@ -71,7 +71,16 @@ export function selectStorySource(
   if (!profile) return { tracks: [], source: "empty" };
   const visitedMap = visited ?? readVisited();
 
-  const liked = profile.likedTracks ?? [];
+  // Sort explicitly by addedAt desc — spotify-taste's /me/tracks
+  // call returns this order by default, but making the contract
+  // self-contained here means the freshest-first guarantee survives
+  // any upstream change to the fetch path or downstream re-ordering
+  // (DB writes, applyTastePatch merge, etc.).
+  const liked = [...(profile.likedTracks ?? [])].sort((a, b) => {
+    const ta = a.addedAt ? Date.parse(a.addedAt) : 0;
+    const tb = b.addedAt ? Date.parse(b.addedAt) : 0;
+    return tb - ta;
+  });
   const top = profile.trackImages ?? [];
 
   // Helper: filter liked tracks to a date window + unvisited + has URI.
@@ -125,10 +134,8 @@ export function selectStorySource(
   }
 
   // No window had ≥ targetCount. Try ALL liked tracks (any age, just
-  // unvisited + has URI). Order is preserved from `liked`, which
-  // spotify-taste returns sorted `added_at desc` (newest first) per
-  // Spotify's /me/tracks default. If that contract ever changes, the
-  // freshest-first guarantee silently breaks here.
+  // unvisited + has URI). `liked` is sorted addedAt-desc at the top
+  // of this function, so the freshest unvisited tracks come first.
   const allLikedUnvisited = liked.filter(
     (l) => !!l.uri && !visitedMap.has(trackKey(l)),
   );

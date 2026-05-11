@@ -358,13 +358,11 @@ export function usePreGeneratedStories(
     // We still want a real content change (different top-N tracks
     // after a user switch / SpotifyCallback) to re-run; trackSig
     // captures that without re-running on identity-only churn.
-    //
-    // `setNuggetCache` is also used inside but omitted — it's
-    // `useCallback(..., [])`-stable in PlayerContext, so adding it
-    // would only add noise. If that ever changes, this suppression
-    // becomes a stale-closure trap.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trackSig, tier, maxStories, maxConcurrent]);
+    // `setNuggetCache` is listed explicitly (rather than via
+    // eslint-disable) — it's useCallback-stable in PlayerContext
+    // today, so listing it costs nothing; if that ever changes
+    // we still want the lint to flag it.
+  }, [trackSig, tier, maxStories, maxConcurrent, setNuggetCache]);
 
   return { stories, loading };
 }

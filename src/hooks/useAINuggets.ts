@@ -1045,8 +1045,15 @@ export function useAINuggets(
             console.warn(`[useAINuggets] SSE failed; falling back to cached nuggets (${fbNuggets.length}) for ${dbCacheKey}`);
             const sanitized = fbNuggets.map(sanitizeNugget);
             const fbSources = new Map<string, Source>();
-            const rawSources = (fallback!.sources ?? {}) as Record<string, Source>;
-            for (const [k, v] of Object.entries(rawSources)) fbSources.set(k, v);
+            const rawSources = (fallback!.sources ?? {}) as Record<string, unknown>;
+            for (const [k, v] of Object.entries(rawSources)) {
+              // Same shape guard as the primary cache-read path — a
+              // malformed row that slips into this catch-block fallback
+              // would otherwise crash downstream on source.url reads.
+              if (k.startsWith("_")) continue;
+              if (!isValidSourceShape(v)) continue;
+              fbSources.set(k, v);
+            }
             setNuggets(sanitized);
             setSources(fbSources);
             setNuggetCache(cacheKey, { nuggets: sanitized, sources: fbSources, listenCount: currentListenCount });

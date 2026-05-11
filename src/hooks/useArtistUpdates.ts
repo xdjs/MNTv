@@ -153,8 +153,16 @@ export function useArtistUpdates(
     if (pool.length === 0) return [] as string[];
     const start = rotationStart % pool.length;
     const out: string[] = [];
-    for (let i = 0; i < maxArtists; i++) {
-      out.push(pool[(start + i) % pool.length]);
+    const seen = new Set<string>();
+    // Cap by min(maxArtists, pool.length) so a small pool (new account
+    // with < 3 top artists) doesn't wrap and render the same artist
+    // twice in the rail.
+    const sliceSize = Math.min(maxArtists, pool.length);
+    for (let i = 0; i < sliceSize; i++) {
+      const candidate = pool[(start + i) % pool.length];
+      if (seen.has(candidate)) continue;
+      seen.add(candidate);
+      out.push(candidate);
     }
     return out;
   }, [profile?.topArtists, maxArtists, rotationStart]);
