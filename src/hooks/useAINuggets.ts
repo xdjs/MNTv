@@ -145,19 +145,26 @@ export function sanitizeNugget(n: Nugget): Nugget {
 }
 
 /**
- * Narrow-validate a `sources` JSONB value from nugget_cache before casting
- * to `Source`. Required keys: `id` + `type` (both strings) — these are
- * what every downstream consumer reads. Optional fields aren't checked;
- * if the row lacks them the UI falls back to safe defaults.
+ * Narrow-validate a `sources` JSONB value from nugget_cache before
+ * casting to `Source`. Verifies every REQUIRED field on the Source
+ * type (`id`, `type`, `title`, `publisher`, `url`) is a string —
+ * downstream consumers commonly call `source.url.startsWith(...)`
+ * and `source.title.toLowerCase()` without null-guarding, so a
+ * malformed row that's missing any of those would crash the page
+ * rather than be silently dropped.
  *
- * Without this guard a malformed row (manual DB edit, partial migration,
- * server bug) would silently corrupt the client cache and crash whatever
- * tries to read `source.title` / `source.url`.
+ * Optional fields (`embedId`, `thumbnailUrl`, etc.) aren't checked
+ * here — the type marks them optional, so consumers must already
+ * null-guard those reads.
  */
 export function isValidSourceShape(v: unknown): v is Source {
   if (!v || typeof v !== "object" || Array.isArray(v)) return false;
   const o = v as Record<string, unknown>;
-  return typeof o.id === "string" && typeof o.type === "string";
+  return typeof o.id === "string"
+    && typeof o.type === "string"
+    && typeof o.title === "string"
+    && typeof o.publisher === "string"
+    && typeof o.url === "string";
 }
 
 export function makeNugget(n: AINuggetData, nuggetId: string, sourceId: string, trackId: string, timestampSec: number): Nugget {
