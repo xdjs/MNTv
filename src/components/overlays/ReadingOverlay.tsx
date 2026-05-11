@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { X, ExternalLink, FileText, Mic } from "lucide-react";
 import type { Source } from "@/mock/types";
+import { isSafeUrl } from "@/lib/urlSafety";
 
 interface Props {
   source: Source;
@@ -71,7 +72,7 @@ export default function ReadingOverlay({ source, onClose }: Props) {
           >
             Return to Listening
           </button>
-          {source.url && /^https?:\/\//i.test(source.url) && (
+          {isSafeUrl(source.url) && (
             <a
               href={source.url}
               target="_blank"

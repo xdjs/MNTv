@@ -10,6 +10,7 @@ import SwipeableNuggetStack from "./SwipeableNuggetStack";
 import MiniPlayer from "./MiniPlayer";
 import { useNuggetPacer } from "./useNuggetPacer";
 import { useBookmarks } from "@/hooks/useBookmarks";
+import { isSafeUrl } from "@/lib/urlSafety";
 
 interface ImmersiveNuggetViewProps {
   nuggets: Nugget[];
@@ -447,7 +448,7 @@ export default function ImmersiveNuggetView({
           )}
 
           <div className="flex gap-2 flex-wrap mb-3">
-            {(activeSource?.url?.startsWith("https://") || activeSource?.url?.startsWith("http://")) && (
+            {isSafeUrl(activeSource?.url) && (
               <a href={activeSource.url} target="_blank" rel="noopener noreferrer"
                 className="text-xs px-3 py-1.5 rounded-full bg-white/10 text-white/60 active:scale-95 transition-transform">
                 View Source

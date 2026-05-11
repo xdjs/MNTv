@@ -157,4 +157,25 @@ describe("selectStorySource", () => {
     const res = selectStorySource(noUri, 5, new Map());
     expect(res.source).toBe("empty");
   });
+
+  // Regression: targetCount = 0 short-circuits the outer cascade loop
+  // at entry (accumulated.length >= 0 is vacuously true), leaving
+  // widestWindow at its initial 0. Before the guard, this emitted an
+  // undocumented "liked-0d" through a union-type cast. Now the source
+  // must fall through to one of the catch-all branches.
+  it("never emits liked-0d when targetCount is 0", () => {
+    const res = selectStorySource(
+      profile({
+        liked: [liked("A", "1", 1), liked("B", "2", 5)],
+        topTracks: [{ artist: "T", title: "tt" }],
+      }),
+      0,
+      new Map(),
+    );
+    expect(res.source).not.toMatch(/^liked-\d+d$/);
+    // Cascade falls through to one of the catch-all branches —
+    // liked-all (any-age unvisited likes exist) is the expected
+    // landing spot here.
+    expect(res.source).toBe("liked-all");
+  });
 });

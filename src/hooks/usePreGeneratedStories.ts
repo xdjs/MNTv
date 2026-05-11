@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { usePlayer } from "@/contexts/PlayerContext";
 import { buildPreGenCacheKey, preparePreGenCacheEntry, PREGEN_INVOKE_TIMEOUT_MS } from "@/lib/preGenCachePrefill";
@@ -106,11 +106,15 @@ export function usePreGeneratedStories(
   // in-flight invokes mid-Gemini, which is why stories stayed warming
   // even though their server-side calls eventually completed. Mirror
   // of the same pattern used in useArtistUpdates.
-  const trackSig = (profile?.trackImages ?? [])
-    .filter((t) => !!t.uri)
-    .slice(0, maxStories)
-    .map((t) => `${t.artist}::${t.title}::${t.uri}`)
-    .join("|");
+  const trackSig = useMemo(
+    () =>
+      (profile?.trackImages ?? [])
+        .filter((t) => !!t.uri)
+        .slice(0, maxStories)
+        .map((t) => `${t.artist}::${t.title}::${t.uri}`)
+        .join("|"),
+    [profile?.trackImages, maxStories],
+  );
   // Detect tier switches (vs initial mount). When the user explicitly
   // changes tier — Casual → Curious — they want to see ALL stories
   // re-warm with the new depth, not silently inherit any stray cache row

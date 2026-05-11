@@ -77,13 +77,15 @@ export function useReleasePreGen(
       // same release.
       if (!spotifyTrackId && !appleTrackId) continue;
 
-      // Full pipeline pre-gen, mirroring the stories rail (which
-      // moved off firstNuggetOnly because the fast path produced
-      // synthetic boilerplate too often). Server runs Curator +
-      // Writer + Validator, caches all 3-9 tier-scaled nuggets.
-      // Best-effort: no awaiting. Tap reads the cache row.
-      // PREGEN_INVOKE_TIMEOUT_MS is shared with usePreGeneratedStories
-      // via @/lib/preGenCachePrefill — see that file for why 95s.
+      // Full pipeline pre-gen (no firstNuggetOnly). Diverges from the
+      // stories rail, which DOES set firstNuggetOnly: true for fast
+      // first-paint and relies on Listen.tsx's wave-2 fan-out to fill
+      // in the rest after tap. Release / collab cards have no wave-2
+      // counterpart yet, so we pay the full Curator + Writer +
+      // Validator latency upfront once and cache all 3-9 tier-scaled
+      // nuggets in one shot. Best-effort: no awaiting. Tap reads the
+      // cache row. PREGEN_INVOKE_TIMEOUT_MS is shared via
+      // @/lib/preGenCachePrefill — see that file for why 95s.
       // Build the URI we'll persist into the cache key. Stories use
       // story.uri directly; we need the same resolved URI so the
       // server-side write key matches what useAINuggets reads on tap.

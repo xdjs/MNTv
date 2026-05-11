@@ -419,11 +419,15 @@ function TierPicker({ tier, onSelect }: TierPickerProps) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
-    function onDocClick(e: MouseEvent) {
+    // pointerdown unifies mouse + touch + pen. mousedown is mouse-only;
+    // on touch devices it's synthesized after touchstart/touchend, which
+    // can produce ordering quirks vs. the option's React click handler.
+    // pointerdown fires once per primary input regardless of source.
+    function onDocPointerDown(e: PointerEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    document.addEventListener("pointerdown", onDocPointerDown);
+    return () => document.removeEventListener("pointerdown", onDocPointerDown);
   }, [open]);
 
   if (!tier) return null;

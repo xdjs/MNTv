@@ -60,24 +60,35 @@ const ROTATION_POOL_SIZE = 10;
 const LS_ROTATION_CURSOR_KEY = "musicnerd_artist_rotation_cursor";
 const SS_ROTATION_RESOLVED_KEY = "musicnerd_artist_rotation_resolved";
 
+// Cap at pool_size * 1000 so the persisted integer can't accidentally
+// climb toward Number.MAX_SAFE_INTEGER from runaway effects or test
+// loops. The modulo at slice time means any multiple of pool size is
+// functionally equivalent, so wrapping here is purely a precaution.
+const NEXT_CURSOR_CAP = ROTATION_POOL_SIZE * 1000;
+
 /**
  * Returns the rotation start index for THIS session — stable across
  * remounts within the same browser tab session, but advances by
  * `sliceSize` between sessions.
  *
  * Storage:
- *   - localStorage cursor: ever-incrementing offset (modulo applied at
- *     slice time). Read+written on the first call of each session.
+ *   - localStorage cursor: offset that advances each session, capped
+ *     at NEXT_CURSOR_CAP (1000× the pool) when written. Read on the
+ *     first call of each session. The cap-wrap is intentionally
+ *     non-monotonic (e.g. 9999 → 2 when sliceSize=3) — the slice-
+ *     time modulo collapses any residue to an equivalent pool index,
+ *     so a backward jump produces no visible rotation glitch.
  *   - sessionStorage resolved value: caches the start index for this
  *     session so multiple Browse mounts don't double-advance.
  *
  * Why both: localStorage gives session-to-session continuity (we keep
  * advancing instead of resetting on tab close); sessionStorage gives
  * within-session stability (a Browse remount mid-session shouldn't
- * skip artists ahead). The cursor only modulos by pool size at slice
- * time, so it can grow unbounded — that's fine, JS handles it.
+ * skip artists ahead). The modulo cap on write keeps the stored
+ * integer bounded — any multiple of pool size is functionally
+ * equivalent since the slice-time modulo collapses them.
  */
-function resolveRotationStart(sliceSize: number): number {
+export function resolveRotationStart(sliceSize: number): number {
   if (typeof window === "undefined") return 0;
   try {
     const cached = sessionStorage.getItem(SS_ROTATION_RESOLVED_KEY);
@@ -95,7 +106,8 @@ function resolveRotationStart(sliceSize: number): number {
 
   try {
     sessionStorage.setItem(SS_ROTATION_RESOLVED_KEY, String(cursor));
-    localStorage.setItem(LS_ROTATION_CURSOR_KEY, String(cursor + sliceSize));
+    const next = (cursor + sliceSize) % NEXT_CURSOR_CAP;
+    localStorage.setItem(LS_ROTATION_CURSOR_KEY, String(next));
   } catch { /* noop */ }
 
   return cursor;

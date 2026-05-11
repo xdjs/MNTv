@@ -4,6 +4,13 @@ import type { Json } from "@/integrations/supabase/types";
 import type { Nugget, Source } from "@/mock/types";
 import { usePlayer } from "@/contexts/PlayerContext";
 import { getSeedListenNuggets } from "@/data/seedNuggets";
+import { isValidSourceShape } from "@/lib/sourceShape";
+import { isSafeUrl } from "@/lib/urlSafety";
+
+// Back-compat re-export for any consumer that imported
+// isValidSourceShape from this module before it moved to
+// @/lib/sourceShape. New callers should prefer the lib path.
+export { isValidSourceShape };
 
 interface AINuggetData {
   headline: string;
@@ -144,36 +151,6 @@ export function sanitizeNugget(n: Nugget): Nugget {
   return headline === n.headline ? n : { ...n, headline };
 }
 
-/**
- * Narrow-validate a `sources` JSONB value from nugget_cache before
- * casting to `Source`. Verifies every REQUIRED field on the Source
- * type (`id`, `type`, `title`, `publisher`, `url`) is a string —
- * downstream consumers commonly call `source.url.startsWith(...)`
- * and `source.title.toLowerCase()` without null-guarding, so a
- * malformed row that's missing any of those would crash the page
- * rather than be silently dropped.
- *
- * Optional fields (`embedId`, `thumbnailUrl`, etc.) aren't checked
- * here — the type marks them optional, so consumers must already
- * null-guard those reads.
- *
- * NOTE: URL scheme (`javascript:`, `data:`) is NOT validated here —
- * that's a render-time concern. Every call site that renders
- * `source.url` in an `<a href>` / `window.open()` MUST enforce the
- * `^https?://` allowlist independently. Today that gate lives in
- * `ExpandedUpdateModal`; if you add a new render site, replicate it
- * there too or this turns into an XSS vector.
- */
-export function isValidSourceShape(v: unknown): v is Source {
-  if (!v || typeof v !== "object" || Array.isArray(v)) return false;
-  const o = v as Record<string, unknown>;
-  return typeof o.id === "string"
-    && typeof o.type === "string"
-    && typeof o.title === "string"
-    && typeof o.publisher === "string"
-    && typeof o.url === "string";
-}
-
 export function makeNugget(n: AINuggetData, nuggetId: string, sourceId: string, trackId: string, timestampSec: number): Nugget {
   return {
     id: nuggetId, trackId, timestampSec, durationMs: 7000,
@@ -268,6 +245,11 @@ async function pollForReadyNuggets(
       for (const [key, val] of Object.entries(rawSourcesObj)) {
         if (key.startsWith("_")) continue;
         if (!isValidSourceShape(val)) continue;
+        // Defense-in-depth: drop unsafe URL schemes at cache-read
+        // time so every render site doesn't have to remember the
+        // guard. Render-side checks remain in place — this is belt
+        // + braces.
+        if (!isSafeUrl(val.url)) continue;
         srcs.set(key, val);
       }
       return { nuggets: nuggs, sources: srcs };
@@ -573,6 +555,10 @@ export function useAINuggets(
             // malformed row would otherwise silently corrupt the cache.
             if (key.startsWith("_")) continue;
             if (!isValidSourceShape(val)) continue;
+            // Defense-in-depth: drop unsafe URL schemes here so every
+            // render site doesn't have to remember the guard. Render-
+            // side `isSafeUrl` checks remain in place.
+            if (!isSafeUrl(val.url)) continue;
             cachedSources.set(key, val);
           }
           if (cancelledRef.current) return;
@@ -1047,11 +1033,13 @@ export function useAINuggets(
             const fbSources = new Map<string, Source>();
             const rawSources = (fallback!.sources ?? {}) as Record<string, unknown>;
             for (const [k, v] of Object.entries(rawSources)) {
-              // Same shape guard as the primary cache-read path — a
-              // malformed row that slips into this catch-block fallback
-              // would otherwise crash downstream on source.url reads.
+              // Same shape + scheme guards as the primary cache-read
+              // path — a malformed row that slips into this catch-
+              // block fallback would otherwise crash downstream on
+              // source.url reads or surface an unsafe scheme.
               if (k.startsWith("_")) continue;
               if (!isValidSourceShape(v)) continue;
+              if (!isSafeUrl(v.url)) continue;
               fbSources.set(k, v);
             }
             setNuggets(sanitized);
