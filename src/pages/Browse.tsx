@@ -22,14 +22,24 @@ export default function Browse() {
   const navigate = useNavigate();
   const { profile, saveProfile } = useUserProfile();
   const { tierConfirmed } = useTierGate();
-  // direct-navigating to /browse (refresh, bookmark,
-  // new tab) skips PreparingExperience and lands here with
-  // tierConfirmed=false. StoriesProvider + ArtistUpdatesProvider both
-  // gate pre-gen on tierConfirmed, so Browse would render empty rails
-  // and look broken. Route through /preparing — which shows the picker
-  // when needed — and let it hand back to /browse.
+  // Direct-navigating to /browse (refresh, bookmark, new tab) skips
+  // PreparingExperience and lands here with tierConfirmed=false.
+  // StoriesProvider + ArtistUpdatesProvider both gate pre-gen on
+  // tierConfirmed, so Browse would render empty rails. Route through
+  // /preparing for the picker.
+  //
+  // One-shot guard: fire the redirect at most once per mount. Without
+  // this, if a transient context re-emit ever flipped tierConfirmed
+  // false→true→false the user could be yanked out of Browse mid-
+  // session. The legitimate "needs to confirm tier" case happens
+  // exactly at mount; later flips during an active session are
+  // either bugs or expected (sign-out clears the flag, which is its
+  // own navigation path).
+  const tierRedirectFiredRef = useRef(false);
   useEffect(() => {
+    if (tierRedirectFiredRef.current) return;
     if (profile && !tierConfirmed) {
+      tierRedirectFiredRef.current = true;
       navigate("/preparing?next=/browse", { replace: true });
     }
   }, [profile, tierConfirmed, navigate]);

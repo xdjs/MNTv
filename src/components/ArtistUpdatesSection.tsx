@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, X, ExternalLink } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -60,19 +60,19 @@ function ArtistUpdatesSectionInner({
 
   // cardKey is a pure function — see module-level definition below.
 
-  // Find the currently-expanded update so we can render its expanded
-  // content. Linear scan across groups since expandedKey is global.
-  // Worst case is O(artists × updates_per_artist) ≈ 3 × 3 = 9 today.
-  // Fine at this scale; if DEFAULT_MAX_ARTISTS or per-artist cap grow
-  // significantly, switch to a Map keyed by cardKey built once per
-  // render.
-  let expandedUpdate: ArtistUpdate | null = null;
-  if (expandedKey) {
+  // Look up the currently-expanded update so we can render its
+  // expanded content. Memoized on (expandedKey, groups) so the scan
+  // doesn't run on every keystroke / scroll / unrelated re-render
+  // (parent context emits readyCount changes as artist rows resolve).
+  // Worst case O(artists × updates_per_artist) ≈ 3 × 3 = 9 today.
+  const expandedUpdate = useMemo<ArtistUpdate | null>(() => {
+    if (!expandedKey) return null;
     for (const g of groups) {
       const found = g.updates?.find((u) => cardKey(u) === expandedKey);
-      if (found) { expandedUpdate = found; break; }
+      if (found) return found;
     }
-  }
+    return null;
+  }, [expandedKey, groups]);
 
   const openArtistAtNugget = useCallback((update: ArtistUpdate) => {
     // New-release / collab cards: tap should land on Listen for the
