@@ -4,6 +4,14 @@ import type { Json } from "@/integrations/supabase/types";
 import type { Nugget, Source } from "@/mock/types";
 import { usePlayer } from "@/contexts/PlayerContext";
 import { getSeedListenNuggets } from "@/data/seedNuggets";
+import { isValidSourceShape } from "@/lib/sourceShape";
+import { isSafeUrl } from "@/lib/urlSafety";
+
+// Back-compat re-export. The validator lives in @/lib/sourceShape
+// now (so non-hook utilities can use it without crossing the
+// hook/lib boundary). The existing test file and any older imports
+// from this module keep working.
+export { isValidSourceShape };
 
 interface AINuggetData {
   headline: string;
@@ -144,12 +152,6 @@ export function sanitizeNugget(n: Nugget): Nugget {
   return headline === n.headline ? n : { ...n, headline };
 }
 
-// Lives in @/lib/sourceShape now. Re-exported here so the existing
-// import surface (and the isValidSourceShape.test.ts file) keeps
-// working. New callers should import directly from @/lib/sourceShape.
-import { isValidSourceShape } from "@/lib/sourceShape";
-export { isValidSourceShape };
-
 export function makeNugget(n: AINuggetData, nuggetId: string, sourceId: string, trackId: string, timestampSec: number): Nugget {
   return {
     id: nuggetId, trackId, timestampSec, durationMs: 7000,
@@ -244,6 +246,11 @@ async function pollForReadyNuggets(
       for (const [key, val] of Object.entries(rawSourcesObj)) {
         if (key.startsWith("_")) continue;
         if (!isValidSourceShape(val)) continue;
+        // Defense-in-depth: drop unsafe URL schemes at cache-read
+        // time so every render site doesn't have to remember the
+        // guard. Render-side checks remain in place — this is belt
+        // + braces.
+        if (!isSafeUrl(val.url)) continue;
         srcs.set(key, val);
       }
       return { nuggets: nuggs, sources: srcs };
@@ -549,6 +556,10 @@ export function useAINuggets(
             // malformed row would otherwise silently corrupt the cache.
             if (key.startsWith("_")) continue;
             if (!isValidSourceShape(val)) continue;
+            // Defense-in-depth: drop unsafe URL schemes here so every
+            // render site doesn't have to remember the guard. Render-
+            // side `isSafeUrl` checks remain in place.
+            if (!isSafeUrl(val.url)) continue;
             cachedSources.set(key, val);
           }
           if (cancelledRef.current) return;
@@ -1023,11 +1034,13 @@ export function useAINuggets(
             const fbSources = new Map<string, Source>();
             const rawSources = (fallback!.sources ?? {}) as Record<string, unknown>;
             for (const [k, v] of Object.entries(rawSources)) {
-              // Same shape guard as the primary cache-read path — a
-              // malformed row that slips into this catch-block fallback
-              // would otherwise crash downstream on source.url reads.
+              // Same shape + scheme guards as the primary cache-read
+              // path — a malformed row that slips into this catch-
+              // block fallback would otherwise crash downstream on
+              // source.url reads or surface an unsafe scheme.
               if (k.startsWith("_")) continue;
               if (!isValidSourceShape(v)) continue;
+              if (!isSafeUrl(v.url)) continue;
               fbSources.set(k, v);
             }
             setNuggets(sanitized);
