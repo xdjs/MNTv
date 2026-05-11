@@ -90,7 +90,7 @@ export default function MediaOverlay({ source, onClose }: Props) {
           >
             Return to Listening
           </button>
-          {source.url && (
+          {source.url && /^https?:\/\//i.test(source.url) && (
             <a
               href={source.url}
               target="_blank"

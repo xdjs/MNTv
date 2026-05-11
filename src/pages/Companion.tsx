@@ -349,6 +349,7 @@ export default function Companion() {
                 <h3 className="text-lg font-bold text-foreground mb-3">Explore Further</h3>
                 <div className="space-y-2">
                   {data.externalLinks.map((link, i) => {
+                    if (!link.url || !/^https?:\/\//i.test(link.url)) return null;
                     const linkLabel = link.label || link.name || "Link";
                     const Icon =
                       linkLabel.toLowerCase().includes("wiki") ? BookOpen :

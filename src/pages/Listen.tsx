@@ -1127,17 +1127,39 @@ export default function Listen() {
     if (!isPlaying && aiFromCache) return;
     const shouldTrigger = (n: typeof trackNuggets[0]) =>
       !aiFromCache || currentTime >= n.timestampSec;
+    // Collect every newly-eligible nugget for this tick first, then
+    // commit state once. If two nuggets' timestamps were both crossed
+    // in the same tick (e.g. after a seek or cache restore), the
+    // previous per-iter setActiveNugget calls clobbered each other
+    // and only the last one rendered — intermediates landed in
+    // shownNuggetIds but never showed as the active card. Now the
+    // intermediates are explicitly pushed into dismissedNuggets so
+    // they appear in the dismissed strip / nerd reel.
+    const newlyEligible: typeof trackNuggets = [];
     for (let i = 1; i < trackNuggets.length; i++) {
       const n = trackNuggets[i];
       if (shownNuggetIds.has(n.id)) continue;
       if (!shouldTrigger(n)) continue;
-      if (activeNugget && activeNugget.id !== n.id) {
-        setDismissedNuggets((prev) => new Map(prev).set(activeNugget.id, activeNugget));
-      }
-      setActiveNugget(n);
-      setReopenedNuggetId(null);
-      setShownNuggetIds((s) => new Set(s).add(n.id));
+      newlyEligible.push(n);
     }
+    if (newlyEligible.length === 0) return;
+    const finalActive = newlyEligible[newlyEligible.length - 1];
+    const intermediates = newlyEligible.slice(0, -1);
+    setDismissedNuggets((prev) => {
+      const next = new Map(prev);
+      if (activeNugget && activeNugget.id !== finalActive.id) {
+        next.set(activeNugget.id, activeNugget);
+      }
+      for (const n of intermediates) next.set(n.id, n);
+      return next;
+    });
+    setActiveNugget(finalActive);
+    setReopenedNuggetId(null);
+    setShownNuggetIds((s) => {
+      const next = new Set(s);
+      for (const n of newlyEligible) next.add(n.id);
+      return next;
+    });
   }, [currentTime, isPlaying, nerdActive, trackNuggets, activeNugget, shownNuggetIds, reopenedNuggetId, aiFromCache]);
 
 
