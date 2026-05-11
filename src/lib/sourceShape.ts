@@ -13,10 +13,15 @@ import type { Source } from "@/mock/types";
  * here — the type marks them optional, so consumers must already
  * null-guard those reads.
  *
- * NOTE: URL scheme (`javascript:`, `data:`) is NOT validated here —
- * that's a render-time concern handled by `isSafeUrl` in
- * `./urlSafety.ts`. Every render site that consumes `source.url`
- * MUST gate on that helper independently or it's an XSS vector.
+ * NOTE: URL scheme (`javascript:`, `data:`) is NOT validated here.
+ * It's gated by `isSafeUrl` in `./urlSafety.ts` at TWO layers:
+ *   1. Cache-write/read boundaries — `preparePreGenCacheEntry` and
+ *      every `nugget_cache` JSONB read in `useAINuggets` drop
+ *      unsafe-scheme sources before they enter the in-memory Map.
+ *   2. Render sites — each `<a href={source.url}>` re-checks before
+ *      mounting, as defense-in-depth.
+ * Both layers are required. Adding a new cache reader OR a new
+ * render site without `isSafeUrl` re-opens the XSS surface.
  *
  * Lives in `lib/` (not `hooks/`) so prefill / cache utilities can
  * validate without importing from a React hook module.

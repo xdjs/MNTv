@@ -72,16 +72,18 @@ const NEXT_CURSOR_CAP = ROTATION_POOL_SIZE * 1000;
  * `sliceSize` between sessions.
  *
  * Storage:
- *   - localStorage cursor: ever-incrementing offset (modulo applied at
- *     slice time). Read+written on the first call of each session.
+ *   - localStorage cursor: offset that advances each session, capped
+ *     at NEXT_CURSOR_CAP (10× the pool) when written. Read on the
+ *     first call of each session.
  *   - sessionStorage resolved value: caches the start index for this
  *     session so multiple Browse mounts don't double-advance.
  *
  * Why both: localStorage gives session-to-session continuity (we keep
  * advancing instead of resetting on tab close); sessionStorage gives
  * within-session stability (a Browse remount mid-session shouldn't
- * skip artists ahead). The cursor only modulos by pool size at slice
- * time, so it can grow unbounded — that's fine, JS handles it.
+ * skip artists ahead). The modulo cap on write keeps the stored
+ * integer bounded — any multiple of pool size is functionally
+ * equivalent since the slice-time modulo collapses them.
  */
 export function resolveRotationStart(sliceSize: number): number {
   if (typeof window === "undefined") return 0;
