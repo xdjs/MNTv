@@ -22,7 +22,10 @@ import type { UserProfile } from "@/mock/types";
  * the user confirms.
  */
 
-const STORAGE_KEY = "musicnerd_tier_confirmed";
+// Exported so external clean-up paths (useSignOut, Connect's OAuth
+// reset) can clear the flag without re-declaring the literal.
+export const TIER_CONFIRMED_STORAGE_KEY = "musicnerd_tier_confirmed";
+const STORAGE_KEY = TIER_CONFIRMED_STORAGE_KEY;
 
 interface TierGateContextValue {
   tierConfirmed: boolean;

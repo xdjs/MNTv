@@ -25,6 +25,7 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { TIER_CONFIRMED_STORAGE_KEY } from "@/contexts/TierGateContext";
 
 const SPOTIFY_CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID as string;
 // `user-library-read` was added 2026-05-10 so spotify-taste can call
@@ -66,7 +67,7 @@ export async function signInWithSpotify(): Promise<void> {
     // TierGateProvider's useState initializer reads the cleared
     // state on the very first render of /preparing — no warming-
     // spinner flash before the tier picker, no stale rotation cursor.
-    sessionStorage.removeItem("musicnerd_tier_confirmed");
+    sessionStorage.removeItem(TIER_CONFIRMED_STORAGE_KEY);
     sessionStorage.removeItem("musicnerd_artist_rotation_resolved");
   } catch {
     // Storage disabled — the overlay will still come up via the
