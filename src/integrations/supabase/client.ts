@@ -24,16 +24,5 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, 
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
-    // implicit (not the v2 default of pkce). PKCE stores a code_verifier
-    // in localStorage before redirecting to the provider and reads it
-    // back from the callback URL to exchange the code for a session.
-    // iOS Safari's ITP wipes that localStorage as "cross-site tracking"
-    // during the mntv → spotify → supabase callback → mntv chain, so
-    // the verifier is gone by the time the client tries to use it,
-    // and the session is never created. Implicit puts the tokens in
-    // the URL hash fragment on the callback — no stored state needed.
-    // Slightly less secure (tokens land in browser history) but the
-    // OAuth flow actually completes on restrictive browsers.
-    flowType: "implicit",
   },
 });
