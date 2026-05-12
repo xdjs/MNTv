@@ -603,71 +603,62 @@ export default function ImmersiveNuggetView({
         }}
       />
 
-      {/* Main content area — full bleed, no card */}
+      {/* Main content area — full bleed, no card. Pete's spec:
+          "only our full screen nugget cards should display since
+          they're available." Previously the AnimatePresence
+          alternated between the nugget card and a centered-cover-art
+          "now-playing" screen with a "View nuggets" button. That
+          alternate was reached whenever showCard was false (active
+          nugget undefined OR dismissed). On a same-session return
+          via the mini-player it was firing even though nuggets were
+          loaded and the user had not dismissed anything. Killing
+          the alternate entirely:
+            - When nuggets exist → always render the card (activeNugget
+              falls back to nuggets[0], so it's never undefined).
+            - When nuggets are still loading → show a minimal blurred
+              placeholder so the user sees something but is not
+              presented with a "View nuggets" button that does
+              nothing for them. */}
       <div className="relative z-10 flex-1 overflow-hidden min-h-0">
-        <AnimatePresence mode="wait">
-          {showCard ? (
-            <motion.div
-              key="nugget-card"
-              className="w-full h-full"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
+        {nuggets.length > 0 ? (
+          <motion.div
+            key="nugget-card"
+            className="w-full h-full"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.2 }}
+          >
+            <SwipeableNuggetStack
+              unlockedCount={unlockedCount}
+              activeIndex={activeIndex}
+              onSwipe={handleSwipe}
             >
-              <SwipeableNuggetStack
-                unlockedCount={unlockedCount}
-                activeIndex={activeIndex}
-                onSwipe={handleSwipe}
-              >
-                {renderNuggetCard}
-              </SwipeableNuggetStack>
-            </motion.div>
-          ) : (
-            /* ── Now-playing — centered cover art ─────────── */
-            <motion.div
-              key="now-playing"
-              className="w-full h-full flex flex-col items-center justify-center gap-5"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.3 }}
-              onClick={() => {
-                if (unlockedCount === 0) return;
-                // Belt-and-suspenders: reset activeIndex to 0 if it
-                // ever drifted out of bounds, then drop the dismissed
-                // flag. Without this, a stale activeIndex made
-                // `nuggets[activeIndex]` undefined and the user was
-                // stuck on cover art even after clicking through.
-                if (activeIndex >= nuggets.length) setActiveIndex(0);
-                setNuggetDismissed(false);
-              }}
-            >
-              {artUrl && (
-                <img
-                  src={artUrl} alt={`${trackTitle} cover`}
-                  className={`w-64 h-64 rounded-2xl shadow-2xl object-cover ${isPlaying ? "animate-cover-pulse" : ""}`}
-                />
-              )}
-              <div className="text-center px-8">
-                <p className="text-xl font-bold text-white/90">{trackTitle}</p>
-                <p className="text-sm text-white/40 mt-1">{artist}</p>
-              </div>
-              {unlockedCount > 0 && (
-                <button
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 active:scale-95 transition-transform animate-nudge-pulse"
-                  onClick={() => {
-                    if (activeIndex >= nuggets.length) setActiveIndex(0);
-                    setNuggetDismissed(false);
-                  }}
-                >
-                  <MusicNerdLogo size={16} />
-                  <span className="text-xs text-white/50">View nuggets</span>
-                </button>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+              {renderNuggetCard}
+            </SwipeableNuggetStack>
+          </motion.div>
+        ) : (
+          /* Loading placeholder — only ever visible while the first
+             nugget is still in flight. No button, no false promise:
+             the orchestrator's researching pill provides the loading
+             affordance. */
+          <motion.div
+            key="loading-placeholder"
+            className="w-full h-full flex items-center justify-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            {artUrl && (
+              <img
+                src={artUrl}
+                alt=""
+                className={`w-56 h-56 rounded-2xl shadow-2xl object-cover opacity-80 ${
+                  isPlaying ? "animate-cover-pulse" : ""
+                }`}
+              />
+            )}
+          </motion.div>
+        )}
       </div>
 
       {/* Position dots moved INSIDE the hero overlay (just below the

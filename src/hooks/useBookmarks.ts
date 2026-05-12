@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSpotifyToken } from "./useSpotifyToken";
 import { useAppleMusicToken } from "./useAppleMusicToken";
@@ -127,8 +128,14 @@ export function useBookmarks() {
       qc.setQueryData<Bookmark[]>(QUERY_KEY, (old) => [optimistic, ...(old || [])]);
       return { prev };
     },
-    onError: (_err, _nugget, ctx) => {
+    onError: (err, _nugget, ctx) => {
       if (ctx?.prev) qc.setQueryData(QUERY_KEY, ctx.prev);
+      // Surface the failure so the user doesn't see the heart fill
+      // briefly then silently empty with no indication of what went
+      // wrong (Pete's report: "Save button isn't working").
+      const message = err instanceof Error ? err.message : "Couldn't save";
+      console.error("[bookmark add] failed:", err);
+      toast.error("Couldn't save nugget", { description: message });
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEY });
@@ -153,8 +160,11 @@ export function useBookmarks() {
       );
       return { prev };
     },
-    onError: (_err, _id, ctx) => {
+    onError: (err, _id, ctx) => {
       if (ctx?.prev) qc.setQueryData(QUERY_KEY, ctx.prev);
+      const message = err instanceof Error ? err.message : "Couldn't remove";
+      console.error("[bookmark remove] failed:", err);
+      toast.error("Couldn't remove bookmark", { description: message });
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEY });
