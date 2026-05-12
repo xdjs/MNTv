@@ -69,12 +69,15 @@ export default function MusicNerdLoadingOrchestrator({
     const cached = phaseCache.get(trackId);
     // If we already reached pulsating/ready/morphFly for this track, restore
     // (morphFly → skip to pulsating/ready since we can't resume mid-flight).
-    // "ready" with aiLoading=true means a fresh generation is in flight
-    // (regenerateKey bump after a track-completed return, or DB cache miss
-    // on the second visit). Drop back to hidden so the state machine fires
-    // the pill again — without this guard, Pete saw cover art with no
-    // researching pill when re-opening a track he'd just played.
-    if (cached === "ready") return aiLoading ? "hidden" : "ready";
+    // NOTE: cached === "ready" intentionally returns "ready" regardless of
+    // aiLoading. A previous attempt to flip "ready" → "hidden" when
+    // aiLoading=true (to surface the pill on track-completed returns)
+    // caused the pill to flash on story-tap re-visits — aiLoading is
+    // always briefly true on mount until the in-mem cache hit lands, and
+    // the trackId-keyed phaseCache treated re-tested tracks the same as
+    // mid-flight regenerations. Better to skip the pill on rare
+    // regenerate-key returns than to surface it on every cache-hit tap.
+    if (cached === "ready") return "ready";
     if (cached === "pulsating") return aiLoading ? "pulsating" : "ready";
     if (cached === "morphFly") return aiLoading ? "pulsating" : "ready";
     if (cached === "pill") return aiLoading ? "pill" : "ready";
