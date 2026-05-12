@@ -275,11 +275,23 @@ export default function ImmersiveNuggetView({
     initialUnlockDoneRef.current = true;
     const t = currentTimeRef.current;
     const initial = new Set<string>();
-    for (const n of nuggets) {
-      if (t >= n.timestampSec) initial.add(n.id);
+    let latestIdx = 0;
+    for (let i = 0; i < nuggets.length; i++) {
+      const n = nuggets[i];
+      if (t >= n.timestampSec) {
+        initial.add(n.id);
+        latestIdx = i;
+      }
     }
     if (initial.size === 0) initial.add(nuggets[0].id);
     setUnlockedIds(initial);
+    // Pete's UX request: when returning to a track mid-play (e.g.
+    // tapping the mini-player from Browse), jump straight to the
+    // latest unlocked nugget so the user picks up where the song
+    // is — not at nugget #0 — and can swipe back to read earlier
+    // ones. First-visit case (currentTime=0) only nugget[0] is
+    // unlocked, so latestIdx stays 0 and behavior is unchanged.
+    if (latestIdx > 0) setActiveIndex(latestIdx);
   }, [nuggets]);
 
   // Track-end is handled by Listen.tsx's handleTrackEnd via PlayerContext onEnded.
@@ -305,7 +317,13 @@ export default function ImmersiveNuggetView({
   }, [trackTitle, artist, artUrl, toggle, onPrev, onNext]);
 
   // ── Derived state ──────────────────────────────────────────────────
-  const activeNugget = nuggets[activeIndex];
+  // Fallback to nuggets[0] when activeIndex is out of bounds. Without
+  // this, returning to a track whose nuggets array shrunk between
+  // visits left activeNugget=undefined → showCard=false → user stuck
+  // on the cover-art screen with a "View nuggets" button that didn't
+  // recover. Now activeNugget is always defined when at least one
+  // nugget exists.
+  const activeNugget = nuggets[activeIndex] ?? nuggets[0];
   const activeSource = activeNugget ? sources.get(activeNugget.sourceId) : undefined;
   const unlockedCount = unlockedIds.size;
   const isTypewriterDone = activeNugget ? typewriterDoneIds.has(activeNugget.id) : false;
@@ -463,6 +481,32 @@ export default function ImmersiveNuggetView({
               )
             )}
             </div>
+            {/* Position dots — INSIDE the hero overlay so they sit on
+                the bottom-fade gradient instead of on a separate
+                bg-black strip between hero and mini-player. Height is
+                reserved (always renders the row even with 1 nugget)
+                so wave-2 landing doesn't reflow the headline. */}
+            <div className="mt-3 h-2 flex justify-center items-center gap-1.5 pointer-events-none">
+              <AnimatePresence>
+                {nuggets.length > 1 &&
+                  Array.from({ length: nuggets.length }, (_, i) => {
+                    const isActive = i === activeIndex;
+                    const isUnlocked = i < unlockedCount;
+                    return (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, scale: 0.6 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.6 }}
+                        transition={{ duration: 0.25, ease: "easeOut" }}
+                        className={`w-1.5 h-1.5 rounded-full transition-colors duration-200 ${
+                          isActive ? "bg-white/85" : isUnlocked ? "bg-white/35" : "bg-white/12"
+                        }`}
+                      />
+                    );
+                  })}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
         {/* Body section — lives BELOW the h-full hero+headline frame,
@@ -515,14 +559,13 @@ export default function ImmersiveNuggetView({
         </div>
       </div>
     );
-    // Deps intentionally narrow: nuggets.length / activeIndex /
-    // unlockedCount are NOT referenced inside this card body — they
-    // drive the dots row + nav arrows which are sibling components.
-    // Listing them here would invalidate the heavy card-content memo
-    // on every pacer unlock and every swipe (4 Hz on cached tracks),
-    // re-rendering the image / typewriter / deep-dive button for no
-    // visible change.
-  }, [getNuggetImage, activeNugget, activeSource, isTypewriterDone, handleTypewriterComplete, deepDiveText, deepDiveFollowUp, deepDiveLoading, deepDiveRateLimited, handleTellMeMore, bookmarks, artist, trackTitle]);
+    // Deps include nuggets.length / activeIndex / unlockedCount now
+    // that the dots row lives inside the hero overlay. Re-rendering
+    // on those changes is correct (dots need to update on swipe and
+    // when wave-2 lands) — and cheap, because the typewriter and
+    // image children re-use the same activeNugget identity unless
+    // the active nugget itself changes.
+  }, [getNuggetImage, activeNugget, activeSource, isTypewriterDone, handleTypewriterComplete, deepDiveText, deepDiveFollowUp, deepDiveLoading, deepDiveRateLimited, handleTellMeMore, bookmarks, artist, trackTitle, nuggets.length, activeIndex, unlockedCount]);
 
   return (
     <motion.div
@@ -627,39 +670,13 @@ export default function ImmersiveNuggetView({
         </AnimatePresence>
       </div>
 
-      {/* Position-indicator dots — own row, never overlaps body text.
-          Pete 2026-05-08: "dots right above the mini player ...
-          headline and nugget amount counter should never be covered
-          by the mini player." Active bright, unlocked dim, locked
-          very-dim. Wrapper is ALWAYS rendered so vertical space is
-          reserved from first paint — when wave-2 lands and bumps
-          nuggets.length past 1, the dots fade in without shrinking
-          the hero area (which would push the headline up). bg-black
-          covers the absolute-positioned blurred background layer
-          beneath; with the wrapper always rendered, the strip is
-          constant from first paint and flush with the mini-player —
-          no "bar appearing" problem because nothing changes. */}
-      <div className="relative z-20 bg-black flex justify-center items-center gap-1.5 pt-5 pb-3 pointer-events-none">
-        <AnimatePresence>
-          {nuggets.length > 1 &&
-            Array.from({ length: nuggets.length }, (_, i) => {
-              const isActive = i === activeIndex;
-              const isUnlocked = i < unlockedCount;
-              return (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, scale: 0.6 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.6 }}
-                  transition={{ duration: 0.25, ease: "easeOut" }}
-                  className={`w-1.5 h-1.5 rounded-full transition-colors duration-200 ${
-                    isActive ? "bg-white/85" : isUnlocked ? "bg-white/35" : "bg-white/12"
-                  }`}
-                />
-              );
-            })}
-        </AnimatePresence>
-      </div>
+      {/* Position dots moved INSIDE the hero overlay (just below the
+          headline) so they sit on the bottom-fade gradient instead
+          of a separate strip between hero and mini-player. The
+          earlier standalone bg-black row had to either show as a
+          visible black bar or expose the blurred background; placing
+          them in the gradient overlay is the cleanest of both. See
+          renderNuggetCard for the dots JSX. */}
 
       {/* Mini player */}
       <div className="relative z-20 bg-black" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
