@@ -57,9 +57,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(newSession);
         bridgeSpotifyProviderTokens(newSession);
         // First emission flips loading off. Subsequent events (token
-        // refresh, sign-in, sign-out) just update session — loading
-        // was already false.
-        setLoading(false);
+        // refresh, sign-in, sign-out) shouldn't touch it — gating
+        // here keeps the semantics clean and protects against any
+        // future code that re-enables loading=true.
+        setLoading((prev) => (prev ? false : prev));
       },
     );
 
