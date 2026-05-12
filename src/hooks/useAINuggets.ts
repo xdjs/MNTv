@@ -1148,7 +1148,11 @@ export function useAINuggets(
     if (waveInFlightRef.current) return;            // already generating
     if (nuggets.length === 0) return;               // wave 1 not yet landed
     if (!durationSec || durationSec < 90) return;   // track too short
-    if (!isPlaying) return;                         // paused — wait
+    // Removed `if (!isPlaying) return;` — a deliberate pause shouldn't
+    // halt background research. The "not enough time left" gate below
+    // already covers the meaningful case where there's no remaining
+    // playback to spend the nuggets on. Pete: "I noticed I never
+    // received [wave-2 nuggets] because I was paused."
     if (cancelledRef.current) return;               // track changed / unmount
     if (Date.now() < waveCooldownUntilRef.current) return;  // recent failure, cooldown
     if (waveExhaustedRef.current) return;           // server returned 0 — no more for this track

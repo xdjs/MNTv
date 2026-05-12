@@ -1003,6 +1003,16 @@ export default function Listen() {
     return () => clearDwell();
   }, [activeNugget, clearDwell]);
 
+  // Capture once: was the track ALREADY loaded into PlayerContext when
+  // this Listen instance mounted? If so, the user is returning to a
+  // track that's been playing (or paused) in the background — don't
+  // force resume on mount, respect the existing playback state.
+  // Without this guard, a paused user clicking the mini-player to
+  // return would have the song auto-unpause on them.
+  const wasTrackAlreadyLoadedAtMount = useRef(
+    !isExternalListenMode && !!trackUri && player.currentTrackUri === trackUri,
+  ).current;
+
   // Auto-resume only after the correct track has been loaded into the SDK.
   // Without the trackUri guard, this fires on mount and resumes the PREVIOUS
   // track (still in the SDK) before loadTrack has a chance to swap it out.
@@ -1015,9 +1025,13 @@ export default function Listen() {
       // would briefly play the OLD track. On very slow SDK loads (>2s)
       // this guard expires and resume() acts as a safety net.
       if (Date.now() - trackLoadTimestampRef.current < 2000) return;
+      // Respect user's deliberate pause state on remount. If the track
+      // was already loaded before THIS mount (mini-player return), the
+      // user owns the playback state — don't force resume.
+      if (wasTrackAlreadyLoadedAtMount) return;
       play();
     }
-  }, [play, isExternalListenMode, trackUri, player.currentTrackUri]);
+  }, [play, isExternalListenMode, trackUri, player.currentTrackUri, wasTrackAlreadyLoadedAtMount]);
 
   // Delayed safety-net: if the track was loaded but NEVER started playing
   // after 4s (autoPlay PUT failed or auto-resume fired in the 2s guard),
@@ -1033,6 +1047,11 @@ export default function Listen() {
 
   useEffect(() => {
     if (isExternalListenMode || !trackUri) return;
+    // Same respect-user-pause gate as the auto-resume effect above.
+    // The safety-net is for "track never started after fresh load,
+    // retry play()" — not for re-mounts where the user deliberately
+    // paused before navigating away.
+    if (wasTrackAlreadyLoadedAtMount) return;
     const capturedUri = trackUri;
     const timer = setTimeout(() => {
       if (currentTrackUriRef.current === capturedUri && !isPlayingRef.current && !hasEverPlayedRef.current) {
@@ -1041,7 +1060,7 @@ export default function Listen() {
       }
     }, 4000);
     return () => clearTimeout(timer);
-  }, [trackUri, isExternalListenMode, play]);
+  }, [trackUri, isExternalListenMode, play, wasTrackAlreadyLoadedAtMount]);
 
   useEffect(() => {
     if (trackNuggets.length === 0) return;
