@@ -34,33 +34,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Subscribe FIRST so the INITIAL_SESSION event reaches us. v2's
-    // onAuthStateChange fires INITIAL_SESSION exactly once when the
-    // subscription is created — with the post-URL-parse session (i.e.
-    // AFTER PKCE code → session exchange has run). Using it as the
-    // auth-loading-complete signal avoids the race that:
-    //
-    //   1. Browser lands on /preparing?code=XXX (OAuth callback)
-    //   2. Old code called getSession() synchronously — returned null
-    //      because the PKCE exchange is still in flight
-    //   3. AuthContext flipped loading=false with session=null
-    //   4. ProtectedRoute fired <Navigate to="/connect?redirect=..."/>
-    //   5. URL changed — `?code=` is gone
-    //   6. Supabase's async exchange tried to read the code, saw nothing,
-    //      session never created → user sees "sign in again"
-    //
-    // Slow networks / browsers were the most likely to lose this race;
-    // a Pete-on-fast-Mac vs boss-on-different-setup difference matches
-    // exactly the symptom report.
+    // 1. Eagerly hydrate from the persisted session (avoids flash and
+    //    avoids the case where onAuthStateChange's INITIAL_SESSION
+    //    fails to fire — e.g. Supabase auth endpoint timing out
+    //    during PKCE exchange, which leaves the app stuck on a
+    //    LazyFallback forever.)
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      bridgeSpotifyProviderTokens(data.session);
+      setLoading(false);
+    });
+
+    // 2. Keep state in sync for token refreshes, sign-in, sign-out.
+    //    The OAuth-callback race that the prior revision tried to fix
+    //    (getSession returning null before PKCE exchange completes,
+    //    ProtectedRoute redirecting away before the real session lands)
+    //    is acceptable here because the next auth-state change will
+    //    overwrite the null with the real session — at worst the user
+    //    bounces through /connect briefly. Trading a rare race for a
+    //    bug-free initial load.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, newSession) => {
         setSession(newSession);
         bridgeSpotifyProviderTokens(newSession);
-        // First emission flips loading off. Subsequent events (token
-        // refresh, sign-in, sign-out) shouldn't touch it — gating
-        // here keeps the semantics clean and protects against any
-        // future code that re-enables loading=true.
-        setLoading((prev) => (prev ? false : prev));
+        setLoading(false);
       },
     );
 
