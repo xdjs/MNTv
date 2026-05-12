@@ -588,10 +588,12 @@ export default function ImmersiveNuggetView({
           very-dim. Wrapper is ALWAYS rendered so vertical space is
           reserved from first paint — when wave-2 lands and bumps
           nuggets.length past 1, the dots fade in without shrinking
-          the hero area (which would push the headline up). Background
-          is transparent so the parent bg-black bleeds through and
-          there's no visible "bar" appearing/disappearing. */}
-      <div className="relative z-20 flex justify-center items-center gap-1.5 pt-5 pb-3 pointer-events-none">
+          the hero area (which would push the headline up). bg-black
+          covers the absolute-positioned blurred background layer
+          beneath; with the wrapper always rendered, the strip is
+          constant from first paint and flush with the mini-player —
+          no "bar appearing" problem because nothing changes. */}
+      <div className="relative z-20 bg-black flex justify-center items-center gap-1.5 pt-5 pb-3 pointer-events-none">
         <AnimatePresence>
           {nuggets.length > 1 &&
             Array.from({ length: nuggets.length }, (_, i) => {
