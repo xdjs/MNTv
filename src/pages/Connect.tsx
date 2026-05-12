@@ -1,6 +1,7 @@
 import { useNavigate, useSearchParams, Navigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
 import PageTransition from "@/components/PageTransition";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
@@ -281,6 +282,13 @@ function ConnectInner({ redirectUrl, oauthFailed = false }: { redirectUrl: strin
     setSpotifyConnecting(true);
     setSpotifyError(null);
     try {
+      // Sign out any stale Supabase session before redirecting to
+      // Spotify. A stale session with a missing/expired
+      // provider_token would otherwise trigger the post-signin sync
+      // to error before OAuth even completes — the user gets stuck
+      // in a retry loop. scope:"local" only wipes the browser-side
+      // session; the OAuth flow creates a fresh one immediately.
+      try { await supabase.auth.signOut({ scope: "local" }); } catch { /* noop */ }
       // Race the OAuth invoke against a 15s timeout. Supabase's
       // signInWithOAuth normally redirects the whole tab and never
       // resolves on the happy path. If it hangs (auth endpoint
@@ -441,13 +449,17 @@ function ConnectInner({ redirectUrl, oauthFailed = false }: { redirectUrl: strin
           gating. We dismiss it once any of:
             - sync flag flipped false (success or short-circuit), AND
             - we're on step 1 or beyond (synced data populated). */}
+      {/* Overlay shows ONLY for ACTIVE sync (in flight or initial
+          mount after OAuth return). When sync errors, the overlay
+          DISMISSES so the user can click the Spotify button below
+          to retry OAuth — the only path that actually fixes a
+          missing provider_token. spotifySyncError is surfaced
+          inline below the connect button instead. Previous behavior
+          left the user stuck on an overlay whose "Try again"
+          button just re-ran the broken sync. */}
       <SpotifySyncingOverlay
-        visible={
-          spotifySyncing ||
-          !!spotifySyncError ||
-          (isFreshSpotifyOAuth && step === 0)
-        }
-        error={spotifySyncError}
+        visible={spotifySyncing || (isFreshSpotifyOAuth && step === 0)}
+        error={null}
         onRetry={retrySync}
       />
       <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden noise-overlay px-6">
@@ -497,6 +509,9 @@ function ConnectInner({ redirectUrl, oauthFailed = false }: { redirectUrl: strin
                         </button>
                         {spotifyError && (
                           <p className="mt-1.5 px-1 text-xs text-red-400">{spotifyError}</p>
+                        )}
+                        {spotifySyncError && (
+                          <p className="mt-1.5 px-1 text-xs text-red-400">{spotifySyncError}</p>
                         )}
                       </>
                     ) : (
