@@ -149,10 +149,21 @@ export default function Connect() {
     const next = redirectUrl || "/browse";
     return <Navigate to={`/preparing?next=${encodeURIComponent(next)}`} replace />;
   }
-  return <ConnectInner redirectUrl={redirectUrl} />;
+  // If the user kicked off an OAuth round-trip but the escape hatch
+  // had to fire because no session ever arrived, surface that to
+  // ConnectInner so the user sees a "your sign-in didn't complete"
+  // explanation instead of being silently dropped back to the sign-
+  // in UI. Most common cause is Safari ITP / third-party-cookie
+  // blocking on the auth callback.
+  return (
+    <ConnectInner
+      redirectUrl={redirectUrl}
+      oauthFailed={oauthEscapeTriggered && !session}
+    />
+  );
 }
 
-function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
+function ConnectInner({ redirectUrl, oauthFailed = false }: { redirectUrl: string | null; oauthFailed?: boolean }) {
   const navigate = useNavigate();
   const { saveProfile } = useUserProfile();
   const { confirmTier } = useTierGate();
@@ -443,6 +454,16 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
               {/* ── Step 0: Connect Spotify ── */}
               {step === 0 && (
                 <motion.div key="step-0" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }} className="flex flex-col items-center gap-4 md:gap-6">
+                  {oauthFailed && (
+                    <div className="w-full rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-left">
+                      <p className="text-sm font-semibold text-amber-300">
+                        Your last Spotify sign-in didn't complete.
+                      </p>
+                      <p className="mt-1 text-xs text-amber-200/80 leading-relaxed">
+                        This usually means your browser blocked the session cookie. Try again — and if it keeps failing, open this page in a private/incognito window or check that third-party cookies are enabled for musicnerd.xyz.
+                      </p>
+                    </div>
+                  )}
                   <div className="text-center">
                     <h1 className="text-2xl md:text-3xl font-black text-foreground tracking-tight">Connect your music</h1>
                     <p className="mt-2 text-muted-foreground">Link Spotify for personalized insights.</p>

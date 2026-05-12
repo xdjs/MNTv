@@ -182,7 +182,7 @@ export default ArtistUpdatesSection;
 // ~2^-32, far below "two cards from the same artist with similar
 // headlines" can produce). Pure function, module-level so nothing in
 // the render tree allocates a new wrapper each pass.
-function cardKey(u: ArtistUpdate): string {
+export function cardKey(u: ArtistUpdate): string {
   if (u.nuggetId) return u.nuggetId;
   const seed = `${u.artistName}|${u.kind}|${u.headline}`;
   let h = 0x811c9dc5;
@@ -253,11 +253,18 @@ interface UpdateCardProps {
   update: ArtistUpdate;
   layoutId: string;
   onClick: () => void;
+  /** Sizing/spacing classes. Default is the Browse-rail horizontal-
+   *  scroll size; ArtistProfile passes `w-full` for a single-column
+   *  vertical stack. */
+  sizeClass?: string;
+  pulsing?: boolean;
 }
 
 // Image-backed for every kind. Tap morphs into ExpandedUpdateModal
-// via Framer Motion layoutId — no immediate navigation.
-function UpdateCard({ update, layoutId, onClick }: UpdateCardProps) {
+// via Framer Motion layoutId — no immediate navigation. Exported so
+// ArtistProfile's Latest Facts section can reuse the exact same card
+// + modal pattern that Browse uses.
+export function UpdateCard({ update, layoutId, onClick, sizeClass = "shrink-0 w-[280px] md:w-[320px] h-44 md:h-48", pulsing = false }: UpdateCardProps) {
   const { kindLabel, KindIcon } = getArtistUpdateKindMeta(update.kind);
   const { chipClass } = kindStyle(update.kind);
   const img = update.artistImageUrl;
@@ -266,7 +273,9 @@ function UpdateCard({ update, layoutId, onClick }: UpdateCardProps) {
     <motion.button
       layoutId={layoutId}
       onClick={onClick}
-      className="relative shrink-0 w-[280px] md:w-[320px] h-44 md:h-48 text-left rounded-2xl overflow-hidden group active:scale-[0.98] transition-transform"
+      className={`relative text-left rounded-2xl overflow-hidden group active:scale-[0.98] transition-transform ${sizeClass} ${
+        pulsing ? "ring-2 ring-rose-400/70 shadow-[0_0_24px_rgba(244,114,182,0.35)]" : ""
+      }`}
       aria-label={`${kindLabel}: ${update.headline}`}
     >
       {img ? (
@@ -492,8 +501,10 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpda
 // Memoized export. The parent passes a stable onClose (useCallback)
 // but onOpen is recreated each render — without memo the modal would
 // re-render on every parent re-render, which is harmless on its own
-// but adds noise during layout-shared transitions.
-const ExpandedUpdateModalMemoized = memo(ExpandedUpdateModal);
+// but adds noise during layout-shared transitions. Exported so
+// LatestFactsSection (and any future consumer) can render the exact
+// same modal without duplicating the Framer Motion layoutId wiring.
+export const ExpandedUpdateModalMemoized = memo(ExpandedUpdateModal);
 
 // Browse-specific styling per kind. Label + icon come from the shared
 // helper in src/lib/artistUpdateKind.ts so adding a new kind only

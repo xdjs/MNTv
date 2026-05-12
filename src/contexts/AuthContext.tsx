@@ -34,24 +34,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Eagerly hydrate from the persisted session (avoids flash)
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      bridgeSpotifyProviderTokens(data.session);
-      setLoading(false);
-    });
-
-    // 2. Keep state in sync for token refreshes, sign-in, sign-out. The
-    // bridge runs on every event so the localStorage token tracks the
-    // freshest Supabase session — but note: post-JWT-refresh events drop
-    // the provider token, which the bridge correctly no-ops on (see
-    // bridgeSpotifyProviderTokens guards).
+    // Subscribe FIRST so the INITIAL_SESSION event reaches us. v2's
+    // onAuthStateChange fires INITIAL_SESSION exactly once when the
+    // subscription is created — with the post-URL-parse session (i.e.
+    // AFTER PKCE code → session exchange has run). Using it as the
+    // auth-loading-complete signal avoids the race that:
+    //
+    //   1. Browser lands on /preparing?code=XXX (OAuth callback)
+    //   2. Old code called getSession() synchronously — returned null
+    //      because the PKCE exchange is still in flight
+    //   3. AuthContext flipped loading=false with session=null
+    //   4. ProtectedRoute fired <Navigate to="/connect?redirect=..."/>
+    //   5. URL changed — `?code=` is gone
+    //   6. Supabase's async exchange tried to read the code, saw nothing,
+    //      session never created → user sees "sign in again"
+    //
+    // Slow networks / browsers were the most likely to lose this race;
+    // a Pete-on-fast-Mac vs boss-on-different-setup difference matches
+    // exactly the symptom report.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, newSession) => {
         setSession(newSession);
         bridgeSpotifyProviderTokens(newSession);
+        // First emission flips loading off. Subsequent events (token
+        // refresh, sign-in, sign-out) just update session — loading
+        // was already false.
         setLoading(false);
-      }
+      },
     );
 
     return () => subscription.unsubscribe();

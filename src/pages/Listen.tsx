@@ -74,13 +74,33 @@ export default function Listen() {
     if (!realTrackMeta) return null;
     // Try URL query param first (demo tiles pass ?art=), then profile, then DiceBear
     let coverArtUrl = urlArt;
-    if (!coverArtUrl && profile?.trackImages) {
+    // Side-effect of the same scan: recover collaborators. The URL
+    // format (`real::artist::title::album::uri`) doesn't carry them,
+    // so the only client-side source is the user's own taste data
+    // where spotify-taste populated `collaborators` from
+    // `track.artists.slice(1)`. Without this lookup, wave-2 on
+    // collab tracks (e.g. "Better" by Ty Symph, Pete Rango) loses
+    // the secondary research target and falls back to thin content
+    // grounded only in the primary artist.
+    let collaborators: string[] | undefined;
+    const titleLower = realTrackMeta.title.toLowerCase();
+    const artistLower = realTrackMeta.artist.toLowerCase();
+    if (profile?.trackImages) {
       const match = profile.trackImages.find(
         (t) =>
-          t.title.toLowerCase() === realTrackMeta.title.toLowerCase() &&
-          t.artist.toLowerCase() === realTrackMeta.artist.toLowerCase()
+          t.title.toLowerCase() === titleLower &&
+          t.artist.toLowerCase() === artistLower
       );
-      if (match?.imageUrl) coverArtUrl = match.imageUrl;
+      if (match?.imageUrl) coverArtUrl = coverArtUrl || match.imageUrl;
+      if (match?.collaborators?.length) collaborators = match.collaborators;
+    }
+    if (!collaborators && profile?.likedTracks) {
+      const liked = profile.likedTracks.find(
+        (t) =>
+          t.title.toLowerCase() === titleLower &&
+          t.artist.toLowerCase() === artistLower
+      );
+      if (liked?.collaborators?.length) collaborators = liked.collaborators;
     }
     if (!coverArtUrl && profile?.artistImages?.[realTrackMeta.artist]) {
       coverArtUrl = profile.artistImages[realTrackMeta.artist];
@@ -92,6 +112,7 @@ export default function Listen() {
       id: trackId,
       title: realTrackMeta.title,
       artist: realTrackMeta.artist,
+      collaborators,
       artistId: "",
       albumId: "",
       album: realTrackMeta.album,
@@ -99,7 +120,7 @@ export default function Listen() {
       coverArtUrl,
       trackNumber: 1,
     };
-  }, [realTrackMeta, trackId, urlArt, profile?.trackImages, profile?.artistImages]);
+  }, [realTrackMeta, trackId, urlArt, profile?.trackImages, profile?.likedTracks, profile?.artistImages]);
 
   // ── Playback source resolution ───────────────────────────────────────
   const { hasSpotifyToken } = useSpotifyToken();
@@ -515,6 +536,16 @@ export default function Listen() {
   const tier = (profile?.calculatedTier as "casual" | "curious" | "nerd") || "casual";
   useTierAccent(tier);
   const artistImageUrl = (track?.artist && profile?.artistImages?.[track.artist]) || track?.coverArtUrl || "";
+  // Display string for the UI — joins primary + collaborators with ", ".
+  // Kept separate from `track.artist` because the latter is the cache
+  // key + lookup anchor everywhere else (search by primary artist
+  // only). Display contexts (mini player, title block, deep dive) want
+  // the full credit so it matches what the user sees on Spotify.
+  const artistDisplay = track?.artist
+    ? track.collaborators?.length
+      ? `${track.artist}, ${track.collaborators.join(", ")}`
+      : track.artist
+    : "";
   const { nuggets: aiNuggets, sources: aiSources, loading: aiLoading, error: aiError, listenCount, artistSummary, fromCache: aiFromCache, waveLoading } = useAINuggets(
     trackId,
     track?.artist || "",
@@ -526,7 +557,8 @@ export default function Listen() {
     artistImageUrl,
     tier,
     profile?.topArtists,
-    profile?.topTracks
+    profile?.topTracks,
+    track?.collaborators,
   );
 
   // Log AI nugget errors for debugging
@@ -1320,7 +1352,7 @@ export default function Listen() {
             {track.title}
           </h1>
           <p className="mt-0.5 text-base font-bold text-foreground/50 md:text-lg" style={{ fontFamily: "'Nunito Sans', sans-serif" }}>
-            {track.artist}
+            {artistDisplay}
           </p>
           {track.album && (
             <p className="mt-0.5 text-sm text-foreground/25 font-medium" style={{ fontFamily: "'Nunito Sans', sans-serif" }}>
@@ -1636,7 +1668,7 @@ export default function Listen() {
                 <NuggetDeepDive
                   nugget={deepDiveNugget}
                   source={getSource(deepDiveNugget.sourceId) || null}
-                  artist={track.artist}
+                  artist={artistDisplay}
                   trackTitle={track.title}
                   onClose={() => { setDeepDiveNugget(null); setFocusZone('bar'); setNuggetFocused(false); }}
                 />
@@ -1655,7 +1687,7 @@ export default function Listen() {
               sources={aiSources}
               coverArtUrl={effectiveCoverArt}
               trackTitle={track?.title || ""}
-              artist={track?.artist || ""}
+              artist={artistDisplay}
               onClose={() => navigate("/browse")}
               onPrev={handlePrev}
               onNext={handleNext}
