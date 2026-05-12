@@ -193,9 +193,15 @@ function ConnectInner({ redirectUrl, oauthFailed = false }: { redirectUrl: strin
       }
     })(),
   ).current;
-  const isFreshSpotifyOAuth =
-    oauthPendingOnMount ||
-    (!!authUser && authUser.app_metadata?.provider === "spotify");
+  // Previously OR'd with `authUser.app_metadata?.provider === "spotify"`
+  // to keep the overlay up during mid-onboarding sync. That made the
+  // overlay STICKY for any user with a Spotify session — including
+  // users with a stale session who want to retry sign-in. Result: the
+  // overlay covered the Spotify connect button and clicks did
+  // nothing. The sessionStorage flag alone is the right signal —
+  // it's set right before the OAuth redirect and cleared when the
+  // user finishes onboarding or hits the escape hatch.
+  const isFreshSpotifyOAuth = oauthPendingOnMount;
 
   // Tier-pick reset on fresh OAuth lives at the parent Connect level
   // now (so it fires for returning users who short-circuit via
@@ -275,14 +281,25 @@ function ConnectInner({ redirectUrl, oauthFailed = false }: { redirectUrl: strin
     setSpotifyConnecting(true);
     setSpotifyError(null);
     try {
-      await signInWithSpotify();
+      // Race the OAuth invoke against a 15s timeout. Supabase's
+      // signInWithOAuth normally redirects the whole tab and never
+      // resolves on the happy path. If it hangs (auth endpoint
+      // timing out, network failure) the button would stay in
+      // "Connecting..." forever with no retry path. The timeout
+      // surfaces an error message so the user can try again.
+      await Promise.race([
+        signInWithSpotify(),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error("Spotify sign-in took too long")), 15_000),
+        ),
+      ]);
     } catch (e) {
       console.error("Spotify auth error:", e);
-      // Mirror the Apple Music path: surface a message instead of
-      // silently re-enabling the button. Supabase's signInWithOAuth
-      // errors here are rare (network, provider misconfiguration) but
-      // when they hit, the user needs to know the click did something.
-      setSpotifyError("Couldn't connect to Spotify. Try again?");
+      const msg = e instanceof Error ? e.message : "Couldn't connect to Spotify";
+      setSpotifyError(`${msg}. Try again?`);
+      // Clear the pending sessionStorage flag so a subsequent retry
+      // doesn't trip the blank-fallback escape hatch.
+      try { sessionStorage.removeItem(SPOTIFY_OAUTH_PENDING_KEY); } catch { /* noop */ }
     } finally {
       // Belt-and-suspenders — on the happy path `signInWithOAuth`
       // redirects the whole tab so this setter runs on a tab that's
