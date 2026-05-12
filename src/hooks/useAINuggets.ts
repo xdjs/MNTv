@@ -317,6 +317,13 @@ export function useAINuggets(
   // 30 s so a transient server error doesn't fire a new request every 500 ms
   // (the effect re-evaluates on every currentTime tick).
   const waveCooldownUntilRef = useRef(0);
+  // Latch: once a wave-2 attempt comes back empty for THIS track, the
+  // Validator + source filter stripped everything the Writer produced
+  // (typical for sub-1k-listener artists where Exa returns no journalism).
+  // No amount of retries will change that within the same track, so we
+  // stop firing wave requests entirely instead of burning a Gemini call
+  // every 30s. Cleared on track change via cancelledRef cycling.
+  const waveExhaustedRef = useRef(false);
   // Mirror waveInFlightRef as state so the UI can surface a "more coming" pill.
   const [waveLoading, setWaveLoading] = useState(false);
   // Track the current trackId via ref so in-flight wave generations can
@@ -337,6 +344,7 @@ export function useAINuggets(
     currentWaveRef.current = 1;
     waveInFlightRef.current = false;
     waveCooldownUntilRef.current = 0;
+    waveExhaustedRef.current = false;
   }, [trackId, regenerateKey]);
 
   const generate = useCallback(async () => {
@@ -1111,6 +1119,7 @@ export function useAINuggets(
     if (!isPlaying) return;                         // paused — wait
     if (cancelledRef.current) return;               // track changed / unmount
     if (Date.now() < waveCooldownUntilRef.current) return;  // recent failure, cooldown
+    if (waveExhaustedRef.current) return;           // server returned 0 — no more for this track
 
     // Tap fan-out if we served from cache but only
     // have a single nugget (firstNuggetOnly partial), the user still
@@ -1154,22 +1163,42 @@ export function useAINuggets(
           spotifyTrackId: spotifyUriMatch?.[1],
           appleTrackId: appleUriMatch?.[1],
         };
-        const { data, error } = await supabase.functions.invoke("generate-nuggets", {
-          body: requestBody,
-        });
+        // 60s hard timeout — server cap is 90s but a wedged call
+        // shouldn't pin waveInFlightRef true forever (the only thing
+        // that releases it is this function's finally block). 60s
+        // covers warm Gemini paths comfortably and aborts cold
+        // starts that wandered off.
+        const invokePromise = supabase.functions.invoke("generate-nuggets", { body: requestBody });
+        const raceResult = await Promise.race<
+          Awaited<typeof invokePromise> | { timedOut: true }
+        >([
+          invokePromise,
+          new Promise<{ timedOut: true }>((resolve) =>
+            setTimeout(() => resolve({ timedOut: true }), 60_000),
+          ),
+        ]);
 
         // Drop results if track changed or generation cancelled.
         if (waveTrackId !== currentTrackIdRef.current || cancelledRef.current) {
           if (import.meta.env.DEV) console.log(`[NuggetWave ${nextWave}] dropped — track changed`);
           return;
         }
+        if ("timedOut" in raceResult) {
+          if (import.meta.env.DEV) console.warn(`[NuggetWave ${nextWave}] TIMEOUT after 60s — backing off`);
+          return;
+        }
+        const { data, error } = raceResult;
         if (error) {
           if (import.meta.env.DEV) console.warn(`[NuggetWave ${nextWave}] error:`, error.message);
           return;
         }
         const newNuggetData = (data?.nuggets as AINuggetData[] | undefined) ?? [];
         if (newNuggetData.length === 0) {
-          if (import.meta.env.DEV) console.log(`[NuggetWave ${nextWave}] server returned 0 nuggets — done`);
+          // Latch: the Validator stripped everything (typical for
+          // sub-1k-listener artists with no Exa coverage). Don't burn
+          // another Gemini call every 30s for the rest of the track.
+          waveExhaustedRef.current = true;
+          if (import.meta.env.DEV) console.log(`[NuggetWave ${nextWave}] server returned 0 nuggets — exhausted, no more retries for this track`);
           return;
         }
 
