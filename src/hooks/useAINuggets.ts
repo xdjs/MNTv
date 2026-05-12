@@ -373,7 +373,26 @@ export function useAINuggets(
     // string the helper builds from raw artist/title/uri.
     const cacheKey = `${trackId}::${tier}::${regenerateKey}`;
 
-    const cached = getNuggetCache(cacheKey);
+    // Pre-gen always writes at regenerateKey=0. Re-listens bump
+    // regenerateKey for "deeper content on re-listen", which means
+    // the cache lookup at the bumped key misses on every return
+    // visit — even though the pre-gen / earlier-session content is
+    // still in the in-mem cache at key=0. Result: user taps mini-
+    // player to return to the song they're listening to and sees
+    // the loading placeholder instead of their nuggets.
+    // Fall back to regenerateKey=0 when the current key misses. The
+    // wave-2/3 trigger downstream still fires with the current
+    // regenerateKey to fetch deeper content from the server — the
+    // user just gets instant content from pre-gen / earlier session
+    // first, deeper content in the background.
+    let cached = getNuggetCache(cacheKey);
+    if (!cached && regenerateKey > 0) {
+      const fallbackKey = `${trackId}::${tier}::0`;
+      cached = getNuggetCache(fallbackKey);
+      if (cached && import.meta.env.DEV) {
+        console.log("[NuggetMemCache] Falling back to regenerateKey=0:", fallbackKey);
+      }
+    }
     if (cached) {
       if (import.meta.env.DEV) console.log("[NuggetMemCache] Serving from in-memory cache:", cacheKey);
       setFromCache(true);
