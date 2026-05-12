@@ -1257,15 +1257,35 @@ export function useAINuggets(
         advancedWaveRef = true;
         if (import.meta.env.DEV) console.log(`[NuggetWave ${nextWave}] appended ${newNuggets.length} nuggets`);
 
-        // Non-fatal: persist the accumulated set for future replays. Read
-        // current state from refs rather than closures so we include any
-        // sources/nuggets that arrived via SSE while this request was in
-        // flight.
+        // Persist the accumulated set for future replays. Read current
+        // state from refs rather than closures so we include any
+        // sources/nuggets that arrived via SSE while this request was
+        // in flight.
+        const allNuggets = [...nuggetsRef.current, ...newNuggets];
+        const allSources = new Map(sourcesRef.current);
+        newSources.forEach((v, k) => allSources.set(k, v));
+
+        // CRITICAL: also write the in-memory cache so a same-session
+        // navigation away and back (Listen → Browse → mini-player tap
+        // → Listen) restores the FULL set of nuggets the user was
+        // viewing, not just the original pre-gen entry. Pete's report:
+        // "I had nugget 3 visible, went to Browse, came back via mini-
+        // player, only saw nugget 1 with everything else gone."
+        // Without this write, the in-mem cache stays pinned to the
+        // pre-gen entry; on remount useAINuggets hits in-mem first
+        // (short-circuiting before DB), so wave 2/3 content
+        // accumulated during the session evaporates. Match the SSE-
+        // complete path's setNuggetCache call (line ~855).
+        const inMemCacheKey = `${trackId}::${tier}::${regenerateKey}`;
+        setNuggetCache(inMemCacheKey, {
+          nuggets: allNuggets,
+          sources: allSources,
+          listenCount,
+        });
+
+        // Non-fatal: persist to DB too so cross-session replays benefit.
         try {
           const dbCacheKey = canonicalCacheKey(trackId, tier);
-          const allNuggets = [...nuggetsRef.current, ...newNuggets];
-          const allSources = new Map(sourcesRef.current);
-          newSources.forEach((v, k) => allSources.set(k, v));
           const cacheSourcesObj: Record<string, Source> = {};
           allSources.forEach((src, key) => { cacheSourcesObj[key] = src; });
           await supabase.from("nugget_cache").upsert(
@@ -1290,7 +1310,7 @@ export function useAINuggets(
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- nuggets/sources read at trigger time, not subscribed
-  }, [currentTime, nuggets.length, durationSec, isPlaying, trackId, artist, title, album, tier, fromCache]);
+  }, [currentTime, nuggets.length, durationSec, isPlaying, trackId, artist, title, album, tier, fromCache, regenerateKey, listenCount, setNuggetCache]);
 
   return { nuggets, sources, loading, error, listenCount, artistSummary, fromCache, waveLoading };
 }
