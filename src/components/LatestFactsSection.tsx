@@ -39,11 +39,20 @@ export default function LatestFactsSection({ updates, loading, artistName }: Pro
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [pulseKey, setPulseKey] = useState<string | null>(null);
 
+  // layoutId namespace prefix. Both this section and Browse's
+  // "Your artists, lately" rail render UpdateCard with the same
+  // cardKey-derived layoutId. Different routes today so they never
+  // co-exist in the DOM, but if React Router ever keeps both in the
+  // tree during a shared-layout exit transition, Framer Motion would
+  // try to animate the same layoutId from two DOM nodes and glitch.
+  // Namespacing makes the contract airtight either way.
+  const layoutIdFor = (u: ArtistUpdate) => `artist-profile-${cardKey(u)}`;
+
   // Look up the expanded update for modal content. Memoized so the
   // scan doesn't re-run on every parent re-render.
   const expandedUpdate = useMemo<ArtistUpdate | null>(() => {
     if (!expandedKey) return null;
-    return updates.find((u) => cardKey(u) === expandedKey) ?? null;
+    return updates.find((u) => layoutIdFor(u) === expandedKey) ?? null;
   }, [expandedKey, updates]);
 
   // Deep-link from Browse: auto-open the matching nugget in the modal.
@@ -54,7 +63,7 @@ export default function LatestFactsSection({ updates, loading, artistName }: Pro
     if (!targetNuggetId || updates.length === 0) return;
     const match = updates.find((u) => u.nuggetId === targetNuggetId);
     if (!match) return;
-    const key = cardKey(match);
+    const key = layoutIdFor(match);
     setExpandedKey(key);
     setPulseKey(key);
     const pulseTimer = setTimeout(() => setPulseKey(null), 1800);
@@ -116,7 +125,7 @@ export default function LatestFactsSection({ updates, loading, artistName }: Pro
         {loading && updates.length === 0
           ? Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
           : updates.map((u) => {
-              const key = cardKey(u);
+              const key = layoutIdFor(u);
               return (
                 <UpdateCard
                   key={key}
@@ -134,7 +143,7 @@ export default function LatestFactsSection({ updates, loading, artistName }: Pro
         {expandedUpdate && (
           <ExpandedUpdateModalMemoized
             update={expandedUpdate}
-            layoutId={cardKey(expandedUpdate)}
+            layoutId={layoutIdFor(expandedUpdate)}
             onClose={modalOnClose}
             onOpen={modalOnOpen}
           />

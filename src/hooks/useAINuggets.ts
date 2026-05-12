@@ -1183,14 +1183,17 @@ export function useAINuggets(
         // covers warm Gemini paths comfortably and aborts cold
         // starts that wandered off.
         const invokePromise = supabase.functions.invoke("generate-nuggets", { body: requestBody });
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        const timeoutPromise = new Promise<{ timedOut: true }>((resolve) => {
+          timeoutId = setTimeout(() => resolve({ timedOut: true }), 60_000);
+        });
         const raceResult = await Promise.race<
           Awaited<typeof invokePromise> | { timedOut: true }
-        >([
-          invokePromise,
-          new Promise<{ timedOut: true }>((resolve) =>
-            setTimeout(() => resolve({ timedOut: true }), 60_000),
-          ),
-        ]);
+        >([invokePromise, timeoutPromise]);
+        // Clear the timer regardless of which side won — without this the
+        // 60s closure stays scheduled even after the invoke resolves,
+        // accumulating one stale timer per wave trigger over the session.
+        if (timeoutId) clearTimeout(timeoutId);
 
         // Drop results if track changed or generation cancelled.
         if (waveTrackId !== currentTrackIdRef.current || cancelledRef.current) {

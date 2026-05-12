@@ -222,14 +222,17 @@ export function useArtistUpdates(
         const invokePromise = supabase.functions.invoke("artist-updates", {
           body: { artist, tier },
         });
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        const timeoutPromise = new Promise<{ timedOut: true }>((resolve) => {
+          timeoutId = setTimeout(() => resolve({ timedOut: true }), 30_000);
+        });
         const raceResult = await Promise.race<
           Awaited<typeof invokePromise> | { timedOut: true }
-        >([
-          invokePromise,
-          new Promise<{ timedOut: true }>((resolve) =>
-            setTimeout(() => resolve({ timedOut: true }), 30_000),
-          ),
-        ]);
+        >([invokePromise, timeoutPromise]);
+        // Clear the timer regardless of which side won — without this
+        // the 30s closure stays scheduled, accumulating per artist
+        // fetch over the session.
+        if (timeoutId) clearTimeout(timeoutId);
         if (cancelled) return;
         if ("timedOut" in raceResult) {
           if (import.meta.env.DEV) {
