@@ -585,23 +585,33 @@ export default function ImmersiveNuggetView({
           Pete 2026-05-08: "dots right above the mini player ...
           headline and nugget amount counter should never be covered
           by the mini player." Active bright, unlocked dim, locked
-          very-dim. Hidden when there's only one nugget. */}
-      {nuggets.length > 1 && (
-        <div className="relative z-20 bg-black flex justify-center items-center gap-1.5 pt-5 pb-3 pointer-events-none">
-          {Array.from({ length: nuggets.length }, (_, i) => {
-            const isActive = i === activeIndex;
-            const isUnlocked = i < unlockedCount;
-            return (
-              <div
-                key={i}
-                className={`w-1.5 h-1.5 rounded-full transition-colors duration-200 ${
-                  isActive ? "bg-white/85" : isUnlocked ? "bg-white/35" : "bg-white/12"
-                }`}
-              />
-            );
-          })}
-        </div>
-      )}
+          very-dim. Wrapper is ALWAYS rendered so vertical space is
+          reserved from first paint — when wave-2 lands and bumps
+          nuggets.length past 1, the dots fade in without shrinking
+          the hero area (which would push the headline up). Background
+          is transparent so the parent bg-black bleeds through and
+          there's no visible "bar" appearing/disappearing. */}
+      <div className="relative z-20 flex justify-center items-center gap-1.5 pt-5 pb-3 pointer-events-none">
+        <AnimatePresence>
+          {nuggets.length > 1 &&
+            Array.from({ length: nuggets.length }, (_, i) => {
+              const isActive = i === activeIndex;
+              const isUnlocked = i < unlockedCount;
+              return (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, scale: 0.6 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.6 }}
+                  transition={{ duration: 0.25, ease: "easeOut" }}
+                  className={`w-1.5 h-1.5 rounded-full transition-colors duration-200 ${
+                    isActive ? "bg-white/85" : isUnlocked ? "bg-white/35" : "bg-white/12"
+                  }`}
+                />
+              );
+            })}
+        </AnimatePresence>
+      </div>
 
       {/* Mini player */}
       <div className="relative z-20 bg-black" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>

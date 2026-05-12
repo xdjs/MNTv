@@ -214,10 +214,33 @@ export function useArtistUpdates(
       if (inFlightRef.current.has(key)) return;
       inFlightRef.current.add(key);
       try {
-        const { data, error } = await supabase.functions.invoke("artist-updates", {
+        // Hard timeout. Without it, a hung edge function (Gemini
+        // cold-start, Exa rate limit) pins the global "Loading
+        // artist updates" pill on screen indefinitely. 30s matches
+        // typical worst-case server budget; anything longer is a
+        // sign the call is wedged.
+        const invokePromise = supabase.functions.invoke("artist-updates", {
           body: { artist, tier },
         });
+        const raceResult = await Promise.race<
+          Awaited<typeof invokePromise> | { timedOut: true }
+        >([
+          invokePromise,
+          new Promise<{ timedOut: true }>((resolve) =>
+            setTimeout(() => resolve({ timedOut: true }), 30_000),
+          ),
+        ]);
         if (cancelled) return;
+        if ("timedOut" in raceResult) {
+          if (import.meta.env.DEV) {
+            console.warn(`[artist-updates] ${artist} TIMEOUT after 30s — resolving empty`);
+          }
+          setGroups((prev) =>
+            prev.map((g) => (g.artistName === artist ? { ...g, updates: [] } : g)),
+          );
+          return;
+        }
+        const { data, error } = raceResult;
         if (error) {
           if (import.meta.env.DEV) {
             console.warn(`[artist-updates] ${artist} failed:`, error.message);
