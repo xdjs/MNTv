@@ -159,6 +159,40 @@ export default function ImmersiveNuggetView({
     }
   }, [trackKey]);
 
+  // Defensive clamp: if the nuggets array ever shrinks (a fresh
+  // generation after a regenerateKey bump comes back with fewer
+  // nuggets than the previous instance had, or the in-memory cache
+  // hands back a partial firstNuggetOnly entry) and activeIndex is
+  // out of bounds, activeNugget = nuggets[activeIndex] becomes
+  // undefined → showCard = false → the user gets the cover-art
+  // "View nuggets" branch with a button that doesn't recover.
+  // Clamping to 0 forces a real card back on screen.
+  useEffect(() => {
+    if (nuggets.length > 0 && activeIndex >= nuggets.length) {
+      setActiveIndex(0);
+    }
+  }, [nuggets.length, activeIndex]);
+
+  // Also drop stale ids from unlockedIds when nuggets changes. The
+  // unlock effect only ADDS ids; without a prune pass, ids from a
+  // previous nuggets list survive when nuggets shrinks. That makes
+  // unlockedCount > 0 (so the "View nuggets" button renders) while
+  // none of the unlocked ids correspond to a real entry in the
+  // current nuggets array.
+  useEffect(() => {
+    if (nuggets.length === 0) return;
+    const currentIds = new Set(nuggets.map((n) => n.id));
+    setUnlockedIds((prev) => {
+      let drift = false;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (currentIds.has(id)) next.add(id);
+        else drift = true;
+      }
+      return drift ? next : prev;
+    });
+  }, [nuggets]);
+
   // ── Unlock nuggets ─────────────────────────────────────────────────
   // INVARIANT (Pete's spec, 2026-05-06): the FIRST nugget always
   // unlocks the moment nuggets arrive — no timestamp gating, no
@@ -555,7 +589,16 @@ export default function ImmersiveNuggetView({
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.3 }}
-              onClick={() => { if (unlockedCount > 0) setNuggetDismissed(false); }}
+              onClick={() => {
+                if (unlockedCount === 0) return;
+                // Belt-and-suspenders: reset activeIndex to 0 if it
+                // ever drifted out of bounds, then drop the dismissed
+                // flag. Without this, a stale activeIndex made
+                // `nuggets[activeIndex]` undefined and the user was
+                // stuck on cover art even after clicking through.
+                if (activeIndex >= nuggets.length) setActiveIndex(0);
+                setNuggetDismissed(false);
+              }}
             >
               {artUrl && (
                 <img
@@ -570,7 +613,10 @@ export default function ImmersiveNuggetView({
               {unlockedCount > 0 && (
                 <button
                   className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 active:scale-95 transition-transform animate-nudge-pulse"
-                  onClick={() => setNuggetDismissed(false)}
+                  onClick={() => {
+                    if (activeIndex >= nuggets.length) setActiveIndex(0);
+                    setNuggetDismissed(false);
+                  }}
                 >
                   <MusicNerdLogo size={16} />
                   <span className="text-xs text-white/50">View nuggets</span>

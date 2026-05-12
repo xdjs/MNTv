@@ -68,8 +68,13 @@ export default function MusicNerdLoadingOrchestrator({
   const initialPhase = (): AnimPhase => {
     const cached = phaseCache.get(trackId);
     // If we already reached pulsating/ready/morphFly for this track, restore
-    // (morphFly → skip to pulsating/ready since we can't resume mid-flight)
-    if (cached === "ready") return "ready";
+    // (morphFly → skip to pulsating/ready since we can't resume mid-flight).
+    // "ready" with aiLoading=true means a fresh generation is in flight
+    // (regenerateKey bump after a track-completed return, or DB cache miss
+    // on the second visit). Drop back to hidden so the state machine fires
+    // the pill again — without this guard, Pete saw cover art with no
+    // researching pill when re-opening a track he'd just played.
+    if (cached === "ready") return aiLoading ? "hidden" : "ready";
     if (cached === "pulsating") return aiLoading ? "pulsating" : "ready";
     if (cached === "morphFly") return aiLoading ? "pulsating" : "ready";
     if (cached === "pill") return aiLoading ? "pill" : "ready";
