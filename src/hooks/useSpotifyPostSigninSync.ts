@@ -58,7 +58,7 @@ export function useSpotifyPostSigninSync({ onSynced }: UseSpotifyPostSigninSyncO
   retrySync: () => void;
 } {
   const { user } = useAuth();
-  const { profile } = useUserProfile();
+  const { profile, loading: profileLoading } = useUserProfile();
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [retryTick, setRetryTick] = useState(0);
@@ -73,6 +73,17 @@ export function useSpotifyPostSigninSync({ onSynced }: UseSpotifyPostSigninSyncO
     if (!user) return;
     if (user.app_metadata?.provider !== "spotify") return;
     if (syncedUserIdRef.current === user.id) return;
+    // Wait for useUserProfile's DB hydration to settle before deciding
+    // whether to fetch. Without this gate, a returning user (DB row
+    // already has Spotify data) starts a fetch in run-1 against
+    // profile=null, then profile loads + Connect navigates to
+    // /preparing + ConnectInner unmounts + the in-flight fetch is
+    // discarded as "cancelled (newer run started)". Wasted Spotify
+    // API call and noisy console log. Letting profile settle first
+    // routes returning users through the cache-hit short-circuit
+    // below; new users still start the fetch correctly once
+    // profileLoading flips false with profile=null.
+    if (profileLoading) return;
     // Skip if the local profile already has Spotify taste data — the user
     // is returning, not newly signing in.
     if (profile?.streamingService === "Spotify" && (profile?.topArtists?.length ?? 0) > 0) {
@@ -168,7 +179,7 @@ export function useSpotifyPostSigninSync({ onSynced }: UseSpotifyPostSigninSyncO
     // re-triggering when the caller's closure identity changes.
     // `retryTick` is included so calling `retrySync()` re-runs the effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, user?.app_metadata?.provider, profile?.streamingService, profile?.topArtists?.length, retryTick]);
+  }, [user?.id, user?.app_metadata?.provider, profile?.streamingService, profile?.topArtists?.length, profileLoading, retryTick]);
 
   const retrySync = () => {
     // Clear the per-user guard so the effect doesn't short-circuit.
