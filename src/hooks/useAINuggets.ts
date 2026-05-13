@@ -1218,11 +1218,20 @@ export function useAINuggets(
         // accumulating one stale timer per wave trigger over the session.
         if (timeoutId) clearTimeout(timeoutId);
 
-        // Drop results if track changed or generation cancelled.
-        if (waveTrackId !== currentTrackIdRef.current || cancelledRef.current) {
-          if (import.meta.env.DEV) console.log(`[NuggetWave ${nextWave}] dropped — track changed`);
+        // Drop entirely only if the user genuinely navigated to a
+        // DIFFERENT track. Unmount-cancellation (Listen → Browse) is
+        // NOT a reason to discard — the OLD wave-2 fetch is still
+        // valid for the OLD track's cache key, and writing the
+        // result so the return visit hits a populated cache is the
+        // whole point of "background research keeps going" (Pete:
+        // "I thought we had fixed this?").
+        if (waveTrackId !== currentTrackIdRef.current) {
+          if (import.meta.env.DEV) console.log(`[NuggetWave ${nextWave}] dropped — user switched tracks`);
           return;
         }
+        // Pure unmount cancellation: setState calls below will be
+        // no-ops in React 18 (which is fine — we still want the
+        // cache write to happen so a return visit sees the nuggets).
         if ("timedOut" in raceResult) {
           if (import.meta.env.DEV) console.warn(`[NuggetWave ${nextWave}] TIMEOUT after 60s — backing off`);
           return;
