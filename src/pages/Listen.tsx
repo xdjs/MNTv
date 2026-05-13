@@ -746,6 +746,24 @@ export default function Listen() {
     }));
   }, [rawTrackNuggets, realDuration]);
 
+  // DEV-ONLY: inject a recommendedArtist via URL query so the
+  // "Open {Artist}" button can be visually verified without a
+  // server-side deploy. Usage: append ?injectArtist=Lunch%20$pecial
+  // (optionally &injectArtistId=SPOTIFY_ID) to any /listen URL.
+  // Stripped from production builds — guarded on import.meta.env.DEV.
+  const trackNuggetsWithDevInjection = useMemo(() => {
+    if (!import.meta.env.DEV) return trackNuggets;
+    if (typeof window === "undefined") return trackNuggets;
+    const params = new URLSearchParams(window.location.search);
+    const injectArtist = params.get("injectArtist");
+    if (!injectArtist) return trackNuggets;
+    const injectArtistId = params.get("injectArtistId") || undefined;
+    return trackNuggets.map((n, i) => (i === 0 ? {
+      ...n,
+      recommendedArtist: { name: injectArtist, spotifyArtistId: injectArtistId },
+    } : n));
+  }, [trackNuggets]);
+
   const [animStyle, setAnimStyle] = useState<AnimationStyle>("A");
   const [activeNugget, setActiveNugget] = useState<Nugget | null>(null);
   const [nuggetQueue, setNuggetQueue] = useState<Nugget[]>([]);
@@ -1709,7 +1727,7 @@ export default function Listen() {
         {isMobile && track && (
           <Suspense fallback={null}>
             <ImmersiveNuggetView
-              nuggets={trackNuggets}
+              nuggets={trackNuggetsWithDevInjection}
               sources={aiSources}
               coverArtUrl={effectiveCoverArt}
               trackTitle={track?.title || ""}
