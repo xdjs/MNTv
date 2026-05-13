@@ -730,13 +730,15 @@ export default function Listen() {
     const endBuffer = 15;
     const usable = Math.max(realDuration - earlyStart - endBuffer, 30);
     const denom = Math.max(rawTrackNuggets.length - 1, 1);
-    // Cap spacing at MAX_SPACING so a low total nugget count doesn't
-    // get spread across the whole track with huge silent gaps.
-    // Pete's report: 3 nuggets in a 240s track → even spacing = 112s
-    // → nugget #3 lands at 3:45. With cap, spacing = 75s →
-    // 0/1:15/2:30, nuggets cluster early and the last ~1:30 of music
-    // is content-free (intentional — better than sparse).
-    const MAX_SPACING_SEC = 75;
+    // Cap spacing tight enough that wave-2 nuggets unlock close to
+    // when they arrive from the server (not 75s after). Pete: "why
+    // should it take 1 minute and 15 seconds for the first nugget
+    // of wave 2 to arrive?" Wave-2 typically returns at T~25-35s
+    // after the track starts; with a 45s cap and 3 nuggets, the
+    // second nugget unlocks at T=45 — much closer to "as soon as
+    // it's available." For high-count wave success (9 nuggets),
+    // even spacing = 25s, which is below the cap and stays as-is.
+    const MAX_SPACING_SEC = 45;
     const spacing = Math.min(usable / denom, MAX_SPACING_SEC);
     return rawTrackNuggets.map((n, i) => ({
       ...n,
