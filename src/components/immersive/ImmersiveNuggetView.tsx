@@ -472,7 +472,7 @@ export default function ImmersiveNuggetView({
               ) : (
                 <TypewriterText
                   text={activeNugget.headline || activeNugget.text}
-                  speed={35}
+                  speed={18}
                   paused={false}
                   onComplete={handleTypewriterComplete}
                   as="h2"
