@@ -11,6 +11,7 @@ import MiniPlayer from "./MiniPlayer";
 import { useNuggetPacer } from "./useNuggetPacer";
 import { useBookmarks } from "@/hooks/useBookmarks";
 import { isSafeUrl } from "@/lib/urlSafety";
+import { RecommendedArtistButton, RecommendedTrackButton } from "./RecommendedButtons";
 
 interface ImmersiveNuggetViewProps {
   nuggets: Nugget[];
@@ -471,7 +472,7 @@ export default function ImmersiveNuggetView({
               ) : (
                 <TypewriterText
                   text={activeNugget.headline || activeNugget.text}
-                  speed={35}
+                  speed={18}
                   paused={false}
                   onComplete={handleTypewriterComplete}
                   as="h2"
@@ -549,6 +550,16 @@ export default function ImmersiveNuggetView({
                 trackTitle={trackTitle}
                 isBookmarked={bookmarks.isBookmarked}
                 toggle={bookmarks.toggle}
+              />
+            )}
+            {activeNugget?.recommendedArtist?.name && (
+              <RecommendedArtistButton
+                recommendedArtist={activeNugget.recommendedArtist}
+              />
+            )}
+            {activeNugget?.recommendedTrack?.title && (
+              <RecommendedTrackButton
+                recommendedTrack={activeNugget.recommendedTrack}
               />
             )}
           </div>

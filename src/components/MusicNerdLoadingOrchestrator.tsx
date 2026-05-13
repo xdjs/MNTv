@@ -171,16 +171,27 @@ export default function MusicNerdLoadingOrchestrator({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aiLoading, trackId, phase]);
 
-  // ── Pill stays visible until nuggets arrive OR loading finishes ──
-  // No timed morph — the pill persists as long as the user has nothing to see.
+  // ── Pill stays visible until nuggets ACTUALLY arrive ──
+  // Previously OR'd on !aiLoading too, which dismissed the pill when
+  // generation "finished" even if no nugget had landed in state yet
+  // (Pete: "loading state disappeared as if research was done but no
+  // nugget popped up, eventually the nugget arrived"). Two real
+  // scenarios bit this: (1) SSE completed with empty results and the
+  // synthetic fallback hadn't fired yet, leaving a window of
+  // aiLoading=false + hasNuggets=false; (2) initial generate errored
+  // and the catch-block fallback was still async-resolving. Either
+  // way the user sees an empty screen with no indication of state.
+  // Now the pill only dismisses when we genuinely have a nugget to
+  // morph into. Failures still transition out via the aiError handler
+  // below.
   useEffect(() => {
     if (phase !== "pill") return;
-    if (hasNuggets || !aiLoading) {
+    if (hasNuggets) {
       clearTimers();
       startMorphFly();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, hasNuggets, aiLoading]);
+  }, [phase, hasNuggets]);
 
   // ── aiLoading flips false→true mid-track: re-enter the state machine ──
   // when skipping tracks, aiLoading sometimes

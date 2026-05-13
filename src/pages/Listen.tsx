@@ -578,18 +578,38 @@ export default function Listen() {
     setShortId(null);
   }, [rawTrackId, regenerateKey]);
 
+  // Per-trackKey count of nuggets last uploaded to companion_cache.
+  // Used to dedupe — we re-upload only when the count grows. Lives at
+  // module-instance scope so it survives effect re-runs but not Listen
+  // remounts (which is fine — a remount means a new session and a
+  // potentially new shortId anyway).
+  const lastCompanionUploadCountRef = useRef<Map<string, number>>(new Map());
+
   useEffect(() => {
     if (aiLoading || aiNuggets.length === 0 || !track) return;
     const trackKey = `${track.artist}::${track.title}`;
 
-    // Fast path: if companion was already pre-generated this session,
-    // restore the cached shortId immediately (no edge function call).
+    // Restore cached shortId immediately if we have one — but DON'T
+    // early-return. The previous version bailed here, which meant the
+    // companion content was frozen at whatever nugget count existed
+    // on the first run (typically just the pre-gen nugget). Wave-2
+    // nuggets that landed later never made it to companion_cache, so
+    // the QR-code companion page only ever showed the original bland
+    // first nugget. Now we keep going to re-upload the latest nugget
+    // set to companion_cache (the shortId stays the same).
     const cachedSid = player.getCompanionShortId(trackKey);
     if (cachedSid) {
       setShortId(cachedSid);
       setCompanionReady(true);
-      return;
     }
+
+    // Length-based debounce: skip the regen if the nugget count hasn't
+    // grown since the last upload to companion. Initial SSE streams
+    // one nugget at a time and would otherwise fire 4-5 redundant
+    // edge-function calls per fresh generation.
+    const lastSent = lastCompanionUploadCountRef.current.get(trackKey) ?? 0;
+    if (aiNuggets.length === lastSent) return;
+    lastCompanionUploadCountRef.current.set(trackKey, aiNuggets.length);
 
     let cancelled = false;
     (async () => {
@@ -745,6 +765,24 @@ export default function Listen() {
       timestampSec: Math.min(Math.floor(earlyStart + spacing * i), realDuration - 10),
     }));
   }, [rawTrackNuggets, realDuration]);
+
+  // DEV-ONLY: inject a recommendedArtist via URL query so the
+  // "Open {Artist}" button can be visually verified without a
+  // server-side deploy. Usage: append ?injectArtist=Lunch%20$pecial
+  // (optionally &injectArtistId=SPOTIFY_ID) to any /listen URL.
+  // Stripped from production builds — guarded on import.meta.env.DEV.
+  const trackNuggetsWithDevInjection = useMemo(() => {
+    if (!import.meta.env.DEV) return trackNuggets;
+    if (typeof window === "undefined") return trackNuggets;
+    const params = new URLSearchParams(window.location.search);
+    const injectArtist = params.get("injectArtist");
+    if (!injectArtist) return trackNuggets;
+    const injectArtistId = params.get("injectArtistId") || undefined;
+    return trackNuggets.map((n, i) => (i === 0 ? {
+      ...n,
+      recommendedArtist: { name: injectArtist, spotifyArtistId: injectArtistId },
+    } : n));
+  }, [trackNuggets]);
 
   const [animStyle, setAnimStyle] = useState<AnimationStyle>("A");
   const [activeNugget, setActiveNugget] = useState<Nugget | null>(null);
@@ -1709,7 +1747,7 @@ export default function Listen() {
         {isMobile && track && (
           <Suspense fallback={null}>
             <ImmersiveNuggetView
-              nuggets={trackNuggets}
+              nuggets={trackNuggetsWithDevInjection}
               sources={aiSources}
               coverArtUrl={effectiveCoverArt}
               trackTitle={track?.title || ""}

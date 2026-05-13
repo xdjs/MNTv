@@ -60,6 +60,23 @@ export type Nugget = {
   imageUrl?: string;
   imageCaption?: string;
   visualOnly?: boolean;
+  /** Optional artist callout — when the nugget recommends or
+   *  references a specific artist by name (most common on
+   *  `discovery` and `collab` kind nuggets), the server populates
+   *  this so the client can render an "Open {Artist}" button. The
+   *  spotifyArtistId is set when the server's catalog lookup
+   *  found a match; if unset, the client falls back to a
+   *  search-by-name navigation. */
+  recommendedArtist?: {
+    name: string;
+    spotifyArtistId?: string;
+  };
+  /** Optional track callout — same idea for a specific track. */
+  recommendedTrack?: {
+    artist: string;
+    title: string;
+    spotifyTrackUri?: string;
+  };
 };
 
 export type AnimationStyle = "A" | "B" | "C";
