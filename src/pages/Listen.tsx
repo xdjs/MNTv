@@ -724,15 +724,20 @@ export default function Listen() {
   // but I was presented with no Nugget."
   const trackNuggets = useMemo(() => {
     if (rawTrackNuggets.length === 0 || realDuration <= 0) return rawTrackNuggets;
-    // aligned with makeTimestamp +
-    // server cache builder — endBuffer=15, usable-min=30. Previously
-    // diverged at endBuffer=10/min=20, which would put the last nugget
-    // 5s closer to the song end than the cache build expected.
+    // Aligned with makeTimestamp + server cache builder —
+    // endBuffer=15, usable-min=30.
     const earlyStart = 0;
     const endBuffer = 15;
     const usable = Math.max(realDuration - earlyStart - endBuffer, 30);
     const denom = Math.max(rawTrackNuggets.length - 1, 1);
-    const spacing = usable / denom;
+    // Cap spacing at MAX_SPACING so a low total nugget count doesn't
+    // get spread across the whole track with huge silent gaps.
+    // Pete's report: 3 nuggets in a 240s track → even spacing = 112s
+    // → nugget #3 lands at 3:45. With cap, spacing = 75s →
+    // 0/1:15/2:30, nuggets cluster early and the last ~1:30 of music
+    // is content-free (intentional — better than sparse).
+    const MAX_SPACING_SEC = 75;
+    const spacing = Math.min(usable / denom, MAX_SPACING_SEC);
     return rawTrackNuggets.map((n, i) => ({
       ...n,
       timestampSec: Math.min(Math.floor(earlyStart + spacing * i), realDuration - 10),
