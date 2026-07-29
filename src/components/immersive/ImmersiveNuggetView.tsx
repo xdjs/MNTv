@@ -554,42 +554,34 @@ export default function ImmersiveNuggetView({
               </AnimatePresence>
             </div>
 
-            {/* "Swipe up for more" cue — a softly pulsing chevron that
-                floats below the dots, on the vertical axis so it reads as
-                a distinct gesture from the sideways dots. Fades out as the
-                body scrolls in (see handleBodyScroll); tap smooth-scrolls
-                the body into view. Only shown when there's body text to
-                reveal. */}
+            {/* Scroll cue — one chevron, nothing else.
+                It previously carried a "MORE" label and a neon halo: the
+                label said what the chevron already says, the halo didn't
+                read at this size against a dark photo, and the stack of
+                three elements sat tight under the headline so the arrow
+                landed directly beneath the sentence's final period and
+                read as punctuation. The generous top margin is the fix —
+                it separates the cue from the prose so it reads as
+                wayfinding. Fades out as the body scrolls in (see
+                handleBodyScroll); tap scrolls the body into view. */}
             {hasMoreBelow && (
-              <div
-                ref={cueRef}
-                className="mt-2 flex justify-center"
-              >
+              <div ref={cueRef} className="mt-4 flex justify-center">
                 <button
                   type="button"
                   aria-label="Scroll down to read the full story"
                   onClick={(e) => { e.stopPropagation(); scrollBodyIntoView(); }}
-                  className="flex flex-col items-center gap-0.5 animate-cue-float"
+                  className="p-3 animate-cue-float"
                 >
-                  <span className="relative flex items-center justify-center w-11 h-6">
-                    <span
-                      className="absolute w-10 h-10 rounded-full animate-cue-glow"
-                      style={{ background: "radial-gradient(circle, hsl(var(--neon-glow) / 0.7), transparent 68%)", filter: "blur(2px)" }}
-                    />
-                    <svg
-                      className="relative z-10"
-                      width="22" height="13" viewBox="0 0 22 14" fill="none"
-                      style={{ filter: "drop-shadow(0 0 6px hsl(var(--neon-glow) / 0.9))" }}
-                    >
-                      <path d="M2 12 L11 3 L20 12" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </span>
-                  <span
-                    className="text-[10px] uppercase tracking-[0.18em] text-white/60"
-                    style={{ textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}
+                  <svg
+                    width="20" height="12" viewBox="0 0 22 14" fill="none" aria-hidden
+                    style={{ filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.9))" }}
                   >
-                    more
-                  </span>
+                    <path
+                      d="M2 12 L11 3 L20 12"
+                      stroke="rgba(255,255,255,0.75)"
+                      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                    />
+                  </svg>
                 </button>
               </div>
             )}
