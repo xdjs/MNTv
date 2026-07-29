@@ -160,7 +160,45 @@ describe("useBookmarks — save flow", () => {
     });
   });
 
-  it("rolls back and surfaces a toast when the edge function rejects", async () => {
+  // Rollback has to be isolated from the post-settle refetch, or the test
+  // passes on either mechanism. The first list call resolves normally;
+  // the refetch triggered by onSettled is left permanently pending, so
+  // the ONLY thing that can clear the optimistic row is onError's
+  // rollback. Without it, isBookmarked stays true and this fails.
+  it("rolls back the optimistic row when the edge function rejects", async () => {
+    let listCalls = 0;
+    let releaseAdd: (v: unknown) => void = () => {};
+    const addGate = new Promise((res) => { releaseAdd = res; });
+    invokeMock.mockImplementation(async (_fn: string, opts: { body: { action: string } }) => {
+      if (opts.body.action === "list") {
+        listCalls += 1;
+        if (listCalls === 1) return { data: { bookmarks: [] }, error: null };
+        return new Promise(() => {}); // refetch never settles
+      }
+      await addGate;
+      return { data: null, error: { message: "track_id, artist, title, headline required" } };
+    });
+
+    const { result } = renderHook(() => useBookmarks(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => {
+      result.current.toggle(NUGGET);
+    });
+
+    // Optimistic row is present while the add is in flight.
+    await waitFor(() => {
+      expect(result.current.isBookmarked(NUGGET.headline, NUGGET.trackId, NUGGET.kind)).toBe(true);
+    });
+
+    await act(async () => { releaseAdd(null); });
+
+    await waitFor(() => {
+      expect(result.current.isBookmarked(NUGGET.headline, NUGGET.trackId, NUGGET.kind)).toBe(false);
+    });
+  });
+
+  it("surfaces a toast when the edge function rejects", async () => {
     invokeMock.mockImplementation(async (_fn: string, opts: { body: { action: string } }) => {
       if (opts.body.action === "list") return { data: { bookmarks: [] }, error: null };
       return { data: null, error: { message: "track_id, artist, title, headline required" } };
@@ -174,9 +212,6 @@ describe("useBookmarks — save flow", () => {
     });
 
     await waitFor(() => expect(toastErrorMock).toHaveBeenCalled());
-    expect(
-      result.current.isBookmarked(NUGGET.headline, NUGGET.trackId, NUGGET.kind),
-    ).toBe(false);
   });
 
   // Regression guard for the documented double-tap race: the short-circuit

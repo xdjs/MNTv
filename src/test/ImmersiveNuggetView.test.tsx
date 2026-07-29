@@ -157,31 +157,99 @@ describe("ImmersiveNuggetView — save button", () => {
     expect(screen.queryByRole("button", { name: /save nugget/i })).toBeNull();
   });
 
-  it("does not let the tap fall through to the card underneath", () => {
-    renderView();
-    fireEvent.click(screen.getByRole("button", { name: /save nugget/i }));
-    // A tap that bubbled to the card would toggle playback.
-    expect(playerToggle).not.toHaveBeenCalled();
-  });
 });
 
 describe("ImmersiveNuggetView — swipe-up cue", () => {
-  it("offers the cue when the body adds something beyond the headline", () => {
+  it("offers the cue when a nugget is on screen", () => {
     renderView();
     expect(screen.getByRole("button", { name: /scroll down to read the full story/i })).toBeTruthy();
   });
 
-  // Without a headline the hero shows `text` and the body repeats it —
-  // a cue promising "more" would point at duplicate prose.
-  it("withholds the cue when the body only repeats the headline", () => {
+  // Regression guard. The cue was once hidden when the body duplicated
+  // the headline — but the below-fold region holds every control, not
+  // just prose, so hiding it stranded the Save button on exactly those
+  // nuggets. A user who has learned "chevron means scroll" reads its
+  // absence as "nothing below".
+  it("still offers the cue on a headline-less nugget, where the controls also live below", () => {
     renderView([HEADLINE_LESS]);
-    expect(screen.queryByRole("button", { name: /scroll down to read the full story/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /scroll down to read the full story/i })).toBeTruthy();
+    // The thing the cue is protecting access to.
+    expect(screen.getByRole("button", { name: /save nugget/i })).toBeTruthy();
   });
 
-  it("does not toggle playback when the cue is tapped", () => {
+  // ── Behaviour, not just presence ────────────────────────────────────
+  // These replace two earlier tests that asserted the Save and cue taps
+  // don't toggle playback. Those could never fail: no ancestor of either
+  // button carries a playback handler (the collapse chevron is a sibling,
+  // and `toggle` reaches only MiniPlayer and the mediaSession handlers),
+  // so they claimed a protection nothing enforced.
+
+  it("fades the cue out as the body scrolls into view", () => {
     renderView();
+    const cue = screen.getByTestId("scroll-cue");
+    const scroller = screen.getByTestId("nugget-scroll");
+
+    // The reset effect sets full opacity on mount.
+    expect(cue.style.opacity).toBe("1");
+
+    Object.defineProperty(scroller, "scrollTop", { value: 45, configurable: true });
+    fireEvent.scroll(scroller);
+    // Half of the 90px fade distance → half opacity.
+    expect(Number(cue.style.opacity)).toBeCloseTo(0.5, 2);
+  });
+
+  it("makes the faded-out cue untappable so it can't intercept touches", () => {
+    renderView();
+    const cue = screen.getByTestId("scroll-cue");
+    const scroller = screen.getByTestId("nugget-scroll");
+
+    Object.defineProperty(scroller, "scrollTop", { value: 500, configurable: true });
+    fireEvent.scroll(scroller);
+
+    expect(Number(cue.style.opacity)).toBe(0);
+    expect(cue.style.pointerEvents).toBe("none");
+  });
+
+  it("scrolls the body into view when the cue is tapped", () => {
+    const scrollToSpy = vi.spyOn(Element.prototype, "scrollTo").mockImplementation(() => {});
+    renderView();
+    const scroller = screen.getByTestId("nugget-scroll");
+    Object.defineProperty(scroller, "clientHeight", { value: 800, configurable: true });
+
     fireEvent.click(screen.getByRole("button", { name: /scroll down to read the full story/i }));
-    expect(playerToggle).not.toHaveBeenCalled();
+
+    expect(scrollToSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ top: 800 * 0.72, behavior: "smooth" }),
+    );
+    scrollToSpy.mockRestore();
+  });
+
+  // Each new fact should open on its headline, not wherever the reader
+  // left the previous one.
+  it("returns to the top and restores the cue when the nugget changes", () => {
+    const { rerender } = renderView();
+    const cue = screen.getByTestId("scroll-cue");
+    const scroller = screen.getByTestId("nugget-scroll");
+
+    Object.defineProperty(scroller, "scrollTop", { value: 300, writable: true, configurable: true });
+    fireEvent.scroll(scroller);
+    expect(Number(cue.style.opacity)).toBe(0);
+
+    const NEXT: Nugget = { ...RICH, id: "n-9", headline: "A different fact entirely.", text: "With its own distinct body copy." };
+    rerender(
+      <ImmersiveNuggetView
+        nuggets={[NEXT]}
+        sources={new Map([["src-1", SOURCE]])}
+        coverArtUrl="https://example.com/art.jpg"
+        trackTitle="KIKI"
+        artist="Cherele"
+        onClose={() => {}}
+        isFresh
+      />,
+    );
+
+    expect(scroller.scrollTop).toBe(0);
+    expect(screen.getByTestId("scroll-cue").style.opacity).toBe("1");
   });
 });
 

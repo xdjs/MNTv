@@ -466,15 +466,20 @@ export default function ImmersiveNuggetView({
   // infrequent and acceptable — the main perf win is skipping during drag.
   const renderNuggetCard = useCallback(() => {
     const { url: imgUrl, isNuggetImage } = getNuggetImage();
-    // Only promise "more below" when the body is genuinely distinct prose
-    // from the hero headline. When a nugget has no headline, the hero falls
-    // back to `text` and the body repeats it — a glowing "more" pointing at
-    // a duplicate reads as a bug, so gate it out.
-    const hl = activeNugget?.headline?.trim();
-    const tx = activeNugget?.text?.trim();
-    const hasMoreBelow = !!hl && !!tx && hl !== tx;
+    // The cue used to be gated on the body being distinct prose from the
+    // headline. That was wrong: the below-fold section holds every control
+    // — View Source, Tell me more, Save, recommended artist/track — not
+    // just prose. On a headline-less nugget the old gate hid the cue
+    // entirely, so a user who had learned "chevron means scroll" read its
+    // absence as "nothing below" and lost the Save button altogether.
+    //
+    // There is always something below the fold, so the cue shows whenever
+    // a nugget is on screen. It's a scroll affordance, not a promise of
+    // more prose — the "MORE" label that made it read as the latter is
+    // gone.
+    const hasMoreBelow = !!activeNugget;
     return (
-      <div ref={scrollRef} onScroll={handleBodyScroll} className="w-full h-full overflow-y-auto scrollbar-hide">
+      <div ref={scrollRef} onScroll={handleBodyScroll} data-testid="nugget-scroll" className="w-full h-full overflow-y-auto scrollbar-hide">
         {/* Hero image fills the visible viewport with a single
             bottom-fade gradient; headline overlays the bottom of the
             image (no separate-box seam). Body lives below the h-full
@@ -565,7 +570,7 @@ export default function ImmersiveNuggetView({
                 wayfinding. Fades out as the body scrolls in (see
                 handleBodyScroll); tap scrolls the body into view. */}
             {hasMoreBelow && (
-              <div ref={cueRef} className="mt-4 flex justify-center">
+              <div ref={cueRef} data-testid="scroll-cue" className="mt-4 flex justify-center">
                 <button
                   type="button"
                   aria-label="Scroll down to read the full story"

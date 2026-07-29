@@ -100,4 +100,38 @@ describe("loading pill lifecycle", () => {
     act(() => { vi.advanceTimersByTime(46_000); });
     expect(pillVisible()).toBe(false);
   });
+
+  // startMorphFly forks on aiLoading: true → "pulsating", false → "ready".
+  // The test above always takes the "pulsating" fork because aiLoading
+  // never flips. But the scenario the ceiling exists for — research
+  // finished yet no nugget was ever revealed (e.g. seeking to a gap while
+  // paused on a cached track) — is aiLoading=false with phase still
+  // "pill", which takes the OTHER fork. Nothing moves the phase out of
+  // "pill" when aiLoading goes true→false, so it is genuinely reachable.
+  it("gives up at the ceiling when research already finished", () => {
+    const { rerender, trackId } = renderPill({ hasNuggets: false, aiLoading: true });
+    act(() => { vi.advanceTimersByTime(400); });
+    expect(pillVisible()).toBe(true);
+
+    const props = {
+      aiError: null,
+      hasNuggets: false,
+      shortId: null,
+      trackId,
+      tier: "casual",
+      listenCount: 1,
+      focusZone: "none",
+      topFocusIndex: 0,
+      onCompanionClick: () => {},
+    };
+    act(() => {
+      rerender(<MusicNerdLoadingOrchestrator {...props} aiLoading={false} />);
+    });
+    // Research is done, but nothing was ever revealed — the pill is now
+    // lying and must still be up until the ceiling, then go.
+    expect(pillVisible()).toBe(true);
+
+    act(() => { vi.advanceTimersByTime(46_000); });
+    expect(pillVisible()).toBe(false);
+  });
 });
