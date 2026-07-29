@@ -33,6 +33,12 @@ const SETTLE_MS = 350;
 const PILL_DISPLAY_MS = 2200;
 /** Duration of the morph-fly animation (s) */
 const MORPH_FLY_S = 0.5;
+/**
+ * Hard ceiling on how long the researching pill may stay up (ms).
+ * Generous enough to cover a slow Exa → Gemini round trip; short enough
+ * that a stalled pipeline doesn't strand the user under a spinner.
+ */
+const PILL_MAX_HOLD_MS = 45000;
 
 /**
  * Module-level cache so that when the user navigates away (Browse) and comes
@@ -193,6 +199,26 @@ export default function MusicNerdLoadingOrchestrator({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, hasNuggets]);
 
+  // ── Safety terminus: the pill must never outlive a plausible research
+  // window ──
+  // On the success path `hasNuggets` is the ONLY exit from "pill" — the
+  // aiError branch below covers failures, and the pulsating / false→true
+  // effects don't apply to this phase. Since `hasNuggets` now tracks a
+  // nugget being genuinely ON SCREEN (strictly harder to satisfy than
+  // "nuggets exist in state"), a stuck upstream leaves the user under a
+  // spinner indefinitely. Listen has real paths that do this: seeking to
+  // a gap nulls activeNugget while marking nuggets shown, so the reveal
+  // effect's `!isPlaying && aiFromCache` guard keeps it null while paused.
+  // Hanging is worse than dismissing early, so cap it unconditionally.
+  useEffect(() => {
+    if (phase !== "pill") return;
+    const t = setTimeout(() => {
+      if (phaseRef.current === "pill") startMorphFly();
+    }, PILL_MAX_HOLD_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
   // ── aiLoading flips false→true mid-track: re-enter the state machine ──
   // when skipping tracks, aiLoading sometimes
   // momentarily lags one tick behind the trackId change. The track
@@ -349,6 +375,7 @@ export default function MusicNerdLoadingOrchestrator({
         {phase === "pill" && (
           <motion.div
             ref={pillRef}
+            data-testid="researching-pill"
             className="fixed left-1/2 z-50 rounded-full px-4 py-2.5 flex items-center gap-2.5 pointer-events-none will-change-transform bg-black/60 border border-white/10"
             style={{
               top: "calc(50% + 216px)",
