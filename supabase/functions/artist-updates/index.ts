@@ -32,6 +32,11 @@ const corsHeaders = {
 // is the minimum viable row content; more nuggets per artist belong
 // on the Artist Profile page via useArtistLatestFacts.
 const FACTS_PER_ARTIST = 1;
+// Playable tracks per artist for the Browse "Get into" lane. Enough to
+// feel like a shelf worth browsing, few enough that three artist rows
+// don't turn Browse into a catalog. These cost nothing extra — the
+// top-tracks call already happens for prompt grounding.
+const TRACKS_PER_ARTIST = 4;
 const RECENT_WINDOW_DAYS = 90;
 
 // Sparse-mode is now driven by actual research results, not follower
@@ -51,7 +56,12 @@ interface ArtistUpdate {
   artistId: string;
   artistName: string;
   artistImageUrl: string;
-  kind: "new-release" | "collab" | "fact";
+  // "track" entries are catalog tracks for the Browse "Get into" lane.
+  // They ride the same array as facts so they flow through the existing
+  // nugget_cache row and response shape unchanged — a separate response
+  // field would miss every cached hit, which returns early before the
+  // artist is even resolved on Spotify.
+  kind: "new-release" | "collab" | "fact" | "track";
   headline: string;
   body: string;
   /** Track-level metadata for new-release/collab kinds — lets the client
@@ -79,7 +89,14 @@ interface SpotifyArtistSearchResult {
 
 interface SpotifyTopTrack {
   name: string;
-  album?: { name?: string; release_date?: string };
+  // uri + album art are what let a top track become a playable tile in
+  // the Browse "Get into" lane, not just prompt grounding.
+  uri?: string;
+  album?: {
+    name?: string;
+    release_date?: string;
+    images?: { url: string }[];
+  };
 }
 
 interface SpotifyReleaseItem {
@@ -258,6 +275,32 @@ function buildReleaseUpdate(
     relatedTrackTitle: navTitle,
     relatedAlbumName: release.name,
     nuggetId: `release-${release.id}`,
+  };
+}
+
+// A catalog track for the Browse "Get into" lane.
+//
+// Carries no headline/body of its own — the client renders these as
+// artwork tiles, not readable cards, and splitArtistUpdates routes
+// "track" kinds to the play lane only. Album art goes in
+// artistImageUrl to match buildReleaseUpdate's convention, where that
+// field already holds a cover rather than an artist photo.
+function buildTrackUpdate(
+  artist: { id: string; name: string },
+  track: SpotifyTopTrack,
+): ArtistUpdate | null {
+  if (!track.name || !track.uri) return null;
+  return {
+    artistId: artist.id,
+    artistName: artist.name,
+    artistImageUrl: track.album?.images?.[0]?.url ?? "",
+    kind: "track",
+    headline: track.name,
+    body: "",
+    relatedTrackUri: track.uri,
+    relatedTrackTitle: track.name,
+    relatedAlbumName: track.album?.name,
+    nuggetId: `track-${track.uri}`,
   };
 }
 
@@ -973,7 +1016,33 @@ serve(async (req) => {
       updates.push(buildFactUpdate(artistInfo, f.headline, f.body, i, citation));
     });
 
-    if (updates.length === 0) {
+    // Catalog tracks for the "Get into" lane. Appended last so they never
+    // displace a fact or release. Skips whatever the release card already
+    // offers — the same song appearing twice in one artist's row reads as
+    // a bug. Case-insensitive because Spotify's top-tracks and album-track
+    // endpoints don't always agree on capitalisation.
+    // Snapshot before appending tracks: "did we compose anything worth
+    // showing" must stay a question about facts and releases. Tracks are
+    // free catalog data and would otherwise mask a total generation
+    // failure as a success, caching a row of bare tiles.
+    const composedCount = updates.length;
+
+    const releaseTrackTitle = updates
+      .find((u) => u.kind === "new-release" || u.kind === "collab")
+      ?.relatedTrackTitle
+      ?.trim()
+      .toLowerCase();
+    let trackCount = 0;
+    for (const t of topTracks) {
+      if (trackCount >= TRACKS_PER_ARTIST) break;
+      if (t.name?.trim().toLowerCase() === releaseTrackTitle) continue;
+      const trackUpdate = buildTrackUpdate(artistInfo, t);
+      if (!trackUpdate) continue;
+      updates.push(trackUpdate);
+      trackCount++;
+    }
+
+    if (composedCount === 0) {
       // Couldn't compose anything (sparse artist + Gemini returned 0
       // facts, no recent release). We claimed the sentinel earlier via
       // tryClaim() — must release it now so concurrent followers don't

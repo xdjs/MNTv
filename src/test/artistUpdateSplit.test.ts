@@ -74,6 +74,66 @@ describe("splitArtistUpdates", () => {
     expect(tracks).toEqual([]);
   });
 
+  // Catalog tracks ride the same array as facts so they flow through the
+  // existing cache, but they carry no body and must never render as a
+  // readable card.
+  it("routes a catalog track to the play lane only", () => {
+    const catalogTrack = update({
+      kind: "track",
+      headline: "Loose End",
+      body: "",
+      relatedTrackTitle: "Loose End",
+      relatedAlbumName: "ACT I",
+      relatedTrackUri: "spotify:track:def",
+      artistImageUrl: "https://example.com/cover.jpg",
+    });
+    const { facts, tracks } = splitArtistUpdates([catalogTrack]);
+    expect(facts).toEqual([]);
+    expect(tracks).toEqual([
+      {
+        title: "Loose End",
+        album: "ACT I",
+        uri: "spotify:track:def",
+        imageUrl: "https://example.com/cover.jpg",
+      },
+    ]);
+  });
+
+  it("keeps readable cards while routing catalog tracks aside", () => {
+    const catalogTrack = update({
+      kind: "track",
+      relatedTrackTitle: "Loose End",
+      relatedTrackUri: "spotify:track:def",
+    });
+    const { facts, tracks } = splitArtistUpdates([update(), RELEASE, catalogTrack]);
+    expect(facts).toHaveLength(2);
+    expect(facts.every((f) => f.kind !== "track")).toBe(true);
+    expect(tracks.map((t) => t.title)).toEqual(["Will Kill", "Loose End"]);
+  });
+
+  // The release card and top-tracks can name the same song; showing it
+  // twice in one artist's row reads as a bug.
+  it("de-duplicates a catalog track against the release track", () => {
+    const dupe = update({
+      kind: "track",
+      relatedTrackTitle: "will kill",
+      relatedTrackUri: "spotify:track:zzz",
+    });
+    const { tracks } = splitArtistUpdates([RELEASE, dupe]);
+    expect(tracks).toHaveLength(1);
+    expect(tracks[0].uri).toBe("spotify:track:abc");
+  });
+
+  it("lets a fact borrow a catalog track as its play target", () => {
+    const catalogTrack = update({
+      kind: "track",
+      relatedTrackTitle: "Loose End",
+      relatedTrackUri: "spotify:track:def",
+    });
+    const { facts, tracks } = splitArtistUpdates([update(), catalogTrack]);
+    expect(resolvePlayTarget(facts[0], tracks)?.title).toBe("Loose End");
+  });
+
   it("appends catalog tracks supplied by the edge function", () => {
     const extra: PlayableTrack[] = [{ title: "Loose End", album: "ACT I", uri: "spotify:track:def" }];
     const { tracks } = splitArtistUpdates([RELEASE], extra);

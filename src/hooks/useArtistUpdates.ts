@@ -13,7 +13,11 @@ export interface ArtistUpdate {
   artistId: string;
   artistName: string;
   artistImageUrl: string;
-  kind: "new-release" | "collab" | "fact";
+  /** "track" entries are catalog tracks for the Browse "Get into" lane.
+   *  They arrive in the same array as facts (so they ride the existing
+   *  cache and response shape) but carry no body and are never rendered
+   *  as readable cards — see splitArtistUpdates. */
+  kind: "new-release" | "collab" | "fact" | "track";
   headline: string;
   body: string;
   source?: {

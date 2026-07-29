@@ -28,9 +28,11 @@ export interface ArtistLanes {
   tracks: PlayableTrack[];
 }
 
+const PLAYABLE_KINDS = new Set<ArtistUpdate["kind"]>(["new-release", "collab", "track"]);
+
 /** An update is playable only if we know what track to play. */
 function toPlayableTrack(update: ArtistUpdate): PlayableTrack | null {
-  if (update.kind !== "new-release" && update.kind !== "collab") return null;
+  if (!PLAYABLE_KINDS.has(update.kind)) return null;
   if (!update.relatedTrackTitle) return null;
   return {
     title: update.relatedTrackTitle,
@@ -72,14 +74,13 @@ export function splitArtistUpdates(
 
   for (const update of updates ?? []) {
     const playable = toPlayableTrack(update);
-    if (playable) {
-      pushTrack(playable);
-      // A release card is both a thing to read and a thing to play; it
-      // stays in the fact lane so its copy still reaches the user.
-      facts.push(update);
-    } else {
-      facts.push(update);
-    }
+    if (playable) pushTrack(playable);
+
+    // "track" kinds are catalog entries with no body — they exist only
+    // to fill the play lane. Everything else is readable copy and
+    // belongs in the fact lane, including a release card, which is both
+    // a thing to read and a thing to play.
+    if (update.kind !== "track") facts.push(update);
   }
 
   for (const track of extraTracks) pushTrack(track);
