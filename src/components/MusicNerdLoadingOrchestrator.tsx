@@ -29,8 +29,10 @@ function AnimatedDots() {
 
 /** Settle delay before pill appears (ms) */
 const SETTLE_MS = 350;
-/** How long the pill is visible before morphing (ms) */
-const PILL_DISPLAY_MS = 2200;
+// PILL_DISPLAY_MS removed — the pill hasn't been on a fixed display
+// timer since it started waiting on hasNuggets, and the constant had
+// been dead since before this branch. noUnusedLocals is off, so nothing
+// flagged it.
 /** Duration of the morph-fly animation (s) */
 const MORPH_FLY_S = 0.5;
 /**
@@ -104,6 +106,12 @@ export default function MusicNerdLoadingOrchestrator({
   // Keep refs in sync
   aiLoadingRef.current = aiLoading;
 
+  // Cancels every timer registered through addTimer. NOTE: the pill's
+  // max-hold ceiling is deliberately NOT registered here — it lives in
+  // an effect whose own cleanup covers both phase change and unmount, so
+  // routing it through addTimer would let a phase transition cancel the
+  // very ceiling that protects against a stuck phase. If you add another
+  // timer, register it here unless it has that same self-cleanup.
   const clearTimers = useCallback(() => {
     timersRef.current.forEach(clearTimeout);
     timersRef.current = [];

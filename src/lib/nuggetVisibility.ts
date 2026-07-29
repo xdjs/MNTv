@@ -20,6 +20,12 @@
 // When nerd mode is off no nugget will ever be revealed, so holding the
 // pill up would hang it forever — fall back to "nuggets exist", the
 // correct terminus for a pill with nothing left to wait for.
+//
+// Caveat worth knowing: on mobile this is a proxy, not ground truth.
+// ImmersiveNuggetView renders its card off its own `nuggets` prop while
+// the pill above it waits on Listen's `activeNugget`, so the two can
+// differ by an effect tick. Cosmetic today, but don't read "ON SCREEN"
+// as a guarantee about what the mobile overlay is painting.
 export function isNuggetOnScreen(params: {
   nerdActive: boolean;
   activeNuggetId: string | null | undefined;

@@ -87,6 +87,15 @@ const BookmarkButton = memo(function BookmarkButton({
   );
 });
 
+/** Scroll distance (px) over which the scroll cue fades to nothing.
+ *  Roughly one thumb-flick — far enough that a stray scroll doesn't
+ *  blink it out, short enough that it's gone once the body is engaged. */
+const CUE_FADE_DISTANCE_PX = 90;
+/** How far a cue tap scrolls, as a fraction of the viewport. Just under
+ *  a full screen so the headline stays partly visible and the movement
+ *  reads as "there's more below this" rather than a page jump. */
+const CUE_SCROLL_TARGET_RATIO = 0.72;
+
 // Minimum time a nugget stays on-screen before auto-advance can swap it out.
 // Tuning knob for the streaming pacing — keeps freshly-streamed nuggets
 // readable without yanking the user mid-sentence.
@@ -354,7 +363,7 @@ export default function ImmersiveNuggetView({
   // doesn't re-render on every scroll frame. Tied to pointer-events so a
   // faded-out cue isn't tappable.
   const handleBodyScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const o = Math.max(0, 1 - e.currentTarget.scrollTop / 90);
+    const o = Math.max(0, 1 - e.currentTarget.scrollTop / CUE_FADE_DISTANCE_PX);
     if (cueRef.current) {
       cueRef.current.style.opacity = String(o);
       cueRef.current.style.pointerEvents = o < 0.05 ? "none" : "";
@@ -362,9 +371,18 @@ export default function ImmersiveNuggetView({
   }, []);
 
   // Tap-to-scroll: bring the body into view from the headline hero.
+  // Honours prefers-reduced-motion — the CSS disables the cue's float
+  // for those users, and a programmatic smooth scroll is the larger
+  // motion of the two, so it would be odd to leave it animating.
   const scrollBodyIntoView = useCallback(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTo({ top: el.clientHeight * 0.72, behavior: "smooth" });
+    if (!el) return;
+    const reduceMotion = typeof window !== "undefined"
+      && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    el.scrollTo({
+      top: el.clientHeight * CUE_SCROLL_TARGET_RATIO,
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
   }, []);
 
   // On nugget change, snap back to the headline (top) and restore the cue
@@ -575,7 +593,10 @@ export default function ImmersiveNuggetView({
                   type="button"
                   aria-label="Scroll down to read the full story"
                   onClick={(e) => { e.stopPropagation(); scrollBodyIntoView(); }}
-                  className="p-3 animate-cue-float"
+                  // w-11 h-11 = 44x44, the minimum touch target, on a
+                  // control whose entire job is being tappable. The glyph
+                  // stays small; the padding does the work.
+                  className="flex items-center justify-center w-11 h-11 rounded-full animate-cue-float focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                 >
                   <svg
                     width="20" height="12" viewBox="0 0 22 14" fill="none" aria-hidden
