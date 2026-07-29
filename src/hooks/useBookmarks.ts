@@ -97,11 +97,17 @@ export function useBookmarks() {
 
   const addMutation = useMutation({
     mutationFn: async (nugget: BookmarkPayload) => {
+      // DEV-only boundary trace. Every layer of this path reads correct in
+      // isolation and passes tests, so the failure is a runtime one —
+      // these three lines say which boundary it dies at.
+      if (import.meta.env.DEV) console.log("[bookmark] resolving auth…");
       const auth = await resolveServiceAuth(getValidToken, hasSpotifyToken, hasAppleToken);
+      if (import.meta.env.DEV) console.log("[bookmark] auth:", auth ? Object.keys(auth) : "NULL");
       if (!auth) throw new Error("Not signed in to Spotify or Apple Music");
       const { data, error } = await supabase.functions.invoke("bookmark-nugget", {
         body: { action: "add", nugget, ...auth },
       });
+      if (import.meta.env.DEV) console.log("[bookmark] invoke returned:", { data, error });
       if (error) throw new Error(error.message || "add failed");
       return data;
     },
@@ -198,7 +204,24 @@ export function useBookmarks() {
     // their remove silently undone. Short-circuiting here is the cheapest
     // fix; the long-term fix is swapping the optimistic id for the
     // server-assigned UUID in addMutation.onSuccess.
-    if (addMutation.isPending || removeMutation.isPending) return;
+    if (import.meta.env.DEV) {
+      console.log("[bookmark] TAP", {
+        signedIn: isSignedIn,
+        hasSpotifyToken,
+        hasAppleToken,
+        adding: addMutation.isPending,
+        removing: removeMutation.isPending,
+        cachedBookmarks: bookmarks.length,
+        naturalKey: { headline: nugget.headline, trackId: nugget.trackId, kind: nugget.kind },
+        alreadySaved: !!findBookmark(nugget.headline, nugget.trackId, nugget.kind),
+      });
+    }
+    if (addMutation.isPending || removeMutation.isPending) {
+      // If this fires, a previous mutation never settled and is silently
+      // eating every subsequent tap — the wedged-pending hypothesis.
+      if (import.meta.env.DEV) console.warn("[bookmark] TAP SWALLOWED — a mutation is still pending");
+      return;
+    }
     const existing = findBookmark(nugget.headline, nugget.trackId, nugget.kind);
     if (existing) {
       removeMutation.mutate(existing.id);
