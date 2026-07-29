@@ -1,35 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
 
-// AnimatePresence keeps exiting children mounted until their exit
-// animation finishes, which never happens under jsdom — so the pill node
-// would linger in the DOM after the phase moved on and "is it dismissed?"
-// would be unanswerable. Strip the animation layer to plain elements so
-// presence in the DOM tracks the state machine directly.
-vi.mock("framer-motion", async () => {
-  const React = await import("react");
-  const ANIM_PROPS = new Set([
-    "initial", "animate", "exit", "transition", "variants", "layout", "layoutId",
-    "whileTap", "whileHover", "whileInView", "onAnimationComplete", "drag",
-  ]);
-  const passthrough = (tag: string) =>
-    React.forwardRef(({ children, ...props }: Record<string, unknown> & { children?: React.ReactNode }, ref: React.Ref<HTMLElement>) => {
-      const domProps: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(props)) if (!ANIM_PROPS.has(k)) domProps[k] = v;
-      return React.createElement(tag, { ...domProps, ref }, children);
-    });
-  const cache = new Map<string, unknown>();
-  return {
-    motion: new Proxy({}, {
-      get: (_t, key: string) => {
-        if (!cache.has(key)) cache.set(key, passthrough(key));
-        return cache.get(key);
-      },
-    }),
-    AnimatePresence: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(React.Fragment, null, children),
-  };
-});
+// AnimatePresence keeps exiting children mounted until an animation that
+// never completes under jsdom, so the pill node would linger after the
+// phase moved on and "is it dismissed?" would be unanswerable.
+vi.mock("framer-motion", async () =>
+  (await import("./helpers/framerMotionMock")).makeFramerMotionMock());
 
 import MusicNerdLoadingOrchestrator from "@/components/MusicNerdLoadingOrchestrator";
 
