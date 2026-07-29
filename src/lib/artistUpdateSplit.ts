@@ -15,6 +15,10 @@ export interface PlayableTrack {
   /** Spotify track URI when known. Absent for Apple users and for
    *  releases whose track lookup failed server-side. */
   uri?: string;
+  /** Cover art. Release/collab updates carry the album image in
+   *  artistImageUrl, so a track tile can look like the rest of the
+   *  cards instead of a bare pill. */
+  imageUrl?: string;
 }
 
 export interface ArtistLanes {
@@ -32,6 +36,10 @@ function toPlayableTrack(update: ArtistUpdate): PlayableTrack | null {
     title: update.relatedTrackTitle,
     album: update.relatedAlbumName ?? "",
     uri: update.relatedTrackUri,
+    // For release/collab kinds this field holds the album cover, not an
+    // artist photo — see buildReleaseUpdate in the artist-updates
+    // edge function.
+    imageUrl: update.artistImageUrl || undefined,
   };
 }
 

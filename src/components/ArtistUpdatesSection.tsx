@@ -134,6 +134,22 @@ function ArtistUpdatesSectionInner({
     }));
   }, [navigate, profile?.streamingService]);
 
+  // The expanded card needs the same play target its tile had, so
+  // opening a fact never becomes a dead end. Resolved from the owning
+  // artist's lanes rather than the update alone, since a plain fact
+  // borrows the artist's first track.
+  const expandedPlayTarget = useMemo<PlayableTrack | null>(() => {
+    if (!expandedUpdate) return null;
+    const group = groups.find((g) => g.artistName === expandedUpdate.artistName);
+    const { tracks } = splitArtistUpdates(group?.updates);
+    return resolvePlayTarget(expandedUpdate, tracks);
+  }, [expandedUpdate, groups]);
+
+  const modalOnPlay = useCallback(() => {
+    if (!expandedUpdate || !expandedPlayTarget) return;
+    playTrack(expandedUpdate.artistName, expandedPlayTarget);
+  }, [expandedUpdate, expandedPlayTarget, playTrack]);
+
   // Stable modal onOpen so the memoized ExpandedUpdateModal isn't
   // forced to re-render every parent tick. Depends on expandedUpdate
   // (correct: closes over which card to open) and openArtistAtNugget.
@@ -182,6 +198,8 @@ function ArtistUpdatesSectionInner({
             layoutId={cardKey(expandedUpdate)}
             onClose={modalOnClose}
             onOpen={modalOnOpen}
+            playTarget={expandedPlayTarget}
+            onPlay={expandedPlayTarget ? modalOnPlay : undefined}
           />
         )}
       </AnimatePresence>
@@ -345,7 +363,7 @@ export function UpdateCard({ update, layoutId, onClick, sizeClass = "shrink-0 w-
         <KindIcon className="w-3 h-3" />
         {kindLabel}
       </span>
-      <div className={`absolute bottom-0 left-0 right-0 p-4 ${showPlay ? "pr-14" : ""}`}>
+      <div className="absolute bottom-0 left-0 right-0 p-4">
         <h3 className="text-base md:text-lg font-black text-white leading-tight line-clamp-2 mb-1 drop-shadow">
           {update.headline}
         </h3>
@@ -355,15 +373,21 @@ export function UpdateCard({ update, layoutId, onClick, sizeClass = "shrink-0 w-
       </div>
     </motion.button>
     {showPlay && (
-      // Names the song rather than saying a bare "Play" — the user
-      // should know what they're about to hear before they tap.
+      // Names the song rather than showing a bare play glyph — you
+      // should know what you're about to hear before you tap. Sits
+      // top-right, mirroring the kind chip opposite it, so it doesn't
+      // crowd the headline; styled as glass rather than a solid white
+      // circle so it belongs to the card instead of sitting on top of it.
       <button
         type="button"
         onClick={onPlay}
         aria-label={`Play ${playTarget!.title} by ${update.artistName}`}
-        className="absolute bottom-3 right-3 z-10 flex items-center justify-center w-10 h-10 rounded-full bg-white text-black shadow-lg active:scale-95 transition-transform"
+        className="absolute top-3 right-3 z-10 flex items-center gap-1.5 max-w-[60%] pl-2 pr-2.5 py-1 rounded-full bg-black/50 backdrop-blur-sm ring-1 ring-white/25 active:scale-95 transition-transform"
       >
-        <Play size={14} fill="currentColor" className="ml-[1px]" />
+        <Play size={10} fill="currentColor" className="text-white shrink-0" />
+        <span className="text-[11px] font-medium text-white truncate">
+          {playTarget!.title}
+        </span>
       </button>
     )}
     </div>
@@ -377,9 +401,11 @@ interface ExpandedUpdateModalProps {
   layoutId: string;
   onClose: () => void;
   onOpen: () => void;
+  playTarget?: PlayableTrack | null;
+  onPlay?: () => void;
 }
 
-function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpdateModalProps) {
+function ExpandedUpdateModal({ update, layoutId, onClose, onOpen, playTarget = null, onPlay }: ExpandedUpdateModalProps) {
   const { kindLabel, KindIcon } = getArtistUpdateKindMeta(update.kind);
   const { chipClass } = kindStyle(update.kind);
   const img = update.artistImageUrl;
@@ -526,6 +552,19 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpda
             )}
 
             <div className="flex gap-2 flex-wrap">
+              {playTarget && onPlay && (
+                // Leads the row: reading a fact should be one tap from
+                // hearing something. Names the track so it's never a
+                // guess what play will start.
+                <button
+                  onClick={onPlay}
+                  aria-label={`Play ${playTarget.title} by ${update.artistName}`}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white text-black text-sm font-semibold hover:bg-white/90 active:scale-95 transition-all max-w-full"
+                >
+                  <Play className="w-3.5 h-3.5 shrink-0" fill="currentColor" />
+                  <span className="truncate">Play "{playTarget.title}"</span>
+                </button>
+              )}
               <button
                 onClick={onOpen}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary/25 text-primary text-sm font-semibold hover:bg-primary/35 active:scale-95 transition-all"

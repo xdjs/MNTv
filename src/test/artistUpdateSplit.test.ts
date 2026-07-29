@@ -32,8 +32,27 @@ describe("splitArtistUpdates", () => {
   it("treats a resolved release as a playable track", () => {
     const { tracks } = splitArtistUpdates([RELEASE]);
     expect(tracks).toEqual([
-      { title: "Will Kill", album: "ACT I", uri: "spotify:track:abc" },
+      {
+        title: "Will Kill",
+        album: "ACT I",
+        uri: "spotify:track:abc",
+        imageUrl: "https://example.com/a.jpg",
+      },
     ]);
+  });
+
+  // Release/collab updates carry the ALBUM cover in artistImageUrl, which
+  // is what lets a track tile look like the rest of the cards instead of
+  // a bare text pill.
+  it("carries cover art through so tiles can render artwork", () => {
+    const { tracks } = splitArtistUpdates([RELEASE]);
+    expect(tracks[0].imageUrl).toBe("https://example.com/a.jpg");
+  });
+
+  it("leaves imageUrl undefined when the update has no image", () => {
+    const noImage = { ...RELEASE, artistImageUrl: "" };
+    const { tracks } = splitArtistUpdates([noImage]);
+    expect(tracks[0].imageUrl).toBeUndefined();
   });
 
   it("keeps a release card readable as well as playable", () => {

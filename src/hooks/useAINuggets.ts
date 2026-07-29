@@ -183,6 +183,10 @@ export function makeSparseFallbackNugget(
 ): { nugget: Nugget; source: Source } {
   const nuggetId = `synth-nug-${trackId}-L1-0`;
   const sourceId = `synth-src-${trackId}-L1-0`;
+  // Runtime is the one verifiable, track-specific fact available here.
+  const runtime = durationSec > 0
+    ? `${Math.floor(durationSec / 60)}:${String(Math.round(durationSec % 60)).padStart(2, "0")}`
+    : null;
   return {
     nugget: {
       id: nuggetId,
@@ -192,8 +196,20 @@ export function makeSparseFallbackNugget(
       // first nugget when the user taps.
       timestampSec: 0,
       durationMs: 7000,
-      headline: `"${title}" by ${artist}`,
-      text: `One of your under-the-radar picks. There's not much press out there for this one yet, so we're letting the music do the talking — give it a real listen and we'll layer in the story as more sources surface.`,
+      // Constitution compliance. The previous copy broke two rules at
+      // once: "One of your under-the-radar picks" patronized the listener
+      // with their own taste, and "we'll layer in the story as more
+      // sources surface" was meta-commentary about the absence of
+      // information — the exact framing the constitution calls lazy and
+      // self-defeating. This states only what we can verify from catalog
+      // data (artist, title, runtime) and frames it as a listen rather
+      // than an apology.
+      headline: runtime
+        ? `${artist} brings "${title}" in at ${runtime}.`
+        : `${artist} — "${title}".`,
+      text: runtime
+        ? `Give it the full ${runtime} before you decide. The first pass is for the groove; the details surface on the second.`
+        : `Give it a full pass before you decide — the details surface on the second listen.`,
       kind: "track",
       listenFor: false,
       sourceId,
