@@ -176,6 +176,45 @@ describe("resolvePlayTarget", () => {
     expect(resolvePlayTarget(update(), [])).toBeNull();
   });
 
+  // Pete: tapped "video radio" on a new-release card and the song never
+  // started. When the server can't resolve a release's first track it
+  // falls back to the ALBUM's uri and name together, so the card offers
+  // an album name as if it were a track — Listen then searches for a
+  // track that doesn't exist. Prefer a real catalog track instead.
+  it("skips an album-level release target in favour of a real track", () => {
+    const albumFallback = update({
+      kind: "new-release",
+      relatedTrackTitle: "video radio",
+      relatedAlbumName: "video radio",
+      relatedTrackUri: "spotify:album:xyz",
+    });
+    const catalogTracks: PlayableTrack[] = [
+      { title: "Real Song", album: "LP", uri: "spotify:track:real" },
+    ];
+    expect(resolvePlayTarget(albumFallback, catalogTracks)?.uri).toBe("spotify:track:real");
+  });
+
+  it("still offers the album-level target when no real track exists", () => {
+    const albumFallback = update({
+      kind: "new-release",
+      relatedTrackTitle: "video radio",
+      relatedTrackUri: "spotify:album:xyz",
+    });
+    // Better than nothing: Listen can still try to resolve by name.
+    expect(resolvePlayTarget(albumFallback, [])?.title).toBe("video radio");
+  });
+
+  // Apple users deliberately get no Spotify URI, so "has a track URI"
+  // must not become a requirement for having a play target at all.
+  it("keeps a URI-less target rather than dropping the control", () => {
+    const noUri = update({
+      kind: "new-release",
+      relatedTrackTitle: "Will Kill",
+      relatedTrackUri: undefined,
+    });
+    expect(resolvePlayTarget(noUri, [])?.title).toBe("Will Kill");
+  });
+
   it("returns null for an unresolved release with no artist tracks", () => {
     const unresolved = update({ kind: "new-release", relatedTrackTitle: undefined });
     expect(resolvePlayTarget(unresolved, [])).toBeNull();

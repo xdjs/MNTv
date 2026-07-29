@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { Loader2, X, ExternalLink, Play } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { ArtistUpdate, ArtistUpdateGroup } from "@/hooks/useArtistUpdates";
-import ArtistTrackStrip from "@/components/ArtistTrackStrip";
 import { splitArtistUpdates, resolvePlayTarget, type PlayableTrack } from "@/lib/artistUpdateSplit";
 import { buildListenRoute } from "@/lib/listenRoute";
 import { serviceParamFromProfile, withAppleStorefront } from "@/lib/appleStorefront";
@@ -290,11 +289,6 @@ function ArtistRow({ group, onExpand, onPlay }: ArtistRowProps) {
               );
             })}
       </div>
-      <ArtistTrackStrip
-        artistName={group.artistName}
-        tracks={tracks}
-        onPlay={(track) => onPlay(group.artistName, track)}
-      />
     </div>
   );
 }
