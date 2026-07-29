@@ -806,8 +806,8 @@ export default function Listen() {
   // blank screen.
   const nuggetOnScreen = isNuggetOnScreen({
     nerdActive,
-    hasActiveNugget: !!activeNugget,
-    trackNuggetCount: trackNuggets.length,
+    activeNuggetId: activeNugget?.id,
+    trackNuggets,
   });
 
   // --- Auto-hide bar logic ---
