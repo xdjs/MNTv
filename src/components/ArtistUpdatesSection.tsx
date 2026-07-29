@@ -376,12 +376,9 @@ export function UpdateCard({ update, layoutId, onClick, sizeClass = "shrink-0 w-
         type="button"
         onClick={onPlay}
         aria-label={`Play ${playTarget!.title} by ${update.artistName}`}
-        className="absolute top-3 right-3 z-10 flex items-center gap-1.5 max-w-[60%] pl-2 pr-2.5 py-1 rounded-full bg-black/50 backdrop-blur-sm ring-1 ring-white/25 active:scale-95 transition-transform"
+        className="absolute top-2.5 right-2.5 z-10 flex items-center justify-center w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm ring-1 ring-white/25 active:scale-95 transition-transform"
       >
-        <Play size={10} fill="currentColor" className="text-white shrink-0" />
-        <span className="text-[11px] font-medium text-white truncate">
-          {playTarget!.title}
-        </span>
+        <Play size={13} fill="currentColor" className="text-white ml-[1px]" />
       </button>
     )}
     </div>
