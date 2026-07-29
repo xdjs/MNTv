@@ -1,8 +1,11 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, X, ExternalLink } from "lucide-react";
+import { Loader2, X, ExternalLink, Play } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { ArtistUpdate, ArtistUpdateGroup } from "@/hooks/useArtistUpdates";
+import ArtistTrackStrip from "@/components/ArtistTrackStrip";
+import { splitArtistUpdates, resolvePlayTarget, type PlayableTrack } from "@/lib/artistUpdateSplit";
+import { buildListenRoute } from "@/lib/listenRoute";
 import { serviceParamFromProfile, withAppleStorefront } from "@/lib/appleStorefront";
 import { getArtistUpdateKindMeta } from "@/lib/artistUpdateKind";
 import { isSafeUrl } from "@/lib/urlSafety";
@@ -92,14 +95,13 @@ function ArtistUpdatesSectionInner({
       (update.kind === "new-release" || update.kind === "collab") &&
       update.relatedTrackTitle
     ) {
-      const album = update.relatedAlbumName ?? "";
-      const isAppleUser = profile?.streamingService === "Apple Music";
-      const hasSpotifyTrackUri =
-        !!update.relatedTrackUri && update.relatedTrackUri.startsWith("spotify:track:");
-      const navUri = !isAppleUser && hasSpotifyTrackUri ? update.relatedTrackUri! : "";
-      navigate(
-        `/listen/real::${encodeURIComponent(update.artistName)}::${encodeURIComponent(update.relatedTrackTitle)}::${encodeURIComponent(album)}::${encodeURIComponent(navUri)}`,
-      );
+      navigate(buildListenRoute({
+        artist: update.artistName,
+        title: update.relatedTrackTitle,
+        album: update.relatedAlbumName,
+        uri: update.relatedTrackUri,
+        streamingService: profile?.streamingService,
+      }));
       return;
     }
 
@@ -118,6 +120,19 @@ function ArtistUpdatesSectionInner({
     );
     navigate(path);
   }, [profile?.streamingService, activeService, artistIds, navigate]);
+
+  // Starting a track from either lane — the "Get into" strip or a fact
+  // card's play control — goes straight to Listen. No expand step: the
+  // user already said what they want.
+  const playTrack = useCallback((artistName: string, track: PlayableTrack) => {
+    navigate(buildListenRoute({
+      artist: artistName,
+      title: track.title,
+      album: track.album,
+      uri: track.uri,
+      streamingService: profile?.streamingService,
+    }));
+  }, [navigate, profile?.streamingService]);
 
   // Stable modal onOpen so the memoized ExpandedUpdateModal isn't
   // forced to re-render every parent tick. Depends on expandedUpdate
@@ -154,6 +169,7 @@ function ArtistUpdatesSectionInner({
               key={group.artistName}
               group={group}
               onExpand={(u) => setExpandedKey(cardKey(u))}
+              onPlay={playTrack}
             />
           );
         })}
@@ -198,11 +214,15 @@ export function cardKey(u: ArtistUpdate): string {
 interface ArtistRowProps {
   group: ArtistUpdateGroup;
   onExpand: (u: ArtistUpdate) => void;
+  onPlay: (artistName: string, track: PlayableTrack) => void;
 }
 
-function ArtistRow({ group, onExpand }: ArtistRowProps) {
+function ArtistRow({ group, onExpand, onPlay }: ArtistRowProps) {
   const loading = group.updates === null;
   const updates = group.updates ?? [];
+  // Two lanes: cards to read, tracks to play. The split rules live in
+  // artistUpdateSplit so they're testable without rendering.
+  const { facts, tracks } = useMemo(() => splitArtistUpdates(group.updates), [group.updates]);
   // Prefer a fact update's image for the row header avatar — that's the
   // artist photo. Release cards hand back an album cover in the same
   // field, which makes a lousy circular avatar. Fall back to whatever's
@@ -234,15 +254,29 @@ function ArtistRow({ group, onExpand }: ArtistRowProps) {
       >
         {loading
           ? Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
-          : updates.map((u) => (
-              <UpdateCard
-                key={cardKey(u)}
-                layoutId={cardKey(u)}
-                update={u}
-                onClick={() => onExpand(u)}
-              />
-            ))}
+          : facts.map((u) => {
+              // Every card should lead somewhere. A fact with no track of
+              // its own borrows the artist's first — but if nothing
+              // resolves, the card renders without a control rather than
+              // with a dead one.
+              const target = resolvePlayTarget(u, tracks);
+              return (
+                <UpdateCard
+                  key={cardKey(u)}
+                  layoutId={cardKey(u)}
+                  update={u}
+                  onClick={() => onExpand(u)}
+                  playTarget={target}
+                  onPlay={target ? () => onPlay(u.artistName, target) : undefined}
+                />
+              );
+            })}
       </div>
+      <ArtistTrackStrip
+        artistName={group.artistName}
+        tracks={tracks}
+        onPlay={(track) => onPlay(group.artistName, track)}
+      />
     </div>
   );
 }
@@ -258,22 +292,33 @@ interface UpdateCardProps {
    *  vertical stack. */
   sizeClass?: string;
   pulsing?: boolean;
+  /** Track this card offers to play, if one resolved. */
+  playTarget?: PlayableTrack | null;
+  /** Omitted when there is nothing to play — the control is then not
+   *  rendered at all rather than rendered inert. */
+  onPlay?: () => void;
 }
 
 // Image-backed for every kind. Tap morphs into ExpandedUpdateModal
 // via Framer Motion layoutId — no immediate navigation. Exported so
 // ArtistProfile's Latest Facts section can reuse the exact same card
 // + modal pattern that Browse uses.
-export function UpdateCard({ update, layoutId, onClick, sizeClass = "shrink-0 w-[280px] md:w-[320px] h-44 md:h-48", pulsing = false }: UpdateCardProps) {
+export function UpdateCard({ update, layoutId, onClick, sizeClass = "shrink-0 w-[280px] md:w-[320px] h-44 md:h-48", pulsing = false, playTarget = null, onPlay }: UpdateCardProps) {
   const { kindLabel, KindIcon } = getArtistUpdateKindMeta(update.kind);
   const { chipClass } = kindStyle(update.kind);
   const img = update.artistImageUrl;
+  const showPlay = !!playTarget && !!onPlay;
 
+  // The play control is a SIBLING of the card button, not a child —
+  // nesting a button inside a button is invalid HTML and breaks
+  // keyboard traversal. The wrapper carries the sizing so the card
+  // still fills it.
   return (
+    <div className={`relative ${sizeClass}`}>
     <motion.button
       layoutId={layoutId}
       onClick={onClick}
-      className={`relative text-left rounded-2xl overflow-hidden group active:scale-[0.98] transition-transform ${sizeClass} ${
+      className={`relative text-left rounded-2xl overflow-hidden group active:scale-[0.98] transition-transform w-full h-full ${
         pulsing ? "ring-2 ring-rose-400/70 shadow-[0_0_24px_rgba(244,114,182,0.35)]" : ""
       }`}
       aria-label={`${kindLabel}: ${update.headline}`}
@@ -300,7 +345,7 @@ export function UpdateCard({ update, layoutId, onClick, sizeClass = "shrink-0 w-
         <KindIcon className="w-3 h-3" />
         {kindLabel}
       </span>
-      <div className="absolute bottom-0 left-0 right-0 p-4">
+      <div className={`absolute bottom-0 left-0 right-0 p-4 ${showPlay ? "pr-14" : ""}`}>
         <h3 className="text-base md:text-lg font-black text-white leading-tight line-clamp-2 mb-1 drop-shadow">
           {update.headline}
         </h3>
@@ -309,6 +354,19 @@ export function UpdateCard({ update, layoutId, onClick, sizeClass = "shrink-0 w-
         </p>
       </div>
     </motion.button>
+    {showPlay && (
+      // Names the song rather than saying a bare "Play" — the user
+      // should know what they're about to hear before they tap.
+      <button
+        type="button"
+        onClick={onPlay}
+        aria-label={`Play ${playTarget!.title} by ${update.artistName}`}
+        className="absolute bottom-3 right-3 z-10 flex items-center justify-center w-10 h-10 rounded-full bg-white text-black shadow-lg active:scale-95 transition-transform"
+      >
+        <Play size={14} fill="currentColor" className="ml-[1px]" />
+      </button>
+    )}
+    </div>
   );
 }
 

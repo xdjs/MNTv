@@ -44,11 +44,11 @@ import ImmersiveNuggetView from "@/components/immersive/ImmersiveNuggetView";
 
 const SOURCE: Source = {
   id: "src-1",
-  kind: "article",
+  type: "article",
   title: "Interview",
   publisher: "Pitchfork",
   url: "https://pitchfork.com/example",
-} as Source;
+};
 
 // A nugget whose headline and body differ — the normal case.
 const RICH: Nugget = {
