@@ -140,3 +140,35 @@ export function dropDuplicatedSeeds(
   const generatedKeys = new Set(generated.map((n) => headlineKey(n.headline || n.text)));
   return seeded.filter((s) => !generatedKeys.has(headlineKey(s.headline || s.text)));
 }
+
+/**
+ * Fold one streamed nugget into the current list, retiring any seeded
+ * artist fact it duplicates.
+ *
+ * Extracted from the SSE handler because it is the seam where the two
+ * lanes meet, and it is easy to get catastrophically wrong inline: an
+ * earlier version passed the WHOLE previous list as `dropDuplicatedSeeds`'
+ * seeded argument while deriving `generated` from that same list, so every
+ * streamed nugget was compared against itself, matched its own headline,
+ * and filtered itself out — collapsing a six-nugget stream to two and then
+ * persisting the truncated set to the shared cache. Keeping it here means
+ * the behaviour is testable across a whole stream rather than one call.
+ *
+ * Ordering: surviving seeds stay in front (they're pinned to
+ * timestampSec 0 and open the listen), generated nuggets keep arrival
+ * order behind them.
+ */
+export function mergeStreamedNugget(
+  prev: readonly Nugget[],
+  incoming: Nugget,
+  seededIds: ReadonlySet<string>,
+): Nugget[] {
+  // Re-fired streams can deliver a nugget already in state.
+  if (prev.some((p) => p.id === incoming.id)) return [...prev];
+  if (seededIds.size === 0) return [...prev, incoming];
+
+  const seedsInPrev = prev.filter((p) => seededIds.has(p.id));
+  const generatedInPrev = prev.filter((p) => !seededIds.has(p.id));
+  const keptSeeds = dropDuplicatedSeeds(seedsInPrev, [...generatedInPrev, incoming]);
+  return [...keptSeeds, ...generatedInPrev, incoming];
+}

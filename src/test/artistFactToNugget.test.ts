@@ -4,6 +4,8 @@ import {
   isReusableArtistFact,
   selectSeedFacts,
   dropDuplicatedSeeds,
+  mergeStreamedNugget,
+  buildArtistUpdatesCacheKey,
   ARTIST_FACT_ID_PREFIX,
 } from "@/lib/artistFactToNugget";
 import type { ArtistUpdate } from "@/hooks/useArtistUpdates";
@@ -175,5 +177,98 @@ describe("dropDuplicatedSeeds", () => {
     const result = dropDuplicatedSeeds(seeded, [dupe]);
     expect(result).not.toContain(dupe);
     expect(result).toHaveLength(0);
+  });
+});
+
+// ── The seam ──────────────────────────────────────────────────────────
+// These are the tests that were missing. The unit tests above all passed
+// while the SSE handler silently collapsed a six-nugget stream to two,
+// because they exercised dropDuplicatedSeeds in isolation and never the
+// expression that folds a whole stream together.
+describe("mergeStreamedNugget — across a full stream", () => {
+  const seedNugget = selectSeedFacts([update()], TRACK_ID).nuggets[0];
+  const seedIds = new Set([seedNugget.id]);
+
+  function streamInto(start: Nugget[], count: number, ids: ReadonlySet<string>) {
+    let state = start;
+    for (let i = 1; i <= count; i++) {
+      state = mergeStreamedNugget(
+        state,
+        nugget({ id: `gen-${i}`, headline: `Generated fact ${i}.` }),
+        ids,
+      );
+    }
+    return state;
+  }
+
+  // THE REGRESSION. Previously this ended with 2 entries.
+  it("accumulates every streamed nugget when a seed is active", () => {
+    const final = streamInto([seedNugget], 6, seedIds);
+    expect(final).toHaveLength(7);
+    expect(final.filter((n) => n.id.startsWith("gen-"))).toHaveLength(6);
+  });
+
+  it("accumulates every streamed nugget with no seed active", () => {
+    const final = streamInto([], 6, new Set());
+    expect(final).toHaveLength(6);
+  });
+
+  it("keeps generated nuggets in arrival order", () => {
+    const final = streamInto([seedNugget], 4, seedIds);
+    expect(final.filter((n) => n.id.startsWith("gen-")).map((n) => n.id))
+      .toEqual(["gen-1", "gen-2", "gen-3", "gen-4"]);
+  });
+
+  it("keeps a surviving seed in front, where it opens the listen", () => {
+    const final = streamInto([seedNugget], 3, seedIds);
+    expect(final[0].id).toBe(seedNugget.id);
+  });
+
+  it("retires the seed only when generation duplicates it, mid-stream", () => {
+    let state: Nugget[] = [seedNugget];
+    state = mergeStreamedNugget(state, nugget({ id: "gen-1" }), seedIds);
+    expect(state).toHaveLength(2);
+
+    // Wave-1 independently produces the same fact.
+    state = mergeStreamedNugget(
+      state,
+      nugget({ id: "gen-2", headline: "Pete Rango's career began in Fort Myers." }),
+      seedIds,
+    );
+    expect(state.some((n) => n.id === seedNugget.id)).toBe(false);
+    // ...and the generated nuggets all survive.
+    expect(state.map((n) => n.id)).toEqual(["gen-1", "gen-2"]);
+  });
+
+  it("does not re-add a nugget already in state", () => {
+    const dupe = nugget({ id: "gen-1" });
+    const once = mergeStreamedNugget([seedNugget], dupe, seedIds);
+    const twice = mergeStreamedNugget(once, dupe, seedIds);
+    expect(twice).toHaveLength(once.length);
+  });
+
+  it("never mutates the array it was given", () => {
+    const start = [seedNugget];
+    mergeStreamedNugget(start, nugget({ id: "gen-1" }), seedIds);
+    expect(start).toHaveLength(1);
+  });
+});
+
+describe("buildArtistUpdatesCacheKey", () => {
+  // MUST match cacheKey() in supabase/functions/artist-updates/index.ts:687
+  // — `artist::${artistName.trim().toLowerCase()}::${tier}`. Drift here
+  // reads nothing and fails silently, with no error anywhere.
+  it("matches the edge function's key format exactly", () => {
+    expect(buildArtistUpdatesCacheKey("Radiohead", "nerd")).toBe("artist::radiohead::nerd");
+  });
+
+  it("lowercases and trims like the edge function does", () => {
+    expect(buildArtistUpdatesCacheKey("  Pete Rango  ", "casual"))
+      .toBe("artist::pete rango::casual");
+  });
+
+  it("scopes by tier", () => {
+    expect(buildArtistUpdatesCacheKey("Flozigg", "curious"))
+      .toBe("artist::flozigg::curious");
   });
 });

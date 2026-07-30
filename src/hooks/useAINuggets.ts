@@ -10,7 +10,7 @@ import type { ArtistUpdate } from "@/hooks/useArtistUpdates";
 import {
   buildArtistUpdatesCacheKey,
   selectSeedFacts,
-  dropDuplicatedSeeds,
+  mergeStreamedNugget,
 } from "@/lib/artistFactToNugget";
 
 // Back-compat re-export for any consumer that imported
@@ -336,6 +336,7 @@ export function useAINuggets(
   // generation runs. Held in a ref so the SSE handler can retire them the
   // moment track-specific nuggets start arriving.
   const seededRef = useRef<Nugget[]>([]);
+  const seededIdsRef = useRef<Set<string>>(new Set());
 
   // ── Wave orchestration ─────────────────────────────────────────────
   // Wave 1 is the initial generate() call. Wave 2/3 fire in-session when
@@ -388,6 +389,7 @@ export function useAINuggets(
     // updaters: setNuggets(prev => [...prev, nugget])).
     setNuggets([]);
     seededRef.current = [];
+    seededIdsRef.current = new Set();
     setSources(new Map());
 
     // ── In-memory cache check ──────────────────────────────────────
@@ -701,7 +703,16 @@ export function useAINuggets(
             .eq("track_id", artistKey)
             .maybeSingle();
 
-          if (!cancelledRef.current && artistRow?.status === "ready") {
+          // cancelledRef is a run-liveness flag, not a track identity
+          // check — the effect resets it to false at the start of each
+          // new run, so an in-flight read from the PREVIOUS track can
+          // resolve afterwards and see it as live. Since this write
+          // REPLACES the nugget list, that would drop the new track's
+          // nuggets and show the old track's fact. The SSE path defends
+          // the same hazard with id-dedup; this one needs the identity
+          // comparison because there is nothing to dedup against.
+          const stillOnSameTrack = currentTrackIdRef.current === trackId;
+          if (!cancelledRef.current && stillOnSameTrack && artistRow?.status === "ready") {
             const updates = (artistRow.nuggets ?? []) as unknown as ArtistUpdate[];
             const seed = selectSeedFacts(updates, trackId);
             if (seed.nuggets.length > 0) {
@@ -709,6 +720,7 @@ export function useAINuggets(
                 console.log("[NuggetCache] Seeding from artist research:", artistKey);
               }
               seededRef.current = seed.nuggets;
+              seededIdsRef.current = new Set(seed.nuggets.map((n) => n.id));
               setNuggets(seed.nuggets);
               setSources(new Map(seed.sources.map((s) => [s.id, s])));
               // Deliberately NOT setFromCache(true) — this is a stopgap
@@ -842,19 +854,10 @@ export function useAINuggets(
               // the cache-restored nugget that has the same listenCount +
               // index. React then renders only one of the two same-keyed
               // children and the other "disappears" mid-typewrite.
-              setNuggets((prev) => {
-                if (prev.some((p) => p.id === nugget.id)) return prev;
-                // Retire seeded artist facts as real, track-specific
-                // nuggets arrive. Dropping the seed rather than the
-                // generated nugget is deliberate: the generated one is
-                // about THIS recording, properly timestamped, and carries
-                // a citation. Only seeds the generation duplicated go —
-                // an artist fact it didn't cover still earns its slot.
-                const withoutDupes = seededRef.current.length > 0
-                  ? dropDuplicatedSeeds(prev, [...prev.filter((p) => !seededRef.current.some((s) => s.id === p.id)), nugget])
-                  : prev;
-                return [...withoutDupes, nugget];
-              });
+              // Retires any seeded artist fact this nugget duplicates.
+              // See mergeStreamedNugget — the logic lives there so it can
+              // be tested across a whole stream, not one call at a time.
+              setNuggets((prev) => mergeStreamedNugget(prev, nugget, seededIdsRef.current));
               if (import.meta.env.DEV) console.log(`[SSE] Received nugget ${payload.index}: "${n.headline?.slice(0, 40)}"`);
 
               // Early-cancel: if we already have enough nuggets to cover
