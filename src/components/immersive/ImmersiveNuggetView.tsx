@@ -27,6 +27,10 @@ interface ImmersiveNuggetViewProps {
   // waiting for playback to reach each timestampSec — parity with desktop's
   // fresh-SSE bypass so the first headline lands the moment the stream emits it.
   isFresh?: boolean;
+  /** Initial generation or wave-2 still running. Drives the screen-edge
+   *  glow so "we're still digging" is legible without looking at the
+   *  logo — the whole frame breathes instead of one small element. */
+  researching?: boolean;
 }
 
 // Module-level so it persists across unmount/remount cycles (e.g. navigating
@@ -119,6 +123,7 @@ export default function ImmersiveNuggetView({
   onNext,
   spotifyAlbumArt,
   isFresh = false,
+  researching = false,
 }: ImmersiveNuggetViewProps) {
   const { isPlaying, currentTime, duration, toggle, seek } = usePlayer();
   const mountedRef = useRef(true);
@@ -710,9 +715,15 @@ export default function ImmersiveNuggetView({
         </svg>
       </button>
 
-      {/* Screen-edge glow — tier-colored border effect */}
-      <div className="fixed inset-0 z-[51] pointer-events-none"
-        style={{
+      {/* Screen-edge glow — tier-colored border effect. Breathes while
+          research is in flight so the state reads from anywhere on the
+          screen, not just the logo in the corner. Settles to the static
+          glow the moment research finishes. */}
+      <div
+        className={`fixed inset-0 z-[51] pointer-events-none ${researching ? "animate-research-glow" : ""}`}
+        data-testid="screen-glow"
+        data-researching={researching ? "true" : "false"}
+        style={researching ? undefined : {
           boxShadow: "inset 0 0 30px 4px hsl(var(--neon-glow) / 0.3), inset 0 0 80px 10px hsl(var(--neon-glow) / 0.1)",
         }}
       />

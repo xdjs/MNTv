@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Heart, Music, Share2, Trash2, Check } from "lucide-react";
+import { ArrowLeft, Heart, Music, Share2, Trash2, Check, Play, X, ExternalLink } from "lucide-react";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
 import { useBookmarks, type Bookmark } from "@/hooks/useBookmarks";
 import PageTransition from "@/components/PageTransition";
+import { AnimatePresence, motion } from "framer-motion";
+import { isSafeUrl } from "@/lib/urlSafety";
 
 // Group bookmarks into date buckets for a scannable profile page. Exact
 // edges don't matter much — the goal is to let a user visually parse
@@ -27,6 +29,20 @@ function listenUrlFor(bm: Bookmark): string {
   return `/listen/${encodeURIComponent(bm.track_id)}`;
 }
 
+// Bookmarks store no artist id, so this uses the search-by-name form the
+// app already resolves server-side (same fallback RecommendedButtons uses
+// when Gemini gives a name but no Spotify id).
+function artistUrlFor(bm: Bookmark): string {
+  return `/artist/real::${encodeURIComponent(bm.artist)}`;
+}
+
+// A saved nugget's citation, when the edge function stored one.
+function sourceUrlOf(bm: Bookmark): string | null {
+  const src = bm.source as { url?: unknown } | null;
+  const url = typeof src?.url === "string" ? src.url : null;
+  return url && isSafeUrl(url) ? url : null;
+}
+
 export default function Profile() {
   const { profile } = useUserProfile();
   const { bookmarks, loading, signedIn, toggle } = useBookmarks();
@@ -34,6 +50,14 @@ export default function Profile() {
   // Transient per-row UI state for the share button's "Copied!" confirmation.
   // Keyed by bookmark id.
   const [sharedIds, setSharedIds] = useState<Set<string>>(new Set());
+  // Tapping a saved nugget used to navigate straight to Listen, which
+  // committed the user to playback before they could re-read what they
+  // saved or decide they wanted the artist instead. Now it opens.
+  const [openId, setOpenId] = useState<string | null>(null);
+  const openBookmark = useMemo(
+    () => bookmarks.find((b) => b.id === openId) ?? null,
+    [bookmarks, openId],
+  );
 
   async function handleShare(bm: Bookmark) {
     const url = `${window.location.origin}${listenUrlFor(bm)}`;
@@ -151,7 +175,7 @@ export default function Profile() {
                         className="bg-white/5 hover:bg-white/10 transition rounded-lg overflow-hidden"
                       >
                         <button
-                          onClick={() => navigate(listenUrlFor(bm))}
+                          onClick={() => setOpenId(bm.id)}
                           className="w-full text-left active:scale-[0.99] transition-transform p-4 flex gap-3"
                         >
                           {bm.image_url ? (
@@ -214,6 +238,95 @@ export default function Profile() {
             )}
         </div>
       </div>
+
+      {/* Saved-nugget detail. Opening the card first is the point: a saved
+          nugget is something you chose to keep, so the tap should let you
+          re-read it and then decide where to go — the song, the artist, or
+          the source — rather than committing you to playback.
+
+          Action shape matches the Browse expanded card deliberately: one
+          filled play control, quiet links beside it. Same gesture, same
+          meaning, on both surfaces. */}
+      <AnimatePresence>
+        {openBookmark && (
+          <motion.div
+            className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setOpenId(null)}
+            role="dialog"
+            aria-modal="true"
+            aria-label={openBookmark.headline}
+          >
+            <motion.div
+              className="relative w-full max-w-md bg-neutral-950 rounded-2xl overflow-hidden ring-1 ring-white/10 max-h-[85vh] flex flex-col"
+              initial={{ y: 24, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 24, opacity: 0 }}
+              transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {openBookmark.image_url && (
+                <div className="relative h-44 shrink-0">
+                  <img src={openBookmark.image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/40 to-transparent" />
+                </div>
+              )}
+
+              <button
+                onClick={() => setOpenId(null)}
+                aria-label="Close"
+                className="absolute top-3 right-3 z-10 w-9 h-9 rounded-full bg-black/50 backdrop-blur-sm ring-1 ring-white/20 flex items-center justify-center active:scale-95 transition-transform"
+              >
+                <X className="w-4 h-4 text-white/80" />
+              </button>
+
+              <div className="px-5 pb-5 pt-4 overflow-y-auto scrollbar-hide">
+                <p className="text-[10px] uppercase tracking-widest text-white/40 mb-2">
+                  {openBookmark.artist} · {openBookmark.title}
+                </p>
+                <h2 className="text-xl font-black text-white leading-tight mb-3">
+                  {openBookmark.headline}
+                </h2>
+                <p className="text-sm text-white/75 leading-relaxed mb-5">
+                  {openBookmark.body}
+                </p>
+
+                <div className="flex items-center gap-3.5">
+                  <button
+                    onClick={() => navigate(listenUrlFor(openBookmark))}
+                    aria-label={`Play ${openBookmark.title} by ${openBookmark.artist}`}
+                    className="shrink-0 flex items-center justify-center w-12 h-12 rounded-full bg-white text-black hover:bg-white/90 active:scale-95 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                  >
+                    <Play className="w-4 h-4 ml-[2px]" fill="currentColor" />
+                  </button>
+                  <div className="flex flex-col items-start gap-1.5 min-w-0">
+                    <button
+                      onClick={() => navigate(artistUrlFor(openBookmark))}
+                      className="inline-flex items-center gap-1.5 max-w-full text-sm font-semibold text-primary hover:underline active:scale-95 transition-transform"
+                    >
+                      <span className="truncate">{openBookmark.artist}</span>
+                      <ExternalLink className="w-3 h-3 shrink-0" />
+                    </button>
+                    {sourceUrlOf(openBookmark) && (
+                      <a
+                        href={sourceUrlOf(openBookmark)!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white/80 transition-colors"
+                      >
+                        Source
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </PageTransition>
   );
 }
