@@ -25,6 +25,11 @@ interface AINuggetData {
   listenFor?: boolean;
   imageUrl?: string;
   imageCaption?: string;
+  /** Artist a discovery nugget points the listener toward. Populated by
+   *  generate-nuggets; drives the "Open {Artist}" button. */
+  recommendedArtist?: { name: string; spotifyArtistId?: string };
+  /** Specific track to start with, when the nugget named one. */
+  recommendedTrack?: { artist: string; title: string; spotifyTrackUri?: string };
   source: {
     type: "youtube" | "article" | "interview";
     title: string;
@@ -163,6 +168,12 @@ export function makeNugget(n: AINuggetData, nuggetId: string, sourceId: string, 
     headline: deriveHeadline(n.headline, n.text), text: n.text, kind: n.kind,
     listenFor: n.listenFor || false, sourceId,
     imageUrl: n.imageUrl, imageCaption: n.imageCaption,
+    // Without these the server's recommendation is dropped on the floor
+    // and the reader gets a discovery nugget naming an artist with no
+    // way to reach them — the RecommendedButtons have been rendering
+    // conditionally on data nothing ever supplied.
+    recommendedArtist: n.recommendedArtist,
+    recommendedTrack: n.recommendedTrack,
   };
 }
 
