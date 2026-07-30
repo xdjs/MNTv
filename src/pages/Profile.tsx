@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, Heart, Music, Share2, Trash2, Check, Play, X, ExternalLink } from "lucide-react";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
 import { useBookmarks, type Bookmark } from "@/hooks/useBookmarks";
 import PageTransition from "@/components/PageTransition";
 import { AnimatePresence, motion } from "framer-motion";
+import { useDialogFocusTrap } from "@/hooks/useDialogFocusTrap";
 import { isSafeUrl } from "@/lib/urlSafety";
 
 // Group bookmarks into date buckets for a scannable profile page. Exact
@@ -58,6 +59,14 @@ export default function Profile() {
     () => bookmarks.find((b) => b.id === openId) ?? null,
     [bookmarks, openId],
   );
+  // Validated once rather than on each render branch that needs it.
+  const sourceUrl = openBookmark ? sourceUrlOf(openBookmark) : null;
+  const closeDetail = useCallback(() => setOpenId(null), []);
+  // Same Escape / focus-trap / focus-restore behaviour as the Browse
+  // expanded card. This dialog was written to match that one visually
+  // and shipped without any of it, so a keyboard user could Tab straight
+  // through the backdrop with no way to dismiss.
+  const closeBtnRef = useDialogFocusTrap(closeDetail, !!openBookmark);
 
   async function handleShare(bm: Bookmark) {
     const url = `${window.location.origin}${listenUrlFor(bm)}`;
@@ -254,13 +263,13 @@ export default function Profile() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => setOpenId(null)}
-            role="dialog"
-            aria-modal="true"
-            aria-label={openBookmark.headline}
+            onClick={closeDetail}
           >
             <motion.div
               className="relative w-full max-w-md bg-neutral-950 rounded-2xl overflow-hidden ring-1 ring-white/10 max-h-[85vh] flex flex-col"
+              role="dialog"
+              aria-modal="true"
+              aria-label={openBookmark.headline}
               initial={{ y: 24, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 24, opacity: 0 }}
@@ -275,7 +284,8 @@ export default function Profile() {
               )}
 
               <button
-                onClick={() => setOpenId(null)}
+                ref={closeBtnRef}
+                onClick={closeDetail}
                 aria-label="Close"
                 className="absolute top-3 right-3 z-10 w-9 h-9 rounded-full bg-black/50 backdrop-blur-sm ring-1 ring-white/20 flex items-center justify-center active:scale-95 transition-transform"
               >
@@ -309,9 +319,9 @@ export default function Profile() {
                       <span className="truncate">{openBookmark.artist}</span>
                       <ExternalLink className="w-3 h-3 shrink-0" />
                     </button>
-                    {sourceUrlOf(openBookmark) && (
+                    {sourceUrl && (
                       <a
-                        href={sourceUrlOf(openBookmark)!}
+                        href={sourceUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white/80 transition-colors"

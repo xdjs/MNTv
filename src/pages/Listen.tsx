@@ -1771,7 +1771,7 @@ export default function Listen() {
               onNext={handleNext}
               spotifyAlbumArt={spotifyStateTrack?.albumArtUrl}
               researching={aiLoading || waveLoading}
-            isFresh={!aiFromCache}
+              isFresh={!aiFromCache}
             />
           </Suspense>
         )}
