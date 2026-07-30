@@ -402,14 +402,6 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen, playTarget = n
     return () => { document.body.style.overflow = prev; };
   }, []);
 
-  // One action per destination. Playback belongs to the Play button
-  // above; this button always opens the artist. Previously it read
-  // `Listen to "X"` for release/collab cards and navigated to Listen —
-  // which, once the Play button existed, meant two controls doing the
-  // identical thing side by side (Pete: "why do we have two ways of
-  // playing a song from the card?").
-  const ctaLabel = `Open ${update.artistName}`;
-
   const titleId = `expanded-${layoutId.replace(/[^a-zA-Z0-9_-]/g, "_")}-title`;
 
   // WCAG focus management: Esc dismisses, focus moves to close button
@@ -530,44 +522,53 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen, playTarget = n
               </p>
             )}
 
-            <div className="flex gap-2 flex-wrap">
+            {/* One weight per action. Three filled pills gave every
+                control the same emphasis and wrapped into a ragged
+                two-row block; the labels also restated the headline
+                directly above them, which is what made them so wide.
+                Play is the only filled element — an icon, matching the
+                treatment on the card tiles so the gesture reads the same
+                on both surfaces — and the two navigations sit beside it
+                as quiet links. */}
+            <div className="flex items-center gap-3.5">
               {playTarget && onPlay && (
-                // Leads the row: reading a fact should be one tap from
-                // hearing something. Names the track so it's never a
-                // guess what play will start.
+                // Unlabelled by design, so the aria-label carries the
+                // whole promise: which track, by whom.
                 <button
                   onClick={onPlay}
                   aria-label={`Play ${playTarget.title} by ${update.artistName}`}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white text-black text-sm font-semibold hover:bg-white/90 active:scale-95 transition-all max-w-full"
+                  className="shrink-0 flex items-center justify-center w-12 h-12 rounded-full bg-white text-black hover:bg-white/90 active:scale-95 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                 >
-                  <Play className="w-3.5 h-3.5 shrink-0" fill="currentColor" />
-                  <span className="truncate">Play "{playTarget.title}"</span>
+                  <Play className="w-4 h-4 ml-[2px]" fill="currentColor" />
                 </button>
               )}
-              {canOpenArtist && (
-                <button
-                  onClick={onOpen}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary/25 text-primary text-sm font-semibold hover:bg-primary/35 active:scale-95 transition-all"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  {ctaLabel}
-                </button>
-              )}
-              {isSafeUrl(update.source?.url) && (
-                // Scheme guard: only render the anchor if the URL is
-                // http(s). The url originates from Exa / Gemini output
-                // — without this a hallucinated `javascript:` or
-                // `data:` scheme would be a navigable XSS vector.
-                <a
-                  href={update.source.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/10 text-white/70 text-sm hover:bg-white/15 active:scale-95 transition-all"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  Source
-                </a>
-              )}
+              <div className="flex flex-col items-start gap-1.5 min-w-0">
+                {canOpenArtist && (
+                  <button
+                    onClick={onOpen}
+                    className="inline-flex items-center gap-1.5 max-w-full text-sm font-semibold text-primary hover:underline active:scale-95 transition-transform"
+                  >
+                    <span className="truncate">{update.artistName}</span>
+                    <ExternalLink className="w-3 h-3 shrink-0" />
+                  </button>
+                )}
+                {isSafeUrl(update.source?.url) && (
+                  // Scheme guard: only render the anchor if the URL is
+                  // http(s). The url originates from Exa / Gemini output
+                  // — without this a hallucinated `javascript:` or
+                  // `data:` scheme would be a navigable XSS vector.
+                  <a
+                    href={update.source.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white/80 transition-colors"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Source
+                    <ExternalLink className="w-3 h-3 shrink-0" />
+                  </a>
+                )}
+              </div>
             </div>
           </motion.div>
         </motion.div>
