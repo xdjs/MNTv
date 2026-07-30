@@ -391,8 +391,28 @@ export function useAINuggets(
     waveExhaustedRef.current = false;
   }, [trackId, regenerateKey]);
 
+  // Enrichment inputs — used INSIDE generate() but deliberately not in its
+  // dependency array. They arrive asynchronously (the artist image resolves
+  // from profile.artistImages; topArtists/topTracks get replaced by the
+  // background taste refresh), so including them meant generate() got a new
+  // identity mid-listen, the effect re-ran, and its first act — setNuggets([])
+  // — wiped every fact the user was reading. Pete: "I had a track paused for a
+  // while, I unpaused, and all the facts disappeared and the researching pill
+  // showed up again."
+  //
+  // Regeneration should be decided by WHAT we are generating for (track, tier,
+  // listen depth), never by late-arriving decoration.
+  const enrichmentRef = useRef({ coverArtUrl, artistImageUrl, topArtists, topTracks });
+  enrichmentRef.current = { coverArtUrl, artistImageUrl, topArtists, topTracks };
+
   const generate = useCallback(async () => {
     if (!artist || !title) return;
+    const {
+      coverArtUrl: coverArtUrlLive,
+      artistImageUrl: artistImageUrlLive,
+      topArtists: topArtistsLive,
+      topTracks: topTracksLive,
+    } = enrichmentRef.current;
     setFromCache(false);
 
     // Clear stale state from a previous track so SSE appends don't stack
@@ -562,11 +582,11 @@ export function useAINuggets(
             nugget.imageUrl = seedNugget.imageUrl;
             nugget.imageCaption = seedNugget.imageCaption || nugget.headline;
             contextualImageIndices.add(idx);
-          } else if (nugget.kind === "artist" && isRealImg(artistImageUrl)) {
-            nugget.imageUrl = artistImageUrl;
+          } else if (nugget.kind === "artist" && isRealImg(artistImageUrlLive)) {
+            nugget.imageUrl = artistImageUrlLive;
             nugget.imageCaption = artist;
-          } else if ((nugget.kind === "track" || nugget.kind === "discovery") && isRealImg(coverArtUrl)) {
-            nugget.imageUrl = coverArtUrl;
+          } else if ((nugget.kind === "track" || nugget.kind === "discovery") && isRealImg(coverArtUrlLive)) {
+            nugget.imageUrl = coverArtUrlLive;
             nugget.imageCaption = nugget.kind === "track"
               ? `${title}${album ? " \u2014 " + album : ""}`
               : nugget.headline || "Explore next";
@@ -765,9 +785,9 @@ export function useAINuggets(
         listenCount: currentListenCount,
         previousNuggets,
         tier,
-        userTopArtists: topArtists?.slice(0, 10),
-        userTopTracks: topTracks?.slice(0, 10),
-        spotifyArtistImageUrl: artistImageUrl,
+        userTopArtists: topArtistsLive?.slice(0, 10),
+        userTopTracks: topTracksLive?.slice(0, 10),
+        spotifyArtistImageUrl: artistImageUrlLive,
         spotifyTrackId: spotifyTrackIdValue,
         appleTrackId: appleTrackIdValue,
         durationSec,  // server uses this to compute cache-side timestamps
@@ -951,11 +971,11 @@ export function useAINuggets(
         const isRealImg = (url?: string) => url && !url.includes("dicebear.com");
         for (const n of aiNuggets) {
           if (n.imageUrl) continue; // server already resolved
-          if (n.kind === "artist" && isRealImg(artistImageUrl)) {
-            n.imageUrl = artistImageUrl;
+          if (n.kind === "artist" && isRealImg(artistImageUrlLive)) {
+            n.imageUrl = artistImageUrlLive;
             n.imageCaption = artist;
-          } else if (isRealImg(coverArtUrl)) {
-            n.imageUrl = coverArtUrl;
+          } else if (isRealImg(coverArtUrlLive)) {
+            n.imageUrl = coverArtUrlLive;
             n.imageCaption = title;
           }
         }
@@ -1046,16 +1066,16 @@ export function useAINuggets(
           contextualImageIndices.add(idx);
         }
         // "context" kind: keep backend-resolved image, only fallback to artist photo
-        else if (nugget.kind === "context" && isRealImage(artistImageUrl)) {
-          nugget.imageUrl = artistImageUrl;
+        else if (nugget.kind === "context" && isRealImage(artistImageUrlLive)) {
+          nugget.imageUrl = artistImageUrlLive;
           nugget.imageCaption = artist;
         }
         // Fall back to Spotify images (only real URLs, not DiceBear placeholders)
-        else if (nugget.kind === "artist" && isRealImage(artistImageUrl)) {
-          nugget.imageUrl = artistImageUrl;
+        else if (nugget.kind === "artist" && isRealImage(artistImageUrlLive)) {
+          nugget.imageUrl = artistImageUrlLive;
           nugget.imageCaption = artist;
-        } else if ((nugget.kind === "track" || nugget.kind === "discovery") && isRealImage(coverArtUrl)) {
-          nugget.imageUrl = coverArtUrl;
+        } else if ((nugget.kind === "track" || nugget.kind === "discovery") && isRealImage(coverArtUrlLive)) {
+          nugget.imageUrl = coverArtUrlLive;
           nugget.imageCaption = nugget.kind === "track"
             ? `${title}${album ? " \u2014 " + album : ""}`
             : nugget.headline || "Explore next";
@@ -1191,7 +1211,7 @@ export function useAINuggets(
         // nugget than leave the user staring at cover art with no
         // content to read.
         console.warn(`[useAINuggets] SSE failed and no cache row exists for ${dbCacheKey}; synthesizing catalog fallback`);
-        const synth = makeSparseFallbackNugget(artist, title, trackId, durationSec, coverArtUrl);
+        const synth = makeSparseFallbackNugget(artist, title, trackId, durationSec, coverArtUrlLive);
         const synthSources = new Map<string, Source>([[synth.source.id, synth.source]]);
         setNuggets([synth.nugget]);
         setSources(synthSources);
@@ -1218,7 +1238,7 @@ export function useAINuggets(
         setLoading(false);
       }
     }
-  }, [trackId, artist, title, album, durationSec, coverArtUrl, artistImageUrl, tier, regenerateKey, topArtists, topTracks, getNuggetCache, setNuggetCache, setTrackListenCount]);
+  }, [trackId, artist, title, album, durationSec, tier, regenerateKey, getNuggetCache, setNuggetCache, setTrackListenCount]); // enrichment deliberately excluded — see enrichmentRef above
 
   useEffect(() => {
     cancelledRef.current = false;
