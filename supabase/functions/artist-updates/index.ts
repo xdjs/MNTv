@@ -147,18 +147,34 @@ async function searchArtist(
   token: string,
   name: string,
 ): Promise<SpotifyArtistSearchResult | null> {
-  const url = `https://api.spotify.com/v1/search?type=artist&limit=1&q=${encodeURIComponent(
+  // limit=5, not 1. Spotify hosts DUPLICATE artist entities for the same
+  // name, and the first hit is not reliably the real one. Verified with
+  // lamboverrice: search returns "Lamboverrice" (1 follower, empty
+  // catalog) ahead of "lamboverrice" (20 followers, the actual artist),
+  // so taking [0] queried a dud and every catalog lookup came back empty
+  // — no top tracks, no albums, no play targets on their cards.
+  const url = `https://api.spotify.com/v1/search?type=artist&limit=5&q=${encodeURIComponent(
     name,
   )}`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) return null;
   const data = await res.json();
-  const first = data?.artists?.items?.[0];
-  if (!first || !first.id) return null;
-  // Require the match to be reasonably close. Spotify sometimes returns
-  // unrelated artists for sparse names — case-insensitive, trim-tolerant.
-  const matches = String(first.name).trim().toLowerCase() === name.trim().toLowerCase();
-  return matches ? first : null;
+  const items = (data?.artists?.items ?? []) as SpotifyArtistSearchResult[];
+  if (items.length === 0) return null;
+
+  // Require a close match, as before — Spotify returns unrelated artists
+  // for sparse names (the same lamboverrice search also surfaces
+  // "Lambo4oe" and "VonOff1700").
+  const wanted = name.trim().toLowerCase();
+  const exact = items.filter((a) => String(a.name).trim().toLowerCase() === wanted);
+  if (exact.length === 0) return null;
+
+  // Among genuine duplicates, prefer the one people actually follow.
+  // Followers beats popularity here: popularity is 0 for both entities of
+  // a small artist, while followers still separates the real one from a
+  // stub.
+  exact.sort((a, b) => (b.followers?.total ?? 0) - (a.followers?.total ?? 0));
+  return exact[0];
 }
 
 async function fetchArtistTopTracks(
@@ -175,6 +191,72 @@ async function fetchArtistTopTracks(
   const data = await res.json();
   const tracks = (data?.tracks ?? []) as SpotifyTopTrack[];
   return tracks.slice(0, limit);
+}
+
+// Fallback catalog source for artists Spotify has no top-tracks for.
+//
+// `/artists/{id}/top-tracks` is popularity-ranked and comes back EMPTY for
+// small artists — verified against lamboverrice, who has releases but no
+// top tracks in the US market. Those artists are much of the point of this
+// app, so without this their cards have nothing to play while bigger
+// artists do. Pulls the newest release's tracklist instead.
+async function fetchAlbumTracksFallback(
+  token: string,
+  artistId: string,
+  limit: number,
+): Promise<SpotifyTopTrack[]> {
+  try {
+    // `appears_on` is included deliberately. Some artists — often exactly
+    // the small ones this fallback exists for — have no releases of their
+    // own and exist entirely as features on other people's records.
+    // Filtering to single,album returns nothing for them. Verified with
+    // lamboverrice, whose own fact card says their track "appeared on"
+    // another artist's release.
+    const albumsRes = await fetch(
+      `https://api.spotify.com/v1/artists/${artistId}/albums?include_groups=single,album,appears_on&limit=5&market=US`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!albumsRes.ok) return [];
+    const albumsData = await albumsRes.json();
+    const albums = (albumsData?.items ?? []) as SpotifyReleaseItem[];
+    if (albums.length === 0) return [];
+    albums.sort((a, b) => (a.release_date < b.release_date ? 1 : -1));
+
+    const out: SpotifyTopTrack[] = [];
+    // Walk newest-first until we have enough; a single release may have
+    // fewer tracks than we want.
+    for (const album of albums) {
+      if (out.length >= limit) break;
+      const res = await fetch(
+        `https://api.spotify.com/v1/albums/${album.id}/tracks?limit=${limit}&market=US`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!res.ok) continue;
+      const data = await res.json();
+      for (const t of (data?.items ?? [])) {
+        if (out.length >= limit) break;
+        if (!t?.name || !t?.uri) continue;
+        // An `appears_on` album belongs to someone else, so most of its
+        // tracks have nothing to do with our artist. Keep only the ones
+        // they're actually credited on — otherwise a card would offer to
+        // play a stranger's song.
+        const credited = Array.isArray(t.artists)
+          && t.artists.some((a: { id?: string }) => a?.id === artistId);
+        if (!credited) continue;
+        out.push({
+          name: t.name,
+          uri: t.uri,
+          // The album-tracks endpoint omits album metadata (it's implied),
+          // so carry the parent album's name and art across for the tile.
+          album: { name: album.name, images: album.images },
+        });
+      }
+    }
+    return out;
+  } catch (e) {
+    console.warn("[artist-updates] album-tracks fallback failed:", e);
+    return [];
+  }
 }
 
 async function fetchRecentRelease(
@@ -1043,8 +1125,20 @@ serve(async (req) => {
       ?.relatedTrackTitle
       ?.trim()
       .toLowerCase();
+    // Small artists have no top-tracks; fall back to their newest release
+    // so their cards get play targets too. Only paid when the primary
+    // source came back empty.
+    const catalogTracks = topTracks.length > 0
+      ? topTracks
+      : await fetchAlbumTracksFallback(token, artistInfo.id, TRACKS_PER_ARTIST + 1);
+    if (topTracks.length === 0) {
+      console.log(
+        `[artist-updates] ${artistInfo.name} — no top-tracks, album fallback yielded ${catalogTracks.length}`,
+      );
+    }
+
     let trackCount = 0;
-    for (const t of topTracks) {
+    for (const t of catalogTracks) {
       if (trackCount >= TRACKS_PER_ARTIST) break;
       if (t.name?.trim().toLowerCase() === releaseTrackTitle) continue;
       const trackUpdate = buildTrackUpdate(artistInfo, t);
