@@ -1,8 +1,10 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, X, ExternalLink } from "lucide-react";
+import { Loader2, X, ExternalLink, Play } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { ArtistUpdate, ArtistUpdateGroup } from "@/hooks/useArtistUpdates";
+import { splitArtistUpdates, resolvePlayTarget, type PlayableTrack } from "@/lib/artistUpdateSplit";
+import { buildListenRoute } from "@/lib/listenRoute";
 import { serviceParamFromProfile, withAppleStorefront } from "@/lib/appleStorefront";
 import { getArtistUpdateKindMeta } from "@/lib/artistUpdateKind";
 import { isSafeUrl } from "@/lib/urlSafety";
@@ -92,14 +94,13 @@ function ArtistUpdatesSectionInner({
       (update.kind === "new-release" || update.kind === "collab") &&
       update.relatedTrackTitle
     ) {
-      const album = update.relatedAlbumName ?? "";
-      const isAppleUser = profile?.streamingService === "Apple Music";
-      const hasSpotifyTrackUri =
-        !!update.relatedTrackUri && update.relatedTrackUri.startsWith("spotify:track:");
-      const navUri = !isAppleUser && hasSpotifyTrackUri ? update.relatedTrackUri! : "";
-      navigate(
-        `/listen/real::${encodeURIComponent(update.artistName)}::${encodeURIComponent(update.relatedTrackTitle)}::${encodeURIComponent(album)}::${encodeURIComponent(navUri)}`,
-      );
+      navigate(buildListenRoute({
+        artist: update.artistName,
+        title: update.relatedTrackTitle,
+        album: update.relatedAlbumName,
+        uri: update.relatedTrackUri,
+        streamingService: profile?.streamingService,
+      }));
       return;
     }
 
@@ -118,6 +119,35 @@ function ArtistUpdatesSectionInner({
     );
     navigate(path);
   }, [profile?.streamingService, activeService, artistIds, navigate]);
+
+  // Starting a track from either lane — the "Get into" strip or a fact
+  // card's play control — goes straight to Listen. No expand step: the
+  // user already said what they want.
+  const playTrack = useCallback((artistName: string, track: PlayableTrack) => {
+    navigate(buildListenRoute({
+      artist: artistName,
+      title: track.title,
+      album: track.album,
+      uri: track.uri,
+      streamingService: profile?.streamingService,
+    }));
+  }, [navigate, profile?.streamingService]);
+
+  // The expanded card needs the same play target its tile had, so
+  // opening a fact never becomes a dead end. Resolved from the owning
+  // artist's lanes rather than the update alone, since a plain fact
+  // borrows the artist's first track.
+  const expandedPlayTarget = useMemo<PlayableTrack | null>(() => {
+    if (!expandedUpdate) return null;
+    const group = groups.find((g) => g.artistName === expandedUpdate.artistName);
+    const { tracks } = splitArtistUpdates(group?.updates);
+    return resolvePlayTarget(expandedUpdate, tracks);
+  }, [expandedUpdate, groups]);
+
+  const modalOnPlay = useCallback(() => {
+    if (!expandedUpdate || !expandedPlayTarget) return;
+    playTrack(expandedUpdate.artistName, expandedPlayTarget);
+  }, [expandedUpdate, expandedPlayTarget, playTrack]);
 
   // Stable modal onOpen so the memoized ExpandedUpdateModal isn't
   // forced to re-render every parent tick. Depends on expandedUpdate
@@ -154,6 +184,7 @@ function ArtistUpdatesSectionInner({
               key={group.artistName}
               group={group}
               onExpand={(u) => setExpandedKey(cardKey(u))}
+              onPlay={playTrack}
             />
           );
         })}
@@ -166,6 +197,8 @@ function ArtistUpdatesSectionInner({
             layoutId={cardKey(expandedUpdate)}
             onClose={modalOnClose}
             onOpen={modalOnOpen}
+            playTarget={expandedPlayTarget}
+            onPlay={expandedPlayTarget ? modalOnPlay : undefined}
           />
         )}
       </AnimatePresence>
@@ -198,11 +231,15 @@ export function cardKey(u: ArtistUpdate): string {
 interface ArtistRowProps {
   group: ArtistUpdateGroup;
   onExpand: (u: ArtistUpdate) => void;
+  onPlay: (artistName: string, track: PlayableTrack) => void;
 }
 
-function ArtistRow({ group, onExpand }: ArtistRowProps) {
+function ArtistRow({ group, onExpand, onPlay }: ArtistRowProps) {
   const loading = group.updates === null;
   const updates = group.updates ?? [];
+  // Two lanes: cards to read, tracks to play. The split rules live in
+  // artistUpdateSplit so they're testable without rendering.
+  const { facts, tracks } = useMemo(() => splitArtistUpdates(group.updates), [group.updates]);
   // Prefer a fact update's image for the row header avatar — that's the
   // artist photo. Release cards hand back an album cover in the same
   // field, which makes a lousy circular avatar. Fall back to whatever's
@@ -234,14 +271,23 @@ function ArtistRow({ group, onExpand }: ArtistRowProps) {
       >
         {loading
           ? Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
-          : updates.map((u) => (
-              <UpdateCard
-                key={cardKey(u)}
-                layoutId={cardKey(u)}
-                update={u}
-                onClick={() => onExpand(u)}
-              />
-            ))}
+          : facts.map((u) => {
+              // Every card should lead somewhere. A fact with no track of
+              // its own borrows the artist's first — but if nothing
+              // resolves, the card renders without a control rather than
+              // with a dead one.
+              const target = resolvePlayTarget(u, tracks);
+              return (
+                <UpdateCard
+                  key={cardKey(u)}
+                  layoutId={cardKey(u)}
+                  update={u}
+                  onClick={() => onExpand(u)}
+                  playTarget={target}
+                  onPlay={target ? () => onPlay(u.artistName, target) : undefined}
+                />
+              );
+            })}
       </div>
     </div>
   );
@@ -258,22 +304,33 @@ interface UpdateCardProps {
    *  vertical stack. */
   sizeClass?: string;
   pulsing?: boolean;
+  /** Track this card offers to play, if one resolved. */
+  playTarget?: PlayableTrack | null;
+  /** Omitted when there is nothing to play — the control is then not
+   *  rendered at all rather than rendered inert. */
+  onPlay?: () => void;
 }
 
 // Image-backed for every kind. Tap morphs into ExpandedUpdateModal
 // via Framer Motion layoutId — no immediate navigation. Exported so
 // ArtistProfile's Latest Facts section can reuse the exact same card
 // + modal pattern that Browse uses.
-export function UpdateCard({ update, layoutId, onClick, sizeClass = "shrink-0 w-[280px] md:w-[320px] h-44 md:h-48", pulsing = false }: UpdateCardProps) {
+export function UpdateCard({ update, layoutId, onClick, sizeClass = "shrink-0 w-[280px] md:w-[320px] h-44 md:h-48", pulsing = false, playTarget = null, onPlay }: UpdateCardProps) {
   const { kindLabel, KindIcon } = getArtistUpdateKindMeta(update.kind);
   const { chipClass } = kindStyle(update.kind);
   const img = update.artistImageUrl;
+  const showPlay = !!playTarget && !!onPlay;
 
+  // The play control is a SIBLING of the card button, not a child —
+  // nesting a button inside a button is invalid HTML and breaks
+  // keyboard traversal. The wrapper carries the sizing so the card
+  // still fills it.
   return (
+    <div className={`relative ${sizeClass}`}>
     <motion.button
       layoutId={layoutId}
       onClick={onClick}
-      className={`relative text-left rounded-2xl overflow-hidden group active:scale-[0.98] transition-transform ${sizeClass} ${
+      className={`relative text-left rounded-2xl overflow-hidden group active:scale-[0.98] transition-transform w-full h-full ${
         pulsing ? "ring-2 ring-rose-400/70 shadow-[0_0_24px_rgba(244,114,182,0.35)]" : ""
       }`}
       aria-label={`${kindLabel}: ${update.headline}`}
@@ -309,6 +366,22 @@ export function UpdateCard({ update, layoutId, onClick, sizeClass = "shrink-0 w-
         </p>
       </div>
     </motion.button>
+    {showPlay && (
+      // Names the song rather than showing a bare play glyph — you
+      // should know what you're about to hear before you tap. Sits
+      // top-right, mirroring the kind chip opposite it, so it doesn't
+      // crowd the headline; styled as glass rather than a solid white
+      // circle so it belongs to the card instead of sitting on top of it.
+      <button
+        type="button"
+        onClick={onPlay}
+        aria-label={`Play ${playTarget!.title} by ${update.artistName}`}
+        className="absolute top-2 right-2 z-10 flex items-center justify-center w-11 h-11 rounded-full bg-black/50 backdrop-blur-sm ring-1 ring-white/25 active:scale-95 transition-transform"
+      >
+        <Play size={13} fill="currentColor" className="text-white ml-[1px]" />
+      </button>
+    )}
+    </div>
   );
 }
 
@@ -319,9 +392,11 @@ interface ExpandedUpdateModalProps {
   layoutId: string;
   onClose: () => void;
   onOpen: () => void;
+  playTarget?: PlayableTrack | null;
+  onPlay?: () => void;
 }
 
-function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpdateModalProps) {
+function ExpandedUpdateModal({ update, layoutId, onClose, onOpen, playTarget = null, onPlay }: ExpandedUpdateModalProps) {
   const { kindLabel, KindIcon } = getArtistUpdateKindMeta(update.kind);
   const { chipClass } = kindStyle(update.kind);
   const img = update.artistImageUrl;
@@ -468,6 +543,19 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpda
             )}
 
             <div className="flex gap-2 flex-wrap">
+              {playTarget && onPlay && (
+                // Leads the row: reading a fact should be one tap from
+                // hearing something. Names the track so it's never a
+                // guess what play will start.
+                <button
+                  onClick={onPlay}
+                  aria-label={`Play ${playTarget.title} by ${update.artistName}`}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white text-black text-sm font-semibold hover:bg-white/90 active:scale-95 transition-all max-w-full"
+                >
+                  <Play className="w-3.5 h-3.5 shrink-0" fill="currentColor" />
+                  <span className="truncate">Play "{playTarget.title}"</span>
+                </button>
+              )}
               <button
                 onClick={onOpen}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary/25 text-primary text-sm font-semibold hover:bg-primary/35 active:scale-95 transition-all"

@@ -6,14 +6,12 @@ import MusicNerdLogo from "@/components/MusicNerdLogo";
 import TileRow from "@/components/TileRow";
 import SearchOverlay from "@/components/SearchOverlay";
 import PageTransition from "@/components/PageTransition";
-import StoriesRail from "@/components/StoriesRail";
 import ArtistUpdatesSection from "@/components/ArtistUpdatesSection";
 import { useUserProfile, tierGreeting, tierBadgeLabel, tierGlowClass } from "@/hooks/useMusicNerdState";
 import { usePersonalizedCatalog } from "@/hooks/usePersonalizedCatalog";
 import { useTierAccent } from "@/hooks/useTierAccent";
 import { useSignOut } from "@/hooks/useSignOut";
 import { usePlayer } from "@/contexts/PlayerContext";
-import { useStoriesContext } from "@/contexts/StoriesContext";
 import { useArtistUpdatesContext } from "@/contexts/ArtistUpdatesContext";
 import { useTierGate } from "@/contexts/TierGateContext";
 
@@ -60,10 +58,11 @@ export default function Browse() {
   const { rows: allRows } = usePersonalizedCatalog(profile);
   const userName = profile?.displayName || profile?.spotifyDisplayName || "";
 
-  // Pre-gen happens up at StoriesProvider (mounted in App), so stories start
-  // warming as soon as the profile is hydrated — not when the user reaches
-  // this page. Browse just reads the shared state.
-  const { stories } = useStoriesContext();
+  // The Stories RAIL is gone from Browse, but the Stories SYSTEM stays:
+  // StoriesProvider (mounted in App) is the pre-generation engine that
+  // warms nugget_cache so a first listen is instant. Removing it would
+  // trade a tidier page for a cold Exa → Gemini round trip on every
+  // first play. Nothing on this page reads the stories directly now.
 
   // "Your artists, lately" — nested rows, one per top artist. Pre-gen
   // is hoisted into `ArtistUpdatesProvider` at app root so warmup
@@ -354,10 +353,6 @@ export default function Browse() {
               : "What do you want to listen to?"}
           </p>
         </div>
-
-        {/* Stories rail — pre-generated nuggets for your top tracks. Tapping
-            a story opens Listen with the first nugget instant from cache. */}
-        <StoriesRail stories={stories} />
 
         {/* "Your artists, lately" — nested per-artist rows of updates.
             Replaces the old Jump-Back-In + Top-Artists rows; moves Browse

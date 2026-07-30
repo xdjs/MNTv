@@ -23,6 +23,7 @@ import { useSpotifyToken } from "@/hooks/useSpotifyToken";
 import { usePlayer } from "@/contexts/PlayerContext";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
 import { withAppleStorefront } from "@/lib/appleStorefront";
+import { isNuggetOnScreen } from "@/lib/nuggetVisibility";
 import { pickNextTrack, type SpotifyTrackResult } from "@/lib/skipCascade";
 import { useTierAccent } from "@/hooks/useTierAccent";
 import PageTransition from "@/components/PageTransition";
@@ -797,6 +798,18 @@ export default function Listen() {
   const [nerdActive, setNerdActive] = useState(true);
   const [liked, setLiked] = useState<boolean | null>(null);
 
+  // What the loading pill waits on. NOT `trackNuggets.length > 0` — that
+  // means nuggets landed in state, while the pill promises "researching…"
+  // until the user can actually see a fact. The reveal effect below gates
+  // display on nerdActive and, for cached tracks, on playback crossing
+  // each timestamp, so the two can diverge and the pill dismisses onto a
+  // blank screen.
+  const nuggetOnScreen = isNuggetOnScreen({
+    nerdActive,
+    activeNuggetId: activeNugget?.id,
+    trackNuggets,
+  });
+
   // --- Auto-hide bar logic ---
   const [barVisible, setBarVisible] = useState(false);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1381,8 +1394,9 @@ export default function Listen() {
           <div className="flex flex-col items-center gap-1.5">
             <MusicNerdLoadingOrchestrator
               aiLoading={aiLoading}
+            waveLoading={waveLoading}
               aiError={aiError}
-              hasNuggets={trackNuggets.length > 0}
+              hasNuggets={nuggetOnScreen}
               shortId={shortId}
               trackId={trackId}
               tier={tier}
@@ -1769,8 +1783,9 @@ export default function Listen() {
         <div className="fixed top-3 right-3 z-[60]" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
           <MusicNerdLoadingOrchestrator
             aiLoading={aiLoading}
+            waveLoading={waveLoading}
             aiError={aiError}
-            hasNuggets={trackNuggets.length > 0}
+            hasNuggets={nuggetOnScreen}
             shortId={shortId}
             trackId={trackId}
             tier={tier}

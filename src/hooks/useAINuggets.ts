@@ -6,6 +6,12 @@ import { usePlayer } from "@/contexts/PlayerContext";
 import { getSeedListenNuggets } from "@/data/seedNuggets";
 import { isValidSourceShape } from "@/lib/sourceShape";
 import { isSafeUrl } from "@/lib/urlSafety";
+import type { ArtistUpdate } from "@/hooks/useArtistUpdates";
+import {
+  buildArtistUpdatesCacheKey,
+  selectSeedFacts,
+  mergeStreamedNugget,
+} from "@/lib/artistFactToNugget";
 
 // Back-compat re-export for any consumer that imported
 // isValidSourceShape from this module before it moved to
@@ -183,6 +189,10 @@ export function makeSparseFallbackNugget(
 ): { nugget: Nugget; source: Source } {
   const nuggetId = `synth-nug-${trackId}-L1-0`;
   const sourceId = `synth-src-${trackId}-L1-0`;
+  // Runtime is the one verifiable, track-specific fact available here.
+  const runtime = durationSec > 0
+    ? `${Math.floor(durationSec / 60)}:${String(Math.round(durationSec % 60)).padStart(2, "0")}`
+    : null;
   return {
     nugget: {
       id: nuggetId,
@@ -192,8 +202,20 @@ export function makeSparseFallbackNugget(
       // first nugget when the user taps.
       timestampSec: 0,
       durationMs: 7000,
-      headline: `"${title}" by ${artist}`,
-      text: `One of your under-the-radar picks. There's not much press out there for this one yet, so we're letting the music do the talking — give it a real listen and we'll layer in the story as more sources surface.`,
+      // Constitution compliance. The previous copy broke two rules at
+      // once: "One of your under-the-radar picks" patronized the listener
+      // with their own taste, and "we'll layer in the story as more
+      // sources surface" was meta-commentary about the absence of
+      // information — the exact framing the constitution calls lazy and
+      // self-defeating. This states only what we can verify from catalog
+      // data (artist, title, runtime) and frames it as a listen rather
+      // than an apology.
+      headline: runtime
+        ? `${artist} brings "${title}" in at ${runtime}.`
+        : `${artist} — "${title}".`,
+      text: runtime
+        ? `Give it the full ${runtime} before you decide. The first pass is for the groove; the details surface on the second.`
+        : `Give it a full pass before you decide — the details surface on the second listen.`,
       kind: "track",
       listenFor: false,
       sourceId,
@@ -310,6 +332,11 @@ export function useAINuggets(
   // Track when the last generation attempt started — used to only debounce
   // on rapid skips (< 5s between tracks), not on first page load.
   const lastGenTimestampRef = useRef(0);
+  // Artist facts reused from Browse to fill the opening slot while real
+  // generation runs. Held in a ref so the SSE handler can retire them the
+  // moment track-specific nuggets start arriving.
+  const seededRef = useRef<Nugget[]>([]);
+  const seededIdsRef = useRef<Set<string>>(new Set());
 
   // ── Wave orchestration ─────────────────────────────────────────────
   // Wave 1 is the initial generate() call. Wave 2/3 fire in-session when
@@ -361,6 +388,8 @@ export function useAINuggets(
     // nuggets across track boundaries (the SSE path uses functional
     // updaters: setNuggets(prev => [...prev, nugget])).
     setNuggets([]);
+    seededRef.current = [];
+    seededIdsRef.current = new Set();
     setSources(new Map());
 
     // ── In-memory cache check ──────────────────────────────────────
@@ -654,6 +683,55 @@ export function useAINuggets(
           // Unexpected error (not a unique violation) — log but proceed.
           console.warn("[NuggetCache] Sentinel insert error:", claimError.message);
         }
+
+        // ── Seed from artist-level research ─────────────────────────
+        // We're about to generate from scratch, but Browse may already
+        // have researched this artist. That row is keyed by artist while
+        // this lookup is keyed by track, so without this we'd pay Exa and
+        // Gemini a second time and leave the user waiting for research
+        // already in the database (Pete: "if we already generated a fact
+        // about song or artist why is it not showing up when I hit
+        // play?").
+        //
+        // Best-effort only: any failure here must not block generation,
+        // which is the real path to the content.
+        try {
+          const artistKey = buildArtistUpdatesCacheKey(artist, tier);
+          const { data: artistRow } = await supabase
+            .from("nugget_cache")
+            .select("nuggets, status")
+            .eq("track_id", artistKey)
+            .maybeSingle();
+
+          // cancelledRef is a run-liveness flag, not a track identity
+          // check — the effect resets it to false at the start of each
+          // new run, so an in-flight read from the PREVIOUS track can
+          // resolve afterwards and see it as live. Since this write
+          // REPLACES the nugget list, that would drop the new track's
+          // nuggets and show the old track's fact. The SSE path defends
+          // the same hazard with id-dedup; this one needs the identity
+          // comparison because there is nothing to dedup against.
+          const stillOnSameTrack = currentTrackIdRef.current === trackId;
+          if (!cancelledRef.current && stillOnSameTrack && artistRow?.status === "ready") {
+            const updates = (artistRow.nuggets ?? []) as unknown as ArtistUpdate[];
+            const seed = selectSeedFacts(updates, trackId);
+            if (seed.nuggets.length > 0) {
+              if (import.meta.env.DEV) {
+                console.log("[NuggetCache] Seeding from artist research:", artistKey);
+              }
+              seededRef.current = seed.nuggets;
+              seededIdsRef.current = new Set(seed.nuggets.map((n) => n.id));
+              setNuggets(seed.nuggets);
+              setSources(new Map(seed.sources.map((s) => [s.id, s])));
+              // Deliberately NOT setFromCache(true) — this is a stopgap
+              // while real generation runs, not a served cache hit, and
+              // downstream reveal logic treats fromCache as "the whole
+              // set is here, pace it against playback".
+            }
+          }
+        } catch (e) {
+          console.warn("[NuggetCache] Artist-fact seed failed (non-fatal):", e);
+        }
       }
 
       // ── Generate fresh nuggets via AI ─────────────────────────────
@@ -776,7 +854,10 @@ export function useAINuggets(
               // the cache-restored nugget that has the same listenCount +
               // index. React then renders only one of the two same-keyed
               // children and the other "disappears" mid-typewrite.
-              setNuggets((prev) => (prev.some((p) => p.id === nugget.id) ? prev : [...prev, nugget]));
+              // Retires any seeded artist fact this nugget duplicates.
+              // See mergeStreamedNugget — the logic lives there so it can
+              // be tested across a whole stream, not one call at a time.
+              setNuggets((prev) => mergeStreamedNugget(prev, nugget, seededIdsRef.current));
               if (import.meta.env.DEV) console.log(`[SSE] Received nugget ${payload.index}: "${n.headline?.slice(0, 40)}"`);
 
               // Early-cancel: if we already have enough nuggets to cover

@@ -87,6 +87,15 @@ const BookmarkButton = memo(function BookmarkButton({
   );
 });
 
+/** Scroll distance (px) over which the scroll cue fades to nothing.
+ *  Roughly one thumb-flick — far enough that a stray scroll doesn't
+ *  blink it out, short enough that it's gone once the body is engaged. */
+const CUE_FADE_DISTANCE_PX = 90;
+/** How far a cue tap scrolls, as a fraction of the viewport. Just under
+ *  a full screen so the headline stays partly visible and the movement
+ *  reads as "there's more below this" rather than a page jump. */
+const CUE_SCROLL_TARGET_RATIO = 0.72;
+
 // Minimum time a nugget stays on-screen before auto-advance can swap it out.
 // Tuning knob for the streaming pacing — keeps freshly-streamed nuggets
 // readable without yanking the user mid-sentence.
@@ -136,6 +145,12 @@ export default function ImmersiveNuggetView({
   useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
   const initialUnlockDoneRef = useRef(false);
   const trackKey = `${trackTitle}::${artist}`;
+  // Refs for the "swipe up for more" cue: scrollRef is the body scroll
+  // container, cueRef is the floating chevron whose opacity we drive
+  // directly on scroll (no setState — keeps the memoized card from
+  // re-rendering on every scroll tick, matching this file's perf style).
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const cueRef = useRef<HTMLDivElement>(null);
 
   // Bookmarking — optimistic toggle, server-verified identity via edge fn.
   const bookmarks = useBookmarks();
@@ -342,6 +357,44 @@ export default function ImmersiveNuggetView({
     setDeepDiveFollowUp(null);
   }, [cancelPacerQueue]);
 
+  // ── "Swipe up for more" cue ────────────────────────────────────────
+  // Fade the cue out as the body scrolls into view, then back in at the
+  // top. Driven via direct DOM writes (not state) so the memoized card
+  // doesn't re-render on every scroll frame. Tied to pointer-events so a
+  // faded-out cue isn't tappable.
+  const handleBodyScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const o = Math.max(0, 1 - e.currentTarget.scrollTop / CUE_FADE_DISTANCE_PX);
+    if (cueRef.current) {
+      cueRef.current.style.opacity = String(o);
+      cueRef.current.style.pointerEvents = o < 0.05 ? "none" : "";
+    }
+  }, []);
+
+  // Tap-to-scroll: bring the body into view from the headline hero.
+  // Honours prefers-reduced-motion — the CSS disables the cue's float
+  // for those users, and a programmatic smooth scroll is the larger
+  // motion of the two, so it would be odd to leave it animating.
+  const scrollBodyIntoView = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const reduceMotion = typeof window !== "undefined"
+      && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    el.scrollTo({
+      top: el.clientHeight * CUE_SCROLL_TARGET_RATIO,
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
+  }, []);
+
+  // On nugget change, snap back to the headline (top) and restore the cue
+  // so each new fact opens on its hook rather than mid-body.
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    if (cueRef.current) {
+      cueRef.current.style.opacity = "1";
+      cueRef.current.style.pointerEvents = "";
+    }
+  }, [activeNugget?.id]);
+
   // Keyboard navigation — left/right arrows step between unlocked
   // nuggets. Useful on desktop / DevTools mobile-emulation where
   // touch swipes don't fire on a mouse drag (Pete: "easy way to
@@ -431,8 +484,20 @@ export default function ImmersiveNuggetView({
   // infrequent and acceptable — the main perf win is skipping during drag.
   const renderNuggetCard = useCallback(() => {
     const { url: imgUrl, isNuggetImage } = getNuggetImage();
+    // The cue used to be gated on the body being distinct prose from the
+    // headline. That was wrong: the below-fold section holds every control
+    // — View Source, Tell me more, Save, recommended artist/track — not
+    // just prose. On a headline-less nugget the old gate hid the cue
+    // entirely, so a user who had learned "chevron means scroll" read its
+    // absence as "nothing below" and lost the Save button altogether.
+    //
+    // There is always something below the fold, so the cue shows whenever
+    // a nugget is on screen. It's a scroll affordance, not a promise of
+    // more prose — the "MORE" label that made it read as the latter is
+    // gone.
+    const hasMoreBelow = !!activeNugget;
     return (
-      <div className="w-full h-full overflow-y-auto scrollbar-hide">
+      <div ref={scrollRef} onScroll={handleBodyScroll} data-testid="nugget-scroll" className="w-full h-full overflow-y-auto scrollbar-hide">
         {/* Hero image fills the visible viewport with a single
             bottom-fade gradient; headline overlays the bottom of the
             image (no separate-box seam). Body lives below the h-full
@@ -450,11 +515,14 @@ export default function ImmersiveNuggetView({
               }}
             />
           )}
-          {/* Single bottom-fade gradient — image visible at top,
-              fading to near-black at the bottom where the headline
-              overlays. */}
+          {/* Single bottom-fade gradient — image visible at top, ramping
+              to SOLID black at the bottom. The last ~8% is fully opaque
+              #000 so the hero's bottom edge matches the body section's
+              bg-black exactly; without this the gradient stopped at 0.92
+              (image faintly visible) and met pure black at the seam,
+              leaving a harsh line where hero meets body. */}
           <div className="absolute inset-0 pointer-events-none" style={{
-            background: "linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.78) 18%, rgba(0,0,0,0.4) 38%, rgba(0,0,0,0.1) 60%, transparent 80%)",
+            background: "linear-gradient(to top, #000 0%, #000 8%, rgba(0,0,0,0.82) 24%, rgba(0,0,0,0.42) 44%, rgba(0,0,0,0.12) 64%, transparent 82%)",
           }} />
           {/* Headline overlays the bottom of the image — no separate
               background, the gradient above provides the legibility
@@ -508,6 +576,41 @@ export default function ImmersiveNuggetView({
                   })}
               </AnimatePresence>
             </div>
+
+            {/* Scroll cue — one chevron, nothing else.
+                It previously carried a "MORE" label and a neon halo: the
+                label said what the chevron already says, the halo didn't
+                read at this size against a dark photo, and the stack of
+                three elements sat tight under the headline so the arrow
+                landed directly beneath the sentence's final period and
+                read as punctuation. The generous top margin is the fix —
+                it separates the cue from the prose so it reads as
+                wayfinding. Fades out as the body scrolls in (see
+                handleBodyScroll); tap scrolls the body into view. */}
+            {hasMoreBelow && (
+              <div ref={cueRef} data-testid="scroll-cue" className="mt-4 flex justify-center">
+                <button
+                  type="button"
+                  aria-label="Scroll down to read the full story"
+                  onClick={(e) => { e.stopPropagation(); scrollBodyIntoView(); }}
+                  // w-11 h-11 = 44x44, the minimum touch target, on a
+                  // control whose entire job is being tappable. The glyph
+                  // stays small; the padding does the work.
+                  className="flex items-center justify-center w-11 h-11 rounded-full animate-cue-float focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                >
+                  <svg
+                    width="20" height="12" viewBox="0 0 22 14" fill="none" aria-hidden
+                    style={{ filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.9))" }}
+                  >
+                    <path
+                      d="M2 12 L11 3 L20 12"
+                      stroke="rgba(255,255,255,0.75)"
+                      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              </div>
+            )}
           </div>
         </div>
         {/* Body section — lives BELOW the h-full hero+headline frame,
@@ -576,7 +679,7 @@ export default function ImmersiveNuggetView({
     // when wave-2 lands) — and cheap, because the typewriter and
     // image children re-use the same activeNugget identity unless
     // the active nugget itself changes.
-  }, [getNuggetImage, activeNugget, activeSource, isTypewriterDone, handleTypewriterComplete, deepDiveText, deepDiveFollowUp, deepDiveLoading, deepDiveRateLimited, handleTellMeMore, bookmarks, artist, trackTitle, nuggets.length, activeIndex, unlockedCount]);
+  }, [getNuggetImage, activeNugget, activeSource, isTypewriterDone, handleTypewriterComplete, deepDiveText, deepDiveFollowUp, deepDiveLoading, deepDiveRateLimited, handleTellMeMore, bookmarks, artist, trackTitle, nuggets.length, activeIndex, unlockedCount, handleBodyScroll, scrollBodyIntoView]);
 
   return (
     <motion.div

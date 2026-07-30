@@ -24,6 +24,11 @@ export function getArtistUpdateKindMeta(kind: ArtistUpdate["kind"]): ArtistUpdat
       return { kindLabel: "New release", KindIcon: Disc };
     case "collab":
       return { kindLabel: "Collab", KindIcon: Users };
+    // Catalog tracks render as artwork tiles in the "Get into" lane, not
+    // as readable cards — this case exists so any future surface that
+    // does render one doesn't fall through to the "Fact" label.
+    case "track":
+      return { kindLabel: "Track", KindIcon: Disc };
     case "fact":
     default:
       return { kindLabel: "Fact", KindIcon: Sparkles };
