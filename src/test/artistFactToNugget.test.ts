@@ -260,17 +260,17 @@ describe("buildArtistUpdatesCacheKey", () => {
   // — `artist::${artistName.trim().toLowerCase()}::${tier}`. Drift here
   // reads nothing and fails silently, with no error anywhere.
   it("matches the edge function's key format exactly", () => {
-    expect(buildArtistUpdatesCacheKey("Radiohead", "nerd")).toBe("artist::radiohead::nerd::v2");
+    expect(buildArtistUpdatesCacheKey("Radiohead", "nerd")).toBe("artist::radiohead::nerd::v3");
   });
 
   it("lowercases and trims like the edge function does", () => {
     expect(buildArtistUpdatesCacheKey("  Pete Rango  ", "casual"))
-      .toBe("artist::pete rango::casual::v2");
+      .toBe("artist::pete rango::casual::v3");
   });
 
   it("scopes by tier", () => {
     expect(buildArtistUpdatesCacheKey("Flozigg", "curious"))
-      .toBe("artist::flozigg::curious::v2");
+      .toBe("artist::flozigg::curious::v3");
   });
 
   // Rows live 7 days, so without a version segment a SHAPE change stays
