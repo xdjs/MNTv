@@ -77,35 +77,13 @@ function ArtistUpdatesSectionInner({
     return null;
   }, [expandedKey, groups]);
 
+  // Always opens the artist profile, deep-linked to the nugget.
+  //
+  // This used to route release/collab cards to Listen for their track
+  // instead — correct when it was the card's only action, but it now
+  // duplicates the Play button. Playback is the Play button's job; this
+  // is the only way to reach the artist, so it must not be overloaded.
   const openArtistAtNugget = useCallback((update: ArtistUpdate) => {
-    // New-release / collab cards: tap should land on Listen for the
-    // released track, not the artist profile. We need at minimum a
-    // track-level title from the edge function (set only when it
-    // successfully resolved the album's first track via Spotify).
-    //
-    // Service-aware URI handling:
-    //   - Spotify users: bake the spotify:track: URI into the route
-    //     so Listen plays instantly without a catalog re-lookup.
-    //   - Apple Music users: omit the URI so Listen's findCatalogUri
-    //     effect resolves the Apple equivalent via {artist, title}.
-    //     Passing the Spotify URI directly would lock Listen into a
-    //     URI Apple Music can't play.
-    if (
-      (update.kind === "new-release" || update.kind === "collab") &&
-      update.relatedTrackTitle
-    ) {
-      navigate(buildListenRoute({
-        artist: update.artistName,
-        title: update.relatedTrackTitle,
-        album: update.relatedAlbumName,
-        uri: update.relatedTrackUri,
-        streamingService: profile?.streamingService,
-      }));
-      return;
-    }
-
-    // Fact cards (or release cards where track resolution failed):
-    // open the artist profile and deep-link to the nugget.
     const id = artistIds[update.artistName] || update.artistId;
     if (!id) return;
     // Route format is `spotify::{id}::{name}` (double-colon delimiter
@@ -120,8 +98,8 @@ function ArtistUpdatesSectionInner({
     navigate(path);
   }, [profile?.streamingService, activeService, artistIds, navigate]);
 
-  // Starting a track from either lane — the "Get into" strip or a fact
-  // card's play control — goes straight to Listen. No expand step: the
+  // Playback always goes straight to Listen — from a card's play control
+  // or the expanded card's Play button. No expand step in between: the
   // user already said what they want.
   const playTrack = useCallback((artistName: string, track: PlayableTrack) => {
     navigate(buildListenRoute({
@@ -143,6 +121,14 @@ function ArtistUpdatesSectionInner({
     const { tracks } = splitArtistUpdates(group?.updates);
     return resolvePlayTarget(expandedUpdate, tracks);
   }, [expandedUpdate, groups]);
+
+  // openArtistAtNugget silently no-ops without an artist id, so the
+  // button must not render at all in that case — the same reason the
+  // play control is omitted when nothing resolves.
+  const expandedCanOpenArtist = useMemo(() => {
+    if (!expandedUpdate) return false;
+    return !!(artistIds[expandedUpdate.artistName] || expandedUpdate.artistId);
+  }, [expandedUpdate, artistIds]);
 
   const modalOnPlay = useCallback(() => {
     if (!expandedUpdate || !expandedPlayTarget) return;
@@ -199,6 +185,7 @@ function ArtistUpdatesSectionInner({
             onOpen={modalOnOpen}
             playTarget={expandedPlayTarget}
             onPlay={expandedPlayTarget ? modalOnPlay : undefined}
+            canOpenArtist={expandedCanOpenArtist}
           />
         )}
       </AnimatePresence>
@@ -394,9 +381,10 @@ interface ExpandedUpdateModalProps {
   onOpen: () => void;
   playTarget?: PlayableTrack | null;
   onPlay?: () => void;
+  canOpenArtist?: boolean;
 }
 
-function ExpandedUpdateModal({ update, layoutId, onClose, onOpen, playTarget = null, onPlay }: ExpandedUpdateModalProps) {
+function ExpandedUpdateModal({ update, layoutId, onClose, onOpen, playTarget = null, onPlay, canOpenArtist = true }: ExpandedUpdateModalProps) {
   const { kindLabel, KindIcon } = getArtistUpdateKindMeta(update.kind);
   const { chipClass } = kindStyle(update.kind);
   const img = update.artistImageUrl;
@@ -414,13 +402,13 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen, playTarget = n
     return () => { document.body.style.overflow = prev; };
   }, []);
 
-  // CTA wording matches what the open path actually does: release /
-  // collab cards land on Listen for the related track; fact cards
-  // open the artist profile.
-  const ctaLabel =
-    (update.kind === "new-release" || update.kind === "collab") && update.relatedTrackTitle
-      ? `Listen to "${update.relatedTrackTitle}"`
-      : `Open ${update.artistName}`;
+  // One action per destination. Playback belongs to the Play button
+  // above; this button always opens the artist. Previously it read
+  // `Listen to "X"` for release/collab cards and navigated to Listen —
+  // which, once the Play button existed, meant two controls doing the
+  // identical thing side by side (Pete: "why do we have two ways of
+  // playing a song from the card?").
+  const ctaLabel = `Open ${update.artistName}`;
 
   const titleId = `expanded-${layoutId.replace(/[^a-zA-Z0-9_-]/g, "_")}-title`;
 
@@ -556,13 +544,15 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen, playTarget = n
                   <span className="truncate">Play "{playTarget.title}"</span>
                 </button>
               )}
-              <button
-                onClick={onOpen}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary/25 text-primary text-sm font-semibold hover:bg-primary/35 active:scale-95 transition-all"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                {ctaLabel}
-              </button>
+              {canOpenArtist && (
+                <button
+                  onClick={onOpen}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary/25 text-primary text-sm font-semibold hover:bg-primary/35 active:scale-95 transition-all"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  {ctaLabel}
+                </button>
+              )}
               {isSafeUrl(update.source?.url) && (
                 // Scheme guard: only render the anchor if the URL is
                 // http(s). The url originates from Exa / Gemini output
