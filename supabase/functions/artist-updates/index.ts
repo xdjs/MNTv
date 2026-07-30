@@ -681,10 +681,21 @@ const POLL_TIMEOUT_MS = 50 * 1000;
 const POLL_INTERVAL_INITIAL_MS = 1_000;
 const POLL_INTERVAL_CAP_MS = 8_000;
 
+// Bump when the SHAPE of a cached row changes, not when its content
+// does. Rows are cached for 7 days, so without this a shape change is
+// invisible for a week: old rows still read as valid and get served,
+// missing whatever the new shape added.
+//
+// v2 — rows gained `kind: "track"` entries for the Browse play targets.
+//
+// MUST stay in sync with buildArtistUpdatesCacheKey in
+// src/lib/artistFactToNugget.ts, which reads these rows from the client.
+const CACHE_VERSION = "v2";
+
 function cacheKey(artistName: string, tier: string): string {
   // Normalized (lowercased + trimmed) so whitespace / case variations
   // land on the same cache row.
-  return `artist::${artistName.trim().toLowerCase()}::${tier}`;
+  return `artist::${artistName.trim().toLowerCase()}::${tier}::${CACHE_VERSION}`;
 }
 
 type CacheState =

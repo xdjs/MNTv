@@ -22,8 +22,10 @@ export const ARTIST_FACT_ID_PREFIX = "artistfact";
  * function — if the two drift, this silently reads nothing and the
  * feature degrades to "no seed" with no error anywhere.
  */
+export const ARTIST_UPDATES_CACHE_VERSION = "v2";
+
 export function buildArtistUpdatesCacheKey(artistName: string, tier: string): string {
-  return `artist::${artistName.trim().toLowerCase()}::${tier}`;
+  return `artist::${artistName.trim().toLowerCase()}::${tier}::${ARTIST_UPDATES_CACHE_VERSION}`;
 }
 
 /** Matches makeSparseFallbackNugget so a seeded fact is indistinguishable

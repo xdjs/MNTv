@@ -6,6 +6,7 @@ import {
   dropDuplicatedSeeds,
   mergeStreamedNugget,
   buildArtistUpdatesCacheKey,
+  ARTIST_UPDATES_CACHE_VERSION,
   ARTIST_FACT_ID_PREFIX,
 } from "@/lib/artistFactToNugget";
 import type { ArtistUpdate } from "@/hooks/useArtistUpdates";
@@ -259,16 +260,25 @@ describe("buildArtistUpdatesCacheKey", () => {
   // — `artist::${artistName.trim().toLowerCase()}::${tier}`. Drift here
   // reads nothing and fails silently, with no error anywhere.
   it("matches the edge function's key format exactly", () => {
-    expect(buildArtistUpdatesCacheKey("Radiohead", "nerd")).toBe("artist::radiohead::nerd");
+    expect(buildArtistUpdatesCacheKey("Radiohead", "nerd")).toBe("artist::radiohead::nerd::v2");
   });
 
   it("lowercases and trims like the edge function does", () => {
     expect(buildArtistUpdatesCacheKey("  Pete Rango  ", "casual"))
-      .toBe("artist::pete rango::casual");
+      .toBe("artist::pete rango::casual::v2");
   });
 
   it("scopes by tier", () => {
     expect(buildArtistUpdatesCacheKey("Flozigg", "curious"))
-      .toBe("artist::flozigg::curious");
+      .toBe("artist::flozigg::curious::v2");
+  });
+
+  // Rows live 7 days, so without a version segment a SHAPE change stays
+  // invisible for a week — old rows read as valid and get served missing
+  // whatever the new shape added. This is how the play targets would have
+  // trickled in over days instead of appearing at once.
+  it("carries a version segment so a shape change invalidates old rows", () => {
+    expect(buildArtistUpdatesCacheKey("X", "casual").endsWith(`::${ARTIST_UPDATES_CACHE_VERSION}`))
+      .toBe(true);
   });
 });
