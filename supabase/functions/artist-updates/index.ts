@@ -769,10 +769,14 @@ const POLL_INTERVAL_CAP_MS = 8_000;
 // missing whatever the new shape added.
 //
 // v2 — rows gained `kind: "track"` entries for the Browse play targets.
+// v3 — rows written before the searchArtist duplicate-entity fix hold data
+//      for the WRONG artist (lamboverrice resolved to a 1-follower stub with
+//      an empty catalog). Those rows are incorrect, not merely stale, so they
+//      must be invalidated rather than left to age out over 7 days.
 //
 // MUST stay in sync with buildArtistUpdatesCacheKey in
 // src/lib/artistFactToNugget.ts, which reads these rows from the client.
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3";
 
 function cacheKey(artistName: string, tier: string): string {
   // Normalized (lowercased + trimmed) so whitespace / case variations
