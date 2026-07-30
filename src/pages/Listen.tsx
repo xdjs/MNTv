@@ -23,6 +23,7 @@ import { useSpotifyToken } from "@/hooks/useSpotifyToken";
 import { usePlayer } from "@/contexts/PlayerContext";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
 import { withAppleStorefront } from "@/lib/appleStorefront";
+import { isNuggetOnScreen } from "@/lib/nuggetVisibility";
 import { pickNextTrack, type SpotifyTrackResult } from "@/lib/skipCascade";
 import { useTierAccent } from "@/hooks/useTierAccent";
 import PageTransition from "@/components/PageTransition";
@@ -74,13 +75,33 @@ export default function Listen() {
     if (!realTrackMeta) return null;
     // Try URL query param first (demo tiles pass ?art=), then profile, then DiceBear
     let coverArtUrl = urlArt;
-    if (!coverArtUrl && profile?.trackImages) {
+    // Side-effect of the same scan: recover collaborators. The URL
+    // format (`real::artist::title::album::uri`) doesn't carry them,
+    // so the only client-side source is the user's own taste data
+    // where spotify-taste populated `collaborators` from
+    // `track.artists.slice(1)`. Without this lookup, wave-2 on
+    // collab tracks (e.g. "Better" by Ty Symph, Pete Rango) loses
+    // the secondary research target and falls back to thin content
+    // grounded only in the primary artist.
+    let collaborators: string[] | undefined;
+    const titleLower = realTrackMeta.title.toLowerCase();
+    const artistLower = realTrackMeta.artist.toLowerCase();
+    if (profile?.trackImages) {
       const match = profile.trackImages.find(
         (t) =>
-          t.title.toLowerCase() === realTrackMeta.title.toLowerCase() &&
-          t.artist.toLowerCase() === realTrackMeta.artist.toLowerCase()
+          t.title.toLowerCase() === titleLower &&
+          t.artist.toLowerCase() === artistLower
       );
-      if (match?.imageUrl) coverArtUrl = match.imageUrl;
+      if (match?.imageUrl) coverArtUrl = coverArtUrl || match.imageUrl;
+      if (match?.collaborators?.length) collaborators = match.collaborators;
+    }
+    if (!collaborators && profile?.likedTracks) {
+      const liked = profile.likedTracks.find(
+        (t) =>
+          t.title.toLowerCase() === titleLower &&
+          t.artist.toLowerCase() === artistLower
+      );
+      if (liked?.collaborators?.length) collaborators = liked.collaborators;
     }
     if (!coverArtUrl && profile?.artistImages?.[realTrackMeta.artist]) {
       coverArtUrl = profile.artistImages[realTrackMeta.artist];
@@ -92,6 +113,7 @@ export default function Listen() {
       id: trackId,
       title: realTrackMeta.title,
       artist: realTrackMeta.artist,
+      collaborators,
       artistId: "",
       albumId: "",
       album: realTrackMeta.album,
@@ -99,7 +121,7 @@ export default function Listen() {
       coverArtUrl,
       trackNumber: 1,
     };
-  }, [realTrackMeta, trackId, urlArt, profile?.trackImages, profile?.artistImages]);
+  }, [realTrackMeta, trackId, urlArt, profile?.trackImages, profile?.likedTracks, profile?.artistImages]);
 
   // ── Playback source resolution ───────────────────────────────────────
   const { hasSpotifyToken } = useSpotifyToken();
@@ -515,6 +537,16 @@ export default function Listen() {
   const tier = (profile?.calculatedTier as "casual" | "curious" | "nerd") || "casual";
   useTierAccent(tier);
   const artistImageUrl = (track?.artist && profile?.artistImages?.[track.artist]) || track?.coverArtUrl || "";
+  // Display string for the UI — joins primary + collaborators with ", ".
+  // Kept separate from `track.artist` because the latter is the cache
+  // key + lookup anchor everywhere else (search by primary artist
+  // only). Display contexts (mini player, title block, deep dive) want
+  // the full credit so it matches what the user sees on Spotify.
+  const artistDisplay = track?.artist
+    ? track.collaborators?.length
+      ? `${track.artist}, ${track.collaborators.join(", ")}`
+      : track.artist
+    : "";
   const { nuggets: aiNuggets, sources: aiSources, loading: aiLoading, error: aiError, listenCount, artistSummary, fromCache: aiFromCache, waveLoading } = useAINuggets(
     trackId,
     track?.artist || "",
@@ -526,7 +558,8 @@ export default function Listen() {
     artistImageUrl,
     tier,
     profile?.topArtists,
-    profile?.topTracks
+    profile?.topTracks,
+    track?.collaborators,
   );
 
   // Log AI nugget errors for debugging
@@ -546,18 +579,38 @@ export default function Listen() {
     setShortId(null);
   }, [rawTrackId, regenerateKey]);
 
+  // Per-trackKey count of nuggets last uploaded to companion_cache.
+  // Used to dedupe — we re-upload only when the count grows. Lives at
+  // module-instance scope so it survives effect re-runs but not Listen
+  // remounts (which is fine — a remount means a new session and a
+  // potentially new shortId anyway).
+  const lastCompanionUploadCountRef = useRef<Map<string, number>>(new Map());
+
   useEffect(() => {
     if (aiLoading || aiNuggets.length === 0 || !track) return;
     const trackKey = `${track.artist}::${track.title}`;
 
-    // Fast path: if companion was already pre-generated this session,
-    // restore the cached shortId immediately (no edge function call).
+    // Restore cached shortId immediately if we have one — but DON'T
+    // early-return. The previous version bailed here, which meant the
+    // companion content was frozen at whatever nugget count existed
+    // on the first run (typically just the pre-gen nugget). Wave-2
+    // nuggets that landed later never made it to companion_cache, so
+    // the QR-code companion page only ever showed the original bland
+    // first nugget. Now we keep going to re-upload the latest nugget
+    // set to companion_cache (the shortId stays the same).
     const cachedSid = player.getCompanionShortId(trackKey);
     if (cachedSid) {
       setShortId(cachedSid);
       setCompanionReady(true);
-      return;
     }
+
+    // Length-based debounce: skip the regen if the nugget count hasn't
+    // grown since the last upload to companion. Initial SSE streams
+    // one nugget at a time and would otherwise fire 4-5 redundant
+    // edge-function calls per fresh generation.
+    const lastSent = lastCompanionUploadCountRef.current.get(trackKey) ?? 0;
+    if (aiNuggets.length === lastSent) return;
+    lastCompanionUploadCountRef.current.set(trackKey, aiNuggets.length);
 
     let cancelled = false;
     (async () => {
@@ -692,20 +745,45 @@ export default function Listen() {
   // but I was presented with no Nugget."
   const trackNuggets = useMemo(() => {
     if (rawTrackNuggets.length === 0 || realDuration <= 0) return rawTrackNuggets;
-    // aligned with makeTimestamp +
-    // server cache builder — endBuffer=15, usable-min=30. Previously
-    // diverged at endBuffer=10/min=20, which would put the last nugget
-    // 5s closer to the song end than the cache build expected.
+    // Aligned with makeTimestamp + server cache builder —
+    // endBuffer=15, usable-min=30.
     const earlyStart = 0;
     const endBuffer = 15;
     const usable = Math.max(realDuration - earlyStart - endBuffer, 30);
     const denom = Math.max(rawTrackNuggets.length - 1, 1);
-    const spacing = usable / denom;
+    // Cap spacing tight enough that wave-2 nuggets unlock close to
+    // when they arrive from the server (not 75s after). Pete: "why
+    // should it take 1 minute and 15 seconds for the first nugget
+    // of wave 2 to arrive?" Wave-2 typically returns at T~25-35s
+    // after the track starts; with a 45s cap and 3 nuggets, the
+    // second nugget unlocks at T=45 — much closer to "as soon as
+    // it's available." For high-count wave success (9 nuggets),
+    // even spacing = 25s, which is below the cap and stays as-is.
+    const MAX_SPACING_SEC = 45;
+    const spacing = Math.min(usable / denom, MAX_SPACING_SEC);
     return rawTrackNuggets.map((n, i) => ({
       ...n,
       timestampSec: Math.min(Math.floor(earlyStart + spacing * i), realDuration - 10),
     }));
   }, [rawTrackNuggets, realDuration]);
+
+  // DEV-ONLY: inject a recommendedArtist via URL query so the
+  // "Open {Artist}" button can be visually verified without a
+  // server-side deploy. Usage: append ?injectArtist=Lunch%20$pecial
+  // (optionally &injectArtistId=SPOTIFY_ID) to any /listen URL.
+  // Stripped from production builds — guarded on import.meta.env.DEV.
+  const trackNuggetsWithDevInjection = useMemo(() => {
+    if (!import.meta.env.DEV) return trackNuggets;
+    if (typeof window === "undefined") return trackNuggets;
+    const params = new URLSearchParams(window.location.search);
+    const injectArtist = params.get("injectArtist");
+    if (!injectArtist) return trackNuggets;
+    const injectArtistId = params.get("injectArtistId") || undefined;
+    return trackNuggets.map((n, i) => (i === 0 ? {
+      ...n,
+      recommendedArtist: { name: injectArtist, spotifyArtistId: injectArtistId },
+    } : n));
+  }, [trackNuggets]);
 
   const [animStyle, setAnimStyle] = useState<AnimationStyle>("A");
   const [activeNugget, setActiveNugget] = useState<Nugget | null>(null);
@@ -719,6 +797,18 @@ export default function Listen() {
   const [devOpen, setDevOpen] = useState(false);
   const [nerdActive, setNerdActive] = useState(true);
   const [liked, setLiked] = useState<boolean | null>(null);
+
+  // What the loading pill waits on. NOT `trackNuggets.length > 0` — that
+  // means nuggets landed in state, while the pill promises "researching…"
+  // until the user can actually see a fact. The reveal effect below gates
+  // display on nerdActive and, for cached tracks, on playback crossing
+  // each timestamp, so the two can diverge and the pill dismisses onto a
+  // blank screen.
+  const nuggetOnScreen = isNuggetOnScreen({
+    nerdActive,
+    activeNuggetId: activeNugget?.id,
+    trackNuggets,
+  });
 
   // --- Auto-hide bar logic ---
   const [barVisible, setBarVisible] = useState(false);
@@ -971,6 +1061,16 @@ export default function Listen() {
     return () => clearDwell();
   }, [activeNugget, clearDwell]);
 
+  // Capture once: was the track ALREADY loaded into PlayerContext when
+  // this Listen instance mounted? If so, the user is returning to a
+  // track that's been playing (or paused) in the background — don't
+  // force resume on mount, respect the existing playback state.
+  // Without this guard, a paused user clicking the mini-player to
+  // return would have the song auto-unpause on them.
+  const wasTrackAlreadyLoadedAtMount = useRef(
+    !isExternalListenMode && !!trackUri && player.currentTrackUri === trackUri,
+  ).current;
+
   // Auto-resume only after the correct track has been loaded into the SDK.
   // Without the trackUri guard, this fires on mount and resumes the PREVIOUS
   // track (still in the SDK) before loadTrack has a chance to swap it out.
@@ -983,9 +1083,13 @@ export default function Listen() {
       // would briefly play the OLD track. On very slow SDK loads (>2s)
       // this guard expires and resume() acts as a safety net.
       if (Date.now() - trackLoadTimestampRef.current < 2000) return;
+      // Respect user's deliberate pause state on remount. If the track
+      // was already loaded before THIS mount (mini-player return), the
+      // user owns the playback state — don't force resume.
+      if (wasTrackAlreadyLoadedAtMount) return;
       play();
     }
-  }, [play, isExternalListenMode, trackUri, player.currentTrackUri]);
+  }, [play, isExternalListenMode, trackUri, player.currentTrackUri, wasTrackAlreadyLoadedAtMount]);
 
   // Delayed safety-net: if the track was loaded but NEVER started playing
   // after 4s (autoPlay PUT failed or auto-resume fired in the 2s guard),
@@ -1001,6 +1105,11 @@ export default function Listen() {
 
   useEffect(() => {
     if (isExternalListenMode || !trackUri) return;
+    // Same respect-user-pause gate as the auto-resume effect above.
+    // The safety-net is for "track never started after fresh load,
+    // retry play()" — not for re-mounts where the user deliberately
+    // paused before navigating away.
+    if (wasTrackAlreadyLoadedAtMount) return;
     const capturedUri = trackUri;
     const timer = setTimeout(() => {
       if (currentTrackUriRef.current === capturedUri && !isPlayingRef.current && !hasEverPlayedRef.current) {
@@ -1009,7 +1118,7 @@ export default function Listen() {
       }
     }, 4000);
     return () => clearTimeout(timer);
-  }, [trackUri, isExternalListenMode, play]);
+  }, [trackUri, isExternalListenMode, play, wasTrackAlreadyLoadedAtMount]);
 
   useEffect(() => {
     if (trackNuggets.length === 0) return;
@@ -1285,8 +1394,9 @@ export default function Listen() {
           <div className="flex flex-col items-center gap-1.5">
             <MusicNerdLoadingOrchestrator
               aiLoading={aiLoading}
+            waveLoading={waveLoading}
               aiError={aiError}
-              hasNuggets={trackNuggets.length > 0}
+              hasNuggets={nuggetOnScreen}
               shortId={shortId}
               trackId={trackId}
               tier={tier}
@@ -1320,7 +1430,7 @@ export default function Listen() {
             {track.title}
           </h1>
           <p className="mt-0.5 text-base font-bold text-foreground/50 md:text-lg" style={{ fontFamily: "'Nunito Sans', sans-serif" }}>
-            {track.artist}
+            {artistDisplay}
           </p>
           {track.album && (
             <p className="mt-0.5 text-sm text-foreground/25 font-medium" style={{ fontFamily: "'Nunito Sans', sans-serif" }}>
@@ -1636,7 +1746,7 @@ export default function Listen() {
                 <NuggetDeepDive
                   nugget={deepDiveNugget}
                   source={getSource(deepDiveNugget.sourceId) || null}
-                  artist={track.artist}
+                  artist={artistDisplay}
                   trackTitle={track.title}
                   onClose={() => { setDeepDiveNugget(null); setFocusZone('bar'); setNuggetFocused(false); }}
                 />
@@ -1651,11 +1761,11 @@ export default function Listen() {
         {isMobile && track && (
           <Suspense fallback={null}>
             <ImmersiveNuggetView
-              nuggets={trackNuggets}
+              nuggets={trackNuggetsWithDevInjection}
               sources={aiSources}
               coverArtUrl={effectiveCoverArt}
               trackTitle={track?.title || ""}
-              artist={track?.artist || ""}
+              artist={artistDisplay}
               onClose={() => navigate("/browse")}
               onPrev={handlePrev}
               onNext={handleNext}
@@ -1673,8 +1783,9 @@ export default function Listen() {
         <div className="fixed top-3 right-3 z-[60]" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
           <MusicNerdLoadingOrchestrator
             aiLoading={aiLoading}
+            waveLoading={waveLoading}
             aiError={aiError}
-            hasNuggets={trackNuggets.length > 0}
+            hasNuggets={nuggetOnScreen}
             shortId={shortId}
             trackId={trackId}
             tier={tier}

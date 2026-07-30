@@ -1823,11 +1823,60 @@ function validateNuggetQuality(nuggets: GeminiNugget[], artist?: string): { vali
 }
 
 // ── Generate nuggets with Gemini + Google Search grounding ───────────
+
+/**
+ * Resolve a recommended artist's Spotify id so the client can deep-link
+ * straight to them instead of falling back to a name search.
+ *
+ * Deliberately mirrors the resolution fix made in artist-updates:
+ * Spotify hosts DUPLICATE entities for the same name and the first search
+ * hit is not reliably the real one — picking [0] there sent us to a
+ * 1-follower stub with an empty catalog. Exact name match, then most
+ * followed. Followers rather than popularity, which is 0 for both
+ * entities of a small artist.
+ *
+ * Best-effort: a null id is fine. The client already falls back to a
+ * search-by-name route (`/artist/real::{name}`), so a failed lookup
+ * costs a slower navigation, not a broken button.
+ */
+async function resolveRecommendedArtistId(name: string): Promise<string | undefined> {
+  const wanted = name.trim().toLowerCase();
+  if (!wanted) return undefined;
+  try {
+    const token = await getSpotifyAppToken();
+    if (!token) return undefined;
+    const res = await fetch(
+      `https://api.spotify.com/v1/search?type=artist&limit=5&q=${encodeURIComponent(name.trim())}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!res.ok) return undefined;
+    const data = await res.json();
+    const items = (data?.artists?.items ?? []) as {
+      id: string; name: string; followers?: { total: number };
+    }[];
+    const exact = items.filter((a) => String(a.name).trim().toLowerCase() === wanted);
+    if (exact.length === 0) return undefined;
+    exact.sort((a, b) => (b.followers?.total ?? 0) - (a.followers?.total ?? 0));
+    return exact[0].id;
+  } catch (e) {
+    console.warn("[Recommend] artist id lookup failed:", e);
+    return undefined;
+  }
+}
+
 interface GeminiNugget {
   headline: string;
   text: string;
   kind: "artist" | "track" | "discovery" | "context";
   listenFor: boolean;
+  /** Artist a discovery/collab nugget points the listener toward. The
+   *  client renders an "Open {Artist}" button from this. Without it the
+   *  recommendation lives only in prose and there is nothing to tap —
+   *  the button has existed client-side since the RecommendedButtons
+   *  work but nothing ever populated its data. */
+  recommendedArtist?: { name: string; spotifyArtistId?: string };
+  /** Same idea for a specific track to start with. */
+  recommendedTrack?: { artist: string; title: string };
   selectedImageLabel?: string;  // Multimodal: label like "IMG-A1" chosen after visual inspection
   selectedImageUrl?: string;   // Legacy text-only fallback: Exa image URL chosen by Gemini
   imageSearchQuery?: string;   // fallback: search Wikipedia/Commons for this
@@ -2278,6 +2327,8 @@ Return ONLY valid JSON:
       ${imageFieldExample}
       "imageSearchQuery": "specific subject OR omit",
       "imageCaption": "6-12 word caption",
+      "recommendedArtist": { "name": "OMIT unless kind is discovery. The ONE artist this nugget points the listener toward — exactly as you named them in the text, no extra words." },
+      "recommendedTrack": { "artist": "...", "title": "OMIT unless you named a specific song to start with. Must be a real track by recommendedArtist that you actually referenced." },
       "source": {
         "type": "youtube|article|interview",
         "title": "Source title",
@@ -3936,6 +3987,40 @@ Return ONLY valid JSON:
                 // skipped. (assembleNugget doesn't read the index today, but any
                 // reader of the emitted nugget should see a coherent position.)
                 const assembled = assembleNugget(nuggetData, streamedIndex);
+
+                // ── Recommendation passthrough ──
+                // Discovery nuggets name an artist (and often a starting
+                // track) in prose. Without these structured fields the
+                // client has nothing to link, so the reader hits a
+                // recommendation with no way to act on it. Resolving the
+                // Spotify id here means the button deep-links instead of
+                // falling back to a name search.
+                //
+                // Trust-but-verify: only carry a recommendation whose
+                // name actually appears in the nugget's own copy. Gemini
+                // occasionally fills the field with an artist it did not
+                // mention, which would surface a button pointing
+                // somewhere the text never sends the reader.
+                const recName = nuggetData.recommendedArtist?.name?.trim();
+                if (recName) {
+                  const copy = `${assembled.headline ?? ""} ${assembled.text ?? ""}`.toLowerCase();
+                  if (copy.includes(recName.toLowerCase())) {
+                    assembled.recommendedArtist = {
+                      name: recName,
+                      spotifyArtistId: await resolveRecommendedArtistId(recName),
+                    };
+                    const recTrack = nuggetData.recommendedTrack;
+                    if (recTrack?.title?.trim()) {
+                      assembled.recommendedTrack = {
+                        artist: recTrack.artist?.trim() || recName,
+                        title: recTrack.title.trim(),
+                      };
+                    }
+                  } else {
+                    console.log(`[Recommend] Dropping "${recName}" — not named in the nugget copy`);
+                  }
+                }
+
                 const sourceType = (assembled.source?.type || "").toLowerCase();
                 const publisher = (assembled.source?.publisher || "").toLowerCase();
                 if (

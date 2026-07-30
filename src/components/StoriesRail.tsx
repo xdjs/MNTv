@@ -10,6 +10,14 @@ import { readVisited, markVisited, type VisitedMap } from "@/lib/storyVisited";
 // cascade selector refills the slot from the next eligible liked track.
 
 /**
+ * NOT CURRENTLY MOUNTED. The rail was removed from Browse in favour of
+ * the reworked "Your artists, lately" section. Retained rather than
+ * deleted because `listenHrefForStory` below is the reference
+ * implementation of the `real::artist::title::album::uri` route format,
+ * mirrored by src/test/nuggetCacheKey.test.ts and canonicalCacheKey.test.ts,
+ * and because the Stories pre-generation system it fed is still live.
+ * Delete both this file and those mirrors together, or not at all.
+ *
  * StoriesRail: Instagram-style horizontal row of "stories" at the top of
  * Browse. Each story = one of the user's top tracks with a nugget ready
  * (or warming up). Tapping a story jumps to Listen for that track; the

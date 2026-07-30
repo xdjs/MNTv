@@ -6,6 +6,12 @@ import { usePlayer } from "@/contexts/PlayerContext";
 import { getSeedListenNuggets } from "@/data/seedNuggets";
 import { isValidSourceShape } from "@/lib/sourceShape";
 import { isSafeUrl } from "@/lib/urlSafety";
+import type { ArtistUpdate } from "@/hooks/useArtistUpdates";
+import {
+  buildArtistUpdatesCacheKey,
+  selectSeedFacts,
+  mergeStreamedNugget,
+} from "@/lib/artistFactToNugget";
 
 // Back-compat re-export for any consumer that imported
 // isValidSourceShape from this module before it moved to
@@ -19,6 +25,11 @@ interface AINuggetData {
   listenFor?: boolean;
   imageUrl?: string;
   imageCaption?: string;
+  /** Artist a discovery nugget points the listener toward. Populated by
+   *  generate-nuggets; drives the "Open {Artist}" button. */
+  recommendedArtist?: { name: string; spotifyArtistId?: string };
+  /** Specific track to start with, when the nugget named one. */
+  recommendedTrack?: { artist: string; title: string; spotifyTrackUri?: string };
   source: {
     type: "youtube" | "article" | "interview";
     title: string;
@@ -157,6 +168,12 @@ export function makeNugget(n: AINuggetData, nuggetId: string, sourceId: string, 
     headline: deriveHeadline(n.headline, n.text), text: n.text, kind: n.kind,
     listenFor: n.listenFor || false, sourceId,
     imageUrl: n.imageUrl, imageCaption: n.imageCaption,
+    // Without these the server's recommendation is dropped on the floor
+    // and the reader gets a discovery nugget naming an artist with no
+    // way to reach them — the RecommendedButtons have been rendering
+    // conditionally on data nothing ever supplied.
+    recommendedArtist: n.recommendedArtist,
+    recommendedTrack: n.recommendedTrack,
   };
 }
 
@@ -183,6 +200,10 @@ export function makeSparseFallbackNugget(
 ): { nugget: Nugget; source: Source } {
   const nuggetId = `synth-nug-${trackId}-L1-0`;
   const sourceId = `synth-src-${trackId}-L1-0`;
+  // Runtime is the one verifiable, track-specific fact available here.
+  const runtime = durationSec > 0
+    ? `${Math.floor(durationSec / 60)}:${String(Math.round(durationSec % 60)).padStart(2, "0")}`
+    : null;
   return {
     nugget: {
       id: nuggetId,
@@ -192,8 +213,20 @@ export function makeSparseFallbackNugget(
       // first nugget when the user taps.
       timestampSec: 0,
       durationMs: 7000,
-      headline: `"${title}" by ${artist}`,
-      text: `One of your under-the-radar picks. There's not much press out there for this one yet, so we're letting the music do the talking — give it a real listen and we'll layer in the story as more sources surface.`,
+      // Constitution compliance. The previous copy broke two rules at
+      // once: "One of your under-the-radar picks" patronized the listener
+      // with their own taste, and "we'll layer in the story as more
+      // sources surface" was meta-commentary about the absence of
+      // information — the exact framing the constitution calls lazy and
+      // self-defeating. This states only what we can verify from catalog
+      // data (artist, title, runtime) and frames it as a listen rather
+      // than an apology.
+      headline: runtime
+        ? `${artist} brings "${title}" in at ${runtime}.`
+        : `${artist} — "${title}".`,
+      text: runtime
+        ? `Give it the full ${runtime} before you decide. The first pass is for the groove; the details surface on the second.`
+        : `Give it a full pass before you decide — the details surface on the second listen.`,
       kind: "track",
       listenFor: false,
       sourceId,
@@ -271,7 +304,13 @@ export function useAINuggets(
   artistImageUrl?: string,
   tier: "casual" | "curious" | "nerd" = "casual",
   topArtists?: string[],
-  topTracks?: string[]
+  topTracks?: string[],
+  // Non-primary artists on the track (e.g. for "Better" by Ty Symph,
+  // Pete Rango, collaborators = ["Pete Rango"]). Passed through to
+  // wave-2/3 so the server has the same research targets the Stories
+  // pre-gen used in wave 1 — otherwise wave-2 loses a key research
+  // signal and falls back to thin generic content on collab tracks.
+  collaborators?: string[],
 ): UseAINuggetsResult {
   const [nuggets, setNuggets] = useState<Nugget[]>([]);
   const [sources, setSources] = useState<Map<string, Source>>(new Map());
@@ -304,6 +343,11 @@ export function useAINuggets(
   // Track when the last generation attempt started — used to only debounce
   // on rapid skips (< 5s between tracks), not on first page load.
   const lastGenTimestampRef = useRef(0);
+  // Artist facts reused from Browse to fill the opening slot while real
+  // generation runs. Held in a ref so the SSE handler can retire them the
+  // moment track-specific nuggets start arriving.
+  const seededRef = useRef<Nugget[]>([]);
+  const seededIdsRef = useRef<Set<string>>(new Set());
 
   // ── Wave orchestration ─────────────────────────────────────────────
   // Wave 1 is the initial generate() call. Wave 2/3 fire in-session when
@@ -317,6 +361,13 @@ export function useAINuggets(
   // 30 s so a transient server error doesn't fire a new request every 500 ms
   // (the effect re-evaluates on every currentTime tick).
   const waveCooldownUntilRef = useRef(0);
+  // Latch: once a wave-2 attempt comes back empty for THIS track, the
+  // Validator + source filter stripped everything the Writer produced
+  // (typical for sub-1k-listener artists where Exa returns no journalism).
+  // No amount of retries will change that within the same track, so we
+  // stop firing wave requests entirely instead of burning a Gemini call
+  // every 30s. Cleared on track change via cancelledRef cycling.
+  const waveExhaustedRef = useRef(false);
   // Mirror waveInFlightRef as state so the UI can surface a "more coming" pill.
   const [waveLoading, setWaveLoading] = useState(false);
   // Track the current trackId via ref so in-flight wave generations can
@@ -337,16 +388,39 @@ export function useAINuggets(
     currentWaveRef.current = 1;
     waveInFlightRef.current = false;
     waveCooldownUntilRef.current = 0;
+    waveExhaustedRef.current = false;
   }, [trackId, regenerateKey]);
+
+  // Enrichment inputs — used INSIDE generate() but deliberately not in its
+  // dependency array. They arrive asynchronously (the artist image resolves
+  // from profile.artistImages; topArtists/topTracks get replaced by the
+  // background taste refresh), so including them meant generate() got a new
+  // identity mid-listen, the effect re-ran, and its first act — setNuggets([])
+  // — wiped every fact the user was reading. Pete: "I had a track paused for a
+  // while, I unpaused, and all the facts disappeared and the researching pill
+  // showed up again."
+  //
+  // Regeneration should be decided by WHAT we are generating for (track, tier,
+  // listen depth), never by late-arriving decoration.
+  const enrichmentRef = useRef({ coverArtUrl, artistImageUrl, topArtists, topTracks });
+  enrichmentRef.current = { coverArtUrl, artistImageUrl, topArtists, topTracks };
 
   const generate = useCallback(async () => {
     if (!artist || !title) return;
+    const {
+      coverArtUrl: coverArtUrlLive,
+      artistImageUrl: artistImageUrlLive,
+      topArtists: topArtistsLive,
+      topTracks: topTracksLive,
+    } = enrichmentRef.current;
     setFromCache(false);
 
     // Clear stale state from a previous track so SSE appends don't stack
     // nuggets across track boundaries (the SSE path uses functional
     // updaters: setNuggets(prev => [...prev, nugget])).
     setNuggets([]);
+    seededRef.current = [];
+    seededIdsRef.current = new Set();
     setSources(new Map());
 
     // ── In-memory cache check ──────────────────────────────────────
@@ -359,7 +433,26 @@ export function useAINuggets(
     // string the helper builds from raw artist/title/uri.
     const cacheKey = `${trackId}::${tier}::${regenerateKey}`;
 
-    const cached = getNuggetCache(cacheKey);
+    // Pre-gen always writes at regenerateKey=0. Re-listens bump
+    // regenerateKey for "deeper content on re-listen", which means
+    // the cache lookup at the bumped key misses on every return
+    // visit — even though the pre-gen / earlier-session content is
+    // still in the in-mem cache at key=0. Result: user taps mini-
+    // player to return to the song they're listening to and sees
+    // the loading placeholder instead of their nuggets.
+    // Fall back to regenerateKey=0 when the current key misses. The
+    // wave-2/3 trigger downstream still fires with the current
+    // regenerateKey to fetch deeper content from the server — the
+    // user just gets instant content from pre-gen / earlier session
+    // first, deeper content in the background.
+    let cached = getNuggetCache(cacheKey);
+    if (!cached && regenerateKey > 0) {
+      const fallbackKey = `${trackId}::${tier}::0`;
+      cached = getNuggetCache(fallbackKey);
+      if (cached && import.meta.env.DEV) {
+        console.log("[NuggetMemCache] Falling back to regenerateKey=0:", fallbackKey);
+      }
+    }
     if (cached) {
       if (import.meta.env.DEV) console.log("[NuggetMemCache] Serving from in-memory cache:", cacheKey);
       setFromCache(true);
@@ -489,11 +582,11 @@ export function useAINuggets(
             nugget.imageUrl = seedNugget.imageUrl;
             nugget.imageCaption = seedNugget.imageCaption || nugget.headline;
             contextualImageIndices.add(idx);
-          } else if (nugget.kind === "artist" && isRealImg(artistImageUrl)) {
-            nugget.imageUrl = artistImageUrl;
+          } else if (nugget.kind === "artist" && isRealImg(artistImageUrlLive)) {
+            nugget.imageUrl = artistImageUrlLive;
             nugget.imageCaption = artist;
-          } else if ((nugget.kind === "track" || nugget.kind === "discovery") && isRealImg(coverArtUrl)) {
-            nugget.imageUrl = coverArtUrl;
+          } else if ((nugget.kind === "track" || nugget.kind === "discovery") && isRealImg(coverArtUrlLive)) {
+            nugget.imageUrl = coverArtUrlLive;
             nugget.imageCaption = nugget.kind === "track"
               ? `${title}${album ? " \u2014 " + album : ""}`
               : nugget.headline || "Explore next";
@@ -621,6 +714,55 @@ export function useAINuggets(
           // Unexpected error (not a unique violation) — log but proceed.
           console.warn("[NuggetCache] Sentinel insert error:", claimError.message);
         }
+
+        // ── Seed from artist-level research ─────────────────────────
+        // We're about to generate from scratch, but Browse may already
+        // have researched this artist. That row is keyed by artist while
+        // this lookup is keyed by track, so without this we'd pay Exa and
+        // Gemini a second time and leave the user waiting for research
+        // already in the database (Pete: "if we already generated a fact
+        // about song or artist why is it not showing up when I hit
+        // play?").
+        //
+        // Best-effort only: any failure here must not block generation,
+        // which is the real path to the content.
+        try {
+          const artistKey = buildArtistUpdatesCacheKey(artist, tier);
+          const { data: artistRow } = await supabase
+            .from("nugget_cache")
+            .select("nuggets, status")
+            .eq("track_id", artistKey)
+            .maybeSingle();
+
+          // cancelledRef is a run-liveness flag, not a track identity
+          // check — the effect resets it to false at the start of each
+          // new run, so an in-flight read from the PREVIOUS track can
+          // resolve afterwards and see it as live. Since this write
+          // REPLACES the nugget list, that would drop the new track's
+          // nuggets and show the old track's fact. The SSE path defends
+          // the same hazard with id-dedup; this one needs the identity
+          // comparison because there is nothing to dedup against.
+          const stillOnSameTrack = currentTrackIdRef.current === trackId;
+          if (!cancelledRef.current && stillOnSameTrack && artistRow?.status === "ready") {
+            const updates = (artistRow.nuggets ?? []) as unknown as ArtistUpdate[];
+            const seed = selectSeedFacts(updates, trackId);
+            if (seed.nuggets.length > 0) {
+              if (import.meta.env.DEV) {
+                console.log("[NuggetCache] Seeding from artist research:", artistKey);
+              }
+              seededRef.current = seed.nuggets;
+              seededIdsRef.current = new Set(seed.nuggets.map((n) => n.id));
+              setNuggets(seed.nuggets);
+              setSources(new Map(seed.sources.map((s) => [s.id, s])));
+              // Deliberately NOT setFromCache(true) — this is a stopgap
+              // while real generation runs, not a served cache hit, and
+              // downstream reveal logic treats fromCache as "the whole
+              // set is here, pace it against playback".
+            }
+          }
+        } catch (e) {
+          console.warn("[NuggetCache] Artist-fact seed failed (non-fatal):", e);
+        }
       }
 
       // ── Generate fresh nuggets via AI ─────────────────────────────
@@ -643,9 +785,9 @@ export function useAINuggets(
         listenCount: currentListenCount,
         previousNuggets,
         tier,
-        userTopArtists: topArtists?.slice(0, 10),
-        userTopTracks: topTracks?.slice(0, 10),
-        spotifyArtistImageUrl: artistImageUrl,
+        userTopArtists: topArtistsLive?.slice(0, 10),
+        userTopTracks: topTracksLive?.slice(0, 10),
+        spotifyArtistImageUrl: artistImageUrlLive,
         spotifyTrackId: spotifyTrackIdValue,
         appleTrackId: appleTrackIdValue,
         durationSec,  // server uses this to compute cache-side timestamps
@@ -736,7 +878,17 @@ export function useAINuggets(
               const nugget = makeNugget(n, nuggetId, sourceId, trackId, ts);
 
               setSources((prev) => new Map(prev).set(sourceId, source));
-              setNuggets((prev) => [...prev, nugget]);
+              // Dedup by id: a re-fire of the generate effect (deps churn
+              // from useUserProfile re-emitting) cancels the old fetch but
+              // resets cancelledRef to false, so a late SSE chunk from the
+              // old stream can append into the new state and collide with
+              // the cache-restored nugget that has the same listenCount +
+              // index. React then renders only one of the two same-keyed
+              // children and the other "disappears" mid-typewrite.
+              // Retires any seeded artist fact this nugget duplicates.
+              // See mergeStreamedNugget — the logic lives there so it can
+              // be tested across a whole stream, not one call at a time.
+              setNuggets((prev) => mergeStreamedNugget(prev, nugget, seededIdsRef.current));
               if (import.meta.env.DEV) console.log(`[SSE] Received nugget ${payload.index}: "${n.headline?.slice(0, 40)}"`);
 
               // Early-cancel: if we already have enough nuggets to cover
@@ -819,11 +971,11 @@ export function useAINuggets(
         const isRealImg = (url?: string) => url && !url.includes("dicebear.com");
         for (const n of aiNuggets) {
           if (n.imageUrl) continue; // server already resolved
-          if (n.kind === "artist" && isRealImg(artistImageUrl)) {
-            n.imageUrl = artistImageUrl;
+          if (n.kind === "artist" && isRealImg(artistImageUrlLive)) {
+            n.imageUrl = artistImageUrlLive;
             n.imageCaption = artist;
-          } else if (isRealImg(coverArtUrl)) {
-            n.imageUrl = coverArtUrl;
+          } else if (isRealImg(coverArtUrlLive)) {
+            n.imageUrl = coverArtUrlLive;
             n.imageCaption = title;
           }
         }
@@ -914,16 +1066,16 @@ export function useAINuggets(
           contextualImageIndices.add(idx);
         }
         // "context" kind: keep backend-resolved image, only fallback to artist photo
-        else if (nugget.kind === "context" && isRealImage(artistImageUrl)) {
-          nugget.imageUrl = artistImageUrl;
+        else if (nugget.kind === "context" && isRealImage(artistImageUrlLive)) {
+          nugget.imageUrl = artistImageUrlLive;
           nugget.imageCaption = artist;
         }
         // Fall back to Spotify images (only real URLs, not DiceBear placeholders)
-        else if (nugget.kind === "artist" && isRealImage(artistImageUrl)) {
-          nugget.imageUrl = artistImageUrl;
+        else if (nugget.kind === "artist" && isRealImage(artistImageUrlLive)) {
+          nugget.imageUrl = artistImageUrlLive;
           nugget.imageCaption = artist;
-        } else if ((nugget.kind === "track" || nugget.kind === "discovery") && isRealImage(coverArtUrl)) {
-          nugget.imageUrl = coverArtUrl;
+        } else if ((nugget.kind === "track" || nugget.kind === "discovery") && isRealImage(coverArtUrlLive)) {
+          nugget.imageUrl = coverArtUrlLive;
           nugget.imageCaption = nugget.kind === "track"
             ? `${title}${album ? " \u2014 " + album : ""}`
             : nugget.headline || "Explore next";
@@ -1059,7 +1211,7 @@ export function useAINuggets(
         // nugget than leave the user staring at cover art with no
         // content to read.
         console.warn(`[useAINuggets] SSE failed and no cache row exists for ${dbCacheKey}; synthesizing catalog fallback`);
-        const synth = makeSparseFallbackNugget(artist, title, trackId, durationSec, coverArtUrl);
+        const synth = makeSparseFallbackNugget(artist, title, trackId, durationSec, coverArtUrlLive);
         const synthSources = new Map<string, Source>([[synth.source.id, synth.source]]);
         setNuggets([synth.nugget]);
         setSources(synthSources);
@@ -1086,7 +1238,7 @@ export function useAINuggets(
         setLoading(false);
       }
     }
-  }, [trackId, artist, title, album, durationSec, coverArtUrl, artistImageUrl, tier, regenerateKey, topArtists, topTracks, getNuggetCache, setNuggetCache, setTrackListenCount]);
+  }, [trackId, artist, title, album, durationSec, tier, regenerateKey, getNuggetCache, setNuggetCache, setTrackListenCount]); // enrichment deliberately excluded — see enrichmentRef above
 
   useEffect(() => {
     cancelledRef.current = false;
@@ -1108,9 +1260,14 @@ export function useAINuggets(
     if (waveInFlightRef.current) return;            // already generating
     if (nuggets.length === 0) return;               // wave 1 not yet landed
     if (!durationSec || durationSec < 90) return;   // track too short
-    if (!isPlaying) return;                         // paused — wait
+    // Removed `if (!isPlaying) return;` — a deliberate pause shouldn't
+    // halt background research. The "not enough time left" gate below
+    // already covers the meaningful case where there's no remaining
+    // playback to spend the nuggets on. Pete: "I noticed I never
+    // received [wave-2 nuggets] because I was paused."
     if (cancelledRef.current) return;               // track changed / unmount
     if (Date.now() < waveCooldownUntilRef.current) return;  // recent failure, cooldown
+    if (waveExhaustedRef.current) return;           // server returned 0 — no more for this track
 
     // Tap fan-out if we served from cache but only
     // have a single nugget (firstNuggetOnly partial), the user still
@@ -1143,6 +1300,7 @@ export function useAINuggets(
         const appleUriMatch = trackId.match(/apple:song:(\d+)/);
         const requestBody = {
           artist,
+          collaborators,
           title,
           album,
           listenCount: nextWave,                     // unlocks deeper angles
@@ -1154,22 +1312,54 @@ export function useAINuggets(
           spotifyTrackId: spotifyUriMatch?.[1],
           appleTrackId: appleUriMatch?.[1],
         };
-        const { data, error } = await supabase.functions.invoke("generate-nuggets", {
-          body: requestBody,
+        // 60s hard timeout — server cap is 90s but a wedged call
+        // shouldn't pin waveInFlightRef true forever (the only thing
+        // that releases it is this function's finally block). 60s
+        // covers warm Gemini paths comfortably and aborts cold
+        // starts that wandered off.
+        const invokePromise = supabase.functions.invoke("generate-nuggets", { body: requestBody });
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        const timeoutPromise = new Promise<{ timedOut: true }>((resolve) => {
+          timeoutId = setTimeout(() => resolve({ timedOut: true }), 60_000);
         });
+        const raceResult = await Promise.race<
+          Awaited<typeof invokePromise> | { timedOut: true }
+        >([invokePromise, timeoutPromise]);
+        // Clear the timer regardless of which side won — without this the
+        // 60s closure stays scheduled even after the invoke resolves,
+        // accumulating one stale timer per wave trigger over the session.
+        if (timeoutId) clearTimeout(timeoutId);
 
-        // Drop results if track changed or generation cancelled.
-        if (waveTrackId !== currentTrackIdRef.current || cancelledRef.current) {
-          if (import.meta.env.DEV) console.log(`[NuggetWave ${nextWave}] dropped — track changed`);
+        // Drop entirely only if the user genuinely navigated to a
+        // DIFFERENT track. Unmount-cancellation (Listen → Browse) is
+        // NOT a reason to discard — the OLD wave-2 fetch is still
+        // valid for the OLD track's cache key, and writing the
+        // result so the return visit hits a populated cache is the
+        // whole point of "background research keeps going" (Pete:
+        // "I thought we had fixed this?").
+        if (waveTrackId !== currentTrackIdRef.current) {
+          if (import.meta.env.DEV) console.log(`[NuggetWave ${nextWave}] dropped — user switched tracks`);
           return;
         }
+        // Pure unmount cancellation: setState calls below will be
+        // no-ops in React 18 (which is fine — we still want the
+        // cache write to happen so a return visit sees the nuggets).
+        if ("timedOut" in raceResult) {
+          if (import.meta.env.DEV) console.warn(`[NuggetWave ${nextWave}] TIMEOUT after 60s — backing off`);
+          return;
+        }
+        const { data, error } = raceResult;
         if (error) {
           if (import.meta.env.DEV) console.warn(`[NuggetWave ${nextWave}] error:`, error.message);
           return;
         }
         const newNuggetData = (data?.nuggets as AINuggetData[] | undefined) ?? [];
         if (newNuggetData.length === 0) {
-          if (import.meta.env.DEV) console.log(`[NuggetWave ${nextWave}] server returned 0 nuggets — done`);
+          // Latch: the Validator stripped everything (typical for
+          // sub-1k-listener artists with no Exa coverage). Don't burn
+          // another Gemini call every 30s for the rest of the track.
+          waveExhaustedRef.current = true;
+          if (import.meta.env.DEV) console.log(`[NuggetWave ${nextWave}] server returned 0 nuggets — exhausted, no more retries for this track`);
           return;
         }
 
@@ -1190,7 +1380,16 @@ export function useAINuggets(
           newNuggets.push(makeNugget(n, nuggetId, sourceId, trackId, ts));
         });
 
-        setNuggets((prev) => [...prev, ...newNuggets]);
+        // Dedup by id: defensive against a wave-2 effect re-fire that
+        // would otherwise append the same set twice (e.g. if the
+        // effect deps change before the previous wave's finally
+        // block clears waveInFlightRef — possible during a profile
+        // re-emit while a wave is in flight).
+        setNuggets((prev) => {
+          const have = new Set(prev.map((p) => p.id));
+          const filtered = newNuggets.filter((n) => !have.has(n.id));
+          return filtered.length ? [...prev, ...filtered] : prev;
+        });
         setSources((prev) => {
           const next = new Map(prev);
           newSources.forEach((v, k) => next.set(k, v));
@@ -1202,15 +1401,35 @@ export function useAINuggets(
         advancedWaveRef = true;
         if (import.meta.env.DEV) console.log(`[NuggetWave ${nextWave}] appended ${newNuggets.length} nuggets`);
 
-        // Non-fatal: persist the accumulated set for future replays. Read
-        // current state from refs rather than closures so we include any
-        // sources/nuggets that arrived via SSE while this request was in
-        // flight.
+        // Persist the accumulated set for future replays. Read current
+        // state from refs rather than closures so we include any
+        // sources/nuggets that arrived via SSE while this request was
+        // in flight.
+        const allNuggets = [...nuggetsRef.current, ...newNuggets];
+        const allSources = new Map(sourcesRef.current);
+        newSources.forEach((v, k) => allSources.set(k, v));
+
+        // CRITICAL: also write the in-memory cache so a same-session
+        // navigation away and back (Listen → Browse → mini-player tap
+        // → Listen) restores the FULL set of nuggets the user was
+        // viewing, not just the original pre-gen entry. Pete's report:
+        // "I had nugget 3 visible, went to Browse, came back via mini-
+        // player, only saw nugget 1 with everything else gone."
+        // Without this write, the in-mem cache stays pinned to the
+        // pre-gen entry; on remount useAINuggets hits in-mem first
+        // (short-circuiting before DB), so wave 2/3 content
+        // accumulated during the session evaporates. Match the SSE-
+        // complete path's setNuggetCache call (line ~855).
+        const inMemCacheKey = `${trackId}::${tier}::${regenerateKey}`;
+        setNuggetCache(inMemCacheKey, {
+          nuggets: allNuggets,
+          sources: allSources,
+          listenCount,
+        });
+
+        // Non-fatal: persist to DB too so cross-session replays benefit.
         try {
           const dbCacheKey = canonicalCacheKey(trackId, tier);
-          const allNuggets = [...nuggetsRef.current, ...newNuggets];
-          const allSources = new Map(sourcesRef.current);
-          newSources.forEach((v, k) => allSources.set(k, v));
           const cacheSourcesObj: Record<string, Source> = {};
           allSources.forEach((src, key) => { cacheSourcesObj[key] = src; });
           await supabase.from("nugget_cache").upsert(
@@ -1235,7 +1454,7 @@ export function useAINuggets(
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- nuggets/sources read at trigger time, not subscribed
-  }, [currentTime, nuggets.length, durationSec, isPlaying, trackId, artist, title, album, tier, fromCache]);
+  }, [currentTime, nuggets.length, durationSec, isPlaying, trackId, artist, title, album, tier, fromCache, regenerateKey, listenCount, setNuggetCache]);
 
   return { nuggets, sources, loading, error, listenCount, artistSummary, fromCache, waveLoading };
 }

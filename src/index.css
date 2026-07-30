@@ -196,3 +196,18 @@
 .animate-nudge-pulse {
   animation: nudge-pulse 2.5s ease-in-out infinite;
 }
+
+/* Scroll cue — the chevron drifts on a slow, shallow loop. Deliberately
+   understated: it sits over editorial copy, so anything more insistent
+   competes with the headline for attention. */
+@keyframes cue-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+.animate-cue-float {
+  animation: cue-float 2.4s ease-in-out infinite;
+}
+/* Motion-sensitivity fallback: hold the chevron still. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-cue-float { animation: none; }
+}

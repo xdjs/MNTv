@@ -11,6 +11,7 @@ import MiniPlayer from "./MiniPlayer";
 import { useNuggetPacer } from "./useNuggetPacer";
 import { useBookmarks } from "@/hooks/useBookmarks";
 import { isSafeUrl } from "@/lib/urlSafety";
+import { RecommendedArtistButton, RecommendedTrackButton } from "./RecommendedButtons";
 
 interface ImmersiveNuggetViewProps {
   nuggets: Nugget[];
@@ -86,6 +87,15 @@ const BookmarkButton = memo(function BookmarkButton({
   );
 });
 
+/** Scroll distance (px) over which the scroll cue fades to nothing.
+ *  Roughly one thumb-flick — far enough that a stray scroll doesn't
+ *  blink it out, short enough that it's gone once the body is engaged. */
+const CUE_FADE_DISTANCE_PX = 90;
+/** How far a cue tap scrolls, as a fraction of the viewport. Just under
+ *  a full screen so the headline stays partly visible and the movement
+ *  reads as "there's more below this" rather than a page jump. */
+const CUE_SCROLL_TARGET_RATIO = 0.72;
+
 // Minimum time a nugget stays on-screen before auto-advance can swap it out.
 // Tuning knob for the streaming pacing — keeps freshly-streamed nuggets
 // readable without yanking the user mid-sentence.
@@ -135,6 +145,12 @@ export default function ImmersiveNuggetView({
   useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
   const initialUnlockDoneRef = useRef(false);
   const trackKey = `${trackTitle}::${artist}`;
+  // Refs for the "swipe up for more" cue: scrollRef is the body scroll
+  // container, cueRef is the floating chevron whose opacity we drive
+  // directly on scroll (no setState — keeps the memoized card from
+  // re-rendering on every scroll tick, matching this file's perf style).
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const cueRef = useRef<HTMLDivElement>(null);
 
   // Bookmarking — optimistic toggle, server-verified identity via edge fn.
   const bookmarks = useBookmarks();
@@ -158,6 +174,40 @@ export default function ImmersiveNuggetView({
       nextUnlockTimeRef.current = 0;
     }
   }, [trackKey]);
+
+  // Defensive clamp: if the nuggets array ever shrinks (a fresh
+  // generation after a regenerateKey bump comes back with fewer
+  // nuggets than the previous instance had, or the in-memory cache
+  // hands back a partial firstNuggetOnly entry) and activeIndex is
+  // out of bounds, activeNugget = nuggets[activeIndex] becomes
+  // undefined → showCard = false → the user gets the cover-art
+  // "View nuggets" branch with a button that doesn't recover.
+  // Clamping to 0 forces a real card back on screen.
+  useEffect(() => {
+    if (nuggets.length > 0 && activeIndex >= nuggets.length) {
+      setActiveIndex(0);
+    }
+  }, [nuggets.length, activeIndex]);
+
+  // Also drop stale ids from unlockedIds when nuggets changes. The
+  // unlock effect only ADDS ids; without a prune pass, ids from a
+  // previous nuggets list survive when nuggets shrinks. That makes
+  // unlockedCount > 0 (so the "View nuggets" button renders) while
+  // none of the unlocked ids correspond to a real entry in the
+  // current nuggets array.
+  useEffect(() => {
+    if (nuggets.length === 0) return;
+    const currentIds = new Set(nuggets.map((n) => n.id));
+    setUnlockedIds((prev) => {
+      let drift = false;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (currentIds.has(id)) next.add(id);
+        else drift = true;
+      }
+      return drift ? next : prev;
+    });
+  }, [nuggets]);
 
   // ── Unlock nuggets ─────────────────────────────────────────────────
   // INVARIANT (Pete's spec, 2026-05-06): the FIRST nugget always
@@ -241,11 +291,23 @@ export default function ImmersiveNuggetView({
     initialUnlockDoneRef.current = true;
     const t = currentTimeRef.current;
     const initial = new Set<string>();
-    for (const n of nuggets) {
-      if (t >= n.timestampSec) initial.add(n.id);
+    let latestIdx = 0;
+    for (let i = 0; i < nuggets.length; i++) {
+      const n = nuggets[i];
+      if (t >= n.timestampSec) {
+        initial.add(n.id);
+        latestIdx = i;
+      }
     }
     if (initial.size === 0) initial.add(nuggets[0].id);
     setUnlockedIds(initial);
+    // Pete's UX request: when returning to a track mid-play (e.g.
+    // tapping the mini-player from Browse), jump straight to the
+    // latest unlocked nugget so the user picks up where the song
+    // is — not at nugget #0 — and can swipe back to read earlier
+    // ones. First-visit case (currentTime=0) only nugget[0] is
+    // unlocked, so latestIdx stays 0 and behavior is unchanged.
+    if (latestIdx > 0) setActiveIndex(latestIdx);
   }, [nuggets]);
 
   // Track-end is handled by Listen.tsx's handleTrackEnd via PlayerContext onEnded.
@@ -271,7 +333,13 @@ export default function ImmersiveNuggetView({
   }, [trackTitle, artist, artUrl, toggle, onPrev, onNext]);
 
   // ── Derived state ──────────────────────────────────────────────────
-  const activeNugget = nuggets[activeIndex];
+  // Fallback to nuggets[0] when activeIndex is out of bounds. Without
+  // this, returning to a track whose nuggets array shrunk between
+  // visits left activeNugget=undefined → showCard=false → user stuck
+  // on the cover-art screen with a "View nuggets" button that didn't
+  // recover. Now activeNugget is always defined when at least one
+  // nugget exists.
+  const activeNugget = nuggets[activeIndex] ?? nuggets[0];
   const activeSource = activeNugget ? sources.get(activeNugget.sourceId) : undefined;
   const unlockedCount = unlockedIds.size;
   const isTypewriterDone = activeNugget ? typewriterDoneIds.has(activeNugget.id) : false;
@@ -288,6 +356,44 @@ export default function ImmersiveNuggetView({
     setDeepDiveText(null);
     setDeepDiveFollowUp(null);
   }, [cancelPacerQueue]);
+
+  // ── "Swipe up for more" cue ────────────────────────────────────────
+  // Fade the cue out as the body scrolls into view, then back in at the
+  // top. Driven via direct DOM writes (not state) so the memoized card
+  // doesn't re-render on every scroll frame. Tied to pointer-events so a
+  // faded-out cue isn't tappable.
+  const handleBodyScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const o = Math.max(0, 1 - e.currentTarget.scrollTop / CUE_FADE_DISTANCE_PX);
+    if (cueRef.current) {
+      cueRef.current.style.opacity = String(o);
+      cueRef.current.style.pointerEvents = o < 0.05 ? "none" : "";
+    }
+  }, []);
+
+  // Tap-to-scroll: bring the body into view from the headline hero.
+  // Honours prefers-reduced-motion — the CSS disables the cue's float
+  // for those users, and a programmatic smooth scroll is the larger
+  // motion of the two, so it would be odd to leave it animating.
+  const scrollBodyIntoView = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const reduceMotion = typeof window !== "undefined"
+      && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    el.scrollTo({
+      top: el.clientHeight * CUE_SCROLL_TARGET_RATIO,
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
+  }, []);
+
+  // On nugget change, snap back to the headline (top) and restore the cue
+  // so each new fact opens on its hook rather than mid-body.
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    if (cueRef.current) {
+      cueRef.current.style.opacity = "1";
+      cueRef.current.style.pointerEvents = "";
+    }
+  }, [activeNugget?.id]);
 
   // Keyboard navigation — left/right arrows step between unlocked
   // nuggets. Useful on desktop / DevTools mobile-emulation where
@@ -378,8 +484,20 @@ export default function ImmersiveNuggetView({
   // infrequent and acceptable — the main perf win is skipping during drag.
   const renderNuggetCard = useCallback(() => {
     const { url: imgUrl, isNuggetImage } = getNuggetImage();
+    // The cue used to be gated on the body being distinct prose from the
+    // headline. That was wrong: the below-fold section holds every control
+    // — View Source, Tell me more, Save, recommended artist/track — not
+    // just prose. On a headline-less nugget the old gate hid the cue
+    // entirely, so a user who had learned "chevron means scroll" read its
+    // absence as "nothing below" and lost the Save button altogether.
+    //
+    // There is always something below the fold, so the cue shows whenever
+    // a nugget is on screen. It's a scroll affordance, not a promise of
+    // more prose — the "MORE" label that made it read as the latter is
+    // gone.
+    const hasMoreBelow = !!activeNugget;
     return (
-      <div className="w-full h-full overflow-y-auto scrollbar-hide">
+      <div ref={scrollRef} onScroll={handleBodyScroll} data-testid="nugget-scroll" className="w-full h-full overflow-y-auto scrollbar-hide">
         {/* Hero image fills the visible viewport with a single
             bottom-fade gradient; headline overlays the bottom of the
             image (no separate-box seam). Body lives below the h-full
@@ -397,11 +515,14 @@ export default function ImmersiveNuggetView({
               }}
             />
           )}
-          {/* Single bottom-fade gradient — image visible at top,
-              fading to near-black at the bottom where the headline
-              overlays. */}
+          {/* Single bottom-fade gradient — image visible at top, ramping
+              to SOLID black at the bottom. The last ~8% is fully opaque
+              #000 so the hero's bottom edge matches the body section's
+              bg-black exactly; without this the gradient stopped at 0.92
+              (image faintly visible) and met pure black at the seam,
+              leaving a harsh line where hero meets body. */}
           <div className="absolute inset-0 pointer-events-none" style={{
-            background: "linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.78) 18%, rgba(0,0,0,0.4) 38%, rgba(0,0,0,0.1) 60%, transparent 80%)",
+            background: "linear-gradient(to top, #000 0%, #000 8%, rgba(0,0,0,0.82) 24%, rgba(0,0,0,0.42) 44%, rgba(0,0,0,0.12) 64%, transparent 82%)",
           }} />
           {/* Headline overlays the bottom of the image — no separate
               background, the gradient above provides the legibility
@@ -419,7 +540,7 @@ export default function ImmersiveNuggetView({
               ) : (
                 <TypewriterText
                   text={activeNugget.headline || activeNugget.text}
-                  speed={35}
+                  speed={18}
                   paused={false}
                   onComplete={handleTypewriterComplete}
                   as="h2"
@@ -429,6 +550,67 @@ export default function ImmersiveNuggetView({
               )
             )}
             </div>
+            {/* Position dots — INSIDE the hero overlay so they sit on
+                the bottom-fade gradient instead of on a separate
+                bg-black strip between hero and mini-player. Height is
+                reserved (always renders the row even with 1 nugget)
+                so wave-2 landing doesn't reflow the headline. */}
+            <div className="mt-3 h-2 flex justify-center items-center gap-1.5 pointer-events-none">
+              <AnimatePresence>
+                {nuggets.length > 1 &&
+                  Array.from({ length: nuggets.length }, (_, i) => {
+                    const isActive = i === activeIndex;
+                    const isUnlocked = i < unlockedCount;
+                    return (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, scale: 0.6 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.6 }}
+                        transition={{ duration: 0.25, ease: "easeOut" }}
+                        className={`w-1.5 h-1.5 rounded-full transition-colors duration-200 ${
+                          isActive ? "bg-white/85" : isUnlocked ? "bg-white/35" : "bg-white/12"
+                        }`}
+                      />
+                    );
+                  })}
+              </AnimatePresence>
+            </div>
+
+            {/* Scroll cue — one chevron, nothing else.
+                It previously carried a "MORE" label and a neon halo: the
+                label said what the chevron already says, the halo didn't
+                read at this size against a dark photo, and the stack of
+                three elements sat tight under the headline so the arrow
+                landed directly beneath the sentence's final period and
+                read as punctuation. The generous top margin is the fix —
+                it separates the cue from the prose so it reads as
+                wayfinding. Fades out as the body scrolls in (see
+                handleBodyScroll); tap scrolls the body into view. */}
+            {hasMoreBelow && (
+              <div ref={cueRef} data-testid="scroll-cue" className="mt-4 flex justify-center">
+                <button
+                  type="button"
+                  aria-label="Scroll down to read the full story"
+                  onClick={(e) => { e.stopPropagation(); scrollBodyIntoView(); }}
+                  // w-11 h-11 = 44x44, the minimum touch target, on a
+                  // control whose entire job is being tappable. The glyph
+                  // stays small; the padding does the work.
+                  className="flex items-center justify-center w-11 h-11 rounded-full animate-cue-float focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                >
+                  <svg
+                    width="20" height="12" viewBox="0 0 22 14" fill="none" aria-hidden
+                    style={{ filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.9))" }}
+                  >
+                    <path
+                      d="M2 12 L11 3 L20 12"
+                      stroke="rgba(255,255,255,0.75)"
+                      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              </div>
+            )}
           </div>
         </div>
         {/* Body section — lives BELOW the h-full hero+headline frame,
@@ -473,6 +655,16 @@ export default function ImmersiveNuggetView({
                 toggle={bookmarks.toggle}
               />
             )}
+            {activeNugget?.recommendedArtist?.name && (
+              <RecommendedArtistButton
+                recommendedArtist={activeNugget.recommendedArtist}
+              />
+            )}
+            {activeNugget?.recommendedTrack?.title && (
+              <RecommendedTrackButton
+                recommendedTrack={activeNugget.recommendedTrack}
+              />
+            )}
           </div>
 
           {activeSource && (
@@ -481,14 +673,13 @@ export default function ImmersiveNuggetView({
         </div>
       </div>
     );
-    // Deps intentionally narrow: nuggets.length / activeIndex /
-    // unlockedCount are NOT referenced inside this card body — they
-    // drive the dots row + nav arrows which are sibling components.
-    // Listing them here would invalidate the heavy card-content memo
-    // on every pacer unlock and every swipe (4 Hz on cached tracks),
-    // re-rendering the image / typewriter / deep-dive button for no
-    // visible change.
-  }, [getNuggetImage, activeNugget, activeSource, isTypewriterDone, handleTypewriterComplete, deepDiveText, deepDiveFollowUp, deepDiveLoading, deepDiveRateLimited, handleTellMeMore, bookmarks, artist, trackTitle]);
+    // Deps include nuggets.length / activeIndex / unlockedCount now
+    // that the dots row lives inside the hero overlay. Re-rendering
+    // on those changes is correct (dots need to update on swipe and
+    // when wave-2 lands) — and cheap, because the typewriter and
+    // image children re-use the same activeNugget identity unless
+    // the active nugget itself changes.
+  }, [getNuggetImage, activeNugget, activeSource, isTypewriterDone, handleTypewriterComplete, deepDiveText, deepDiveFollowUp, deepDiveLoading, deepDiveRateLimited, handleTellMeMore, bookmarks, artist, trackTitle, nuggets.length, activeIndex, unlockedCount, handleBodyScroll, scrollBodyIntoView]);
 
   return (
     <motion.div
@@ -526,82 +717,71 @@ export default function ImmersiveNuggetView({
         }}
       />
 
-      {/* Main content area — full bleed, no card */}
+      {/* Main content area — full bleed, no card. Pete's spec:
+          "only our full screen nugget cards should display since
+          they're available." Previously the AnimatePresence
+          alternated between the nugget card and a centered-cover-art
+          "now-playing" screen with a "View nuggets" button. That
+          alternate was reached whenever showCard was false (active
+          nugget undefined OR dismissed). On a same-session return
+          via the mini-player it was firing even though nuggets were
+          loaded and the user had not dismissed anything. Killing
+          the alternate entirely:
+            - When nuggets exist → always render the card (activeNugget
+              falls back to nuggets[0], so it's never undefined).
+            - When nuggets are still loading → show a minimal blurred
+              placeholder so the user sees something but is not
+              presented with a "View nuggets" button that does
+              nothing for them. */}
       <div className="relative z-10 flex-1 overflow-hidden min-h-0">
-        <AnimatePresence mode="wait">
-          {showCard ? (
-            <motion.div
-              key="nugget-card"
-              className="w-full h-full"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
+        {nuggets.length > 0 ? (
+          <motion.div
+            key="nugget-card"
+            className="w-full h-full"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.2 }}
+          >
+            <SwipeableNuggetStack
+              unlockedCount={unlockedCount}
+              activeIndex={activeIndex}
+              onSwipe={handleSwipe}
             >
-              <SwipeableNuggetStack
-                unlockedCount={unlockedCount}
-                activeIndex={activeIndex}
-                onSwipe={handleSwipe}
-              >
-                {renderNuggetCard}
-              </SwipeableNuggetStack>
-            </motion.div>
-          ) : (
-            /* ── Now-playing — centered cover art ─────────── */
-            <motion.div
-              key="now-playing"
-              className="w-full h-full flex flex-col items-center justify-center gap-5"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.3 }}
-              onClick={() => { if (unlockedCount > 0) setNuggetDismissed(false); }}
-            >
-              {artUrl && (
-                <img
-                  src={artUrl} alt={`${trackTitle} cover`}
-                  className={`w-64 h-64 rounded-2xl shadow-2xl object-cover ${isPlaying ? "animate-cover-pulse" : ""}`}
-                />
-              )}
-              <div className="text-center px-8">
-                <p className="text-xl font-bold text-white/90">{trackTitle}</p>
-                <p className="text-sm text-white/40 mt-1">{artist}</p>
-              </div>
-              {unlockedCount > 0 && (
-                <button
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 active:scale-95 transition-transform animate-nudge-pulse"
-                  onClick={() => setNuggetDismissed(false)}
-                >
-                  <MusicNerdLogo size={16} />
-                  <span className="text-xs text-white/50">View nuggets</span>
-                </button>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* Position-indicator dots — own row, never overlaps body text.
-          Pete 2026-05-08: "dots right above the mini player ...
-          headline and nugget amount counter should never be covered
-          by the mini player." Active bright, unlocked dim, locked
-          very-dim. Hidden when there's only one nugget. */}
-      {nuggets.length > 1 && (
-        <div className="relative z-20 bg-black flex justify-center items-center gap-1.5 pt-5 pb-3 pointer-events-none">
-          {Array.from({ length: nuggets.length }, (_, i) => {
-            const isActive = i === activeIndex;
-            const isUnlocked = i < unlockedCount;
-            return (
-              <div
-                key={i}
-                className={`w-1.5 h-1.5 rounded-full transition-colors duration-200 ${
-                  isActive ? "bg-white/85" : isUnlocked ? "bg-white/35" : "bg-white/12"
+              {renderNuggetCard}
+            </SwipeableNuggetStack>
+          </motion.div>
+        ) : (
+          /* Loading placeholder — only ever visible while the first
+             nugget is still in flight. No button, no false promise:
+             the orchestrator's researching pill provides the loading
+             affordance. */
+          <motion.div
+            key="loading-placeholder"
+            className="w-full h-full flex items-center justify-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            {artUrl && (
+              <img
+                src={artUrl}
+                alt=""
+                className={`w-56 h-56 rounded-2xl shadow-2xl object-cover opacity-80 ${
+                  isPlaying ? "animate-cover-pulse" : ""
                 }`}
               />
-            );
-          })}
-        </div>
-      )}
+            )}
+          </motion.div>
+        )}
+      </div>
+
+      {/* Position dots moved INSIDE the hero overlay (just below the
+          headline) so they sit on the bottom-fade gradient instead
+          of a separate strip between hero and mini-player. The
+          earlier standalone bg-black row had to either show as a
+          visible black bar or expose the blurred background; placing
+          them in the gradient overlay is the cleanest of both. See
+          renderNuggetCard for the dots JSX. */}
 
       {/* Mini player */}
       <div className="relative z-20 bg-black" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>

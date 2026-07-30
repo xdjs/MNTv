@@ -52,3 +52,6 @@ scripts/pipeline-comparison/
 supabase/.temp/
 .vercel
 .gstack/
+
+# TypeScript incremental build info (machine-generated)
+*.tsbuildinfo

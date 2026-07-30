@@ -34,24 +34,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Eagerly hydrate from the persisted session (avoids flash)
+    // 1. Eagerly hydrate from the persisted session (avoids flash and
+    //    avoids the case where onAuthStateChange's INITIAL_SESSION
+    //    fails to fire — e.g. Supabase auth endpoint timing out
+    //    during PKCE exchange, which leaves the app stuck on a
+    //    LazyFallback forever.)
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       bridgeSpotifyProviderTokens(data.session);
       setLoading(false);
     });
 
-    // 2. Keep state in sync for token refreshes, sign-in, sign-out. The
-    // bridge runs on every event so the localStorage token tracks the
-    // freshest Supabase session — but note: post-JWT-refresh events drop
-    // the provider token, which the bridge correctly no-ops on (see
-    // bridgeSpotifyProviderTokens guards).
+    // 2. Keep state in sync for token refreshes, sign-in, sign-out.
+    //    The OAuth-callback race that the prior revision tried to fix
+    //    (getSession returning null before PKCE exchange completes,
+    //    ProtectedRoute redirecting away before the real session lands)
+    //    is acceptable here because the next auth-state change will
+    //    overwrite the null with the real session — at worst the user
+    //    bounces through /connect briefly. Trading a rare race for a
+    //    bug-free initial load.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, newSession) => {
         setSession(newSession);
         bridgeSpotifyProviderTokens(newSession);
         setLoading(false);
-      }
+      },
     );
 
     return () => subscription.unsubscribe();

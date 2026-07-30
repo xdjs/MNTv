@@ -1,19 +1,28 @@
-import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { AnimatePresence } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import type { ArtistUpdate } from "@/hooks/useArtistUpdates";
-import { getArtistUpdateKindMeta } from "@/lib/artistUpdateKind";
-import { isSafeUrl } from "@/lib/urlSafety";
+import {
+  UpdateCard,
+  ExpandedUpdateModalMemoized,
+  cardKey,
+} from "@/components/ArtistUpdatesSection";
 
 /**
  * "Latest Facts" section on the Artist Profile. Renders artist-level
- * updates from the same edge function Browse uses, so a nugget the
- * user just tapped on Browse is immediately available here.
+ * updates from the same edge function Browse uses, so a fact a user
+ * just tapped on Browse is immediately available here.
+ *
+ * Uses the same image-backed UpdateCard + shared-layout ExpandedUpdate
+ * Modal pattern that Browse uses, so the expand-on-tap feel is
+ * consistent across the app. Layout differs from Browse: vertical
+ * single-column stack (we're already on the artist page; no need for
+ * a horizontal-scroll rail across multiple artists).
  *
  * If the URL has a `?nugget=<id>` query (Browse → Artist Profile tap-
- * through), this component scrolls the matching fact into view, auto-
- * expands it, and pulses a ring around it for ~1.2s before silently
- * removing the query param so a refresh doesn't re-pulse.
+ * through), this component auto-opens the matching fact in the modal
+ * and silently strips the param so a refresh doesn't re-open.
  */
 
 interface Props {
@@ -26,42 +35,75 @@ interface Props {
 export default function LatestFactsSection({ updates, loading, artistName }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
   const targetNuggetId = searchParams.get("nugget");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [pulseId, setPulseId] = useState<string | null>(null);
-  const cardRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
+  const navigate = useNavigate();
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [pulseKey, setPulseKey] = useState<string | null>(null);
 
-  // Scroll + highlight behavior when landed via `?nugget=<id>`.
+  // layoutId namespace prefix. Both this section and Browse's
+  // "Your artists, lately" rail render UpdateCard with the same
+  // cardKey-derived layoutId. Different routes today so they never
+  // co-exist in the DOM, but if React Router ever keeps both in the
+  // tree during a shared-layout exit transition, Framer Motion would
+  // try to animate the same layoutId from two DOM nodes and glitch.
+  // Namespacing makes the contract airtight either way.
+  const layoutIdFor = (u: ArtistUpdate) => `artist-profile-${cardKey(u)}`;
+
+  // Look up the expanded update for modal content. Memoized so the
+  // scan doesn't re-run on every parent re-render.
+  const expandedUpdate = useMemo<ArtistUpdate | null>(() => {
+    if (!expandedKey) return null;
+    return updates.find((u) => layoutIdFor(u) === expandedKey) ?? null;
+  }, [expandedKey, updates]);
+
+  // Deep-link from Browse: auto-open the matching nugget in the modal.
+  // We open immediately on data arrival, then pulse the underlying
+  // card briefly so the user sees which fact was referenced when they
+  // close the modal.
   useEffect(() => {
     if (!targetNuggetId || updates.length === 0) return;
     const match = updates.find((u) => u.nuggetId === targetNuggetId);
     if (!match) return;
-    const id = match.nuggetId!;
-    setExpandedId(id);
-    setPulseId(id);
-    // Defer the scroll one tick so the expanded body has laid out.
-    const scrollTimer = setTimeout(() => {
-      cardRefs.current.get(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 30);
-    const pulseTimer = setTimeout(() => setPulseId(null), 1200);
+    const key = layoutIdFor(match);
+    setExpandedKey(key);
+    setPulseKey(key);
+    const pulseTimer = setTimeout(() => setPulseKey(null), 1800);
     const stripTimer = setTimeout(() => {
-      // Quietly remove the ?nugget= param so reload doesn't re-pulse.
+      // Quietly remove the ?nugget= param so reload doesn't re-open.
       const next = new URLSearchParams(searchParams);
       next.delete("nugget");
       setSearchParams(next, { replace: true });
-    }, 1400);
+    }, 200);
     return () => {
-      clearTimeout(scrollTimer);
       clearTimeout(pulseTimer);
       clearTimeout(stripTimer);
     };
-    // Ignoring searchParams/setSearchParams in deps because including
-    // them re-fires the effect on the strip, creating an infinite loop.
+    // Ignoring searchParams/setSearchParams in deps — including them
+    // re-fires the effect on the strip, creating an infinite loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetNuggetId, updates.length]);
 
+  const modalOnClose = useCallback(() => setExpandedKey(null), []);
+
+  // Modal's "Open / Listen" CTA. Release / collab cards in this
+  // section route to /listen for the related track; pure fact cards
+  // are a no-op (already on the artist profile) so the modal just
+  // closes.
+  const modalOnOpen = useCallback(() => {
+    if (!expandedUpdate) return;
+    setExpandedKey(null);
+    const u = expandedUpdate;
+    if ((u.kind === "new-release" || u.kind === "collab") && u.relatedTrackTitle) {
+      const album = u.relatedAlbumName ?? "";
+      const navUri = u.relatedTrackUri?.startsWith("spotify:track:") ? u.relatedTrackUri : "";
+      navigate(
+        `/listen/real::${encodeURIComponent(u.artistName)}::${encodeURIComponent(u.relatedTrackTitle)}::${encodeURIComponent(album)}::${encodeURIComponent(navUri)}`,
+      );
+    }
+  }, [expandedUpdate, navigate]);
+
   if (!loading && updates.length === 0) {
-    // Quiet fallback — don't render an empty section header on artists
-    // we couldn't compose anything for.
+    // Quiet fallback — don't render an empty section header on
+    // artists we couldn't compose anything for.
     return null;
   }
 
@@ -79,104 +121,52 @@ export default function LatestFactsSection({ updates, loading, artistName }: Pro
         )}
       </div>
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-3">
         {loading && updates.length === 0
           ? Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
-          : updates.map((u) => (
-              <FactCard
-                key={u.nuggetId ?? `${u.kind}-${u.headline}`}
-                update={u}
-                expanded={u.nuggetId === expandedId}
-                pulsing={u.nuggetId === pulseId}
-                onToggle={() =>
-                  setExpandedId((prev) => (prev === u.nuggetId ? null : (u.nuggetId ?? null)))
-                }
-                registerRef={(el) => {
-                  if (u.nuggetId) cardRefs.current.set(u.nuggetId, el);
-                }}
-              />
-            ))}
+          : updates.map((u) => {
+              const key = layoutIdFor(u);
+              return (
+                <UpdateCard
+                  key={key}
+                  layoutId={key}
+                  update={u}
+                  onClick={() => setExpandedKey(key)}
+                  sizeClass="w-full h-44 md:h-48"
+                  pulsing={pulseKey === key}
+                />
+              );
+            })}
       </div>
+
+      <AnimatePresence>
+        {expandedUpdate && (
+          <ExpandedUpdateModalMemoized
+            update={expandedUpdate}
+            layoutId={layoutIdFor(expandedUpdate)}
+            onClose={modalOnClose}
+            onOpen={modalOnOpen}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Reserve the section name in JSX comments for accessibility
+          screen readers — `artistName` is the data shape contract
+          used by the parent ArtistProfile when an empty state needs a
+          name. We don't render the artist name visibly here (the page
+          header already shows it). */}
+      <span className="sr-only">Latest facts about {artistName}</span>
     </section>
   );
 }
 
-// ── Fact card ─────────────────────────────────────────────────────────
-
-interface FactCardProps {
-  update: ArtistUpdate;
-  expanded: boolean;
-  pulsing: boolean;
-  onToggle: () => void;
-  registerRef: (el: HTMLDivElement | null) => void;
-}
-
-function FactCard({ update, expanded, pulsing, onToggle, registerRef }: FactCardProps) {
-  const { kindLabel, KindIcon } = getArtistUpdateKindMeta(update.kind);
-  const chipClass = kindClass(update.kind);
+function SkeletonCard() {
+  // Full-width tall skeleton matching the real card's footprint so
+  // the layout doesn't jump when content lands.
   return (
     <div
-      ref={registerRef}
-      className={`rounded-2xl border bg-gradient-to-br from-white/[0.06] to-white/[0.02] transition-all ${
-        pulsing
-          ? "border-rose-400/70 ring-2 ring-rose-400/40"
-          : "border-white/10 hover:border-white/20"
-      }`}
-    >
-      <button
-        onClick={onToggle}
-        className="w-full text-left px-4 py-3 flex items-start gap-3"
-        aria-expanded={expanded}
-      >
-        <span
-          className={`mt-0.5 shrink-0 inline-flex items-center gap-1 text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full ${chipClass}`}
-        >
-          <KindIcon className="w-3 h-3" />
-          {kindLabel}
-        </span>
-        <h3 className="flex-1 text-sm md:text-base font-semibold text-white/95 leading-snug">
-          {update.headline}
-        </h3>
-      </button>
-      {expanded && (
-        <div className="px-4 pb-4 -mt-1 flex flex-col gap-2">
-          <p className="text-sm leading-relaxed text-white/70">{update.body}</p>
-          {isSafeUrl(update.source?.url) && (
-            <a
-              href={update.source.url}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="text-xs text-white/40 hover:text-white/70 transition-colors self-start"
-            >
-              Source: {update.source.publisher ?? "link"}
-            </a>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Local styling for the artist-profile chip. Label + icon come from
-// the shared helper in src/lib/artistUpdateKind.ts so adding a new
-// kind only edits one file.
-function kindClass(kind: ArtistUpdate["kind"]): string {
-  switch (kind) {
-    case "new-release": return "bg-rose-500/15 text-rose-300";
-    case "collab": return "bg-violet-500/15 text-violet-300";
-    case "fact":
-    default: return "bg-sky-500/15 text-sky-300";
-  }
-}
-
-function SkeletonCard() {
-  return (
-    <div className="rounded-2xl bg-white/[0.04] border border-white/5 p-4 animate-pulse" aria-hidden>
-      <div className="flex items-center gap-3 mb-2">
-        <div className="h-4 w-16 rounded-full bg-white/10" />
-        <div className="h-4 flex-1 rounded bg-white/10" />
-      </div>
-      <div className="h-3 w-5/6 rounded bg-white/5" />
-    </div>
+      className="w-full h-44 md:h-48 rounded-2xl bg-white/[0.04] border border-white/5 animate-pulse"
+      aria-hidden
+    />
   );
 }

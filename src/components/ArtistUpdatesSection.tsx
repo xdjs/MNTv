@@ -1,8 +1,10 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, X, ExternalLink } from "lucide-react";
+import { Loader2, X, ExternalLink, Play } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { ArtistUpdate, ArtistUpdateGroup } from "@/hooks/useArtistUpdates";
+import { splitArtistUpdates, resolvePlayTarget, type PlayableTrack } from "@/lib/artistUpdateSplit";
+import { buildListenRoute } from "@/lib/listenRoute";
 import { serviceParamFromProfile, withAppleStorefront } from "@/lib/appleStorefront";
 import { getArtistUpdateKindMeta } from "@/lib/artistUpdateKind";
 import { isSafeUrl } from "@/lib/urlSafety";
@@ -75,36 +77,13 @@ function ArtistUpdatesSectionInner({
     return null;
   }, [expandedKey, groups]);
 
+  // Always opens the artist profile, deep-linked to the nugget.
+  //
+  // This used to route release/collab cards to Listen for their track
+  // instead — correct when it was the card's only action, but it now
+  // duplicates the Play button. Playback is the Play button's job; this
+  // is the only way to reach the artist, so it must not be overloaded.
   const openArtistAtNugget = useCallback((update: ArtistUpdate) => {
-    // New-release / collab cards: tap should land on Listen for the
-    // released track, not the artist profile. We need at minimum a
-    // track-level title from the edge function (set only when it
-    // successfully resolved the album's first track via Spotify).
-    //
-    // Service-aware URI handling:
-    //   - Spotify users: bake the spotify:track: URI into the route
-    //     so Listen plays instantly without a catalog re-lookup.
-    //   - Apple Music users: omit the URI so Listen's findCatalogUri
-    //     effect resolves the Apple equivalent via {artist, title}.
-    //     Passing the Spotify URI directly would lock Listen into a
-    //     URI Apple Music can't play.
-    if (
-      (update.kind === "new-release" || update.kind === "collab") &&
-      update.relatedTrackTitle
-    ) {
-      const album = update.relatedAlbumName ?? "";
-      const isAppleUser = profile?.streamingService === "Apple Music";
-      const hasSpotifyTrackUri =
-        !!update.relatedTrackUri && update.relatedTrackUri.startsWith("spotify:track:");
-      const navUri = !isAppleUser && hasSpotifyTrackUri ? update.relatedTrackUri! : "";
-      navigate(
-        `/listen/real::${encodeURIComponent(update.artistName)}::${encodeURIComponent(update.relatedTrackTitle)}::${encodeURIComponent(album)}::${encodeURIComponent(navUri)}`,
-      );
-      return;
-    }
-
-    // Fact cards (or release cards where track resolution failed):
-    // open the artist profile and deep-link to the nugget.
     const id = artistIds[update.artistName] || update.artistId;
     if (!id) return;
     // Route format is `spotify::{id}::{name}` (double-colon delimiter
@@ -118,6 +97,43 @@ function ArtistUpdatesSectionInner({
     );
     navigate(path);
   }, [profile?.streamingService, activeService, artistIds, navigate]);
+
+  // Playback always goes straight to Listen — from a card's play control
+  // or the expanded card's Play button. No expand step in between: the
+  // user already said what they want.
+  const playTrack = useCallback((artistName: string, track: PlayableTrack) => {
+    navigate(buildListenRoute({
+      artist: artistName,
+      title: track.title,
+      album: track.album,
+      uri: track.uri,
+      streamingService: profile?.streamingService,
+    }));
+  }, [navigate, profile?.streamingService]);
+
+  // The expanded card needs the same play target its tile had, so
+  // opening a fact never becomes a dead end. Resolved from the owning
+  // artist's lanes rather than the update alone, since a plain fact
+  // borrows the artist's first track.
+  const expandedPlayTarget = useMemo<PlayableTrack | null>(() => {
+    if (!expandedUpdate) return null;
+    const group = groups.find((g) => g.artistName === expandedUpdate.artistName);
+    const { tracks } = splitArtistUpdates(group?.updates);
+    return resolvePlayTarget(expandedUpdate, tracks);
+  }, [expandedUpdate, groups]);
+
+  // openArtistAtNugget silently no-ops without an artist id, so the
+  // button must not render at all in that case — the same reason the
+  // play control is omitted when nothing resolves.
+  const expandedCanOpenArtist = useMemo(() => {
+    if (!expandedUpdate) return false;
+    return !!(artistIds[expandedUpdate.artistName] || expandedUpdate.artistId);
+  }, [expandedUpdate, artistIds]);
+
+  const modalOnPlay = useCallback(() => {
+    if (!expandedUpdate || !expandedPlayTarget) return;
+    playTrack(expandedUpdate.artistName, expandedPlayTarget);
+  }, [expandedUpdate, expandedPlayTarget, playTrack]);
 
   // Stable modal onOpen so the memoized ExpandedUpdateModal isn't
   // forced to re-render every parent tick. Depends on expandedUpdate
@@ -154,6 +170,7 @@ function ArtistUpdatesSectionInner({
               key={group.artistName}
               group={group}
               onExpand={(u) => setExpandedKey(cardKey(u))}
+              onPlay={playTrack}
             />
           );
         })}
@@ -166,6 +183,9 @@ function ArtistUpdatesSectionInner({
             layoutId={cardKey(expandedUpdate)}
             onClose={modalOnClose}
             onOpen={modalOnOpen}
+            playTarget={expandedPlayTarget}
+            onPlay={expandedPlayTarget ? modalOnPlay : undefined}
+            canOpenArtist={expandedCanOpenArtist}
           />
         )}
       </AnimatePresence>
@@ -182,7 +202,7 @@ export default ArtistUpdatesSection;
 // ~2^-32, far below "two cards from the same artist with similar
 // headlines" can produce). Pure function, module-level so nothing in
 // the render tree allocates a new wrapper each pass.
-function cardKey(u: ArtistUpdate): string {
+export function cardKey(u: ArtistUpdate): string {
   if (u.nuggetId) return u.nuggetId;
   const seed = `${u.artistName}|${u.kind}|${u.headline}`;
   let h = 0x811c9dc5;
@@ -198,11 +218,15 @@ function cardKey(u: ArtistUpdate): string {
 interface ArtistRowProps {
   group: ArtistUpdateGroup;
   onExpand: (u: ArtistUpdate) => void;
+  onPlay: (artistName: string, track: PlayableTrack) => void;
 }
 
-function ArtistRow({ group, onExpand }: ArtistRowProps) {
+function ArtistRow({ group, onExpand, onPlay }: ArtistRowProps) {
   const loading = group.updates === null;
   const updates = group.updates ?? [];
+  // Two lanes: cards to read, tracks to play. The split rules live in
+  // artistUpdateSplit so they're testable without rendering.
+  const { facts, tracks } = useMemo(() => splitArtistUpdates(group.updates), [group.updates]);
   // Prefer a fact update's image for the row header avatar — that's the
   // artist photo. Release cards hand back an album cover in the same
   // field, which makes a lousy circular avatar. Fall back to whatever's
@@ -234,14 +258,23 @@ function ArtistRow({ group, onExpand }: ArtistRowProps) {
       >
         {loading
           ? Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
-          : updates.map((u) => (
-              <UpdateCard
-                key={cardKey(u)}
-                layoutId={cardKey(u)}
-                update={u}
-                onClick={() => onExpand(u)}
-              />
-            ))}
+          : facts.map((u) => {
+              // Every card should lead somewhere. A fact with no track of
+              // its own borrows the artist's first — but if nothing
+              // resolves, the card renders without a control rather than
+              // with a dead one.
+              const target = resolvePlayTarget(u, tracks);
+              return (
+                <UpdateCard
+                  key={cardKey(u)}
+                  layoutId={cardKey(u)}
+                  update={u}
+                  onClick={() => onExpand(u)}
+                  playTarget={target}
+                  onPlay={target ? () => onPlay(u.artistName, target) : undefined}
+                />
+              );
+            })}
       </div>
     </div>
   );
@@ -253,20 +286,40 @@ interface UpdateCardProps {
   update: ArtistUpdate;
   layoutId: string;
   onClick: () => void;
+  /** Sizing/spacing classes. Default is the Browse-rail horizontal-
+   *  scroll size; ArtistProfile passes `w-full` for a single-column
+   *  vertical stack. */
+  sizeClass?: string;
+  pulsing?: boolean;
+  /** Track this card offers to play, if one resolved. */
+  playTarget?: PlayableTrack | null;
+  /** Omitted when there is nothing to play — the control is then not
+   *  rendered at all rather than rendered inert. */
+  onPlay?: () => void;
 }
 
 // Image-backed for every kind. Tap morphs into ExpandedUpdateModal
-// via Framer Motion layoutId — no immediate navigation.
-function UpdateCard({ update, layoutId, onClick }: UpdateCardProps) {
+// via Framer Motion layoutId — no immediate navigation. Exported so
+// ArtistProfile's Latest Facts section can reuse the exact same card
+// + modal pattern that Browse uses.
+export function UpdateCard({ update, layoutId, onClick, sizeClass = "shrink-0 w-[280px] md:w-[320px] h-44 md:h-48", pulsing = false, playTarget = null, onPlay }: UpdateCardProps) {
   const { kindLabel, KindIcon } = getArtistUpdateKindMeta(update.kind);
   const { chipClass } = kindStyle(update.kind);
   const img = update.artistImageUrl;
+  const showPlay = !!playTarget && !!onPlay;
 
+  // The play control is a SIBLING of the card button, not a child —
+  // nesting a button inside a button is invalid HTML and breaks
+  // keyboard traversal. The wrapper carries the sizing so the card
+  // still fills it.
   return (
+    <div className={`relative ${sizeClass}`}>
     <motion.button
       layoutId={layoutId}
       onClick={onClick}
-      className="relative shrink-0 w-[280px] md:w-[320px] h-44 md:h-48 text-left rounded-2xl overflow-hidden group active:scale-[0.98] transition-transform"
+      className={`relative text-left rounded-2xl overflow-hidden group active:scale-[0.98] transition-transform w-full h-full ${
+        pulsing ? "ring-2 ring-rose-400/70 shadow-[0_0_24px_rgba(244,114,182,0.35)]" : ""
+      }`}
       aria-label={`${kindLabel}: ${update.headline}`}
     >
       {img ? (
@@ -300,6 +353,22 @@ function UpdateCard({ update, layoutId, onClick }: UpdateCardProps) {
         </p>
       </div>
     </motion.button>
+    {showPlay && (
+      // Names the song rather than showing a bare play glyph — you
+      // should know what you're about to hear before you tap. Sits
+      // top-right, mirroring the kind chip opposite it, so it doesn't
+      // crowd the headline; styled as glass rather than a solid white
+      // circle so it belongs to the card instead of sitting on top of it.
+      <button
+        type="button"
+        onClick={onPlay}
+        aria-label={`Play ${playTarget!.title} by ${update.artistName}`}
+        className="absolute top-2 right-2 z-10 flex items-center justify-center w-11 h-11 rounded-full bg-black/50 backdrop-blur-sm ring-1 ring-white/25 active:scale-95 transition-transform"
+      >
+        <Play size={13} fill="currentColor" className="text-white ml-[1px]" />
+      </button>
+    )}
+    </div>
   );
 }
 
@@ -310,9 +379,12 @@ interface ExpandedUpdateModalProps {
   layoutId: string;
   onClose: () => void;
   onOpen: () => void;
+  playTarget?: PlayableTrack | null;
+  onPlay?: () => void;
+  canOpenArtist?: boolean;
 }
 
-function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpdateModalProps) {
+function ExpandedUpdateModal({ update, layoutId, onClose, onOpen, playTarget = null, onPlay, canOpenArtist = true }: ExpandedUpdateModalProps) {
   const { kindLabel, KindIcon } = getArtistUpdateKindMeta(update.kind);
   const { chipClass } = kindStyle(update.kind);
   const img = update.artistImageUrl;
@@ -329,14 +401,6 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpda
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = prev; };
   }, []);
-
-  // CTA wording matches what the open path actually does: release /
-  // collab cards land on Listen for the related track; fact cards
-  // open the artist profile.
-  const ctaLabel =
-    (update.kind === "new-release" || update.kind === "collab") && update.relatedTrackTitle
-      ? `Listen to "${update.relatedTrackTitle}"`
-      : `Open ${update.artistName}`;
 
   const titleId = `expanded-${layoutId.replace(/[^a-zA-Z0-9_-]/g, "_")}-title`;
 
@@ -458,29 +522,53 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpda
               </p>
             )}
 
-            <div className="flex gap-2 flex-wrap">
-              <button
-                onClick={onOpen}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary/25 text-primary text-sm font-semibold hover:bg-primary/35 active:scale-95 transition-all"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                {ctaLabel}
-              </button>
-              {isSafeUrl(update.source?.url) && (
-                // Scheme guard: only render the anchor if the URL is
-                // http(s). The url originates from Exa / Gemini output
-                // — without this a hallucinated `javascript:` or
-                // `data:` scheme would be a navigable XSS vector.
-                <a
-                  href={update.source.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/10 text-white/70 text-sm hover:bg-white/15 active:scale-95 transition-all"
-                  onClick={(e) => e.stopPropagation()}
+            {/* One weight per action. Three filled pills gave every
+                control the same emphasis and wrapped into a ragged
+                two-row block; the labels also restated the headline
+                directly above them, which is what made them so wide.
+                Play is the only filled element — an icon, matching the
+                treatment on the card tiles so the gesture reads the same
+                on both surfaces — and the two navigations sit beside it
+                as quiet links. */}
+            <div className="flex items-center gap-3.5">
+              {playTarget && onPlay && (
+                // Unlabelled by design, so the aria-label carries the
+                // whole promise: which track, by whom.
+                <button
+                  onClick={onPlay}
+                  aria-label={`Play ${playTarget.title} by ${update.artistName}`}
+                  className="shrink-0 flex items-center justify-center w-12 h-12 rounded-full bg-white text-black hover:bg-white/90 active:scale-95 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                 >
-                  Source
-                </a>
+                  <Play className="w-4 h-4 ml-[2px]" fill="currentColor" />
+                </button>
               )}
+              <div className="flex flex-col items-start gap-1.5 min-w-0">
+                {canOpenArtist && (
+                  <button
+                    onClick={onOpen}
+                    className="inline-flex items-center gap-1.5 max-w-full text-sm font-semibold text-primary hover:underline active:scale-95 transition-transform"
+                  >
+                    <span className="truncate">{update.artistName}</span>
+                    <ExternalLink className="w-3 h-3 shrink-0" />
+                  </button>
+                )}
+                {isSafeUrl(update.source?.url) && (
+                  // Scheme guard: only render the anchor if the URL is
+                  // http(s). The url originates from Exa / Gemini output
+                  // — without this a hallucinated `javascript:` or
+                  // `data:` scheme would be a navigable XSS vector.
+                  <a
+                    href={update.source.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white/80 transition-colors"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Source
+                    <ExternalLink className="w-3 h-3 shrink-0" />
+                  </a>
+                )}
+              </div>
             </div>
           </motion.div>
         </motion.div>
@@ -492,8 +580,10 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen }: ExpandedUpda
 // Memoized export. The parent passes a stable onClose (useCallback)
 // but onOpen is recreated each render — without memo the modal would
 // re-render on every parent re-render, which is harmless on its own
-// but adds noise during layout-shared transitions.
-const ExpandedUpdateModalMemoized = memo(ExpandedUpdateModal);
+// but adds noise during layout-shared transitions. Exported so
+// LatestFactsSection (and any future consumer) can render the exact
+// same modal without duplicating the Framer Motion layoutId wiring.
+export const ExpandedUpdateModalMemoized = memo(ExpandedUpdateModal);
 
 // Browse-specific styling per kind. Label + icon come from the shared
 // helper in src/lib/artistUpdateKind.ts so adding a new kind only

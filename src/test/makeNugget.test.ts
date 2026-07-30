@@ -186,3 +186,47 @@ describe("deriveHeadline (shared helper)", () => {
     expect(deriveHeadline("Existing", "Body.")).toBe("Existing");
   });
 });
+
+// ── Recommendation passthrough ────────────────────────────────────────
+// The RecommendedButtons render conditionally on these fields, but
+// makeNugget dropped them — so the buttons could never appear for a real
+// user no matter what the server sent. Guard both directions.
+describe("makeNugget — recommendation passthrough", () => {
+  const base = {
+    headline: "Head.",
+    text: "Body.",
+    kind: "discovery" as const,
+    source: { type: "article" as const, title: "t", publisher: "p" },
+  };
+
+  it("carries the recommended artist through to the nugget", () => {
+    const result = makeNugget(
+      { ...base, recommendedArtist: { name: "PAGEFOURR", spotifyArtistId: "abc123" } },
+      "n-1", "s-1", "track-1", 30,
+    );
+    expect(result.recommendedArtist).toEqual({ name: "PAGEFOURR", spotifyArtistId: "abc123" });
+  });
+
+  it("carries a recommended artist with no Spotify id", () => {
+    const result = makeNugget(
+      { ...base, recommendedArtist: { name: "PAGEFOURR" } },
+      "n-1", "s-1", "track-1", 30,
+    );
+    expect(result.recommendedArtist?.name).toBe("PAGEFOURR");
+    expect(result.recommendedArtist?.spotifyArtistId).toBeUndefined();
+  });
+
+  it("carries the recommended track through", () => {
+    const result = makeNugget(
+      { ...base, recommendedTrack: { artist: "PAGEFOURR", title: "u don't love me" } },
+      "n-1", "s-1", "track-1", 30,
+    );
+    expect(result.recommendedTrack).toEqual({ artist: "PAGEFOURR", title: "u don't love me" });
+  });
+
+  it("leaves both undefined when the server sent neither", () => {
+    const result = makeNugget(base, "n-1", "s-1", "track-1", 30);
+    expect(result.recommendedArtist).toBeUndefined();
+    expect(result.recommendedTrack).toBeUndefined();
+  });
+});

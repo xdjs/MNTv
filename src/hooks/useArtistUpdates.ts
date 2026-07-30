@@ -13,7 +13,11 @@ export interface ArtistUpdate {
   artistId: string;
   artistName: string;
   artistImageUrl: string;
-  kind: "new-release" | "collab" | "fact";
+  /** "track" entries are catalog tracks for the Browse "Get into" lane.
+   *  They arrive in the same array as facts (so they ride the existing
+   *  cache and response shape) but carry no body and are never rendered
+   *  as readable cards — see splitArtistUpdates. */
+  kind: "new-release" | "collab" | "fact" | "track";
   headline: string;
   body: string;
   source?: {
@@ -214,10 +218,36 @@ export function useArtistUpdates(
       if (inFlightRef.current.has(key)) return;
       inFlightRef.current.add(key);
       try {
-        const { data, error } = await supabase.functions.invoke("artist-updates", {
+        // Hard timeout. Without it, a hung edge function (Gemini
+        // cold-start, Exa rate limit) pins the global "Loading
+        // artist updates" pill on screen indefinitely. 30s matches
+        // typical worst-case server budget; anything longer is a
+        // sign the call is wedged.
+        const invokePromise = supabase.functions.invoke("artist-updates", {
           body: { artist, tier },
         });
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        const timeoutPromise = new Promise<{ timedOut: true }>((resolve) => {
+          timeoutId = setTimeout(() => resolve({ timedOut: true }), 30_000);
+        });
+        const raceResult = await Promise.race<
+          Awaited<typeof invokePromise> | { timedOut: true }
+        >([invokePromise, timeoutPromise]);
+        // Clear the timer regardless of which side won — without this
+        // the 30s closure stays scheduled, accumulating per artist
+        // fetch over the session.
+        if (timeoutId) clearTimeout(timeoutId);
         if (cancelled) return;
+        if ("timedOut" in raceResult) {
+          if (import.meta.env.DEV) {
+            console.warn(`[artist-updates] ${artist} TIMEOUT after 30s — resolving empty`);
+          }
+          setGroups((prev) =>
+            prev.map((g) => (g.artistName === artist ? { ...g, updates: [] } : g)),
+          );
+          return;
+        }
+        const { data, error } = raceResult;
         if (error) {
           if (import.meta.env.DEV) {
             console.warn(`[artist-updates] ${artist} failed:`, error.message);

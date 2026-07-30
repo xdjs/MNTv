@@ -1,6 +1,7 @@
 import { useNavigate, useSearchParams, Navigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
 import PageTransition from "@/components/PageTransition";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
@@ -149,10 +150,21 @@ export default function Connect() {
     const next = redirectUrl || "/browse";
     return <Navigate to={`/preparing?next=${encodeURIComponent(next)}`} replace />;
   }
-  return <ConnectInner redirectUrl={redirectUrl} />;
+  // If the user kicked off an OAuth round-trip but the escape hatch
+  // had to fire because no session ever arrived, surface that to
+  // ConnectInner so the user sees a "your sign-in didn't complete"
+  // explanation instead of being silently dropped back to the sign-
+  // in UI. Most common cause is Safari ITP / third-party-cookie
+  // blocking on the auth callback.
+  return (
+    <ConnectInner
+      redirectUrl={redirectUrl}
+      oauthFailed={oauthEscapeTriggered && !session}
+    />
+  );
 }
 
-function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
+function ConnectInner({ redirectUrl, oauthFailed = false }: { redirectUrl: string | null; oauthFailed?: boolean }) {
   const navigate = useNavigate();
   const { saveProfile } = useUserProfile();
   const { confirmTier } = useTierGate();
@@ -182,9 +194,15 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
       }
     })(),
   ).current;
-  const isFreshSpotifyOAuth =
-    oauthPendingOnMount ||
-    (!!authUser && authUser.app_metadata?.provider === "spotify");
+  // Previously OR'd with `authUser.app_metadata?.provider === "spotify"`
+  // to keep the overlay up during mid-onboarding sync. That made the
+  // overlay STICKY for any user with a Spotify session — including
+  // users with a stale session who want to retry sign-in. Result: the
+  // overlay covered the Spotify connect button and clicks did
+  // nothing. The sessionStorage flag alone is the right signal —
+  // it's set right before the OAuth redirect and cleared when the
+  // user finishes onboarding or hits the escape hatch.
+  const isFreshSpotifyOAuth = oauthPendingOnMount;
 
   // Tier-pick reset on fresh OAuth lives at the parent Connect level
   // now (so it fires for returning users who short-circuit via
@@ -264,14 +282,32 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
     setSpotifyConnecting(true);
     setSpotifyError(null);
     try {
-      await signInWithSpotify();
+      // Sign out any stale Supabase session before redirecting to
+      // Spotify. A stale session with a missing/expired
+      // provider_token would otherwise trigger the post-signin sync
+      // to error before OAuth even completes — the user gets stuck
+      // in a retry loop. scope:"local" only wipes the browser-side
+      // session; the OAuth flow creates a fresh one immediately.
+      try { await supabase.auth.signOut({ scope: "local" }); } catch { /* noop */ }
+      // Race the OAuth invoke against a 15s timeout. Supabase's
+      // signInWithOAuth normally redirects the whole tab and never
+      // resolves on the happy path. If it hangs (auth endpoint
+      // timing out, network failure) the button would stay in
+      // "Connecting..." forever with no retry path. The timeout
+      // surfaces an error message so the user can try again.
+      await Promise.race([
+        signInWithSpotify(),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error("Spotify sign-in took too long")), 15_000),
+        ),
+      ]);
     } catch (e) {
       console.error("Spotify auth error:", e);
-      // Mirror the Apple Music path: surface a message instead of
-      // silently re-enabling the button. Supabase's signInWithOAuth
-      // errors here are rare (network, provider misconfiguration) but
-      // when they hit, the user needs to know the click did something.
-      setSpotifyError("Couldn't connect to Spotify. Try again?");
+      const msg = e instanceof Error ? e.message : "Couldn't connect to Spotify";
+      setSpotifyError(`${msg}. Try again?`);
+      // Clear the pending sessionStorage flag so a subsequent retry
+      // doesn't trip the blank-fallback escape hatch.
+      try { sessionStorage.removeItem(SPOTIFY_OAUTH_PENDING_KEY); } catch { /* noop */ }
     } finally {
       // Belt-and-suspenders — on the happy path `signInWithOAuth`
       // redirects the whole tab so this setter runs on a tab that's
@@ -413,13 +449,17 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
           gating. We dismiss it once any of:
             - sync flag flipped false (success or short-circuit), AND
             - we're on step 1 or beyond (synced data populated). */}
+      {/* Overlay shows ONLY for ACTIVE sync (in flight or initial
+          mount after OAuth return). When sync errors, the overlay
+          DISMISSES so the user can click the Spotify button below
+          to retry OAuth — the only path that actually fixes a
+          missing provider_token. spotifySyncError is surfaced
+          inline below the connect button instead. Previous behavior
+          left the user stuck on an overlay whose "Try again"
+          button just re-ran the broken sync. */}
       <SpotifySyncingOverlay
-        visible={
-          spotifySyncing ||
-          !!spotifySyncError ||
-          (isFreshSpotifyOAuth && step === 0)
-        }
-        error={spotifySyncError}
+        visible={spotifySyncing || (isFreshSpotifyOAuth && step === 0)}
+        error={null}
         onRetry={retrySync}
       />
       <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden noise-overlay px-6">
@@ -443,6 +483,16 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
               {/* ── Step 0: Connect Spotify ── */}
               {step === 0 && (
                 <motion.div key="step-0" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }} className="flex flex-col items-center gap-4 md:gap-6">
+                  {oauthFailed && (
+                    <div className="w-full rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-left">
+                      <p className="text-sm font-semibold text-amber-300">
+                        Your last Spotify sign-in didn't complete.
+                      </p>
+                      <p className="mt-1 text-xs text-amber-200/80 leading-relaxed">
+                        This usually means your browser blocked the session cookie. Try again — and if it keeps failing, open this page in a private/incognito window or check that third-party cookies are enabled for musicnerd.xyz.
+                      </p>
+                    </div>
+                  )}
                   <div className="text-center">
                     <h1 className="text-2xl md:text-3xl font-black text-foreground tracking-tight">Connect your music</h1>
                     <p className="mt-2 text-muted-foreground">Link Spotify for personalized insights.</p>
@@ -459,6 +509,9 @@ function ConnectInner({ redirectUrl }: { redirectUrl: string | null }) {
                         </button>
                         {spotifyError && (
                           <p className="mt-1.5 px-1 text-xs text-red-400">{spotifyError}</p>
+                        )}
+                        {spotifySyncError && (
+                          <p className="mt-1.5 px-1 text-xs text-red-400">{spotifySyncError}</p>
                         )}
                       </>
                     ) : (
