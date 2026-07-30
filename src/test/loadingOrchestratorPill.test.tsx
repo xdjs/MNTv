@@ -17,24 +17,40 @@ afterEach(() => vi.useRealTimers());
 // The component caches phase per trackId in a module-level Map, so each
 // test needs its own trackId to start from a clean state.
 let seq = 0;
-function renderPill(props: { hasNuggets: boolean; aiLoading?: boolean; aiError?: string | null }) {
+function baseProps(trackId: string) {
+  return {
+    aiError: null,
+    shortId: null,
+    trackId,
+    tier: "casual",
+    listenCount: 1,
+    focusZone: "none",
+    topFocusIndex: 0,
+    onCompanionClick: () => {},
+  };
+}
+
+function renderPill(props: {
+  hasNuggets: boolean;
+  aiLoading?: boolean;
+  aiError?: string | null;
+  waveLoading?: boolean;
+}) {
   const trackId = `track-${seq++}`;
   const view = render(
     <MusicNerdLoadingOrchestrator
+      {...baseProps(trackId)}
       aiLoading={props.aiLoading ?? true}
+      waveLoading={props.waveLoading ?? false}
       aiError={props.aiError ?? null}
       hasNuggets={props.hasNuggets}
-      shortId={null}
-      trackId={trackId}
-      tier="casual"
-      listenCount={1}
-      focusZone="none"
-      topFocusIndex={0}
-      onCompanionClick={() => {}}
     />,
   );
   return { ...view, trackId };
 }
+
+/** "pulsating" = research still in flight; "ready" = settled. */
+const logoPhase = () => screen.queryByTestId("nerd-logo")?.getAttribute("data-phase") ?? null;
 
 // Match the pill element itself, not its text — the morph-fly and
 // pulsating states render "MusicNerd is researching" too, so a text
@@ -68,18 +84,7 @@ describe("loading pill lifecycle", () => {
 
     act(() => {
       rerender(
-        <MusicNerdLoadingOrchestrator
-          aiLoading={true}
-          aiError={null}
-          hasNuggets={true}
-          shortId={null}
-          trackId={trackId}
-          tier="casual"
-          listenCount={1}
-          focusZone="none"
-          topFocusIndex={0}
-          onCompanionClick={() => {}}
-        />,
+        <MusicNerdLoadingOrchestrator {...baseProps(trackId)} aiLoading hasNuggets />,
       );
     });
     act(() => { vi.advanceTimersByTime(1000); });
@@ -113,25 +118,88 @@ describe("loading pill lifecycle", () => {
     act(() => { vi.advanceTimersByTime(400); });
     expect(pillVisible()).toBe(true);
 
-    const props = {
-      aiError: null,
-      hasNuggets: false,
-      shortId: null,
-      trackId,
-      tier: "casual",
-      listenCount: 1,
-      focusZone: "none",
-      topFocusIndex: 0,
-      onCompanionClick: () => {},
-    };
     act(() => {
-      rerender(<MusicNerdLoadingOrchestrator {...props} aiLoading={false} />);
+      rerender(
+        <MusicNerdLoadingOrchestrator
+          {...baseProps(trackId)}
+          aiLoading={false}
+          hasNuggets={false}
+        />,
+      );
     });
     // Research is done, but nothing was ever revealed — the pill is now
-    // lying and must still be up until the ceiling, then go.
+    // lying and must still go at the ceiling.
     expect(pillVisible()).toBe(true);
 
     act(() => { vi.advanceTimersByTime(46_000); });
     expect(pillVisible()).toBe(false);
+  });
+});
+
+// ── Wave-2 ────────────────────────────────────────────────────────────
+// After the first facts land, aiLoading goes false but research
+// continues. The logo keeps pulsing so the user knows more is coming
+// rather than assuming the app is done.
+describe("pulsating logo through wave-2", () => {
+  function settleToLogo(waveLoading: boolean) {
+    const view = renderPill({ hasNuggets: true, aiLoading: true, waveLoading });
+    act(() => { vi.advanceTimersByTime(400); });   // pill up
+    act(() => { vi.advanceTimersByTime(1000); });  // fact arrives -> morph -> logo
+    return view;
+  }
+
+  it("keeps pulsing while wave-2 is still researching", () => {
+    const { rerender, trackId } = settleToLogo(true);
+
+    act(() => {
+      rerender(
+        <MusicNerdLoadingOrchestrator
+          {...baseProps(trackId)}
+          aiLoading={false}
+          waveLoading={true}
+          hasNuggets
+        />,
+      );
+    });
+
+    expect(logoPhase()).toBe("pulsating");
+  });
+
+  it("settles once wave-2 finishes", () => {
+    const { rerender, trackId } = settleToLogo(true);
+
+    act(() => {
+      rerender(
+        <MusicNerdLoadingOrchestrator
+          {...baseProps(trackId)}
+          aiLoading={false}
+          waveLoading={false}
+          hasNuggets
+        />,
+      );
+    });
+
+    expect(logoPhase()).toBe("ready");
+  });
+
+  // Same reasoning as the pill's ceiling: a wave-2 that never resolves
+  // must not leave the logo claiming research is in flight forever.
+  it("gives up pulsing at the ceiling if wave-2 never resolves", () => {
+    const { rerender, trackId } = settleToLogo(true);
+
+    act(() => {
+      rerender(
+        <MusicNerdLoadingOrchestrator
+          {...baseProps(trackId)}
+          aiLoading={false}
+          waveLoading={true}
+          hasNuggets
+        />,
+      );
+    });
+    expect(logoPhase()).toBe("pulsating");
+
+    act(() => { vi.advanceTimersByTime(91_000); });
+    expect(logoPhase()).toBe("ready");
   });
 });

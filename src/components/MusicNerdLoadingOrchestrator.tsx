@@ -6,6 +6,10 @@ type AnimPhase = "hidden" | "pill" | "morphFly" | "pulsating" | "ready" | "faile
 
 interface Props {
   aiLoading: boolean;
+  /** Wave-2 research, which continues after the first nuggets land and
+   *  `aiLoading` has gone false. Keeps the logo pulsing so the user knows
+   *  more facts are still coming rather than assuming we're done. */
+  waveLoading?: boolean;
   aiError?: string | null;
   hasNuggets?: boolean;
   shortId: string | null;
@@ -41,6 +45,14 @@ const MORPH_FLY_S = 0.5;
  * that a stalled pipeline doesn't strand the user under a spinner.
  */
 const PILL_MAX_HOLD_MS = 45000;
+/**
+ * Hard ceiling on the pulsating logo (ms). Same reasoning as the pill's:
+ * a stalled wave-2 must not leave the logo pulsing forever, telling the
+ * user research is in flight when nothing is coming. Longer than the
+ * pill's because by this point the user already has facts to read — the
+ * cost of over-waiting is much lower than staring at an empty screen.
+ */
+const PULSATING_MAX_HOLD_MS = 90000;
 
 /**
  * Module-level cache so that when the user navigates away (Browse) and comes
@@ -62,6 +74,7 @@ function setPhaseCached(key: string, value: AnimPhase) {
 
 export default function MusicNerdLoadingOrchestrator({
   aiLoading,
+  waveLoading = false,
   aiError,
   hasNuggets = false,
   shortId,
@@ -72,6 +85,12 @@ export default function MusicNerdLoadingOrchestrator({
   topFocusIndex,
   onCompanionClick,
 }: Props) {
+  // "Still researching" covers both the initial generation and wave-2.
+  // Only the pulsating phase uses this — the pill's own timing stays tied
+  // to aiLoading alone, since wave-2 by definition hasn't started while
+  // the pill is up.
+  const researching = aiLoading || waveLoading;
+
   // Restore cached phase for this track, or start hidden
   const initialPhase = (): AnimPhase => {
     const cached = phaseCache.get(trackId);
@@ -86,8 +105,8 @@ export default function MusicNerdLoadingOrchestrator({
     // mid-flight regenerations. Better to skip the pill on rare
     // regenerate-key returns than to surface it on every cache-hit tap.
     if (cached === "ready") return "ready";
-    if (cached === "pulsating") return aiLoading ? "pulsating" : "ready";
-    if (cached === "morphFly") return aiLoading ? "pulsating" : "ready";
+    if (cached === "pulsating") return researching ? "pulsating" : "ready";
+    if (cached === "morphFly") return researching ? "pulsating" : "ready";
     if (cached === "pill") return aiLoading ? "pill" : "ready";
     return "hidden";
   };
@@ -105,6 +124,8 @@ export default function MusicNerdLoadingOrchestrator({
 
   // Keep refs in sync
   aiLoadingRef.current = aiLoading;
+  const researchingRef = useRef(researching);
+  researchingRef.current = researching;
 
   // Cancels every timer registered through addTimer. NOTE: the pill's
   // max-hold ceiling is deliberately NOT registered here — it lives in
@@ -245,12 +266,28 @@ export default function MusicNerdLoadingOrchestrator({
     }
   }, [aiLoading, clearTimers, setPhaseAndRef]);
 
-  // ── aiLoading goes false during pulsating → ready ──
+  // ── Research finishes during pulsating → ready ──
+  // Waits on wave-2 as well as the initial generation, so the logo keeps
+  // pulsing while more facts are still being researched.
   useEffect(() => {
-    if (!aiLoading && phase === "pulsating") {
+    if (!researching && phase === "pulsating") {
       setPhaseAndRef("ready");
     }
-  }, [aiLoading, phase, setPhaseAndRef]);
+  }, [researching, phase, setPhaseAndRef]);
+
+  // ── Safety terminus for the pulsating logo ──
+  // Same reasoning as the pill's ceiling: a wave-2 that never resolves
+  // must not leave the logo claiming research is in flight forever.
+  // Registered outside addTimer for the same reason — the effect's own
+  // cleanup handles phase change and unmount, and routing it through
+  // clearTimers would let a phase transition cancel the guard.
+  useEffect(() => {
+    if (phase !== "pulsating") return;
+    const t = setTimeout(() => {
+      if (phaseRef.current === "pulsating") setPhaseAndRef("ready");
+    }, PULSATING_MAX_HOLD_MS);
+    return () => clearTimeout(t);
+  }, [phase, setPhaseAndRef]);
 
   // ── Research failed → show error state, auto-dismiss after 4s ──
   // Timing: aiError is set when generation fails, and aiLoading goes
@@ -292,7 +329,7 @@ export default function MusicNerdLoadingOrchestrator({
       setPhaseAndRef("morphFly");
     } else {
       // Anchor not visible (e.g. hidden on mobile) — skip morph, go straight to pulsating/ready
-      if (aiLoadingRef.current) {
+      if (researchingRef.current) {
         setPhaseAndRef("pulsating");
       } else {
         setPhaseAndRef("ready");
@@ -302,8 +339,8 @@ export default function MusicNerdLoadingOrchestrator({
 
   function onMorphComplete() {
     setFlyCoords(null);
-    // Use ref for latest aiLoading value (closure may be stale)
-    if (aiLoadingRef.current) {
+    // Use ref for the latest value (closure may be stale)
+    if (researchingRef.current) {
       setPhaseAndRef("pulsating");
     } else {
       setPhaseAndRef("ready");
@@ -321,6 +358,8 @@ export default function MusicNerdLoadingOrchestrator({
         {/* Final logo button — visible in pulsating + ready phases */}
         {(phase === "pulsating" || phase === "ready") && (
           <motion.button
+            data-testid="nerd-logo"
+            data-phase={phase}
             onClick={onCompanionClick}
             disabled={phase !== "ready" || !shortId}
             className={`relative transition-all duration-300 outline-none rounded-full ${
