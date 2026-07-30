@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import MusicNerdLogo from "@/components/MusicNerdLogo";
+import { PREGEN_INVOKE_TIMEOUT_MS } from "@/lib/preGenCachePrefill";
 
 type AnimPhase = "hidden" | "pill" | "morphFly" | "pulsating" | "ready" | "failed";
 
@@ -41,10 +42,21 @@ const SETTLE_MS = 350;
 const MORPH_FLY_S = 0.5;
 /**
  * Hard ceiling on how long the researching pill may stay up (ms).
- * Generous enough to cover a slow Exa → Gemini round trip; short enough
- * that a stalled pipeline doesn't strand the user under a spinner.
+ *
+ * This is a BACKSTOP against a stalled pipeline, not a deadline for a
+ * working one. It was 45s, which was simply wrong: generate-nuggets
+ * budgets FUNCTION_TIMEOUT_MS = 90s and the client waits
+ * PREGEN_INVOKE_TIMEOUT_MS = 95s, so a slow-but-successful generation —
+ * a cold Exa → Gemini round trip, or a multi-artist collab — had the
+ * pill quit at 45s and leave the user on blank cover art while research
+ * was still running. Pete hit exactly that on a Years & Years / Tove Lo
+ * collab.
+ *
+ * Derived from the invoke timeout rather than hard-coded so the two
+ * can't drift apart again. The margin covers the round trip after the
+ * server's own deadline fires.
  */
-const PILL_MAX_HOLD_MS = 45000;
+const PILL_MAX_HOLD_MS = PREGEN_INVOKE_TIMEOUT_MS + 5_000;
 /**
  * Hard ceiling on the pulsating logo (ms). Same reasoning as the pill's:
  * a stalled wave-2 must not leave the logo pulsing forever, telling the
@@ -52,7 +64,7 @@ const PILL_MAX_HOLD_MS = 45000;
  * pill's because by this point the user already has facts to read — the
  * cost of over-waiting is much lower than staring at an empty screen.
  */
-const PULSATING_MAX_HOLD_MS = 90000;
+const PULSATING_MAX_HOLD_MS = PREGEN_INVOKE_TIMEOUT_MS + 5_000;
 
 /**
  * Module-level cache so that when the user navigates away (Browse) and comes

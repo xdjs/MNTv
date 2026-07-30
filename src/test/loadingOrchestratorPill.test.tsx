@@ -102,7 +102,7 @@ describe("loading pill lifecycle", () => {
     act(() => { vi.advanceTimersByTime(400); });
     expect(pillVisible()).toBe(true);
 
-    act(() => { vi.advanceTimersByTime(46_000); });
+    act(() => { vi.advanceTimersByTime(101_000); });
     expect(pillVisible()).toBe(false);
   });
 
@@ -131,7 +131,7 @@ describe("loading pill lifecycle", () => {
     // lying and must still go at the ceiling.
     expect(pillVisible()).toBe(true);
 
-    act(() => { vi.advanceTimersByTime(46_000); });
+    act(() => { vi.advanceTimersByTime(101_000); });
     expect(pillVisible()).toBe(false);
   });
 });
@@ -199,7 +199,36 @@ describe("pulsating logo through wave-2", () => {
     });
     expect(logoPhase()).toBe("pulsating");
 
-    act(() => { vi.advanceTimersByTime(91_000); });
+    act(() => { vi.advanceTimersByTime(101_000); });
     expect(logoPhase()).toBe("ready");
+  });
+});
+
+// The ceiling is a backstop against a stalled pipeline, NOT a deadline
+// for a working one. It was 45s while generate-nuggets budgets 90s and
+// the client waits 95s, so a slow-but-successful generation had the pill
+// quit early and leave the user on blank cover art (Pete, on a Years &
+// Years / Tove Lo collab). These lock the relationship so the two can't
+// drift apart again.
+describe("pill ceiling vs the generation budget", () => {
+  it("keeps holding at 45s, when research may still legitimately be running", () => {
+    renderPill({ hasNuggets: false });
+    act(() => { vi.advanceTimersByTime(400); });
+    act(() => { vi.advanceTimersByTime(45_000); });
+    expect(pillVisible()).toBe(true);
+  });
+
+  it("still holds past the server's own 90s deadline", () => {
+    renderPill({ hasNuggets: false });
+    act(() => { vi.advanceTimersByTime(400); });
+    act(() => { vi.advanceTimersByTime(90_000); });
+    expect(pillVisible()).toBe(true);
+  });
+
+  it("gives up once the client has stopped waiting for the invoke", () => {
+    renderPill({ hasNuggets: false });
+    act(() => { vi.advanceTimersByTime(400); });
+    act(() => { vi.advanceTimersByTime(101_000); });
+    expect(pillVisible()).toBe(false);
   });
 });
