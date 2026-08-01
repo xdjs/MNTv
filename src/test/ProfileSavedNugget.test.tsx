@@ -141,3 +141,69 @@ describe("Profile — deciding where to go", () => {
     expect(within(openDialog()!).queryByRole("link", { name: /source/i })).toBeNull();
   });
 });
+
+// ── Keyboard access ───────────────────────────────────────────────────
+// Flagged in review: this dialog was written to "match the Browse
+// expanded card" but shipped without any of that card's focus
+// management, so a keyboard user could Tab through the backdrop into the
+// page behind with no way to dismiss. Both now share
+// useDialogFocusTrap, and these assert the behaviour rather than the
+// sharing.
+describe("Profile — saved-nugget dialog keyboard access", () => {
+  it("dismisses on Escape", () => {
+    renderProfile();
+    fireEvent.click(screen.getByText(BOOKMARK.headline));
+    expect(openDialog()).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(openDialog()).toBeNull();
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it("moves focus into the dialog on open", () => {
+    renderProfile();
+    fireEvent.click(screen.getByText(BOOKMARK.headline));
+
+    const closeBtn = screen.getByRole("button", { name: /close/i });
+    expect(document.activeElement).toBe(closeBtn);
+  });
+
+  it("returns focus to the card that opened it", () => {
+    renderProfile();
+    // Focus the trigger first — that's the keyboard path, and jsdom's
+    // click alone doesn't move focus the way a real browser does.
+    const trigger = screen.getByText(BOOKMARK.headline).closest("button")!;
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: /close/i }));
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    // Focus goes back where the user left it, not stranded on the body.
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("keeps Tab inside the dialog rather than reaching the page behind", () => {
+    renderProfile();
+    fireEvent.click(screen.getByText(BOOKMARK.headline));
+
+    const dialog = openDialog()!;
+    const focusable = Array.from(
+      dialog.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    expect(focusable.length).toBeGreaterThan(1);
+
+    // Tabbing forward off the last element wraps to the first.
+    focusable[focusable.length - 1].focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(focusable[0]);
+
+    // Shift+Tab off the first wraps to the last.
+    focusable[0].focus();
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(focusable[focusable.length - 1]);
+  });
+});

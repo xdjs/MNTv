@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, X, ExternalLink, Play } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -8,6 +8,7 @@ import { buildListenRoute } from "@/lib/listenRoute";
 import { serviceParamFromProfile, withAppleStorefront } from "@/lib/appleStorefront";
 import { getArtistUpdateKindMeta } from "@/lib/artistUpdateKind";
 import { isSafeUrl } from "@/lib/urlSafety";
+import { useDialogFocusTrap } from "@/hooks/useDialogFocusTrap";
 import type { UserProfile } from "@/mock/types";
 
 /**
@@ -388,8 +389,6 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen, playTarget = n
   const { kindLabel, KindIcon } = getArtistUpdateKindMeta(update.kind);
   const { chipClass } = kindStyle(update.kind);
   const img = update.artistImageUrl;
-  const closeBtnRef = useRef<HTMLButtonElement>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   // Lock document scroll while the modal is open. Without this, the
   // Browse page scrolls behind the open modal on mobile/trackpad —
@@ -404,47 +403,8 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen, playTarget = n
 
   const titleId = `expanded-${layoutId.replace(/[^a-zA-Z0-9_-]/g, "_")}-title`;
 
-  // WCAG focus management: Esc dismisses, focus moves to close button
-  // on open and restores on close, Tab/Shift+Tab cycles within the
-  // dialog only.
-  useEffect(() => {
-    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
-    closeBtnRef.current?.focus();
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-        return;
-      }
-      if (e.key !== "Tab") return;
-      // role="dialog" lives on the inner pointer-events-auto card; the
-      // outer flex wrapper is just a centering layer.
-      const root = closeBtnRef.current?.closest('[role="dialog"]');
-      // (closest('[role="dialog"]') still finds the inner card after
-      // the ARIA move because the close button is a descendant.)
-      if (!root) return;
-      const focusable = Array.from(
-        root.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ),
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      previouslyFocusedRef.current?.focus?.();
-    };
-  }, [onClose]);
+  // Shared with Profile's saved-nugget dialog — see useDialogFocusTrap.
+  const closeBtnRef = useDialogFocusTrap(onClose);
 
   return (
     <>
