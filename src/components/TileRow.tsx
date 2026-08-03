@@ -1,3 +1,4 @@
+import RemoteImage from "@/components/RemoteImage";
 import { useRef, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -110,11 +111,15 @@ export default function TileRow({ label, items, tileSize = "md", focusedIndex = 
               >
                 <div className="absolute inset-0 rounded-xl overflow-hidden">
                   {item.imageUrl ? (
-                    <img
+                    <RemoteImage
                       src={item.imageUrl}
                       alt={item.title}
                       className="h-full w-full object-cover"
-                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                      fallback={
+                        <div className="h-full w-full bg-foreground/10 flex items-center justify-center">
+                          <span className="text-xl md:text-2xl font-bold text-foreground/30">{item.title?.[0] || "?"}</span>
+                        </div>
+                      }
                     />
                   ) : (
                     <div className="h-full w-full bg-foreground/10 flex items-center justify-center">

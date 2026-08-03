@@ -8,6 +8,7 @@ import { buildListenRoute } from "@/lib/listenRoute";
 import { serviceParamFromProfile, withAppleStorefront } from "@/lib/appleStorefront";
 import { getArtistUpdateKindMeta } from "@/lib/artistUpdateKind";
 import { isSafeUrl } from "@/lib/urlSafety";
+import RemoteImage from "@/components/RemoteImage";
 import { useDialogFocusTrap } from "@/hooks/useDialogFocusTrap";
 import type { UserProfile } from "@/mock/types";
 
@@ -240,15 +241,14 @@ function ArtistRow({ group, onExpand, onPlay }: ArtistRowProps) {
   return (
     <div>
       <div className="px-4 md:px-10 mb-3 flex items-center gap-3">
-        {heroImg ? (
-          <img
-            src={heroImg}
-            alt={`${group.artistName} avatar`}
-            className="w-14 h-14 rounded-full object-cover ring-2 ring-white/10 shadow-lg"
-          />
-        ) : (
-          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-rose-400/40 to-pink-500/40 ring-2 ring-white/10" />
-        )}
+        <RemoteImage
+          src={heroImg}
+          alt={`${group.artistName} avatar`}
+          className="w-14 h-14 rounded-full object-cover ring-2 ring-white/10 shadow-lg"
+          fallback={
+            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-rose-400/40 to-pink-500/40 ring-2 ring-white/10" />
+          }
+        />
         <span className="text-lg md:text-xl font-black text-white tracking-tight">
           {group.artistName}
         </span>
@@ -323,22 +323,14 @@ export function UpdateCard({ update, layoutId, onClick, sizeClass = "shrink-0 w-
       }`}
       aria-label={`${kindLabel}: ${update.headline}`}
     >
-      {img ? (
-        <motion.img
-          layoutId={`${layoutId}::img`}
-          src={img}
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500"
-          onError={(e) => {
-            (e.currentTarget as HTMLImageElement).style.display = "none";
-          }}
-        />
-      ) : (
-        <motion.div
-          layoutId={`${layoutId}::img`}
-          className="absolute inset-0 bg-gradient-to-br from-rose-500/30 via-violet-500/20 to-sky-500/15"
-        />
-      )}
+      <RemoteImage
+        src={img}
+        alt=""
+        className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500"
+        fallback={
+          <div className="absolute inset-0 bg-gradient-to-br from-rose-500/30 via-violet-500/20 to-sky-500/15" />
+        }
+      />
       <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-black/10" />
       <div className="absolute inset-0 ring-1 ring-inset ring-white/10 rounded-2xl pointer-events-none" />
       <span className={`absolute top-3 left-3 inline-flex items-center gap-1 text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full backdrop-blur-sm ${chipClass}`}>
