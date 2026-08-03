@@ -110,22 +110,19 @@ export default function TileRow({ label, items, tileSize = "md", focusedIndex = 
                 onMouseLeave={(e) => handleTileLeave(e.currentTarget, isFocused)}
               >
                 <div className="absolute inset-0 rounded-xl overflow-hidden">
-                  {item.imageUrl ? (
-                    <RemoteImage
-                      src={item.imageUrl}
-                      alt={item.title}
-                      className="h-full w-full object-cover"
-                      fallback={
-                        <div className="h-full w-full bg-foreground/10 flex items-center justify-center">
-                          <span className="text-xl md:text-2xl font-bold text-foreground/30">{item.title?.[0] || "?"}</span>
-                        </div>
-                      }
-                    />
-                  ) : (
-                    <div className="h-full w-full bg-foreground/10 flex items-center justify-center">
-                      <span className="text-xl md:text-2xl font-bold text-foreground/30">{item.title?.[0] || "?"}</span>
-                    </div>
-                  )}
+                  {/* No outer ternary — RemoteImage renders `fallback`
+                      whenever src is missing OR every attempt fails, so
+                      guarding here would only duplicate the placeholder. */}
+                  <RemoteImage
+                    src={item.imageUrl}
+                    alt={item.title}
+                    className="h-full w-full object-cover"
+                    fallback={
+                      <div className="h-full w-full bg-foreground/10 flex items-center justify-center">
+                        <span className="text-xl md:text-2xl font-bold text-foreground/30">{item.title?.[0] || "?"}</span>
+                      </div>
+                    }
+                  />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
                 </div>
                 <div className="absolute bottom-0 left-0 right-0 p-2 md:p-3 z-10">

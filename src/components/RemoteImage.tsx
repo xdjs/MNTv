@@ -42,6 +42,9 @@ interface RemoteImageProps {
 }
 
 const RETRY_DELAY_MS = 700;
+/** Underscore-prefixed so it cannot collide with a real query param if
+ *  this component is ever pointed at something other than Spotify. */
+const RETRY_PARAM = "_retry=1";
 
 export default function RemoteImage({
   src,
@@ -60,7 +63,19 @@ export default function RemoteImage({
 
   // A new src is a new image — reset, or a previously failed URL would
   // keep the fallback showing for a perfectly good replacement.
+  //
+  // Cancelling a pending retry here is load-bearing, not tidiness. A
+  // scheduled retry holds the PREVIOUS src in its closure; if the prop
+  // moves on before it fires, it writes the old URL over the new one
+  // ~700ms later and can drop a perfectly good image into the fallback.
+  // That collision is likeliest during exactly the burst this component
+  // exists for: several images sit mid-backoff while ArtistRow's heroImg
+  // recomputes as facts stream in.
   useEffect(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
     setFailed(false);
     setAttemptSrc(src ?? undefined);
     retriedRef.current = false;
@@ -77,7 +92,7 @@ export default function RemoteImage({
     // Backoff before retrying: an immediate retry rejoins the same burst
     // that caused the throttle in the first place.
     timerRef.current = setTimeout(() => {
-      setAttemptSrc(`${src}${src.includes("?") ? "&" : "?"}r=1`);
+      setAttemptSrc(`${src}${src.includes("?") ? "&" : "?"}${RETRY_PARAM}`);
     }, RETRY_DELAY_MS);
   }, [src]);
 
