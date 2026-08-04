@@ -23,7 +23,15 @@ const ANIMATION_PROPS = new Set([
   "dragElastic", "dragMomentum", "onDragEnd", "onDragStart", "custom",
 ]);
 
-export function makeFramerMotionMock() {
+/**
+ * `exposeLayoutId` surfaces layoutId as a `data-layout-id` attribute.
+ * Framer Motion consumes layoutId to compute a shared-element morph and
+ * never writes it to the DOM, so without this a test cannot see whether
+ * both ends of a morph agree on the id — and a morph wired up on only
+ * one end hard-cuts silently rather than failing. Opt-in, because it is
+ * not a real DOM attribute and would be noise in every other suite.
+ */
+export function makeFramerMotionMock({ exposeLayoutId = false } = {}) {
   const cache = new Map<string, React.ElementType>();
 
   const passthrough = (tag: string) =>
@@ -34,6 +42,9 @@ export function makeFramerMotionMock() {
       const domProps: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(props)) {
         if (!ANIMATION_PROPS.has(key)) domProps[key] = value;
+      }
+      if (exposeLayoutId && props.layoutId !== undefined) {
+        domProps["data-layout-id"] = props.layoutId;
       }
       return React.createElement(tag, { ...domProps, ref }, children);
     });

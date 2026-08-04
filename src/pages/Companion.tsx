@@ -1,4 +1,5 @@
 import { useParams } from "react-router-dom";
+import RemoteImage from "@/components/RemoteImage";
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useArtistImage } from "@/hooks/useArtistImage";
@@ -206,11 +207,11 @@ export default function Companion() {
       {/* Artist Hero */}
       <div className="relative w-full aspect-[3/1] max-h-[200px] overflow-hidden">
         {artistImage ? (
-          <img
+          <RemoteImage
             src={artistImage}
             alt={artistName}
+            eager
             className="w-full h-full object-cover"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
         ) : (
           <div className="w-full h-full bg-foreground/5" />
@@ -237,7 +238,8 @@ export default function Companion() {
 
         {/* Track Details */}
         <section className="apple-glass rounded-2xl p-4 flex items-center gap-4">
-          <img src={trackInfo.coverArtUrl} alt={trackInfo.title} className="w-16 h-16 rounded-lg object-cover shrink-0" />
+          <RemoteImage src={trackInfo.coverArtUrl} alt={trackInfo.title} className="w-16 h-16 rounded-lg object-cover shrink-0"
+            fallback={<div className="w-16 h-16 rounded-lg bg-foreground/10 shrink-0" />} />
           <div className="min-w-0">
             <h2 className="text-lg font-bold text-foreground truncate">{trackInfo.title}</h2>
             {trackInfo.album && <p className="text-sm text-muted-foreground truncate">{trackInfo.album}</p>}
@@ -304,11 +306,10 @@ export default function Companion() {
                           <ErrorBoundary>
                             {nugget.imageUrl && (
                               <div className="-mx-4 -mt-4 mb-3">
-                                <img
+                                <RemoteImage
                                   src={nugget.imageUrl}
                                   alt={nugget.imageCaption || nugget.headline || ""}
                                   className="w-full object-contain max-h-44"
-                                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                                 />
                                 {nugget.imageCaption && (
                                   <p className="px-4 py-1.5 text-xs text-muted-foreground italic">{nugget.imageCaption}</p>
