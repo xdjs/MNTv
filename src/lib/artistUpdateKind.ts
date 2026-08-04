@@ -18,6 +18,30 @@ export interface ArtistUpdateKindMeta {
   KindIcon: typeof Sparkles;
 }
 
+/**
+ * Whether an update has something to read.
+ *
+ * `kind: "track"` entries are play targets, not content: the edge
+ * function builds them with the track name as the headline and
+ * `body: ""` (artist-updates/index.ts:381 — the only empty body it
+ * produces). They exist for the Browse "Get into" lane, which renders
+ * them as artwork tiles.
+ *
+ * The artist profile's "Latest Facts" reads the same array and rendered
+ * them as readable cards, so the section promised facts and delivered
+ * bare catalog artwork — duplicating the "Popular" list directly below
+ * it. Pete: "I don't understand what the track cards are doing here in
+ * latest facts, when there is no facts in each of those cards."
+ *
+ * Also drops any other empty-bodied update, which would render the same
+ * broken way. Filtering here rather than in the component keeps the
+ * rule in one place for the next surface that reads these.
+ */
+export function isReadableUpdate(u: ArtistUpdate): boolean {
+  if (u.kind === "track") return false;
+  return u.body.trim().length > 0;
+}
+
 export function getArtistUpdateKindMeta(kind: ArtistUpdate["kind"]): ArtistUpdateKindMeta {
   switch (kind) {
     case "new-release":
