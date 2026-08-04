@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { Loader2 } from "lucide-react";
@@ -21,8 +21,12 @@ import {
  * a horizontal-scroll rail across multiple artists).
  *
  * If the URL has a `?nugget=<id>` query (Browse → Artist Profile tap-
- * through), this component auto-opens the matching fact in the modal
- * and silently strips the param so a refresh doesn't re-open.
+ * through), this component scrolls the matching fact into view and
+ * pulses it, then silently strips the param so a refresh doesn't repeat
+ * it. It deliberately does NOT open the modal — the user pressed "Open
+ * {Artist}" to see the artist, and re-opening the card they just came
+ * from puts a full-screen overlay between them and the page they asked
+ * for.
  */
 
 interface Props {
@@ -32,12 +36,21 @@ interface Props {
   artistName: string;
 }
 
+/** Respect motion sensitivity for the deep-link scroll. */
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined"
+    && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+}
+
 export default function LatestFactsSection({ updates, loading, artistName }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
   const targetNuggetId = searchParams.get("nugget");
   const navigate = useNavigate();
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [pulseKey, setPulseKey] = useState<string | null>(null);
+  // Card nodes by layoutId, so the deep-link can scroll to the referenced
+  // fact rather than opening it.
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // layoutId namespace prefix. Both this section and Browse's
   // "Your artists, lately" rail render UpdateCard with the same
@@ -55,17 +68,28 @@ export default function LatestFactsSection({ updates, loading, artistName }: Pro
     return updates.find((u) => layoutIdFor(u) === expandedKey) ?? null;
   }, [expandedKey, updates]);
 
-  // Deep-link from Browse: auto-open the matching nugget in the modal.
-  // We open immediately on data arrival, then pulse the underlying
-  // card briefly so the user sees which fact was referenced when they
-  // close the modal.
+  // Deep-link from Browse: point AT the referenced fact without covering
+  // the page with it. Pete: "it takes me to the profile but the fact card
+  // stays open or re-opens on top of the artist profile instead of
+  // letting me see the artist profile." That was this effect calling
+  // setExpandedKey — the card was never lingering, it was being opened
+  // again on arrival.
+  //
+  // Scroll it into view and pulse it instead, which is what the artist
+  // page already documented this param as doing.
   useEffect(() => {
     if (!targetNuggetId || updates.length === 0) return;
     const match = updates.find((u) => u.nuggetId === targetNuggetId);
     if (!match) return;
     const key = layoutIdFor(match);
-    setExpandedKey(key);
     setPulseKey(key);
+    // Next frame, so the card exists before we scroll to it.
+    const scrollFrame = requestAnimationFrame(() => {
+      cardRefs.current[key]?.scrollIntoView({
+        behavior: prefersReducedMotion() ? "auto" : "smooth",
+        block: "center",
+      });
+    });
     const pulseTimer = setTimeout(() => setPulseKey(null), 1800);
     const stripTimer = setTimeout(() => {
       // Quietly remove the ?nugget= param so reload doesn't re-open.
@@ -74,6 +98,7 @@ export default function LatestFactsSection({ updates, loading, artistName }: Pro
       setSearchParams(next, { replace: true });
     }, 200);
     return () => {
+      cancelAnimationFrame(scrollFrame);
       clearTimeout(pulseTimer);
       clearTimeout(stripTimer);
     };
@@ -127,14 +152,15 @@ export default function LatestFactsSection({ updates, loading, artistName }: Pro
           : updates.map((u) => {
               const key = layoutIdFor(u);
               return (
-                <UpdateCard
-                  key={key}
-                  layoutId={key}
-                  update={u}
-                  onClick={() => setExpandedKey(key)}
-                  sizeClass="w-full h-44 md:h-48"
-                  pulsing={pulseKey === key}
-                />
+                <div key={key} ref={(el) => { cardRefs.current[key] = el; }}>
+                  <UpdateCard
+                    layoutId={key}
+                    update={u}
+                    onClick={() => setExpandedKey(key)}
+                    sizeClass="w-full h-44 md:h-48"
+                    pulsing={pulseKey === key}
+                  />
+                </div>
               );
             })}
       </div>
