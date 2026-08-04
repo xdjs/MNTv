@@ -60,7 +60,7 @@ export default function ReadingOverlay({ source, onClose }: Props) {
         )}
 
         {source.thumbnailUrl && (
-          <RemoteImage src={source.thumbnailUrl} alt="" className="rounded-xl w-full object-cover max-h-48" fallback={null} />
+          <RemoteImage src={source.thumbnailUrl} alt="" className="rounded-xl w-full object-cover max-h-48" />
         )}
 
         {/* Spacer to push actions to bottom */}

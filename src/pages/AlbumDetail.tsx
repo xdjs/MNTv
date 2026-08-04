@@ -320,6 +320,7 @@ function CatalogAlbumInner({
           <RemoteImage
             src={album.imageUrl}
             alt=""
+            eager
             className="h-full w-full object-cover blur-[20px] scale-125 brightness-[0.3]"
           />
         </div>
@@ -498,6 +499,7 @@ function MockAlbumInner({
           <RemoteImage
             src={album.coverArtUrl}
             alt=""
+            eager
             className="h-full w-full object-cover blur-[20px] scale-125 brightness-[0.3]"
           />
         </div>
