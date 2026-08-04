@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import RemoteImage from "@/components/RemoteImage";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronRight, ExternalLink, ArrowLeft, Loader2 } from "lucide-react";
 import type { Nugget, Source } from "@/mock/types";
@@ -237,11 +238,11 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
                 animate={{ opacity: 1, transition: { delay: 0.2, duration: 0.3 } }}
                 className="flex-shrink-0 md:w-[45%] flex flex-col"
               >
-                <img
+                <RemoteImage
                   src={nugget.imageUrl}
                   alt={nugget.imageCaption || nugget.headline || ""}
+                  eager
                   className="w-full max-h-[35vh] md:max-h-[45vh] object-contain rounded-lg"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                 />
                 {nugget.imageCaption && (
                   <p className="text-xs text-muted-foreground mt-1.5 italic text-center">{nugget.imageCaption}</p>

@@ -424,6 +424,8 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen, playTarget = n
             {img ? (
               <motion.img
                 layoutId={`${layoutId}::img`}
+                loading="eager"
+                decoding="async"
                 src={img}
                 alt=""
                 className="absolute inset-0 w-full h-full object-cover"

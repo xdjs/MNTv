@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import RemoteImage from "@/components/RemoteImage";
 import { X, ExternalLink, FileText, Mic } from "lucide-react";
 import type { Source } from "@/mock/types";
 import { isSafeUrl } from "@/lib/urlSafety";
@@ -59,7 +60,7 @@ export default function ReadingOverlay({ source, onClose }: Props) {
         )}
 
         {source.thumbnailUrl && (
-          <img src={source.thumbnailUrl} alt="" className="rounded-xl w-full object-cover max-h-48" />
+          <RemoteImage src={source.thumbnailUrl} alt="" className="rounded-xl w-full object-cover max-h-48" fallback={null} />
         )}
 
         {/* Spacer to push actions to bottom */}

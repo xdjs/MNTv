@@ -1,4 +1,5 @@
 import { useEffect, useCallback } from "react";
+import RemoteImage from "@/components/RemoteImage";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Play, Pause, SkipBack, SkipForward, Smartphone } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -133,11 +134,12 @@ export default function NowPlayingBar() {
                   className="flex flex-1 items-center gap-3 min-w-0 text-left"
                 >
                   {externalPlayback.albumArtUrl ? (
-                    <img
+                    <RemoteImage
                       src={externalPlayback.albumArtUrl}
                       alt=""
+                      eager
                       className="h-10 w-10 rounded-lg object-cover shrink-0"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      fallback={<div className="h-10 w-10 rounded-lg bg-foreground/10 shrink-0" />}
                     />
                   ) : (
                     <div className="h-10 w-10 rounded-lg bg-foreground/10 shrink-0 flex items-center justify-center">
@@ -163,11 +165,12 @@ export default function NowPlayingBar() {
                   onClick={() => navigate(listenUrl!)}
                   className={`flex flex-1 items-center gap-3 min-w-0 text-left rounded-lg transition-all ${npbFocusClass(0)}`}
                 >
-                  <img
+                  <RemoteImage
                     src={currentTrack.coverArtUrl}
                     alt=""
+                    eager
                     className="h-10 w-10 rounded-lg object-cover shrink-0"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                    fallback={<div className="h-10 w-10 rounded-lg bg-foreground/10 shrink-0" />}
                   />
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-foreground truncate">{currentTrack.title}</p>
