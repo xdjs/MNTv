@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { ArtistUpdate } from "@/hooks/useArtistUpdates";
+import { isReadableUpdate } from "@/lib/artistUpdateKind";
 
 /**
  * Fetches the `ArtistUpdate[]` for a single artist. Hits the same
@@ -15,6 +16,11 @@ import type { ArtistUpdate } from "@/hooks/useArtistUpdates";
  * via a Browse nugget tap); a cold artist (e.g. navigated from "Fans
  * Also Like") triggers a fresh edge-function call with the usual
  * generation latency.
+ *
+ * Returns only updates with something to read. The same response also
+ * carries Browse's `kind: "track"` play targets, which have no body —
+ * see isReadableUpdate. Filtering here rather than in the component
+ * means the hook's name matches what it returns.
  */
 export function useArtistLatestFacts(
   artistName: string | null,
@@ -45,7 +51,10 @@ export function useArtistLatestFacts(
           return;
         }
         const next = (data?.updates as ArtistUpdate[] | undefined) ?? [];
-        setUpdates(next);
+        // The edge function returns Browse's play targets in the same
+        // array. Those have no body, so "Latest Facts" would render
+        // them as titles with nothing underneath.
+        setUpdates(next.filter(isReadableUpdate));
       } catch (e) {
         if (import.meta.env.DEV) {
           console.warn(`[artist-latest-facts] ${artistName} threw:`, e);
