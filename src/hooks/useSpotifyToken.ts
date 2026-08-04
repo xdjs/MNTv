@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   SPOTIFY_STORAGE_KEY,
   TOKEN_CHANGED_EVENT,
+  RECONNECT_REQUIRED_EVENT,
   type StoredSpotifyToken,
 } from "@/lib/spotifyTokenStore";
 import { refreshSpotifyToken } from "./useSpotifyAuth";
@@ -133,7 +134,7 @@ export function useSpotifyToken() {
       // the next ProtectedRoute check — no signal that anything failed.
       localStorage.removeItem(STORAGE_KEY);
       if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event("spotify-reconnect-required"));
+        window.dispatchEvent(new Event(RECONNECT_REQUIRED_EVENT));
       }
       return null;
     }
