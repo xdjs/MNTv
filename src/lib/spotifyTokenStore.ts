@@ -22,11 +22,43 @@ import type { Session } from "@supabase/supabase-js";
 
 export const SPOTIFY_STORAGE_KEY = "spotify_playback_token";
 export const TOKEN_CHANGED_EVENT = "spotify-token-changed";
+/** Playback credentials are gone and cannot be recovered without a new
+ *  OAuth round trip. SpotifyReconnectBanner listens for this and offers
+ *  the user a way back. Two things raise it: a refresh chain that failed
+ *  (useSpotifyToken), and a session that never had credentials to begin
+ *  with (the bridge below). */
+export const RECONNECT_REQUIRED_EVENT = "spotify-reconnect-required";
 
 export interface StoredSpotifyToken {
   accessToken: string;
   refreshToken: string;
   expiresAt: number;
+}
+
+/**
+ * The stored token, or null if there isn't a usable one.
+ *
+ * "Usable" deliberately means parseable with an access token present —
+ * NOT merely "the key exists". A corrupted value would satisfy a raw
+ * `getItem` truthiness check while every real consumer, which parses,
+ * would find nothing. Anything deciding "do we still have credentials?"
+ * must agree with the reader, or it will conclude there is a fallback
+ * that isn't there — which is the exact silent dead end this module's
+ * reconnect signalling exists to prevent.
+ *
+ * An expired token still counts as usable here: it carries the refresh
+ * token, and useSpotifyToken.getValidToken can trade it for a live one.
+ */
+export function readStoredSpotifyToken(): StoredSpotifyToken | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(SPOTIFY_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredSpotifyToken;
+    return parsed?.accessToken ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -36,7 +68,10 @@ export interface StoredSpotifyToken {
  *   - no-op if the session lacks a provider_token (post-JWT-refresh
  *     sessions DROP the provider token; Supabase doesn't persist it,
  *     so we must not overwrite what's already in localStorage with an
- *     empty string)
+ *     empty string) — but NOT a silent one: if nothing usable is stored
+ *     either, there is no path back to credentials without a new OAuth
+ *     round trip, so this dispatches RECONNECT_REQUIRED_EVENT rather
+ *     than leaving playback dead with no signal
  *   - skips the write if an existing token has a longer expiry, so a
  *     freshly-refreshed client-side token isn't clobbered by a stale
  *     session-bound one on re-hydration
@@ -44,13 +79,32 @@ export interface StoredSpotifyToken {
  * Exported for unit testing.
  */
 export function bridgeSpotifyProviderTokens(session: Session | null): void {
-  if (!session?.provider_token) return;
+  if (!session) return;
   if (session.user?.app_metadata?.provider !== "spotify") return;
-  // Skip the write if the session has no refresh token. Spotify requires
-  // a refresh token to issue new access tokens, so persisting without one
-  // would leave the Web Playback SDK stuck once the first access token
-  // expires (~1h) with no path forward.
-  if (!session.provider_refresh_token) return;
+
+  // A Spotify session carrying no usable provider tokens cannot establish
+  // playback credentials on its own. Routine in itself — Supabase issues
+  // provider_token only on a fresh OAuth and drops it on every JWT
+  // refresh — and harmless while localStorage still holds what was
+  // written at sign-in. Skipping the write is deliberate: an access token
+  // without a refresh token strands the SDK at the first expiry (~1h),
+  // and overwriting a good stored token with an empty one is worse than
+  // doing nothing.
+  //
+  // But when localStorage is empty too, nothing is left to fall back on:
+  // no access token, no refresh token, and no way to obtain either
+  // without sending the user back through OAuth. That state used to be
+  // entirely silent — getValidToken returns null for a missing token
+  // without raising anything — so the Web Playback SDK simply had no
+  // credentials and the play button did nothing at all. Pete hit exactly
+  // this on staging: valid session, correct track, dead transport, no
+  // error anywhere in the console.
+  if (!session.provider_token || !session.provider_refresh_token) {
+    if (typeof window !== "undefined" && !readStoredSpotifyToken()) {
+      window.dispatchEvent(new Event(RECONNECT_REQUIRED_EVENT));
+    }
+    return;
+  }
 
   // `session.expires_in` is strictly the Supabase JWT's TTL, not the
   // Spotify access token's TTL — the two refresh on independent
