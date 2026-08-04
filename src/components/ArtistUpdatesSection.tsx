@@ -323,12 +323,19 @@ export function UpdateCard({ update, layoutId, onClick, sizeClass = "shrink-0 w-
       }`}
       aria-label={`${kindLabel}: ${update.headline}`}
     >
+      {/* Source end of the shared-element morph — the same layoutId as
+          ExpandedUpdateModal's hero, on the loaded image AND the empty
+          state, so the photo scales into the modal instead of cutting. */}
       <RemoteImage
         src={img}
         alt=""
+        layoutId={`${layoutId}::img`}
         className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500"
         fallback={
-          <div className="absolute inset-0 bg-gradient-to-br from-rose-500/30 via-violet-500/20 to-sky-500/15" />
+          <motion.div
+            layoutId={`${layoutId}::img`}
+            className="absolute inset-0 bg-gradient-to-br from-rose-500/30 via-violet-500/20 to-sky-500/15"
+          />
         }
       />
       <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-black/10" />

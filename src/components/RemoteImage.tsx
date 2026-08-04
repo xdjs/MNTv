@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
 
 /**
  * An <img> for third-party artwork (Spotify's i.scdn.co, mostly).
@@ -38,6 +39,13 @@ interface RemoteImageProps {
    *  mini-player, an open overlay's hero. Deferring those only delays
    *  something the user is already looking at. */
   eager?: boolean;
+  /** Renders as a `motion.img` carrying this layoutId, so Framer Motion
+   *  can morph it into a matching element elsewhere — the artist card
+   *  thumbnail growing into the expanded modal's hero. Both ends of a
+   *  morph need the same id; supplying it on only one side hard-cuts.
+   *  Omit it and this renders a plain <img>, which is what nearly every
+   *  call site wants. */
+  layoutId?: string;
   onLoad?: () => void;
 }
 
@@ -52,6 +60,7 @@ export default function RemoteImage({
   className,
   fallback = null,
   eager = false,
+  layoutId,
   onLoad,
 }: RemoteImageProps) {
   const [failed, setFailed] = useState(false);
@@ -98,15 +107,20 @@ export default function RemoteImage({
 
   if (!src || failed) return <>{fallback}</>;
 
-  return (
-    <img
-      src={attemptSrc}
-      alt={alt}
-      className={className}
-      loading={eager ? "eager" : "lazy"}
-      decoding="async"
-      onError={handleError}
-      onLoad={onLoad}
-    />
-  );
+  const imgProps = {
+    src: attemptSrc,
+    alt,
+    className,
+    loading: eager ? ("eager" as const) : ("lazy" as const),
+    decoding: "async" as const,
+    onError: handleError,
+    onLoad,
+  };
+
+  // Deferral survives the morph — a card that animates into a modal is
+  // still offscreen artwork until it is scrolled to, and it was the
+  // bulk of the original burst.
+  if (layoutId) return <motion.img layoutId={layoutId} {...imgProps} />;
+
+  return <img {...imgProps} />;
 }
