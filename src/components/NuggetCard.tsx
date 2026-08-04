@@ -152,6 +152,8 @@ export default function NuggetCard({ nugget, animationStyle, onSourceClick, curr
               <img
                 src={nugget.imageUrl}
                 alt={nugget.imageCaption || nugget.headline || ""}
+                loading="lazy"
+                decoding="async"
                 className="w-full rounded-xl object-contain"
                 style={{ maxHeight: "380px", minHeight: "160px", display: imgLoaded ? "block" : "none" }}
                 onLoad={() => setImgLoaded(true)}

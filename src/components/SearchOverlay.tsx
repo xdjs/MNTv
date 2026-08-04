@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import RemoteImage from "@/components/RemoteImage";
 import { useNavigate } from "react-router-dom";
 import { Search, X, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -159,7 +160,8 @@ export default function SearchOverlay({ open, onClose }: Props) {
                               className="flex items-center gap-3 rounded-xl bg-foreground/5 p-3 pr-6 transition-colors hover:bg-foreground/10"
                             >
                               {a.imageUrl ? (
-                                <img src={a.imageUrl} alt={a.name} className="h-12 w-12 rounded-full object-cover" />
+                                <RemoteImage src={a.imageUrl} alt={a.name} className="h-12 w-12 rounded-full object-cover"
+                                  fallback={<div className="h-12 w-12 rounded-full bg-foreground/10" />} />
                               ) : (
                                 <div className="h-12 w-12 rounded-full bg-foreground/10 flex items-center justify-center text-muted-foreground text-lg font-bold">
                                   {a.name[0]}
@@ -183,7 +185,8 @@ export default function SearchOverlay({ open, onClose }: Props) {
                               className="flex w-full items-center gap-4 rounded-xl p-3 transition-colors hover:bg-foreground/5 text-left"
                             >
                               {t.imageUrl ? (
-                                <img src={t.imageUrl} alt={t.title} className="h-10 w-10 rounded-lg object-cover" />
+                                <RemoteImage src={t.imageUrl} alt={t.title} className="h-10 w-10 rounded-lg object-cover"
+                                  fallback={<div className="h-10 w-10 rounded-lg bg-foreground/10" />} />
                               ) : (
                                 <div className="h-10 w-10 rounded-lg bg-foreground/10" />
                               )}

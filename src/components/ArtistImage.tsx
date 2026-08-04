@@ -1,4 +1,5 @@
 import { useArtistImage } from "@/hooks/useArtistImage";
+import RemoteImage from "@/components/RemoteImage";
 
 interface Props {
   artistName: string;
@@ -15,7 +16,7 @@ export default function ArtistImage({ artistName, fallbackUrl, alt, className }:
   const imageUrl = useArtistImage(artistName, fallbackUrl);
 
   return (
-    <img
+    <RemoteImage
       src={imageUrl}
       alt={alt || artistName}
       className={className}

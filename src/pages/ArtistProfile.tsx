@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
+import RemoteImage from "@/components/RemoteImage";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { getArtistById, getAlbumsForArtist, getTracksForArtist, artists } from "@/mock/tracks";
@@ -438,9 +439,10 @@ function RealArtistProfileInner({ artist, trackTiles, albumTiles, relatedTiles }
     <div className="min-h-screen bg-background">
       {/* Hero */}
       <div className="relative h-60 md:h-80 overflow-hidden">
-        <img
+        <RemoteImage
           src={heroImage}
           alt={artist.name}
+          eager
           className="h-full w-full object-cover blur-[8px] scale-110 brightness-[0.4]"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
@@ -509,7 +511,8 @@ function RealArtistProfileInner({ artist, trackTiles, albumTiles, relatedTiles }
               >
                 <span className="w-6 text-center text-sm text-muted-foreground tabular-nums">{i + 1}</span>
                 {t.imageUrl ? (
-                  <img src={t.imageUrl} alt={t.title} className="h-10 w-10 rounded-lg object-cover" />
+                  <RemoteImage src={t.imageUrl} alt={t.title} className="h-10 w-10 rounded-lg object-cover"
+                    fallback={<div className="h-10 w-10 rounded-lg bg-foreground/10" />} />
                 ) : (
                   <div className="h-10 w-10 rounded-lg bg-foreground/10" />
                 )}
@@ -647,9 +650,10 @@ function MockArtistProfileInner({ artist, tracksData, albumTiles, relatedTiles }
     <div className="min-h-screen bg-background">
       {/* Hero */}
       <div className="relative h-60 md:h-80 overflow-hidden">
-        <img
+        <RemoteImage
           src={heroImage}
           alt={artist.name}
+          eager
           className="h-full w-full object-cover blur-[8px] scale-110 brightness-[0.4]"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
@@ -697,7 +701,8 @@ function MockArtistProfileInner({ artist, tracksData, albumTiles, relatedTiles }
               }`}
             >
               <span className="w-6 text-center text-sm text-muted-foreground tabular-nums">{i + 1}</span>
-              <img src={t.coverArtUrl} alt={t.title} className="h-10 w-10 rounded-lg object-cover" />
+              <RemoteImage src={t.coverArtUrl} alt={t.title} className="h-10 w-10 rounded-lg object-cover"
+                fallback={<div className="h-10 w-10 rounded-lg bg-foreground/10" />} />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-foreground truncate">{t.title}</p>
                 <p className="text-xs text-muted-foreground truncate">{t.album}</p>

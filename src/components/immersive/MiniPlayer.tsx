@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from "react";
+import RemoteImage from "@/components/RemoteImage";
 import { Play, Pause, SkipBack, SkipForward } from "lucide-react";
 
 interface MiniPlayerProps {
@@ -100,7 +101,8 @@ export default function MiniPlayer({
       {/* Player content */}
       <div className="flex items-center gap-2 px-3 py-2">
         {artUrl && (
-          <img src={artUrl} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+          <RemoteImage src={artUrl} alt="" eager className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+            fallback={<div className="w-10 h-10 rounded-lg bg-foreground/10 flex-shrink-0" />} />
         )}
         <div className="flex-1 min-w-0 overflow-hidden">
           {/* ~25 chars fits the mini player at 375px width with controls.

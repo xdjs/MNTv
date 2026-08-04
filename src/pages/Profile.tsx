@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import RemoteImage from "@/components/RemoteImage";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, Heart, Music, Share2, Trash2, Check, Play, X, ExternalLink } from "lucide-react";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
@@ -187,17 +188,16 @@ export default function Profile() {
                           onClick={() => setOpenId(bm.id)}
                           className="w-full text-left active:scale-[0.99] transition-transform p-4 flex gap-3"
                         >
-                          {bm.image_url ? (
-                            <img
-                              src={bm.image_url}
-                              alt=""
-                              className="w-14 h-14 rounded object-cover flex-shrink-0"
-                            />
-                          ) : (
-                            <div className="w-14 h-14 rounded bg-white/10 flex items-center justify-center flex-shrink-0">
-                              <Music className="w-5 h-5 text-white/30" />
-                            </div>
-                          )}
+                          <RemoteImage
+                            src={bm.image_url}
+                            alt=""
+                            className="w-14 h-14 rounded object-cover flex-shrink-0"
+                            fallback={
+                              <div className="w-14 h-14 rounded bg-white/10 flex items-center justify-center flex-shrink-0">
+                                <Music className="w-5 h-5 text-white/30" />
+                              </div>
+                            }
+                          />
                           <div className="flex-1 min-w-0">
                             <p className="text-[10px] uppercase tracking-wider text-white/40 mb-0.5">
                               {bm.artist} · {bm.title}
@@ -278,7 +278,7 @@ export default function Profile() {
             >
               {openBookmark.image_url && (
                 <div className="relative h-44 shrink-0">
-                  <img src={openBookmark.image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                  <RemoteImage src={openBookmark.image_url} alt="" eager className="absolute inset-0 w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/40 to-transparent" />
                 </div>
               )}

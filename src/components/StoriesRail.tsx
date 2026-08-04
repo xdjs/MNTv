@@ -168,6 +168,8 @@ export default function StoriesRail({ stories }: StoriesRailProps) {
                 <div className="w-full h-full rounded-full bg-background overflow-hidden p-[2px]">
                   {s.imageUrl ? (
                     <img
+                      loading="lazy"
+                      decoding="async"
                       src={s.imageUrl}
                       alt=""
                       className="w-full h-full rounded-full object-cover"

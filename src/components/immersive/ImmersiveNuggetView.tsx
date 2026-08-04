@@ -512,6 +512,8 @@ export default function ImmersiveNuggetView({
             <img
               src={imgUrl}
               alt=""
+              loading="eager"
+              decoding="async"
               className="absolute inset-0 w-full h-full object-cover"
               onError={() => {
                 if (isNuggetImage && activeNugget?.imageUrl) {
@@ -697,7 +699,7 @@ export default function ImmersiveNuggetView({
       {/* Background */}
       <div className="absolute inset-0 pointer-events-none">
         {artUrl && (
-          <img src={artUrl} alt="" className="absolute inset-0 w-full h-full object-cover"
+          <img src={artUrl} alt="" loading="eager" decoding="async" className="absolute inset-0 w-full h-full object-cover"
             style={{ filter: "blur(48px) brightness(0.25) saturate(1.4)", transform: "scale(1.3)" }} />
         )}
         <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60" />
@@ -777,6 +779,8 @@ export default function ImmersiveNuggetView({
               <img
                 src={artUrl}
                 alt=""
+                loading="eager"
+                decoding="async"
                 className={`w-56 h-56 rounded-2xl shadow-2xl object-cover opacity-80 ${
                   isPlaying ? "animate-cover-pulse" : ""
                 }`}
