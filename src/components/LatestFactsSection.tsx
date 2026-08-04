@@ -153,13 +153,13 @@ export default function LatestFactsSection({ updates, loading, artistName }: Pro
               const key = layoutIdFor(u);
               return (
                 <div key={key} ref={(el) => { cardRefs.current[key] = el; }}>
-                <UpdateCard
-                  layoutId={key}
-                  update={u}
-                  onClick={() => setExpandedKey(key)}
-                  sizeClass="w-full h-44 md:h-48"
-                  pulsing={pulseKey === key}
-                />
+                  <UpdateCard
+                    layoutId={key}
+                    update={u}
+                    onClick={() => setExpandedKey(key)}
+                    sizeClass="w-full h-44 md:h-48"
+                    pulsing={pulseKey === key}
+                  />
                 </div>
               );
             })}
