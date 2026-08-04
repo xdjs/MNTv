@@ -4,6 +4,7 @@ import {
   SPOTIFY_STORAGE_KEY,
   TOKEN_CHANGED_EVENT,
   RECONNECT_REQUIRED_EVENT,
+  readStoredSpotifyToken,
   type StoredSpotifyToken,
 } from "@/lib/spotifyTokenStore";
 import { refreshSpotifyToken } from "./useSpotifyAuth";
@@ -40,15 +41,11 @@ async function refreshViaEdgeFunction(refreshToken: string): Promise<{
   }
 }
 
-function readToken(): StoredToken | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as StoredToken;
-  } catch {
-    return null;
-  }
-}
+// Delegates to the store so "is there a usable token?" has exactly one
+// answer. The bridge asks the same question when deciding whether the
+// user is stranded; two implementations could disagree on a corrupted
+// value and leave that dead end unsignalled.
+const readToken = (): StoredToken | null => readStoredSpotifyToken();
 
 // writeToken persists to localStorage AND dispatches TOKEN_CHANGED_EVENT so
 // every mounted useSpotifyToken hook instance re-reads and re-sets state. All

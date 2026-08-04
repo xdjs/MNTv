@@ -36,13 +36,42 @@ export interface StoredSpotifyToken {
 }
 
 /**
+ * The stored token, or null if there isn't a usable one.
+ *
+ * "Usable" deliberately means parseable with an access token present —
+ * NOT merely "the key exists". A corrupted value would satisfy a raw
+ * `getItem` truthiness check while every real consumer, which parses,
+ * would find nothing. Anything deciding "do we still have credentials?"
+ * must agree with the reader, or it will conclude there is a fallback
+ * that isn't there — which is the exact silent dead end this module's
+ * reconnect signalling exists to prevent.
+ *
+ * An expired token still counts as usable here: it carries the refresh
+ * token, and useSpotifyToken.getValidToken can trade it for a live one.
+ */
+export function readStoredSpotifyToken(): StoredSpotifyToken | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(SPOTIFY_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredSpotifyToken;
+    return parsed?.accessToken ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Copy Spotify provider tokens from a Supabase session into localStorage.
  * Idempotent + defensive:
  *   - no-op if the session is null or not from the Spotify provider
  *   - no-op if the session lacks a provider_token (post-JWT-refresh
  *     sessions DROP the provider token; Supabase doesn't persist it,
  *     so we must not overwrite what's already in localStorage with an
- *     empty string)
+ *     empty string) — but NOT a silent one: if nothing usable is stored
+ *     either, there is no path back to credentials without a new OAuth
+ *     round trip, so this dispatches RECONNECT_REQUIRED_EVENT rather
+ *     than leaving playback dead with no signal
  *   - skips the write if an existing token has a longer expiry, so a
  *     freshly-refreshed client-side token isn't clobbered by a stale
  *     session-bound one on re-hydration
@@ -71,7 +100,7 @@ export function bridgeSpotifyProviderTokens(session: Session | null): void {
   // this on staging: valid session, correct track, dead transport, no
   // error anywhere in the console.
   if (!session.provider_token || !session.provider_refresh_token) {
-    if (typeof window !== "undefined" && !localStorage.getItem(SPOTIFY_STORAGE_KEY)) {
+    if (typeof window !== "undefined" && !readStoredSpotifyToken()) {
       window.dispatchEvent(new Event(RECONNECT_REQUIRED_EVENT));
     }
     return;

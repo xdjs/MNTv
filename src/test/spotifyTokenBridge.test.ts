@@ -190,6 +190,24 @@ describe("bridgeSpotifyProviderTokens — unrecoverable credentials", () => {
     expect(reconnects).toBe(0);
   });
 
+  // Raised in review. A raw `getItem` truthiness check would see the key
+  // and conclude a fallback exists, while every real consumer parses and
+  // finds nothing — leaving the user stranded with no signal, which is
+  // the exact failure this whole path exists to catch. Both sides now go
+  // through readStoredSpotifyToken so they cannot disagree.
+  it("treats a corrupted stored token as no token at all", () => {
+    localStorage.setItem(SPOTIFY_STORAGE_KEY, "{ not json");
+    bridgeSpotifyProviderTokens(strandedSession);
+    expect(reconnects).toBe(1);
+  });
+
+  // Parseable but useless — same reasoning.
+  it("treats a stored token with no access token as no token", () => {
+    localStorage.setItem(SPOTIFY_STORAGE_KEY, JSON.stringify({ refreshToken: "r", expiresAt: 1 }));
+    bridgeSpotifyProviderTokens(strandedSession);
+    expect(reconnects).toBe(1);
+  });
+
   it("does not fire for an Apple / anonymous session", () => {
     const session = {
       provider_token: undefined,
