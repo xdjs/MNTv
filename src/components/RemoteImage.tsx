@@ -58,7 +58,7 @@ const RETRY_JITTER_MS = 300;
 const RETRY_PARAM = "_retry=1";
 
 /**
- * The URL to retry with.
+ * Whether appending a cache-buster to this URL is safe.
  *
  * Cache-busting matters because the browser will otherwise replay its
  * cached failure instead of making a real second request. But this
@@ -68,13 +68,12 @@ const RETRY_PARAM = "_retry=1";
  * string, so appending to one turns a transient failure into a
  * guaranteed 403.
  *
- * Rule: only cache-bust a URL that has no query string of its own.
  * Spotify's i.scdn.co URLs are bare paths, so they still get a real
- * retry. Anything already carrying params is retried untouched — a
- * weaker retry, but a weaker retry beats one that cannot succeed.
+ * cache-busted retry. Anything already carrying params is retried by
+ * remounting instead — see the retry scheduler.
  */
-function retryUrlFor(src: string): string {
-  return src.includes("?") ? src : `${src}?${RETRY_PARAM}`;
+function canCacheBust(src: string): boolean {
+  return !src.includes("?");
 }
 
 export default function RemoteImage({
@@ -90,6 +89,10 @@ export default function RemoteImage({
   // Cache-busted retry URL. Kept in state so the retry is a real second
   // request rather than the browser replaying its cached failure.
   const [attemptSrc, setAttemptSrc] = useState(src ?? undefined);
+  // Bumped to force a fresh <img> element when the URL itself cannot be
+  // changed. Keying the element on this is what makes the remount a real
+  // request rather than a no-op re-render.
+  const [reloadNonce, setReloadNonce] = useState(0);
   const retriedRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -110,6 +113,7 @@ export default function RemoteImage({
     }
     setFailed(false);
     setAttemptSrc(src ?? undefined);
+    setReloadNonce(0);
     retriedRef.current = false;
   }, [src]);
 
@@ -129,7 +133,23 @@ export default function RemoteImage({
     // that just throttled them, which is the failure this component
     // exists to avoid.
     timerRef.current = setTimeout(() => {
-      setAttemptSrc(retryUrlFor(src!));
+      if (canCacheBust(src!)) {
+        setAttemptSrc(`${src}?${RETRY_PARAM}`);
+        return;
+      }
+      // The URL can't be cache-busted without risking its signature, and
+      // re-setting the same src is not a retry: React bails on an
+      // identical state value, the src attribute never changes, and the
+      // browser issues no request. The first version of this shipped
+      // exactly that — so onError never fired again, `failed` was never
+      // reached, and a signed URL sat as a broken <img> forever instead
+      // of falling back. Worse than the naive cache-bust it replaced,
+      // which at least reached the fallback.
+      //
+      // Remounting is a real second attempt that leaves the URL intact.
+      // Whatever the outcome, the new element resolves — it loads, or it
+      // errors and this handler takes the `failed` branch.
+      setReloadNonce((n) => n + 1);
     }, RETRY_DELAY_MS + Math.random() * RETRY_JITTER_MS);
   }, [src]);
 
@@ -148,7 +168,11 @@ export default function RemoteImage({
   // Deferral survives the morph — a card that animates into a modal is
   // still offscreen artwork until it is scrolled to, and it was the
   // bulk of the original burst.
-  if (layoutId) return <motion.img layoutId={layoutId} {...imgProps} />;
+  // `key` carries the nonce so a bump unmounts the old element and
+  // mounts a new one — the mechanism behind the remount retry above.
+  const key = `${attemptSrc}#${reloadNonce}`;
 
-  return <img {...imgProps} />;
+  if (layoutId) return <motion.img key={key} layoutId={layoutId} {...imgProps} />;
+
+  return <img key={key} {...imgProps} />;
 }

@@ -133,6 +133,44 @@ describe("RemoteImage — retrying a URL that carries its own query", () => {
     expect(screen.getByAltText("cover").getAttribute("src")).toBe(SIGNED);
   });
 
+  // Caught in review, and the sharpest bug in this PR. The first version
+  // "retried" by re-setting the same src. React bails on an identical
+  // state value, so the src attribute never changed and the browser
+  // issued no request — meaning onError never fired again, `failed` was
+  // never reached, and a signed URL sat as a broken <img> forever rather
+  // than falling back. That is worse than the naive cache-bust it
+  // replaced, which at least reached the fallback.
+  //
+  // The old test missed it by firing the second error by hand — an event
+  // a real browser would never deliver, because nothing was requested.
+  // Asserting a NEW element exists is what distinguishes a real second
+  // attempt from a no-op re-render.
+  it("makes a real second attempt by remounting, not by re-setting state", () => {
+    render(<RemoteImage src={SIGNED} alt="cover" />);
+    const first = screen.getByAltText("cover");
+
+    fireEvent.error(first);
+    act(() => { vi.advanceTimersByTime(1100); });
+
+    const second = screen.getByAltText("cover");
+    expect(second).not.toBe(first);
+    expect(second.getAttribute("src")).toBe(SIGNED);
+  });
+
+  // The guarantee that actually matters to a user: never a permanently
+  // broken image. Whatever the retry does, the component must resolve to
+  // the fallback once the second attempt fails.
+  it("reaches the fallback after the remounted attempt also fails", () => {
+    render(<RemoteImage src={SIGNED} alt="cover" fallback={<div data-testid="ph" />} />);
+
+    fireEvent.error(screen.getByAltText("cover"));
+    act(() => { vi.advanceTimersByTime(1100); });
+    fireEvent.error(screen.getByAltText("cover"));
+
+    expect(screen.queryByAltText("cover")).toBeNull();
+    expect(screen.getByTestId("ph")).toBeTruthy();
+  });
+
   it("still cache-busts a bare URL", () => {
     render(<RemoteImage src={SRC} alt="cover" />);
     fireEvent.error(screen.getByAltText("cover"));
