@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
+import RemoteImage from "@/components/RemoteImage";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { getAlbumById, getTracksForAlbum, getArtistById } from "@/mock/tracks";
@@ -316,9 +317,10 @@ function CatalogAlbumInner({
       {/* Hero */}
       <div className="relative overflow-hidden">
         <div className="absolute inset-0">
-          <img
+          <RemoteImage
             src={album.imageUrl}
             alt=""
+            eager
             className="h-full w-full object-cover blur-[20px] scale-125 brightness-[0.3]"
           />
         </div>
@@ -334,10 +336,12 @@ function CatalogAlbumInner({
         </button>
 
         <div className="relative z-10 flex flex-col md:flex-row items-center md:items-end gap-4 md:gap-8 px-4 md:px-10 pb-6 md:pb-10">
-          <img
+          <RemoteImage
             src={album.imageUrl}
             alt={album.name}
+            eager
             className="h-36 w-36 md:h-48 md:w-48 rounded-2xl shadow-2xl object-cover"
+            fallback={<div className="h-36 w-36 md:h-48 md:w-48 rounded-2xl shadow-2xl bg-foreground/10" />}
           />
           <div className="pb-2 text-center md:text-left">
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">
@@ -492,9 +496,10 @@ function MockAlbumInner({
     <div className="min-h-screen bg-background">
       <div className="relative overflow-hidden">
         <div className="absolute inset-0">
-          <img
+          <RemoteImage
             src={album.coverArtUrl}
             alt=""
+            eager
             className="h-full w-full object-cover blur-[20px] scale-125 brightness-[0.3]"
           />
         </div>
@@ -510,10 +515,12 @@ function MockAlbumInner({
         </button>
 
         <div className="relative z-10 flex flex-col md:flex-row items-center md:items-end gap-4 md:gap-8 px-4 md:px-10 pb-6 md:pb-10">
-          <img
+          <RemoteImage
             src={album.coverArtUrl}
             alt={album.title}
+            eager
             className="h-36 w-36 md:h-48 md:w-48 rounded-2xl shadow-2xl object-cover"
+            fallback={<div className="h-36 w-36 md:h-48 md:w-48 rounded-2xl shadow-2xl bg-foreground/10" />}
           />
           <div className="pb-2 text-center md:text-left">
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">

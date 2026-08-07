@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
+// Imported rather than hardcoded: a literal here would keep passing as a
+// listener for an event nobody dispatches if the name is ever renamed.
+import { RECONNECT_REQUIRED_EVENT } from "@/lib/spotifyTokenStore";
 
 const { invokeMock, refreshLegacyMock } = vi.hoisted(() => ({
   invokeMock: vi.fn(),
@@ -107,7 +110,7 @@ describe("useSpotifyToken.getValidToken — refresh fallback chain", () => {
 
     const events: string[] = [];
     const listener = (e: Event) => events.push(e.type);
-    window.addEventListener("spotify-reconnect-required", listener);
+    window.addEventListener(RECONNECT_REQUIRED_EVENT, listener);
 
     const { result } = renderHook(() => useSpotifyToken());
     await act(async () => {
@@ -116,8 +119,8 @@ describe("useSpotifyToken.getValidToken — refresh fallback chain", () => {
     });
 
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
-    expect(events).toContain("spotify-reconnect-required");
+    expect(events).toContain(RECONNECT_REQUIRED_EVENT);
 
-    window.removeEventListener("spotify-reconnect-required", listener);
+    window.removeEventListener(RECONNECT_REQUIRED_EVENT, listener);
   });
 });

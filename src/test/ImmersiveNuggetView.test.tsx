@@ -74,7 +74,7 @@ const HEADLINE_LESS: Nugget = {
   sourceId: "src-1",
 };
 
-function renderView(nuggets: Nugget[] = [RICH]) {
+function renderView(nuggets: Nugget[] = [RICH], researching = false) {
   return render(
     <ImmersiveNuggetView
       nuggets={nuggets}
@@ -84,6 +84,7 @@ function renderView(nuggets: Nugget[] = [RICH]) {
       artist="Cherele"
       onClose={() => {}}
       isFresh
+      researching={researching}
     />,
   );
 }
@@ -265,5 +266,49 @@ describe("ImmersiveNuggetView — deep dive", () => {
     const deeper = screen.getByRole("button", { name: /tell me more/i });
     expect(save).not.toBe(deeper);
     expect(within(save).queryByText(/tell me more/i)).toBeNull();
+  });
+});
+
+
+// ── Research glow ─────────────────────────────────────────────────────
+// Pete: "can we make the color that shows up around the screen pulse a
+// little more so we know that research is being done?" The screen-edge
+// glow is visible from anywhere on the card, so it carries the state
+// better than the small logo in the corner.
+describe("ImmersiveNuggetView — research glow", () => {
+  it("breathes the screen edge while research is in flight", () => {
+    renderView([RICH], true);
+    const glow = screen.getByTestId("screen-glow");
+    expect(glow.getAttribute("data-researching")).toBe("true");
+    expect(glow.className).toContain("animate-research-glow");
+  });
+
+  it("settles to a static glow once research finishes", () => {
+    renderView([RICH], false);
+    const glow = screen.getByTestId("screen-glow");
+    expect(glow.getAttribute("data-researching")).toBe("false");
+    expect(glow.className).not.toContain("animate-research-glow");
+    // Static state still tints the edges — it just stops moving.
+    expect(glow.getAttribute("style") ?? "").toContain("box-shadow");
+  });
+
+  it("stops breathing when research completes mid-view", () => {
+    const { rerender } = renderView([RICH], true);
+    expect(screen.getByTestId("screen-glow").className).toContain("animate-research-glow");
+
+    rerender(
+      <ImmersiveNuggetView
+        nuggets={[RICH]}
+        sources={new Map([["src-1", SOURCE]])}
+        coverArtUrl="https://example.com/art.jpg"
+        trackTitle="KIKI"
+        artist="Cherele"
+        onClose={() => {}}
+        isFresh
+        researching={false}
+      />,
+    );
+
+    expect(screen.getByTestId("screen-glow").className).not.toContain("animate-research-glow");
   });
 });

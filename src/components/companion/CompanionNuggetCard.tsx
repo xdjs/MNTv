@@ -1,4 +1,5 @@
 import { ExternalLink, ChevronRight } from "lucide-react";
+import RemoteImage from "@/components/RemoteImage";
 import type { CompanionNugget } from "@/mock/types";
 
 interface Props {
@@ -12,11 +13,10 @@ export default function CompanionNuggetCard({ nugget, onDeepDive }: Props) {
       {/* Image */}
       {nugget.imageUrl && (
         <div className="w-full">
-          <img
+          <RemoteImage
             src={nugget.imageUrl}
             alt={nugget.imageCaption || nugget.headline || ""}
             className="w-full object-contain max-h-56"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
           {nugget.imageCaption && (
             <p className="px-4 py-1.5 text-xs text-muted-foreground italic">{nugget.imageCaption}</p>

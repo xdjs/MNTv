@@ -1223,17 +1223,33 @@ export function useAINuggets(
         // client), so leaving the in-mem cache empty means a future
         // mount will go through the full pipeline again.
         setError(null);
-        // Sentinel cleanup so a future tap retries the real pipeline.
-        if (sentinelClaimed) {
-          try { await supabase.from("nugget_cache").delete().eq("track_id", dbCacheKey); } catch { /* noop */ }
-        }
         return;
       }
-      // Remove the 'generating' sentinel so waiting clients don't poll indefinitely.
-      if (sentinelClaimed) {
-        try { await supabase.from("nugget_cache").delete().eq("track_id", dbCacheKey); } catch { /* noop */ }
-      }
     } finally {
+      // Release the generation claim on EVERY exit, not just the two
+      // paths that used to reach the end of the try block.
+      //
+      // A 'generating' row is a lock: other clients poll it instead of
+      // starting their own generation. Releasing it only on the way out
+      // of the happy path meant any of the thirteen earlier exits
+      // stranded it forever — most often `if (cancelledRef.current)
+      // return` and the AbortError catch, which is precisely what the
+      // unmount cleanup below triggers when a user skips a track a few
+      // seconds in. Nothing ever cleared those rows, so the affected
+      // track showed "researching" and no facts to every later listener,
+      // permanently. Twelve had accumulated since May, including
+      // Turnover's "Humming", claimed 2026-07-30.
+      //
+      // The success paths set sentinelClaimed = false once the row holds
+      // real content, so this is a no-op there. And a delete that races
+      // a server write cannot destroy anything: RLS only permits
+      // deleting a row that is still 'generating', so once the server
+      // has written 'ready' the statement matches nothing.
+      if (sentinelClaimed) {
+        try {
+          await supabase.from("nugget_cache").delete().eq("track_id", dbCacheKey);
+        } catch { /* best-effort — a stale claim is recoverable, a throw here is not */ }
+      }
       if (!cancelledRef.current) {
         setLoading(false);
       }

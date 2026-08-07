@@ -1,21 +1,28 @@
 import { useEffect, useState } from "react";
 import { signInWithSpotify } from "@/hooks/useSpotifyAuth";
+import { RECONNECT_REQUIRED_EVENT } from "@/lib/spotifyTokenStore";
 
 /**
- * Surfaces a reconnect banner when useSpotifyToken's refresh chain fails
- * (both the server-side edge function and the legacy client-side path
- * returned null). Before this banner existed, the user was silently
- * logged out of Spotify on the next ProtectedRoute check with no
- * indication why. Dispatched via `spotify-reconnect-required` from
- * useSpotifyToken.getValidToken.
+ * Surfaces a reconnect banner when playback credentials are gone and
+ * cannot be recovered without a new OAuth round trip. Before this banner
+ * existed, the user was silently logged out of Spotify on the next
+ * ProtectedRoute check with no indication why.
+ *
+ * Two paths raise RECONNECT_REQUIRED_EVENT:
+ *   - useSpotifyToken.getValidToken, when the refresh chain fails (both
+ *     the server-side edge function and the legacy client-side path
+ *     returned null).
+ *   - bridgeSpotifyProviderTokens, when a Spotify session arrives with
+ *     no provider tokens and localStorage has none either — nothing to
+ *     refresh, so the failure never reaches getValidToken at all.
  */
 export default function SpotifyReconnectBanner() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     const onReconnect = () => setVisible(true);
-    window.addEventListener("spotify-reconnect-required", onReconnect);
-    return () => window.removeEventListener("spotify-reconnect-required", onReconnect);
+    window.addEventListener(RECONNECT_REQUIRED_EVENT, onReconnect);
+    return () => window.removeEventListener(RECONNECT_REQUIRED_EVENT, onReconnect);
   }, []);
 
   if (!visible) return null;

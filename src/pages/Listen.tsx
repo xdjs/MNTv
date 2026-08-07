@@ -1358,6 +1358,8 @@ export default function Listen() {
           <img
             src={effectiveCoverArt}
             alt=""
+            loading="eager"
+            decoding="async"
             className="h-full w-full object-cover scale-[1.3] transition-all duration-1000 ease-out"
             style={{
               filter: barVisible
@@ -1498,6 +1500,8 @@ export default function Listen() {
             key={effectiveCoverArt}
             src={effectiveCoverArt}
             alt={`${track.title} cover art`}
+            loading="eager"
+            decoding="async"
             className="rounded-2xl object-cover shadow-2xl shadow-black/50"
             style={{ width: "min(70vw, 70vh)", height: "min(70vw, 70vh)" }}
             initial={{ opacity: 0, scale: 0.9 }}
@@ -1770,6 +1774,7 @@ export default function Listen() {
               onPrev={handlePrev}
               onNext={handleNext}
               spotifyAlbumArt={spotifyStateTrack?.albumArtUrl}
+              researching={aiLoading || waveLoading}
               isFresh={!aiFromCache}
             />
           </Suspense>

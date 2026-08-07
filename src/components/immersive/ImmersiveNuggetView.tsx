@@ -27,6 +27,10 @@ interface ImmersiveNuggetViewProps {
   // waiting for playback to reach each timestampSec — parity with desktop's
   // fresh-SSE bypass so the first headline lands the moment the stream emits it.
   isFresh?: boolean;
+  /** Initial generation or wave-2 still running. Drives the screen-edge
+   *  glow so "we're still digging" is legible without looking at the
+   *  logo — the whole frame breathes instead of one small element. */
+  researching?: boolean;
 }
 
 // Module-level so it persists across unmount/remount cycles (e.g. navigating
@@ -119,6 +123,7 @@ export default function ImmersiveNuggetView({
   onNext,
   spotifyAlbumArt,
   isFresh = false,
+  researching = false,
 }: ImmersiveNuggetViewProps) {
   const { isPlaying, currentTime, duration, toggle, seek } = usePlayer();
   const mountedRef = useRef(true);
@@ -507,6 +512,8 @@ export default function ImmersiveNuggetView({
             <img
               src={imgUrl}
               alt=""
+              loading="eager"
+              decoding="async"
               className="absolute inset-0 w-full h-full object-cover"
               onError={() => {
                 if (isNuggetImage && activeNugget?.imageUrl) {
@@ -692,7 +699,7 @@ export default function ImmersiveNuggetView({
       {/* Background */}
       <div className="absolute inset-0 pointer-events-none">
         {artUrl && (
-          <img src={artUrl} alt="" className="absolute inset-0 w-full h-full object-cover"
+          <img src={artUrl} alt="" loading="eager" decoding="async" className="absolute inset-0 w-full h-full object-cover"
             style={{ filter: "blur(48px) brightness(0.25) saturate(1.4)", transform: "scale(1.3)" }} />
         )}
         <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60" />
@@ -710,9 +717,15 @@ export default function ImmersiveNuggetView({
         </svg>
       </button>
 
-      {/* Screen-edge glow — tier-colored border effect */}
-      <div className="fixed inset-0 z-[51] pointer-events-none"
-        style={{
+      {/* Screen-edge glow — tier-colored border effect. Breathes while
+          research is in flight so the state reads from anywhere on the
+          screen, not just the logo in the corner. Settles to the static
+          glow the moment research finishes. */}
+      <div
+        className={`fixed inset-0 z-[51] pointer-events-none ${researching ? "animate-research-glow" : ""}`}
+        data-testid="screen-glow"
+        data-researching={researching ? "true" : "false"}
+        style={researching ? undefined : {
           boxShadow: "inset 0 0 30px 4px hsl(var(--neon-glow) / 0.3), inset 0 0 80px 10px hsl(var(--neon-glow) / 0.1)",
         }}
       />
@@ -766,6 +779,8 @@ export default function ImmersiveNuggetView({
               <img
                 src={artUrl}
                 alt=""
+                loading="eager"
+                decoding="async"
                 className={`w-56 h-56 rounded-2xl shadow-2xl object-cover opacity-80 ${
                   isPlaying ? "animate-cover-pulse" : ""
                 }`}
