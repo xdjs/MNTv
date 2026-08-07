@@ -168,11 +168,18 @@ export default function RemoteImage({
   // Deferral survives the morph — a card that animates into a modal is
   // still offscreen artwork until it is scrolled to, and it was the
   // bulk of the original burst.
-  // `key` carries the nonce so a bump unmounts the old element and
-  // mounts a new one — the mechanism behind the remount retry above.
-  const key = `${attemptSrc}#${reloadNonce}`;
+  // Keyed on the nonce ALONE, deliberately. Including attemptSrc would
+  // remount on every ordinary image swap, and that is both unnecessary
+  // and harmful: the browser already refetches when the src attribute
+  // changes, so React reusing the node is the correct behaviour, and
+  // remounting a motion.img mid-morph can restart the shared-layout
+  // transition it is part of. ArtistRow's heroImg recomputes repeatedly
+  // as facts stream in, so that path is hit constantly.
+  //
+  // The nonce only moves for the signed-URL retry — the one case where
+  // attemptSrc is deliberately unchanged and a fresh element is the only
+  // way to make a second request happen.
+  if (layoutId) return <motion.img key={reloadNonce} layoutId={layoutId} {...imgProps} />;
 
-  if (layoutId) return <motion.img key={key} layoutId={layoutId} {...imgProps} />;
-
-  return <img key={key} {...imgProps} />;
+  return <img key={reloadNonce} {...imgProps} />;
 }

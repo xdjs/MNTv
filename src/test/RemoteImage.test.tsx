@@ -190,6 +190,38 @@ describe("RemoteImage — retrying a URL that carries its own query", () => {
   });
 });
 
+// ── Remount only when there is no other way ───────────────────────────
+// Raised in review. The retry needs a fresh element ONLY for the signed
+// URL, where the src is deliberately unchanged. Keying on the src as
+// well would remount on every ordinary swap — pointless, since the
+// browser refetches on a src attribute change by itself, and harmful for
+// the layoutId morph, where remounting a motion.img mid-flight can
+// restart the shared-layout transition. ArtistRow's heroImg recomputes
+// constantly as facts stream in, so that path is hit a lot.
+describe("RemoteImage — reuses the element unless a remount is required", () => {
+  const NEXT = "https://i.scdn.co/image/def456";
+
+  it("keeps the same DOM node across an ordinary src change", () => {
+    const { rerender } = render(<RemoteImage src={SRC} alt="cover" />);
+    const before = screen.getByAltText("cover");
+
+    rerender(<RemoteImage src={NEXT} alt="cover" />);
+
+    const after = screen.getByAltText("cover");
+    expect(after).toBe(before);
+    expect(after.getAttribute("src")).toBe(NEXT);
+  });
+
+  it("keeps the same node when morphing, so the transition is not restarted", () => {
+    const { rerender } = render(<RemoteImage src={SRC} alt="cover" layoutId="card::img" />);
+    const before = screen.getByAltText("cover");
+
+    rerender(<RemoteImage src={NEXT} alt="cover" layoutId="card::img" />);
+
+    expect(screen.getByAltText("cover")).toBe(before);
+  });
+});
+
 describe("RemoteImage — no artwork", () => {
   it("renders the fallback when src is missing", () => {
     render(<RemoteImage src={undefined} fallback={<div data-testid="ph" />} />);
