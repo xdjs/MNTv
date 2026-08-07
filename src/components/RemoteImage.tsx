@@ -50,9 +50,32 @@ interface RemoteImageProps {
 }
 
 const RETRY_DELAY_MS = 700;
+/** Spread added to the backoff so images that failed together don't all
+ *  retry on the same tick. */
+const RETRY_JITTER_MS = 300;
 /** Underscore-prefixed so it cannot collide with a real query param if
  *  this component is ever pointed at something other than Spotify. */
 const RETRY_PARAM = "_retry=1";
+
+/**
+ * The URL to retry with.
+ *
+ * Cache-busting matters because the browser will otherwise replay its
+ * cached failure instead of making a real second request. But this
+ * component is no longer Spotify-only — ReadingOverlay and
+ * NuggetDeepDive point it at Exa-derived `Source.thumbnailUrl`, which
+ * can be any host. A signed URL's signature usually covers the query
+ * string, so appending to one turns a transient failure into a
+ * guaranteed 403.
+ *
+ * Rule: only cache-bust a URL that has no query string of its own.
+ * Spotify's i.scdn.co URLs are bare paths, so they still get a real
+ * retry. Anything already carrying params is retried untouched — a
+ * weaker retry, but a weaker retry beats one that cannot succeed.
+ */
+function retryUrlFor(src: string): string {
+  return src.includes("?") ? src : `${src}?${RETRY_PARAM}`;
+}
 
 export default function RemoteImage({
   src,
@@ -95,14 +118,19 @@ export default function RemoteImage({
   }, []);
 
   const handleError = useCallback(() => {
-    if (!src) { setFailed(true); return; }
+    // No `!src` guard needed — the component returns the fallback before
+    // rendering an <img>, so onError is never attached without one.
     if (retriedRef.current) { setFailed(true); return; }
     retriedRef.current = true;
     // Backoff before retrying: an immediate retry rejoins the same burst
-    // that caused the throttle in the first place.
+    // that caused the throttle in the first place. Jittered because a
+    // batch of images tends to fail together — a fixed delay would
+    // reconvene them into a second synchronised burst against the CDN
+    // that just throttled them, which is the failure this component
+    // exists to avoid.
     timerRef.current = setTimeout(() => {
-      setAttemptSrc(`${src}${src.includes("?") ? "&" : "?"}${RETRY_PARAM}`);
-    }, RETRY_DELAY_MS);
+      setAttemptSrc(retryUrlFor(src!));
+    }, RETRY_DELAY_MS + Math.random() * RETRY_JITTER_MS);
   }, [src]);
 
   if (!src || failed) return <>{fallback}</>;

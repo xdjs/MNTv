@@ -40,14 +40,14 @@ describe("RemoteImage — recovering from a throttled request", () => {
     // Immediately retrying would rejoin the burst that caused the throttle.
     expect(screen.getByAltText("cover").getAttribute("src")).toBe(SRC);
 
-    act(() => { vi.advanceTimersByTime(800); });
+    act(() => { vi.advanceTimersByTime(1100); });
     expect(screen.getByAltText("cover").getAttribute("src")).toBe(`${SRC}?_retry=1`);
   });
 
   it("cache-busts the retry so the browser cannot replay the failure", () => {
     render(<RemoteImage src={SRC} alt="cover" />);
     fireEvent.error(screen.getByAltText("cover"));
-    act(() => { vi.advanceTimersByTime(800); });
+    act(() => { vi.advanceTimersByTime(1100); });
 
     expect(screen.getByAltText("cover").getAttribute("src")).not.toBe(SRC);
   });
@@ -56,7 +56,7 @@ describe("RemoteImage — recovering from a throttled request", () => {
     render(<RemoteImage src={SRC} alt="cover" fallback={<div data-testid="ph" />} />);
 
     fireEvent.error(screen.getByAltText("cover"));
-    act(() => { vi.advanceTimersByTime(800); });
+    act(() => { vi.advanceTimersByTime(1100); });
     fireEvent.error(screen.getByAltText("cover"));
 
     expect(screen.queryByAltText("cover")).toBeNull();
@@ -66,9 +66,87 @@ describe("RemoteImage — recovering from a throttled request", () => {
   it("does not retry forever", () => {
     render(<RemoteImage src={SRC} alt="cover" fallback={<div data-testid="ph" />} />);
     fireEvent.error(screen.getByAltText("cover"));
-    act(() => { vi.advanceTimersByTime(800); });
+    act(() => { vi.advanceTimersByTime(1100); });
     fireEvent.error(screen.getByAltText("cover"));
     act(() => { vi.advanceTimersByTime(5000); });
+
+    expect(screen.getByTestId("ph")).toBeTruthy();
+  });
+});
+
+// ── Jittered backoff ──────────────────────────────────────────────────
+// A fixed delay reconvenes everything that failed together into a second
+// synchronised burst against the CDN that just throttled it — a smaller
+// replay of the original bug. The window is [700, 1000).
+describe("RemoteImage — the retry is spread out", () => {
+  it("never retries before the base backoff", () => {
+    render(<RemoteImage src={SRC} alt="cover" />);
+    fireEvent.error(screen.getByAltText("cover"));
+
+    act(() => { vi.advanceTimersByTime(699); });
+
+    expect(screen.getByAltText("cover").getAttribute("src")).toBe(SRC);
+  });
+
+  it("has always retried by the top of the jitter window", () => {
+    render(<RemoteImage src={SRC} alt="cover" />);
+    fireEvent.error(screen.getByAltText("cover"));
+
+    act(() => { vi.advanceTimersByTime(1000); });
+
+    expect(screen.getByAltText("cover").getAttribute("src")).toBe(`${SRC}?_retry=1`);
+  });
+
+  // Same failure, different delays — otherwise the jitter isn't doing
+  // anything. Sampled across many renders because two draws can collide.
+  it("does not schedule every retry at the same moment", () => {
+    const fired: number[] = [];
+    for (let i = 0; i < 25; i++) {
+      const { unmount } = render(<RemoteImage src={SRC} alt="cover" />);
+      fireEvent.error(screen.getByAltText("cover"));
+      let ms = 0;
+      while (ms < 1000 && screen.getByAltText("cover").getAttribute("src") === SRC) {
+        act(() => { vi.advanceTimersByTime(10); });
+        ms += 10;
+      }
+      fired.push(ms);
+      unmount();
+    }
+    expect(new Set(fired).size).toBeGreaterThan(1);
+  });
+});
+
+// ── Cache-busting only where it is safe ───────────────────────────────
+// This component is no longer Spotify-only: ReadingOverlay and
+// NuggetDeepDive point it at Exa-derived thumbnails on arbitrary hosts.
+// A signed URL's signature usually covers the query string, so appending
+// to one turns a transient failure into a guaranteed 403.
+describe("RemoteImage — retrying a URL that carries its own query", () => {
+  const SIGNED = "https://cdn.example.com/img.jpg?Expires=123&Signature=abc";
+
+  it("retries a signed URL untouched rather than breaking its signature", () => {
+    render(<RemoteImage src={SIGNED} alt="cover" />);
+    fireEvent.error(screen.getByAltText("cover"));
+
+    act(() => { vi.advanceTimersByTime(1100); });
+
+    expect(screen.getByAltText("cover").getAttribute("src")).toBe(SIGNED);
+  });
+
+  it("still cache-busts a bare URL", () => {
+    render(<RemoteImage src={SRC} alt="cover" />);
+    fireEvent.error(screen.getByAltText("cover"));
+
+    act(() => { vi.advanceTimersByTime(1100); });
+
+    expect(screen.getByAltText("cover").getAttribute("src")).toBe(`${SRC}?_retry=1`);
+  });
+
+  it("still gives up after one retry on a signed URL", () => {
+    render(<RemoteImage src={SIGNED} alt="cover" fallback={<div data-testid="ph" />} />);
+    fireEvent.error(screen.getByAltText("cover"));
+    act(() => { vi.advanceTimersByTime(1100); });
+    fireEvent.error(screen.getByAltText("cover"));
 
     expect(screen.getByTestId("ph")).toBeTruthy();
   });
@@ -92,7 +170,7 @@ describe("RemoteImage — no artwork", () => {
       <RemoteImage src={SRC} alt="cover" fallback={<div data-testid="ph" />} />,
     );
     fireEvent.error(screen.getByAltText("cover"));
-    act(() => { vi.advanceTimersByTime(800); });
+    act(() => { vi.advanceTimersByTime(1100); });
     fireEvent.error(screen.getByAltText("cover"));
     expect(screen.getByTestId("ph")).toBeTruthy();
 
@@ -149,7 +227,7 @@ describe("RemoteImage — src changes while a retry is pending", () => {
     act(() => { vi.advanceTimersByTime(2000); });
 
     fireEvent.error(screen.getByAltText("cover"));
-    act(() => { vi.advanceTimersByTime(800); });
+    act(() => { vi.advanceTimersByTime(1100); });
 
     expect(screen.getByAltText("cover").getAttribute("src")).toBe(`${NEXT}?_retry=1`);
   });
