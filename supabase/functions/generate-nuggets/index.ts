@@ -1,9 +1,23 @@
-// ⚠ DEPLOY GUARD: This file contains in-progress prompt-quality work
-// (Task #28 — banned phrase lists, catalog-source allowlist, collaborator
-// context). Do NOT run `supabase functions deploy generate-nuggets`
-// from this branch. The deployed v57 (May 9) is the production cut;
-// the changes here ship in a separate dedicated PR once the new
-// prompts have been validated against Pete's 50-example test set.
+// ⚠ DEPLOY GUARD: Do NOT run `supabase functions deploy generate-nuggets`
+// from this branch.
+//
+// Production is v59 (Aug 4), which is the v57 cut plus ONE change: the
+// server-side nugget_cache merge in this file's cache-write block. The
+// exact deployed source is recorded on branch `deploy/wave-merge-on-v57`.
+//
+// This file still holds work that has NOT shipped and must not:
+//   • prompt-quality work (Task #28 — banned phrase lists, catalog-source
+//     allowlist, collaborator context), unvalidated against Pete's
+//     50-example test set
+//   • rotation / liked-tracks cascade, PR #82 round 3, recommendedArtist
+//   • 13 unvalidated Constitution rules in ./constitution.ts
+//
+// Deploying from here ships all of that. It also uploads the WHOLE
+// function folder — constitution.ts included — which is how v58 leaked
+// those Constitution rules to production for about a minute on Aug 4:
+// only index.ts had been reverted to the production cut. If you ever
+// need to deploy a targeted fix, diff EVERY file in this folder against
+// the deployed cut, not just the one you changed.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getAppleDeveloperToken } from "../_shared/apple-token.ts";
@@ -4282,8 +4296,8 @@ Return ONLY valid JSON:
         const denom = Math.max(validatedNuggets.length - 1, 1);
         const spacing = usable / denom;
         const cacheNuggets = validatedNuggets.map((n: any, i: number) => {
-          const sourceId = `ai-src-${trackId}-L1-${i}`;
-          const nuggetId = `ai-nug-${trackId}-L1-${i}`;
+          const sourceId = `ai-src-${trackId}-L${safeListenCount}-${i}`;
+          const nuggetId = `ai-nug-${trackId}-L${safeListenCount}-${i}`;
           const ts = Math.min(Math.floor(earlyStart + spacing * i), cacheDurationSec - 10);
           return {
             id: nuggetId, trackId, timestampSec: ts, durationMs: 7000,
@@ -4294,7 +4308,7 @@ Return ONLY valid JSON:
         });
         const cacheSources: Record<string, unknown> = {};
         validatedNuggets.forEach((n: any, i: number) => {
-          const sourceId = `ai-src-${trackId}-L1-${i}`;
+          const sourceId = `ai-src-${trackId}-L${safeListenCount}-${i}`;
           cacheSources[sourceId] = { id: sourceId, ...n.source };
         });
         cacheSources.artistSummary = artistSummary;
@@ -4303,14 +4317,54 @@ Return ONLY valid JSON:
         if (!cacheAdminClient) {
           console.warn("[NuggetCache] server upsert skipped — no admin key configured");
         } else {
+          // A wave call (listen 2+) generates only that wave's angles, so
+          // the response is a DELTA, not the whole set. Overwriting the
+          // row with it drops everything earlier waves produced, and a
+          // later first-time listener gets whichever wave happened to run
+          // last instead of the track's full depth.
+          //
+          // The client used to repair this by writing the accumulated set
+          // itself. nugget_cache RLS now forbids client writes to a ready
+          // row, so the merge belongs here, where the admin key is.
+          let mergedNuggets = cacheNuggets;
+          let mergedSources = cacheSources;
+          if (safeListenCount > 1) {
+            const { data: prior } = await cacheAdminClient
+              .from("nugget_cache")
+              .select("nuggets, sources")
+              .eq("track_id", dbCacheKey)
+              .maybeSingle();
+            const priorNuggets: any[] = Array.isArray(prior?.nuggets) ? prior.nuggets : [];
+            if (priorNuggets.length > 0) {
+              // Drop prior entries this wave supersedes. By id for rows
+              // written after wave ids became listen-scoped, and by
+              // headline for older rows where every wave was written as
+              // "L1" — without that, those legacy rows would merge into
+              // visible duplicates.
+              const ids = new Set(cacheNuggets.map((n: any) => n.id));
+              const heads = new Set(
+                cacheNuggets.map((n: any) => String(n.headline ?? "").trim().toLowerCase()),
+              );
+              mergedNuggets = [
+                ...priorNuggets.filter((n: any) =>
+                  !ids.has(n?.id) && !heads.has(String(n?.headline ?? "").trim().toLowerCase())),
+                ...cacheNuggets,
+              ];
+              const priorSources = prior?.sources && typeof prior.sources === "object"
+                ? prior.sources as Record<string, unknown>
+                : {};
+              mergedSources = { ...priorSources, ...cacheSources };
+            }
+          }
+
           const { error: cacheErr } = await cacheAdminClient.from("nugget_cache").upsert(
-            { track_id: dbCacheKey, nuggets: cacheNuggets, sources: cacheSources, status: "ready" },
+            { track_id: dbCacheKey, nuggets: mergedNuggets, sources: mergedSources, status: "ready" },
             { onConflict: "track_id" },
           );
           if (cacheErr) {
             console.warn(`[NuggetCache] server upsert failed (non-fatal):`, cacheErr.message);
           } else {
-            console.log(`[NuggetCache] server upserted ${cacheNuggets.length} nuggets for ${dbCacheKey.slice(0, 80)}`);
+            console.log(`[NuggetCache] server upserted ${mergedNuggets.length} nuggets (listen ${safeListenCount}, +${cacheNuggets.length} this wave) for ${dbCacheKey.slice(0, 80)}`);
           }
         }
       } catch (e) {
