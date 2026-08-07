@@ -116,8 +116,9 @@ describe("canonicalCacheKey", () => {
       return `real::${artist}::${title}::::${uri}::${tier}`;
     }
     function clientStoryHrefTrackId(artist: string, title: string, uri: string): string {
-      // Mirror of `listenHrefForStory` in src/components/StoriesRail.tsx
-      // — the URL-encoded form Listen sees from React Router params.
+      // The URL-encoded form Listen sees from React Router params.
+      // Mirrored the now-deleted StoriesRail's `listenHrefForStory`; the
+      // encoding contract it pins outlived the component.
       const enc = encodeURIComponent;
       return `real::${enc(artist)}::${enc(title)}::${enc("")}::${enc(uri)}`;
     }

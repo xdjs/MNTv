@@ -79,8 +79,10 @@ function recordPregen(trackKey: string, tier: string): void {
 /**
  * usePreGeneratedStories: picks the top N tracks from the user's profile,
  * checks nugget_cache for each, and fires background generation for uncached
- * ones (throttled). Returns a live-updating list of Story objects so the
- * StoriesRail can show each one flipping to "ready" as its pre-gen lands.
+ * ones (throttled). Returns a live-updating list of Story objects so a
+ * consumer can show each one flipping to "ready" as its pre-gen lands.
+ * (The StoriesRail that used to render them was removed; the pre-gen
+ * itself still warms the per-track cache for later taps.)
  *
  * Non-goals: this hook does NOT navigate, does NOT mutate DB outside of
  * triggering generate-nuggets, and never surfaces errors — background
