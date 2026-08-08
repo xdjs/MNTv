@@ -1,9 +1,11 @@
 // ⚠ DEPLOY GUARD: Do NOT run `supabase functions deploy generate-nuggets`
 // from this branch.
 //
-// Production is v59 (Aug 4), which is the v57 cut plus ONE change: the
-// server-side nugget_cache merge in this file's cache-write block. The
-// exact deployed source is recorded on branch `deploy/wave-merge-on-v57`.
+// Production is v60 (Aug 8): the v57 cut plus TWO changes, both in this
+// file's cache-write block — the server-side nugget_cache merge, and
+// failing loudly rather than silently overwriting when the prior row
+// cannot be read. The exact deployed source is recorded on branch
+// `deploy/wave-merge-on-v57`.
 //
 // This file still holds work that has NOT shipped and must not:
 //   • prompt-quality work (Task #28 — banned phrase lists, catalog-source
@@ -12,12 +14,14 @@
 //   • rotation / liked-tracks cascade, PR #82 round 3, recommendedArtist
 //   • 13 unvalidated Constitution rules in ./constitution.ts
 //
-// Deploying from here ships all of that. It also uploads the WHOLE
-// function folder — constitution.ts included — which is how v58 leaked
-// those Constitution rules to production for about a minute on Aug 4:
-// only index.ts had been reverted to the production cut. If you ever
-// need to deploy a targeted fix, diff EVERY file in this folder against
-// the deployed cut, not just the one you changed.
+// Deploying from here ships all of that. It also uploads the function's
+// whole IMPORT GRAPH — constitution.ts and _shared/apple-token.ts, not
+// just index.ts — which is how v58 leaked those Constitution rules to
+// production for about a minute on Aug 4: only index.ts had been
+// reverted to the production cut. If you ever need to deploy a targeted
+// fix, diff EVERY file in that graph against the deployed cut, not just
+// the one you changed. (Files in the folder that nothing imports, like
+// index.pre-exa-backup.ts, are not uploaded.)
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getAppleDeveloperToken } from "../_shared/apple-token.ts";
@@ -4328,12 +4332,33 @@ Return ONLY valid JSON:
           // row, so the merge belongs here, where the admin key is.
           let mergedNuggets = cacheNuggets;
           let mergedSources = cacheSources;
+          let priorReadFailed = false;
           if (safeListenCount > 1) {
-            const { data: prior } = await cacheAdminClient
+            const { data: prior, error: priorErr } = await cacheAdminClient
               .from("nugget_cache")
               .select("nuggets, sources")
               .eq("track_id", dbCacheKey)
               .maybeSingle();
+            // A failed read is NOT the same as "no prior row". Treating it
+            // as one would merge against nothing and write this wave's
+            // delta over whatever is there — silently reinstating the
+            // exact overwrite this merge exists to prevent, with nothing
+            // in the logs to show for it.
+            //
+            // So: say so loudly, and skip the write entirely. The row we
+            // cannot read may hold every earlier wave; leaving it intact
+            // costs this wave's contribution to the cache, while
+            // overwriting could destroy all of them. The listener in
+            // front of us is unaffected either way — they already have
+            // these nuggets in memory — and the next listen retries.
+            if (priorErr) {
+              priorReadFailed = true;
+              console.warn(
+                `[NuggetCache] prior-row read failed for ${dbCacheKey.slice(0, 80)} ` +
+                `(listen ${safeListenCount}) — skipping the write rather than ` +
+                `overwriting an unread row:`, priorErr.message,
+              );
+            }
             const priorNuggets: any[] = Array.isArray(prior?.nuggets) ? prior.nuggets : [];
             if (priorNuggets.length > 0) {
               // Drop prior entries this wave supersedes. By id for rows
@@ -4357,14 +4382,18 @@ Return ONLY valid JSON:
             }
           }
 
-          const { error: cacheErr } = await cacheAdminClient.from("nugget_cache").upsert(
-            { track_id: dbCacheKey, nuggets: mergedNuggets, sources: mergedSources, status: "ready" },
-            { onConflict: "track_id" },
-          );
-          if (cacheErr) {
-            console.warn(`[NuggetCache] server upsert failed (non-fatal):`, cacheErr.message);
-          } else {
-            console.log(`[NuggetCache] server upserted ${mergedNuggets.length} nuggets (listen ${safeListenCount}, +${cacheNuggets.length} this wave) for ${dbCacheKey.slice(0, 80)}`);
+          // priorReadFailed means we already warned and are deliberately
+          // writing nothing — see the read above.
+          if (!priorReadFailed) {
+            const { error: cacheErr } = await cacheAdminClient.from("nugget_cache").upsert(
+              { track_id: dbCacheKey, nuggets: mergedNuggets, sources: mergedSources, status: "ready" },
+              { onConflict: "track_id" },
+            );
+            if (cacheErr) {
+              console.warn(`[NuggetCache] server upsert failed (non-fatal):`, cacheErr.message);
+            } else {
+              console.log(`[NuggetCache] server upserted ${mergedNuggets.length} nuggets (listen ${safeListenCount}, +${cacheNuggets.length} this wave) for ${dbCacheKey.slice(0, 80)}`);
+            }
           }
         }
       } catch (e) {
