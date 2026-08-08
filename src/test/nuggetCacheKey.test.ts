@@ -14,9 +14,10 @@ function buildReadSideKey(rawTrackId: string, tier: string, regenerateKey: numbe
 }
 
 function buildStoryHrefTrackId(artist: string, title: string, uri: string): string {
-  // Mirrors `listenHrefForStory` in src/components/StoriesRail.tsx —
-  // what React Router will pass to useAINuggets as `trackId` after the
-  // user taps a story tile.
+  // The URL-encoded shape React Router hands useAINuggets as `trackId`
+  // when a story tile is tapped. Mirrored the now-deleted StoriesRail's
+  // `listenHrefForStory`; kept because the encoding contract it pins is
+  // still what Listen receives, whichever surface builds the link.
   const enc = encodeURIComponent;
   return `real::${enc(artist)}::${enc(title)}::${enc("")}::${enc(uri)}`;
 }
