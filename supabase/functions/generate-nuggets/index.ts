@@ -4124,12 +4124,33 @@ Return ONLY valid JSON:
           // row, so the merge belongs here, where the admin key is.
           let mergedNuggets = cacheNuggets;
           let mergedSources = cacheSources;
+          let priorReadFailed = false;
           if (safeListenCount > 1) {
-            const { data: prior } = await cacheAdminClient
+            const { data: prior, error: priorErr } = await cacheAdminClient
               .from("nugget_cache")
               .select("nuggets, sources")
               .eq("track_id", dbCacheKey)
               .maybeSingle();
+            // A failed read is NOT the same as "no prior row". Treating it
+            // as one would merge against nothing and write this wave's
+            // delta over whatever is there — silently reinstating the
+            // exact overwrite this merge exists to prevent, with nothing
+            // in the logs to show for it.
+            //
+            // So: say so loudly, and skip the write entirely. The row we
+            // cannot read may hold every earlier wave; leaving it intact
+            // costs this wave's contribution to the cache, while
+            // overwriting could destroy all of them. The listener in
+            // front of us is unaffected either way — they already have
+            // these nuggets in memory — and the next listen retries.
+            if (priorErr) {
+              priorReadFailed = true;
+              console.warn(
+                `[NuggetCache] prior-row read failed for ${dbCacheKey.slice(0, 80)} ` +
+                `(listen ${safeListenCount}) — skipping the write rather than ` +
+                `overwriting an unread row:`, priorErr.message,
+              );
+            }
             const priorNuggets: any[] = Array.isArray(prior?.nuggets) ? prior.nuggets : [];
             if (priorNuggets.length > 0) {
               // Drop prior entries this wave supersedes. By id for rows
@@ -4153,14 +4174,18 @@ Return ONLY valid JSON:
             }
           }
 
-          const { error: cacheErr } = await cacheAdminClient.from("nugget_cache").upsert(
-            { track_id: dbCacheKey, nuggets: mergedNuggets, sources: mergedSources, status: "ready" },
-            { onConflict: "track_id" },
-          );
-          if (cacheErr) {
-            console.warn(`[NuggetCache] server upsert failed (non-fatal):`, cacheErr.message);
-          } else {
-            console.log(`[NuggetCache] server upserted ${mergedNuggets.length} nuggets (listen ${safeListenCount}, +${cacheNuggets.length} this wave) for ${dbCacheKey.slice(0, 80)}`);
+          // priorReadFailed means we already warned and are deliberately
+          // writing nothing — see the read above.
+          if (!priorReadFailed) {
+            const { error: cacheErr } = await cacheAdminClient.from("nugget_cache").upsert(
+              { track_id: dbCacheKey, nuggets: mergedNuggets, sources: mergedSources, status: "ready" },
+              { onConflict: "track_id" },
+            );
+            if (cacheErr) {
+              console.warn(`[NuggetCache] server upsert failed (non-fatal):`, cacheErr.message);
+            } else {
+              console.log(`[NuggetCache] server upserted ${mergedNuggets.length} nuggets (listen ${safeListenCount}, +${cacheNuggets.length} this wave) for ${dbCacheKey.slice(0, 80)}`);
+            }
           }
         }
       } catch (e) {
