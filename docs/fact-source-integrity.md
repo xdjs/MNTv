@@ -33,3 +33,5 @@ Listening history preserves the complete query string (including artist ID and a
 Companion uploads wait for initial and background generation to settle, coalesce snapshots for 1.5 seconds, and serialize requests. Attempts are spaced at least 65 seconds apart within the mounted Listen page, with at most three attempts per snapshot. Only successful uploads enter the dedupe map; quota failures can retry after the next minute window. Navigating away cancels queued work and prevents old requests from updating the current QR state.
 
 Both streamed and batch cache writes normalize durations: finite values above 30 seconds and at most six hours are accepted; other inputs use 240 seconds. The streamed persistence helper also enforces this boundary independently.
+
+Track currentness uses a monotonically increasing generation, so A → B → A cannot revive an old request. Cached QR links restore independently of upload deduplication when returning to a track.

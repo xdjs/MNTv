@@ -50,3 +50,11 @@ it('prevents an old request from updating the current track', async () => {
   await act(async () => finish());
   await act(() => vi.advanceTimersByTimeAsync(65000)); expect(upload).toHaveBeenCalledTimes(2);
 });
+it('keeps an old request stale after navigating A to B to A', async () => {
+  vi.useFakeTimers(); let current!: () => boolean; let finish!: () => void;
+  const upload = vi.fn().mockImplementationOnce((isCurrent) => { current = isCurrent; return new Promise<void>(resolve => { finish = resolve; }); }).mockResolvedValue(undefined);
+  const { rerender } = renderHook(({ key }) => useCompanionUpload(key, '9', false, upload), { initialProps: { key: 'A' } });
+  await act(() => vi.advanceTimersByTimeAsync(1500));
+  rerender({ key: 'B' }); rerender({ key: 'A' }); expect(current()).toBe(false);
+  await act(async () => finish()); await act(() => vi.advanceTimersByTimeAsync(65000)); expect(upload).toHaveBeenCalledTimes(2);
+});

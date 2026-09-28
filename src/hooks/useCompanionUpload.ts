@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from 'react';
  * the three-per-minute verification quota. Failed snapshots are never deduped. */
 export function useCompanionUpload(key: string, signature: string, busy: boolean,
   upload: (isCurrent: () => boolean) => Promise<void>) {
-  const latest = useRef({ key, upload });
-  latest.current = { key, upload };
+  const latest = useRef({ key, upload, generation: 0 });
+  const generation = latest.current.generation + (latest.current.key === key ? 0 : 1);
+  latest.current = { key, upload, generation };
   const mounted = useRef(false);
   const sent = useRef(new Map<string, string>());
   const attempts = useRef(new Map<string, number>());
@@ -21,8 +22,8 @@ export function useCompanionUpload(key: string, signature: string, busy: boolean
       nextAllowed.current = Date.now() + 65000;
       attempts.current.set(attemptKey, (attempts.current.get(attemptKey) ?? 0) + 1);
       try {
-        await latest.current.upload(() => mounted.current && latest.current.key === key);
-        if (mounted.current && latest.current.key === key) sent.current.set(key, signature);
+        await latest.current.upload(() => mounted.current && latest.current.generation === generation);
+        if (mounted.current && latest.current.generation === generation) sent.current.set(key, signature);
       } catch (error) {
         console.warn('[Companion] Upload failed; retrying after quota cooldown', error);
       } finally {
@@ -31,5 +32,5 @@ export function useCompanionUpload(key: string, signature: string, busy: boolean
       }
     }, Math.max(1500, nextAllowed.current - Date.now()));
     return () => clearTimeout(timer);
-  }, [key, signature, busy, revision]);
+  }, [key, signature, busy, revision, generation]);
 }

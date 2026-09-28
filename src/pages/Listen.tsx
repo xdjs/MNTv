@@ -586,25 +586,23 @@ export default function Listen() {
     setShortId(null);
   }, [rawTrackId, regenerateKey]);
 
+  const companionTrackKey = track ? `${track.artist}::${track.title}` : "";
+  const getCompanionShortId = player.getCompanionShortId;
+  // Restoring an existing QR link must not depend on whether an upload is due.
+  useEffect(() => {
+    if (!companionTrackKey) return;
+    const cachedSid = getCompanionShortId(companionTrackKey);
+    if (cachedSid) {
+      setShortId(cachedSid);
+      setCompanionReady(true);
+    }
+  }, [rawTrackId, regenerateKey, companionTrackKey, getCompanionShortId]);
+
   const companionUploadKey = track ? JSON.stringify([rawTrackId, tier, listenCount, regenerateKey]) : "";
   const companionSnapshot = aiNuggets.length ? JSON.stringify([aiNuggets, [...aiSources]]) : "";
   useCompanionUpload(companionUploadKey, companionSnapshot, aiLoading || waveLoading, async (isCurrent) => {
     if (!track) return;
     const trackKey = `${track.artist}::${track.title}`;
-
-    // Restore cached shortId immediately if we have one — but DON'T
-    // early-return. The previous version bailed here, which meant the
-    // companion content was frozen at whatever nugget count existed
-    // on the first run (typically just the pre-gen nugget). Wave-2
-    // nuggets that landed later never made it to companion_cache, so
-    // the QR-code companion page only ever showed the original bland
-    // first nugget. Now we keep going to re-upload the latest nugget
-    // set to companion_cache (the shortId stays the same).
-    const cachedSid = player.getCompanionShortId(trackKey);
-    if (cachedSid) {
-      setShortId(cachedSid);
-      setCompanionReady(true);
-    }
 
     // Build prebuilt nuggets for the companion page.
     // Both demo (seed) and AI tracks go through the edge function — direct
