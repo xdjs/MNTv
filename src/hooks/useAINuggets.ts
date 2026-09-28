@@ -1,3 +1,4 @@
+import { preparePreGenCacheEntry } from "@/lib/preGenCachePrefill";
 import { hasFactEvidence } from "../../supabase/functions/_shared/hasFactEvidence";
 import type { FactEvidence } from "../../supabase/functions/_shared/hasFactEvidence";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
@@ -1116,24 +1117,10 @@ export function useAINuggets(
             .select("nuggets, sources, status")
             .eq("track_id", dbCacheKey)
             .maybeSingle();
-          const fbNuggets = fallback?.status === "ready"
-            ? (fallback.nuggets as Nugget[] | null) ?? []
-            : [];
-          if (fbNuggets.length > 0) {
-            console.warn(`[useAINuggets] SSE failed; falling back to cached nuggets (${fbNuggets.length}) for ${dbCacheKey}`);
-            const sanitized = fbNuggets.map(sanitizeNugget);
-            const fbSources = new Map<string, Source>();
-            const rawSources = (fallback!.sources ?? {}) as Record<string, unknown>;
-            for (const [k, v] of Object.entries(rawSources)) {
-              // Same shape + scheme guards as the primary cache-read
-              // path — a malformed row that slips into this catch-
-              // block fallback would otherwise crash downstream on
-              // source.url reads or surface an unsafe scheme.
-              if (k.startsWith("_")) continue;
-              if (!isValidSourceShape(v)) continue;
-              if (!isSafeUrl(v.url)) continue;
-              fbSources.set(k, v);
-            }
+          const recovered = fallback?.status === "ready" ? preparePreGenCacheEntry(fallback) : null;
+          if (recovered) {
+            const sanitized = recovered.nuggets.map(sanitizeNugget);
+            const fbSources = recovered.sources;
             setNuggets(sanitized);
             setSources(fbSources);
             setNuggetCache(cacheKey, { nuggets: sanitized, sources: fbSources, listenCount: currentListenCount });

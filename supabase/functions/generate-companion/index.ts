@@ -73,6 +73,11 @@ serve(async (req) => {
       const checked = await verifyFactSources(prebuiltNuggets.slice(0, 30).map((n: any) => ({ ...n, source: { url: n.sourceUrl } })), {
         googleKey: Deno.env.get("GOOGLE_AI_API_KEY"), exaKey: Deno.env.get("EXA_API_KEY"),
       });
+      if (!checked.length) {
+        return new Response(JSON.stringify({ error: "No supported facts could be verified; existing companion content was preserved." }), {
+          status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       const allNuggets = checked.map(n => ({ ...n, sourceName: n.source.publisher, citation: n.source.citation }));
       if (listenTier > 1) {
         for (let t = 1; t < listenTier; t++) {

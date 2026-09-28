@@ -65,3 +65,16 @@ describe("artist identity", () => {
     expect(result.current.groups[0].updates).toEqual([]);
   });
 });
+it("allows source verification to finish after the old 30-second deadline", async () => {
+  vi.useFakeTimers();
+  try {
+    let complete!: (value: unknown) => void;
+    invoke.mockReturnValue(new Promise(resolve => { complete = resolve; }));
+    const { result } = renderHook(() => useArtistUpdates(profile, { tier: "casual" }));
+    const { act } = await import("@testing-library/react");
+    await act(async () => { await vi.advanceTimersByTimeAsync(35_000); });
+    expect(result.current.readyCount).toBe(0);
+    await act(async () => { complete({ data: { updates: [update] }, error: null }); });
+    expect(result.current.groups[0].updates).toEqual([update]);
+  } finally { vi.useRealTimers(); }
+});

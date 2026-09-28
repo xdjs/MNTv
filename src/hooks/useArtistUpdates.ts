@@ -228,27 +228,27 @@ export function useArtistUpdates(
       try {
         // Hard timeout. Without it, a hung edge function (Gemini
         // cold-start, Exa rate limit) pins the global "Loading
-        // artist updates" pill on screen indefinitely. 30s matches
-        // typical worst-case server budget; anything longer is a
-        // sign the call is wedged.
+        // artist updates" pill on screen indefinitely. Allow the 50s
+        // concurrent-request poll plus bounded research, writing and
+        // verification; the old 30s limit abandoned valid responses.
         const invokePromise = supabase.functions.invoke("artist-updates", {
           body: { artist, tier, ...(apple ? { service: "apple", storefront, artistId } : artistId ? { spotifyArtistId: artistId } : {}) },
         });
         let timeoutId: ReturnType<typeof setTimeout> | undefined;
         const timeoutPromise = new Promise<{ timedOut: true }>((resolve) => {
-          timeoutId = setTimeout(() => resolve({ timedOut: true }), 30_000);
+          timeoutId = setTimeout(() => resolve({ timedOut: true }), 95_000);
         });
         const raceResult = await Promise.race<
           Awaited<typeof invokePromise> | { timedOut: true }
         >([invokePromise, timeoutPromise]);
         // Clear the timer regardless of which side won — without this
-        // the 30s closure stays scheduled, accumulating per artist
+        // the timeout closure stays scheduled, accumulating per artist
         // fetch over the session.
         if (timeoutId) clearTimeout(timeoutId);
         if (cancelled) return;
         if ("timedOut" in raceResult) {
           if (import.meta.env.DEV) {
-            console.warn(`[artist-updates] ${artist} TIMEOUT after 30s — resolving empty`);
+            console.warn(`[artist-updates] ${artist} TIMEOUT after 95s — resolving empty`);
           }
           setGroups((prev) =>
             prev.map((g) => (g.artistName === artist ? { ...g, updates: [] } : g)),
