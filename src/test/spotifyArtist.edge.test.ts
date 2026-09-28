@@ -50,8 +50,8 @@ beforeEach(async () => {
   await import(modulePath);
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
-async function request(body: object) {
-  return mocks.handler!(new Request("https://example.test", { method: "POST", body: JSON.stringify(body) }));
+async function request(body: object, path = "") {
+  return mocks.handler!(new Request(`https://example.test/${path}`, { method: "POST", body: JSON.stringify(body) }));
 }
 describe("Spotify artist backend", () => {
   it("recovers a direct artist lookup from search without accepting a different ID", async () => {
@@ -148,7 +148,6 @@ describe("local artist-page integration (mock Spotify, real page and edge handle
 });
 
 it("candidate requests bypass and never replace production artist caches", async () => {
-  vi.stubGlobal("Deno", { env: { get: (key: string) => key === "MNTV_FUNCTION_CHANNEL" ? "staging" : undefined } });
   mocks.cached = { created_at: new Date().toISOString(), data: { found: true, catalogVersion: 2, artist, topTracks: [], albums: [] } };
   responses = (path) => {
     if (path.includes("top-tracks")) return Response.json({ tracks: [song] });
@@ -156,7 +155,7 @@ it("candidate requests bypass and never replace production artist caches", async
     if (path.includes("related-artists")) return Response.json({ artists: [] });
     return Response.json(artist);
   };
-  const data = await (await request({ artistId: artist.id })).json();
+  const data = await (await request({ artistId: artist.id }, "functions/v1/spotify-artist-staging")).json();
   expect(data.topTracks[0].title).toBe(song.name);
   expect(mocks.upsert).not.toHaveBeenCalled();
 });

@@ -1,3 +1,2 @@
-// Candidate endpoint; production continues calling artist-updates.
-Deno.env.set("MNTV_FUNCTION_CHANNEL", "staging");
-await import("../artist-updates/index.ts");
+// Candidate endpoint; the handler scopes caches by the request path.
+import "../artist-updates/index.ts";

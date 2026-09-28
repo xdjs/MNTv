@@ -957,7 +957,7 @@ serve(async (req) => {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-  const namespace = Deno.env.get("MNTV_FUNCTION_CHANNEL") === "staging" ? "staging::" : "";
+  const namespace = new URL(req.url).pathname.split("/").includes("artist-updates-staging") ? "staging::" : "";
   const key = namespace + cacheKey(artist, tier, apple ? body.artistId : spotifyArtistId, apple ? "apple" : "spotify", storefront);
 
   // 1. Cache state machine — picks one of:

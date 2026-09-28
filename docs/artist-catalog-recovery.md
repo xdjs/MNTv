@@ -156,7 +156,7 @@ Tracked in [MusicNerdWeb#1374](https://github.com/xdjs/MusicNerdWeb/issues/1374)
 The candidate uses `VITE_EDGE_FUNCTION_CHANNEL=staging` in the staging and
 feature-branch preview builds. Only the three changed endpoints are mapped to
 `-staging` wrappers. Other builds retain the original endpoint names. The
-wrappers set the function channel before loading the same implementation.
+wrappers load the same implementation; the request path selects cache isolation.
 Candidate artist updates use a `staging::` cache prefix; candidate artist
 profiles bypass complete-result cache reads and writes. No production
 function is replaced for staging verification. Infrastructure, credentials
