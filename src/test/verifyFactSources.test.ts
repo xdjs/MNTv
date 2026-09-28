@@ -70,3 +70,13 @@ it("caps each request to remaining shared time and skips verification when retri
   expect(fetcher).toHaveBeenCalledTimes(1);
   clock.mockRestore();
 });
+it("bounds retrieved and verifier document sizes for companion submissions", async () => {
+  const fetcher = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ results: [{ ...page, text: "x".repeat(10000) }] })))
+    .mockResolvedValueOnce(reply([]));
+  vi.stubGlobal("fetch", fetcher);
+  await verifyFactSources([fact], { googleKey: "test", exaKey: "test", maxDocumentCharacters: 4000 });
+  expect(JSON.parse(fetcher.mock.calls[0][1].body).text.maxCharacters).toBe(4000);
+  const prompt = JSON.parse(fetcher.mock.calls[1][1].body).contents[0].parts[0].text;
+  expect(prompt).toContain("x".repeat(4000));
+  expect(prompt).not.toContain("x".repeat(4001));
+});

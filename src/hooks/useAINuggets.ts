@@ -396,7 +396,9 @@ export function useAINuggets(
     if (cached && cached.nuggets.some(n => hasFactEvidence(n, cached.sources.get(n.sourceId)))) {
       if (import.meta.env.DEV) console.log("[NuggetMemCache] Serving from in-memory cache:", cacheKey);
       setFromCache(true);
-      setNuggets(cached.nuggets);
+      const supportedCached = cached.nuggets.filter(n => hasFactEvidence(n, cached.sources.get(n.sourceId)));
+      setNuggets(supportedCached);
+      setNuggetCache(cacheKey, { ...cached, nuggets: supportedCached });
       setSources(cached.sources);
       setListenCount(cached.listenCount);
       setLoading(false);
@@ -580,7 +582,7 @@ export function useAINuggets(
           if (import.meta.env.DEV) console.log("[NuggetCache] Serving cached nuggets for", dbCacheKey);
           // Sanitize — older cache entries may have empty headlines that
           // predate the server-side/makeNugget headline guard.
-          const cachedNuggets = (cached.nuggets as Nugget[]).map(sanitizeNugget);
+          const cachedNuggets = (cached.nuggets as Nugget[]).filter(n => hasFactEvidence(n, (cached.sources as Record<string, unknown>)?.[n.sourceId])).map(sanitizeNugget);
           const cachedSources = new Map<string, Source>();
           const rawSourcesObj = (cached.sources ?? {}) as Record<string, unknown>;
           for (const [key, val] of Object.entries(rawSourcesObj)) {

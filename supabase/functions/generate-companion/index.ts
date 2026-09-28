@@ -60,6 +60,11 @@ serve(async (req) => {
       if (authError || !authData.user) return new Response(JSON.stringify({ error: "Invalid session." }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+      const { data: quotaAllowed, error: quotaError } = await supabase.rpc("consume_companion_verification_quota", { caller_id: authData.user.id });
+      if (quotaError || quotaAllowed !== true) return new Response(JSON.stringify({ error: quotaError ? "Verification is temporarily unavailable." : "Verification limit reached. Try again later." }), {
+        status: quotaError ? 503 : 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" },
+      });
       const listenTier = Math.min(Math.max(listenCount, 1), 3);
 
       // Read nugget_cache for artistSummary and externalLinks
@@ -82,8 +87,8 @@ serve(async (req) => {
 
       // Accumulate nuggets from previous listen tiers
       // Client-supplied claims must be checked on the server before sharing.
-      const checked = await verifyFactSources(prebuiltNuggets.slice(0, 30).map((n: CompanionFact) => ({ ...n, source: { url: n.sourceUrl } })), {
-        googleKey: Deno.env.get("GOOGLE_AI_API_KEY"), exaKey: Deno.env.get("EXA_API_KEY"),
+      const checked = await verifyFactSources(prebuiltNuggets.filter((n: CompanionFact) => n && typeof n.text === "string" && n.text.length <= 2000).slice(-9).map((n: CompanionFact) => ({ ...n, source: { url: n.sourceUrl } })), {
+        googleKey: Deno.env.get("GOOGLE_AI_API_KEY"), exaKey: Deno.env.get("EXA_API_KEY"), maxDocumentCharacters: 4000,
       });
       if (!checked.length) {
         return new Response(JSON.stringify({ error: "No supported facts could be verified; existing companion content was preserved." }), {
@@ -157,11 +162,25 @@ serve(async (req) => {
 
     // No companion cache — try reading from nugget_cache directly
     const dbCacheKey = `${artist}::${title}::${safeTier}`;
-    const { data: nuggetData } = await supabase
+    // Old short links contain artist/title but no provider URI. Match the
+    // canonical recording-key layout with escaped literal artist/title fields.
+    const escapeLike = (value: string) => value.replace(/[\\%_]/g, "\\$&");
+    const { data: canonicalRows } = await supabase
       .from("nugget_cache")
       .select("nuggets, sources, status")
-      .eq("track_id", dbCacheKey)
-      .maybeSingle();
+      .like("track_id", `real::${escapeLike(artist)}::${escapeLike(title)}::::%::${safeTier}`)
+      .eq("status", "ready")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    let nuggetData = (canonicalRows ?? []).find(row => Array.isArray(row.nuggets) && row.nuggets.some((n: any) => hasFactEvidence(n, row.sources?.[n.sourceId] ?? n.source)));
+    if (!nuggetData) {
+      const { data: legacyData } = await supabase
+        .from("nugget_cache")
+        .select("nuggets, sources, status")
+        .eq("track_id", dbCacheKey)
+        .maybeSingle();
+      nuggetData = legacyData ?? undefined;
+    }
 
     if (nuggetData?.status === "ready" && nuggetData.nuggets?.length) {
       const artistSummary = nuggetData.sources?.artistSummary || "";
