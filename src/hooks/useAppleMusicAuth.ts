@@ -1,4 +1,3 @@
-import { edgeFunctionName } from "@/lib/edgeFunctionName";
 /**
  * Apple Music authorization via MusicKit JS v3.
  *
@@ -89,7 +88,7 @@ export interface AppleMusicTaste {
  */
 export async function fetchAppleMusicTaste(musicUserToken: string): Promise<AppleMusicTaste | null> {
   try {
-    const { data, error } = await supabase.functions.invoke(edgeFunctionName("apple-taste"), {
+    const { data, error } = await supabase.functions.invoke("apple-taste", {
       body: { musicUserToken, storefront: readAppleStorefront() },
     });
     if (error) {

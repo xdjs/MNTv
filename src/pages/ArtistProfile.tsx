@@ -1,4 +1,3 @@
-import { edgeFunctionName } from "@/lib/edgeFunctionName";
 import { useParams, useNavigate } from "react-router-dom";
 import RemoteImage from "@/components/RemoteImage";
 import { ArrowLeft, Loader2 } from "lucide-react";
@@ -212,7 +211,7 @@ function RealArtistProfile({
     const body = withAppleStorefront(baseBody, service);
 
     supabase.functions
-      .invoke(edgeFunctionName("spotify-artist"), { body })
+      .invoke("spotify-artist", { body })
       .then(({ data: d, error: e }) => {
         if (cancelled) return;
         if (e || !d?.found || !d?.artist) {

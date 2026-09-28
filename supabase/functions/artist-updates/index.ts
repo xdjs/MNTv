@@ -15,6 +15,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { artistUpdatesCacheKey as cacheKey } from "../_shared/artistUpdatesCacheKey.ts";
+import { matchesArtistResearch } from "../_shared/matchesArtistResearch.ts";
 import { selectUpdateArtist } from "../_shared/selectUpdateArtist.ts";
 import { fetchAppleUpdateCatalog } from "../_shared/appleUpdateCatalog.ts";
 import { getAppleDeveloperToken } from "../_shared/apple-token.ts";
@@ -405,6 +406,7 @@ const EXA_TIMEOUT_MS = 8_000;
 async function researchArtistOnExa(
   artistName: string,
   apiKey: string,
+  identity: Parameters<typeof matchesArtistResearch>[1],
 ): Promise<{ snippets: string; citations: { title: string; url: string }[] }> {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), EXA_TIMEOUT_MS);
@@ -416,7 +418,7 @@ async function researchArtistOnExa(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        query: `${artistName} interview production credits collaborators backstory`,
+        query: `${artistName} "${identity.titles[0] ?? ""}" interview production credits collaborators backstory`,
         type: "auto",
         numResults: 4,
         livecrawl: "fallback",
@@ -434,12 +436,13 @@ async function researchArtistOnExa(
       return { snippets: "", citations: [] };
     }
     const data = await res.json();
-    const results = (data?.results ?? []) as Array<{
+    const candidates = (data?.results ?? []) as Array<{
       title?: string;
       url?: string;
       text?: string;
       highlights?: string[];
     }>;
+    const results = candidates.filter((source) => matchesArtistResearch(source, identity));
     const citations = results
       .filter((r) => r.url)
       .map((r) => ({ title: r.title || "", url: r.url! }));
@@ -600,11 +603,10 @@ ${writerRules}
 
 ${tierGuidance}${sparseGroundingBlock}${exaResearchBlock}
 
-You also have Google Search available as a tool. USE IT to verify or
-extend the Exa research above — interviews, production credits, label
-history, scene context, recent press. Cross-check any specific name /
-year / venue / song title before committing to it. Only fall back to
-the catalog data above if both Exa and Google Search are empty.
+Use only the identity-checked research above. Do not introduce facts from
+training memory or additional searches: the same name may belong to a
+completely different artist. Return no nuggets if the supplied sources do
+not support a fact about this artist's verified catalog.
 
 ARTIST NAME LOCK: refer to the artist as "${artistName}" throughout —
 that's their public/stage name and how the audience knows them.
@@ -627,14 +629,8 @@ Return JSON only, no preamble:
   ]
 }`;
 
-  // Use `gemini-2.5-flash` with Google Search grounding enabled. The
-  // model autonomously decides whether to search; grounded responses
-  // come back with `groundingMetadata` we could surface as citations
-  // (future). For now we just use the grounded text.
-  //
-  // `responseMimeType` is intentionally NOT set — incompatible with
-  // grounding tools. The response sometimes comes wrapped in a
-  // ```json fence which we strip before JSON.parse.
+  // Generate only from identity-checked research; independent search could
+  // reintroduce a namesake. Strip JSON fences before parsing the response.
   //
   // 40s abort timeout: keeps the worst-case wall time predictable so a
   // hung Gemini doesn't hold the cache sentinel for the full
@@ -652,7 +648,7 @@ Return JSON only, no preamble:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: prompt }] }],
-          tools: [{ googleSearch: {} }],
+
           generationConfig: { temperature: 0.7 },
         }),
         signal: ctl.signal,
@@ -773,7 +769,7 @@ const POLL_INTERVAL_CAP_MS = 8_000;
 //      an empty catalog). Those rows are incorrect, not merely stale, so they
 //      must be invalidated rather than left to age out over 7 days.
 //
-// v4 — identity-scoped keys are shared with the client through
+// v5 — identity-scoped, research-validated keys are shared with the client through
 // _shared/artistUpdatesCacheKey.ts. Legacy name-only rows are not reused.
 
 type CacheState =
@@ -957,8 +953,7 @@ serve(async (req) => {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-  const namespace = new URL(req.url).pathname.split("/").includes("artist-updates-staging") ? "staging::" : "";
-  const key = namespace + cacheKey(artist, tier, apple ? body.artistId : spotifyArtistId, apple ? "apple" : "spotify", storefront);
+  const key = cacheKey(artist, tier, apple ? body.artistId : spotifyArtistId, apple ? "apple" : "spotify", storefront);
 
   // 1. Cache state machine — picks one of:
   //    - ready  → return cached
@@ -1074,13 +1069,16 @@ serve(async (req) => {
     //    (citation count + body-text mention). Top-tracks always
     //    fetched too — cheap call, and the sparse-mode prompt needs
     //    them as catalog grounding when we DO fall through.
-    const [release, topTracks, exaResult] = await Promise.all([
+    const [release, topTracks] = await Promise.all([
       apple ? Promise.resolve(appleCatalog?.release ?? null) : fetchRecentRelease(token, artistInfo.id),
       apple ? Promise.resolve(appleCatalog?.tracks ?? []) : fetchArtistTopTracks(token, artistInfo.id),
-      exaApiKey
-        ? researchArtistOnExa(artistInfo.name, exaApiKey)
-        : Promise.resolve({ snippets: "", citations: [] as { title: string; url: string }[] }),
     ]);
+    const exaResult = exaApiKey
+      ? await researchArtistOnExa(artistInfo.name, exaApiKey, {
+        id: artistInfo.id, name: artistInfo.name, service: apple ? "apple" : "spotify",
+        titles: [...topTracks.map((track) => track.name), ...(release ? [release.name] : [])],
+      })
+      : { snippets: "", citations: [] as { title: string; url: string }[] };
 
     // Sparse iff: few/no usable Exa citations AND the artist's name
     // doesn't appear in any snippet body. Mirrors the trigger in
@@ -1091,7 +1089,7 @@ serve(async (req) => {
       exaResult.snippets.toLowerCase().includes(artistInfo.name.toLowerCase());
     const isSparse = exaResult.citations.length <= 1 && !artistMentionedInBody;
 
-    const facts = await generateArtistFacts({
+    const facts = exaResult.citations.length === 0 ? [] : await generateArtistFacts({
       artistName: artistInfo.name,
       tier,
       count: FACTS_PER_ARTIST,

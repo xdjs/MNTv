@@ -23,7 +23,7 @@ export const ARTIST_FACT_ID_PREFIX = "artistfact";
  * function — if the two drift, this silently reads nothing and the
  * feature degrades to "no seed" with no error anywhere.
  */
-export const ARTIST_UPDATES_CACHE_VERSION = "v4";
+export const ARTIST_UPDATES_CACHE_VERSION = "v5";
 
 export function buildArtistUpdatesCacheKey(artistName: string, tier: string, spotifyArtistId?: string): string {
   return artistUpdatesCacheKey(artistName, tier, spotifyArtistId);

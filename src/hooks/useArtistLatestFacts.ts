@@ -1,4 +1,3 @@
-import { edgeFunctionName } from "@/lib/edgeFunctionName";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { ArtistUpdate } from "@/hooks/useArtistUpdates";
@@ -45,7 +44,7 @@ export function useArtistLatestFacts(
     setLoading(true);
     (async () => {
       try {
-        const { data, error } = await supabase.functions.invoke(edgeFunctionName("artist-updates"), {
+        const { data, error } = await supabase.functions.invoke("artist-updates", {
           body: { artist: artistName, tier, ...(service === "apple" ? { service, storefront, artistId } : artistId ? { spotifyArtistId: artistId } : {}) },
         });
         if (cancelled) return;

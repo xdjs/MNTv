@@ -153,14 +153,20 @@ and https://developer.apple.com/documentation/applemusicapi/artists/views-data.d
 ## Staging-first release (2026-09-28)
 
 Tracked in [MusicNerdWeb#1374](https://github.com/xdjs/MusicNerdWeb/issues/1374).
-The candidate uses `VITE_EDGE_FUNCTION_CHANNEL=staging` in the staging and
-feature-branch preview builds. Only the three changed endpoints are mapped to
-`-staging` wrappers. Other builds retain the original endpoint names. The
-wrappers load the same implementation; the request path selects cache isolation.
-Candidate artist updates use a `staging::` cache prefix; candidate artist
-profiles bypass complete-result cache reads and writes. No production
-function is replaced for staging verification. Infrastructure, credentials
-and provider quotas are still shared; this is not a separate database.
+Pete explicitly approved updating the shared backend, affecting production,
+after reviewing the staging-isolation option. The temporary candidate
+endpoints were used for pre-deployment probes; staging-only frontend routing
+is removed from the release. Production frontend remains unchanged until the
+staging-to-main release is approved.
+
+Live probes recovered ten songs each for Tame Impala and Dame Atlas, and
+native Apple updates for Tame Impala. They also caught research about a
+namesake despite correct Spotify catalog identity. Research now searches
+with catalog context and checks each source against the exact artist URL or
+artist name plus a distinctive catalog title. Unverified sources are excluded;
+no facts are generated when no sources pass. Generation cannot extend the
+sources through independent name-only Google searches. Cache v5 invalidates
+the earlier candidate results. This trades fewer fact cards for safer identity.
 
 The Spotify biography generator is aligned to the downloaded live version
 before deployment; this release does not introduce the previously unshipped

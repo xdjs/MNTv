@@ -1,4 +1,3 @@
-import { edgeFunctionName } from "@/lib/edgeFunctionName";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { readAppleStorefront } from "@/lib/appleStorefront";
@@ -229,7 +228,7 @@ export function useArtistUpdates(
         // artist updates" pill on screen indefinitely. 30s matches
         // typical worst-case server budget; anything longer is a
         // sign the call is wedged.
-        const invokePromise = supabase.functions.invoke(edgeFunctionName("artist-updates"), {
+        const invokePromise = supabase.functions.invoke("artist-updates", {
           body: { artist, tier, ...(apple ? { service: "apple", storefront, artistId } : artistId ? { spotifyArtistId: artistId } : {}) },
         });
         let timeoutId: ReturnType<typeof setTimeout> | undefined;

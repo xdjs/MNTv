@@ -370,7 +370,6 @@ async function writeArtistCache(
 // ── Main handler ────────────────────────────────────────────────────────
 
 serve(async (req) => {
-  const staging = new URL(req.url).pathname.split("/").includes("spotify-artist-staging");
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -397,7 +396,6 @@ serve(async (req) => {
         providedId: typeof providedId === "string" ? providedId : undefined,
         artistName: typeof artistName === "string" ? artistName : undefined,
         storefront: rawStorefront,
-        staging,
       });
     }
 
@@ -412,7 +410,7 @@ serve(async (req) => {
         .eq("service", "spotify")
         .single();
 
-      if (!staging && isFreshCacheRow(cached) && isValidArtistCachePayload(cached.data) &&
+      if (isFreshCacheRow(cached) && isValidArtistCachePayload(cached.data) &&
           (cached.data as Record<string, unknown>).catalogVersion === 2) {
         return new Response(JSON.stringify(cached.data), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -473,7 +471,7 @@ serve(async (req) => {
         .eq("service", "spotify")
         .single();
 
-      if (!staging && isFreshCacheRow(cached) && isValidArtistCachePayload(cached.data) &&
+      if (isFreshCacheRow(cached) && isValidArtistCachePayload(cached.data) &&
           (cached.data as Record<string, unknown>).catalogVersion === 2) {
         return new Response(JSON.stringify(cached.data), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -602,7 +600,7 @@ serve(async (req) => {
     // Supabase's Deno edge runtime). Concurrent cold-cache requests for
     // the same artist will both generate a bio, but upsert is idempotent
     // so the second write overwrites with equivalent data.
-    if (!staging && albumsData !== null && tracksFetchSucceeded) {
+    if (albumsData !== null && tracksFetchSucceeded) {
       await writeArtistCache(db, {
         artist_id: artistId,
         service: "spotify",
@@ -651,9 +649,8 @@ async function handleAppleArtist(args: {
   providedId?: string;
   artistName?: string;
   storefront?: string;
-  staging?: boolean;
 }): Promise<Response> {
-  const { db, staging = false, providedId, artistName, storefront: rawStorefront } = args;
+  const { db, providedId, artistName, storefront: rawStorefront } = args;
   const storefront = safeStorefront(rawStorefront);
   const devToken = await getAppleDeveloperToken();
 
@@ -688,7 +685,7 @@ async function handleAppleArtist(args: {
     .eq("service", "apple")
     .single();
 
-  if (!staging && isFreshCacheRow(cached) && isValidArtistCachePayload(cached.data)) {
+  if (isFreshCacheRow(cached) && isValidArtistCachePayload(cached.data)) {
     return new Response(JSON.stringify(cached.data), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -783,7 +780,7 @@ async function handleAppleArtist(args: {
     relatedArtists,
   };
 
-  if (!staging && albumsFetchSucceeded) {
+  if (albumsFetchSucceeded) {
     await writeArtistCache(db, {
       artist_id: artistId,
       service: "apple",

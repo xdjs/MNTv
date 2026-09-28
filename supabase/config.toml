@@ -91,14 +91,3 @@ verify_jwt = true
 # so client code didn't need changes.
 [functions.artist-updates]
 verify_jwt = true
-
-# Isolated candidate endpoints for the staging frontend.
-
-[functions.spotify-artist-staging]
-verify_jwt = false
-
-[functions.artist-updates-staging]
-verify_jwt = true
-
-[functions.apple-taste-staging]
-verify_jwt = false
