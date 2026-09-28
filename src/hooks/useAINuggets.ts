@@ -1,3 +1,4 @@
+import { artistUpdatesCacheKey } from "../../supabase/functions/_shared/artistUpdatesCacheKey";
 import { preparePreGenCacheEntry } from "@/lib/preGenCachePrefill";
 import { hasFactEvidence } from "../../supabase/functions/_shared/hasFactEvidence";
 import type { FactEvidence } from "../../supabase/functions/_shared/hasFactEvidence";
@@ -11,7 +12,6 @@ import { isValidSourceShape } from "@/lib/sourceShape";
 import { isSafeUrl } from "@/lib/urlSafety";
 import type { ArtistUpdate } from "@/hooks/useArtistUpdates";
 import {
-  buildArtistUpdatesCacheKey,
   selectSeedFacts,
   mergeStreamedNugget,
 } from "@/lib/artistFactToNugget";
@@ -251,6 +251,7 @@ export function useAINuggets(
   // pre-gen used in wave 1 — otherwise wave-2 loses a key research
   // signal and falls back to thin generic content on collab tracks.
   collaborators?: string[],
+  catalogIdentity?: { id?: string; service: "spotify" | "apple"; storefront?: string },
 ): UseAINuggetsResult {
   const [nuggets, setNuggets] = useState<Nugget[]>([]);
   const [sources, setSources] = useState<Map<string, Source>>(new Map());
@@ -342,8 +343,8 @@ export function useAINuggets(
   //
   // Regeneration should be decided by WHAT we are generating for (track, tier,
   // listen depth), never by late-arriving decoration.
-  const enrichmentRef = useRef({ coverArtUrl, artistImageUrl, topArtists, topTracks });
-  enrichmentRef.current = { coverArtUrl, artistImageUrl, topArtists, topTracks };
+  const enrichmentRef = useRef({ coverArtUrl, artistImageUrl, topArtists, topTracks, catalogIdentity });
+  enrichmentRef.current = { coverArtUrl, artistImageUrl, topArtists, topTracks, catalogIdentity };
 
   const generate = useCallback(async () => {
     if (!artist || !title) return;
@@ -670,7 +671,8 @@ export function useAINuggets(
         // Best-effort only: any failure here must not block generation,
         // which is the real path to the content.
         try {
-          const artistKey = buildArtistUpdatesCacheKey(artist, tier);
+          const identity = enrichmentRef.current.catalogIdentity;
+          const artistKey = artistUpdatesCacheKey(artist, tier, identity?.id, identity?.service, identity?.storefront);
           const { data: artistRow } = await supabase
             .from("nugget_cache")
             .select("nuggets, status")

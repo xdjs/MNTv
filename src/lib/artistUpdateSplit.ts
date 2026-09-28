@@ -10,6 +10,7 @@ import type { ArtistUpdate } from "@/hooks/useArtistUpdates";
 
 /** A track the user can start playing from the Browse row. */
 export interface PlayableTrack {
+  artistId?: string;
   title: string;
   album: string;
   /** Spotify track URI when known. Absent for Apple users and for
@@ -42,6 +43,7 @@ function toPlayableTrack(update: ArtistUpdate): PlayableTrack | null {
   if (!update.relatedTrackTitle) return null;
   return {
     title: update.relatedTrackTitle,
+    ...(update.artistId ? { artistId: update.artistId } : {}),
     album: update.relatedAlbumName ?? "",
     uri: update.relatedTrackUri,
     // For release/collab kinds this field holds the album cover, not an

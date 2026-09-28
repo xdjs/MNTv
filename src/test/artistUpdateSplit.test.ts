@@ -34,6 +34,7 @@ describe("splitArtistUpdates", () => {
     expect(tracks).toEqual([
       {
         title: "Will Kill",
+        artistId: "a1",
         album: "ACT I",
         uri: "spotify:track:abc",
         imageUrl: "https://example.com/a.jpg",
@@ -92,6 +93,7 @@ describe("splitArtistUpdates", () => {
     expect(tracks).toEqual([
       {
         title: "Loose End",
+        artistId: "a1",
         album: "ACT I",
         uri: "spotify:track:def",
         imageUrl: "https://example.com/cover.jpg",

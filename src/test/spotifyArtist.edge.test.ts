@@ -146,3 +146,19 @@ describe("local artist-page integration (mock Spotify, real page and edge handle
     expect(screen.queryByText("Couldn't find this artist on Spotify.")).not.toBeInTheDocument();
   });
 });
+it("keeps the primary artist separate from collaboration credits in search fallback", async () => {
+  const prior = responses;
+  responses = path => path.startsWith("/search?type=track")
+    ? Response.json({ tracks: { items: [{ ...song, artists: [artist, { id: "featured", name: "Featured" }] }] } })
+    : prior(path);
+  const data = await (await request({ artistId: artist.id, artistName: artist.name })).json();
+  expect(data.topTracks[0].artist).toBe(artist.name);
+  expect(data.topTracks[0].artistId).toBe(artist.id);
+  expect(data.topTracks[0].collaborators).toEqual(["Featured"]);
+});
+it("refreshes catalogs cached before primary-artist credits were separated", async () => {
+  mocks.cached = { created_at: new Date().toISOString(), data: { catalogVersion: 2, found: true, artist, topTracks: [{ ...song, artist: "Tame Impala, Featured" }] } };
+  const data = await (await request({ artistName: artist.name })).json();
+  expect(data.catalogVersion).toBe(3);
+  expect(data.topTracks[0].artist).toBe(artist.name);
+});

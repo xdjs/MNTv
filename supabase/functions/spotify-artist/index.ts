@@ -39,6 +39,8 @@ interface SpotifyTrack {
   duration_ms?: number;
 }
 interface ArtistTrack {
+  artistId?: string;
+  collaborators?: string[];
   title: string;
   artist: string;
   album: string;
@@ -411,7 +413,7 @@ serve(async (req) => {
         .single();
 
       if (isFreshCacheRow(cached) && isValidArtistCachePayload(cached.data) &&
-          (cached.data as Record<string, unknown>).catalogVersion === 2) {
+          (cached.data as Record<string, unknown>).catalogVersion === 3) {
         return new Response(JSON.stringify(cached.data), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -472,7 +474,7 @@ serve(async (req) => {
         .single();
 
       if (isFreshCacheRow(cached) && isValidArtistCachePayload(cached.data) &&
-          (cached.data as Record<string, unknown>).catalogVersion === 2) {
+          (cached.data as Record<string, unknown>).catalogVersion === 3) {
         return new Response(JSON.stringify(cached.data), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -498,6 +500,8 @@ serve(async (req) => {
       topTracks = topTracksData.tracks.slice(0, 10).map((t: SpotifyTrack) => ({
         title: t.name,
         artist: t.artists?.[0]?.name || artist.name,
+        artistId: t.artists?.[0]?.id || artistId,
+        collaborators: (t.artists || []).slice(1).map((a: { name: string }) => a.name),
         album: t.album?.name || "",
         imageUrl: t.album?.images?.[0]?.url || t.album?.images?.[1]?.url || "",
         uri: t.uri || "",
@@ -519,7 +523,9 @@ serve(async (req) => {
         })
         .slice(0, 10)
         .map((t: SpotifyTrack) => ({
-          title: t.name, artist: (t.artists || []).map((a: { name: string }) => a.name).join(", "),
+          title: t.name, artist: t.artists?.[0]?.name || artist.name,
+          artistId: t.artists?.[0]?.id || artistId,
+          collaborators: (t.artists || []).slice(1).map((a: { name: string }) => a.name),
           album: t.album?.name || "", imageUrl: t.album?.images?.[0]?.url || "",
           uri: t.uri, durationMs: t.duration_ms || 0,
         }));
@@ -538,6 +544,8 @@ serve(async (req) => {
             topTracks.push({
               title: t.name,
               artist: t.artists?.[0]?.name || artist.name,
+              artistId: t.artists?.[0]?.id || artistId,
+              collaborators: (t.artists || []).slice(1).map((a: { name: string }) => a.name),
               album: albumDetail.name || "",
               imageUrl: albumDetail.images?.[0]?.url || albumDetail.images?.[1]?.url || "",
               uri: t.uri || "",
@@ -566,7 +574,7 @@ serve(async (req) => {
 
     // Normalize response
     const result = {
-      catalogVersion: 2,
+      catalogVersion: 3,
       tracksSource,
       tracksUnavailable: !tracksFetchSucceeded && topTracks.length === 0,
       found: true,
