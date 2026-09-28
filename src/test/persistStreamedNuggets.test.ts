@@ -28,3 +28,9 @@ it("does not overwrite an unread cache or persist unsupported output", async () 
   await persistStreamedNuggets(db, { ...options, nuggets: [{ ...fact, source: { url: source.url } }] });
   expect(upsert).not.toHaveBeenCalled();
 });
+it.each([-1, 0, Infinity, NaN, 1e12])('normalizes unsafe duration %s before cache writes', async (durationSec) => {
+  const { db, upsert } = client(null);
+  await persistStreamedNuggets(db, { ...options, durationSec, nuggets: Array.from({ length: 3 }, () => ({ ...fact, source })) });
+  const nuggets = upsert.mock.calls[0][0].nuggets as { timestampSec: number }[];
+  expect(nuggets.map(n => n.timestampSec)).toEqual([0, 112, 225]);
+});

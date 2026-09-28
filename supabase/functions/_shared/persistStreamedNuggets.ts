@@ -1,3 +1,4 @@
+import { normalizeCacheDuration } from "./normalizeCacheDuration.ts";
 import { hasFactEvidence } from "./hasFactEvidence.ts";
 type Fact = { id?: string; headline?: string; text?: string; sourceId?: string; source?: Record<string, unknown>; [key: string]: unknown };
 type Row = { nuggets?: Fact[]; sources?: Record<string, unknown> };
@@ -12,6 +13,7 @@ export async function persistStreamedNuggets(client: CacheClient | null, options
   durationSec: number; nuggets: Fact[]; externalLinks?: unknown[];
 }): Promise<boolean> {
   if (!client) return false;
+  const durationSec = normalizeCacheDuration(options.durationSec);
   const supported = options.nuggets.filter(n => hasFactEvidence(n, n.source));
   if (!supported.length) return false;
   const trackId = `real::${options.artist}::${options.title}::::${options.uri}`;
@@ -26,7 +28,7 @@ export async function persistStreamedNuggets(client: CacheClient | null, options
       const sourceId = `ai-src-${trackId}-L${options.listenCount}-${i}`;
       sources[sourceId] = { ...n.source, id: sourceId };
       return { ...n, source: undefined, id: `ai-nug-${trackId}-L${options.listenCount}-${i}`, trackId, sourceId,
-        timestampSec: Math.max(0, Math.min(Math.floor(i * Math.max(options.durationSec - 15, 30) / Math.max(supported.length - 1, 1)), options.durationSec - 10)), durationMs: 7000 };
+        timestampSec: Math.max(0, Math.min(Math.floor(i * Math.max(durationSec - 15, 30) / Math.max(supported.length - 1, 1)), durationSec - 10)), durationMs: 7000 };
     });
     const ids = new Set(incoming.map(n => n.id));
     const headlines = new Set(incoming.map(n => n.headline?.trim().toLowerCase()));

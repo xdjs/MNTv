@@ -27,3 +27,17 @@ Completed SSE generation persists verified facts with backend privileges before 
 Listen never infers an artist ID from a profile display-name map. Artist-profile and artist-update playback routes explicitly carry their selected catalog identity; other routes retain the name-scoped lookup until they carry an explicit ID. Cross-service recording resolution drops the original provider's artist ID.
 
 Listening history preserves the complete query string (including artist ID and all collaborator credits), merging fallback artwork only when no artwork parameter exists. Returning with Previous therefore retains the same catalog identity and research context.
+
+### Final review corrections (2026-09-28)
+
+Companion uploads wait for initial and background generation to settle, coalesce snapshots for 1.5 seconds, and serialize requests. Attempts are spaced at least 65 seconds apart within the mounted Listen page, with at most three attempts per snapshot. Only successful uploads enter the dedupe map; quota failures can retry after the next minute window. Navigating away cancels queued work and prevents old requests from updating the current QR state.
+
+Both streamed and batch cache writes normalize durations: finite values above 30 seconds and at most six hours are accepted; other inputs use 240 seconds. The streamed persistence helper also enforces this boundary independently.
+
+Track currentness uses a monotonically increasing generation, so A → B → A cannot revive an old request. Cached QR links restore independently of upload deduplication when returning to a track.
+
+QR readiness is derived from acceptance of the exact track/listen-depth/snapshot, not possession of a cached short link. A new listen or pending wave keeps the QR hidden until the current snapshot succeeds; revisiting an already accepted unchanged snapshot restores readiness without another upload.
+
+Accepted snapshots and the attempt cooldown survive Listen remounts in a bounded in-memory page-session cache (100 keys). The acceptance key uses track, tier and listen depth; the fact snapshot independently distinguishes regenerated content. Each upload has a 60-second timeout and abort signal, so a stalled auth/network request cannot block later tracks indefinitely. Every companion entry point, including loading-orchestrator buttons, receives a readiness-gated short ID.
+
+Acceptance also requires a usable short link. Read/insert failures propagate to the scheduler for retry; a concurrent insert is recovered by re-reading the winning link.
