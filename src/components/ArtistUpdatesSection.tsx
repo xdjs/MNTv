@@ -57,7 +57,7 @@ function ArtistUpdatesSectionInner({
   // effect doesn't re-fire on every parent re-render (which would
   // pull focus back to the close button mid-interaction whenever
   // readyCount/groups update from useArtistUpdatesContext).
-  const modalOnClose = useCallback(() => setExpandedKey(null), []);
+  const closeExpanded = useCallback(() => setExpandedKey(null), []);
 
 
   const showProgress = totalCount > 0 && readyCount < totalCount;
@@ -99,7 +99,8 @@ function ArtistUpdatesSectionInner({
   // Playback always goes straight to Listen — from a card's play control
   // or the expanded card's Play button. No expand step in between: the
   // user already said what they want.
-  const { playTrack, pending, error } = useArtistUpdatePlayback(profile?.streamingService, modalOnClose);
+  const { playTrack, pending, error, cancel } = useArtistUpdatePlayback(profile?.streamingService, closeExpanded);
+  const modalOnClose = useCallback(() => { cancel(); closeExpanded(); }, [cancel, closeExpanded]);
 
   // The expanded card needs the same play target its tile had, so
   // opening a fact never becomes a dead end. Resolved from the owning
@@ -166,7 +167,7 @@ function ArtistUpdatesSectionInner({
                 : activeService === "spotify" && group.updates?.[0]?.artistId
                   ? `/artist/spotify::${group.updates[0].artistId}::${encodeURIComponent(group.artistName)}`
                   : `/artist/real::${encodeURIComponent(group.artistName)}`}
-              onExpand={(u) => setExpandedKey(cardKey(u))}
+              onExpand={(u) => { cancel(); setExpandedKey(cardKey(u)); }}
               onPlay={playTrack}
               playPending={pending}
             />

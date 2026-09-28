@@ -110,9 +110,10 @@ export default function LatestFactsSection({ updates, loading, artistName }: Pro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetNuggetId, updates.length]);
 
-  const modalOnClose = useCallback(() => setExpandedKey(null), []);
+  const closeExpanded = useCallback(() => setExpandedKey(null), []);
 
-  const { playTrack, pending, error } = useArtistUpdatePlayback(profile?.streamingService, modalOnClose);
+  const { playTrack, pending, error, cancel } = useArtistUpdatePlayback(profile?.streamingService, closeExpanded);
+  const modalOnClose = useCallback(() => { cancel(); closeExpanded(); }, [cancel, closeExpanded]);
   const expandedPlayTarget = expandedUpdate ? resolvePlayTarget(expandedUpdate, []) : null;
   const modalOnPlay = useCallback(() => {
     if (expandedUpdate && expandedPlayTarget) {
@@ -151,7 +152,7 @@ export default function LatestFactsSection({ updates, loading, artistName }: Pro
                   <UpdateCard
                     layoutId={key}
                     update={u}
-                    onClick={() => setExpandedKey(key)}
+                    onClick={() => { cancel(); setExpandedKey(key); }}
                     sizeClass="w-full h-44 md:h-48"
                     pulsing={pulseKey === key}
                     playTarget={playTarget}

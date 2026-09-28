@@ -9,6 +9,7 @@ import { withAppleStorefront } from "@/lib/appleStorefront";
 export function useArtistUpdatePlayback(streamingService?: string, onStarted?: () => void) {
   const navigate = useNavigate();
   const busy = useRef(false);
+  const attempt = useRef(0);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -17,8 +18,17 @@ export function useArtistUpdatePlayback(streamingService?: string, onStarted?: (
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const cancel = useCallback(() => {
+    attempt.current += 1;
+    busy.current = false;
+    setPending(false);
+    setError(null);
+  }, []);
+
   const playTrack = useCallback(async (artist: string, target: PlayableTrack) => {
     if (busy.current) return;
+    const activeAttempt = ++attempt.current;
+    const isActive = () => mounted.current && attempt.current === activeAttempt;
     busy.current = true;
     setPending(true);
     setError(null);
@@ -33,10 +43,10 @@ export function useArtistUpdatePlayback(streamingService?: string, onStarted?: (
         let firstTrack = !requestError && (data?.tracks as PlayableTrack[] | undefined)?.find((t) =>
           t.title && t.uri?.startsWith(service === "apple" ? "apple:song:" : "spotify:track:"),
         );
-        if (!mounted.current) return;
-        if (!firstTrack) {
+        if (!isActive()) return;
+        if (!firstTrack && service === "spotify") {
           // Some Spotify apps can search but cannot read album details.
-          // Only accept a song matching this release AND artist.
+          // Match the exact album identity, including collaborative credits.
           const albumName = target.album || target.title;
           const clean = (value: string) => value.replace(/"/g, "");
           const query = service === "spotify"
@@ -45,26 +55,23 @@ export function useArtistUpdatePlayback(streamingService?: string, onStarted?: (
           const searched = await supabase.functions.invoke("spotify-search", {
             body: withAppleStorefront({ query, service }, service),
           });
-          const normalize = (value: string) => value.trim().toLowerCase();
-          firstTrack = !searched.error && (searched.data?.tracks as (PlayableTrack & { artist: string })[] | undefined)?.find((t) =>
-            t.title && t.artist && t.album && normalize(t.artist) === normalize(artist) &&
-            normalize(t.album) === normalize(albumName) &&
+          firstTrack = !searched.error && (searched.data?.tracks as (PlayableTrack & { albumUri?: string })[] | undefined)?.find((t) =>
+            t.title && t.albumUri === target.uri &&
             t.uri?.startsWith(service === "apple" ? "apple:song:" : "spotify:track:"),
           );
         }
         if (!firstTrack) throw new Error("Release tracks unavailable");
         track = { ...firstTrack, album: target.album || target.title };
       }
-      if (!mounted.current) return;
-      navigate(buildListenRoute({ artist, ...track, streamingService }));
+      if (!isActive()) return;
+      navigate(buildListenRoute({ ...track, artist, streamingService }));
       onStarted?.();
     } catch {
-      if (mounted.current) setError("Couldn't load this release. Please try again.");
+      if (isActive()) setError("Couldn't load this release. Please try again.");
     } finally {
-      busy.current = false;
-      if (mounted.current) setPending(false);
+      if (isActive()) { busy.current = false; setPending(false); }
     }
   }, [navigate, streamingService, onStarted]);
 
-  return { playTrack, pending, error };
+  return { playTrack, pending, error, cancel };
 }

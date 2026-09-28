@@ -186,3 +186,10 @@ workflow fails before review because its GitHub App is not installed on the
 repository. This is recorded as a review infrastructure failure, not a pass.
 Actual Apple account-history authorization and audible playback still need
 user verification on staging before the main release.
+
+Review follow-up: Spotify search now returns each track's album URI. Release
+fallback requires that exact album URI, so collaborators are accepted without
+substituting a namesake's same-titled release. Apple album lookup failures
+stay retryable rather than guessing from names. Closing a release dialog or
+opening another card invalidates pending playback, preventing late navigation
+or a stale error. Regression tests exercise both cases.

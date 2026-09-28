@@ -154,12 +154,25 @@ describe("artist-page release playback", () => {
 it("uses search only for a song from the advertised release when album details fail", async () => {
   playbackMocks.invoke.mockResolvedValueOnce({ data: null, error: new Error("Forbidden") }).mockResolvedValueOnce({
     data: { tracks: [
-      { title: "Wrong album", artist: "Loathe", album: "Older Album", uri: "spotify:track:wrong" },
-      { title: "Wrong artist", artist: "Someone Else", album: "A Stranger To You", uri: "spotify:track:wrong2" },
-      { title: "Release Song", artist: "Loathe", album: "A Stranger To You", uri: "spotify:track:right" },
+      { title: "Wrong album", artist: "Loathe", album: "Older Album", albumUri: "spotify:album:wrong", uri: "spotify:track:wrong" },
+      { title: "Wrong artist", artist: "Loathe", album: "A Stranger To You", albumUri: "spotify:album:namesake", uri: "spotify:track:wrong2" },
+      { title: "Release Song", artist: "Collaborator, Loathe", album: "A Stranger To You", albumUri: "spotify:album:album123", uri: "spotify:track:right" },
     ] }, error: null,
   });
   renderAt("", [RELEASE]);
   fireEvent.click(screen.getByRole("button", { name: "Play A Stranger To You by Loathe" }));
   await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/listen/real::Loathe::Release%20Song::A%20Stranger%20To%20You::spotify%3Atrack%3Aright"));
+});
+
+
+it("cancels playback when the originating dialog is dismissed", async () => {
+  let finish!: (value: typeof resolvedAlbum) => void;
+  playbackMocks.invoke.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  renderAt("", [RELEASE]);
+  fireEvent.click(screen.getByText(RELEASE.headline));
+  fireEvent.click(within(dialog()!).getByRole("button", { name: "Play A Stranger To You by Loathe" }));
+  fireEvent.click(within(dialog()!).getByRole("button", { name: "Close" }));
+  finish(resolvedAlbum);
+  await waitFor(() => expect(dialog()).toBeNull());
+  expect(navigateMock).not.toHaveBeenCalled();
 });
