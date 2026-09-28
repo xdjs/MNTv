@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      VITE_SUPABASE_URL: https://test-project.supabase.co
+      VITE_SUPABASE_PUBLISHABLE_KEY: test-anon-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm test
+      - name: Release safety regression tests
+        run: node --test scripts/release/*.test.mjs
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+
+  staging-release:
+    needs: [test, build]
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      vars.RELEASES_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: staging-release
+      url: https://staging.mntv.musicnerd.xyz
+    concurrency:
+      group: mntv-staging-release
+      cancel-in-progress: false
+    outputs:
+      record: ${{ steps.release.outputs.record }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+      - name: Build, validate and assign staging
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          RELEASE_ENVIRONMENT: staging
+        run: node scripts/release/runRelease.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-staging-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-record.json
+          if-no-files-found: ignore
+          retention-days: 90
+
+  production-release:
+    needs: staging-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Approval includes the manual production-migration checklist in docs/releases.md.
+    environment:
+      name: production-release
+      url: https://mntv.musicnerd.xyz
+    concurrency:
+      group: mntv-production-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+      - name: Build production candidate, validate and promote
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          RELEASE_ENVIRONMENT: production
+          STAGING_RECORD: ${{ needs.staging-release.outputs.record }}
+        run: node scripts/release/runRelease.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-production-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-record.json
+          if-no-files-found: ignore
+          retention-days: 90

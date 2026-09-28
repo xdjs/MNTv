@@ -51,3 +51,10 @@ src/
 supabase/
   functions/     — Edge functions (generate-nuggets, generate-companion, etc.)
 ```
+
+## Development and releases
+
+Branch from `main` and open PRs to `main`. After CI passes, merged changes deploy to
+[staging](https://staging.mntv.musicnerd.xyz). Production requires approval in GitHub Actions,
+which builds and promotes a production candidate from the same commit. See
+[the release guide](docs/releases.md) for setup, approval, verification and rollback.

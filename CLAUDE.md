@@ -17,7 +17,7 @@ MusicNerd TV is a React SPA that delivers AI-powered music discovery through rea
 - **Web Research**: Exa API (fact enrichment for nuggets)
 - **Playback**: Spotify Web Playback SDK + YouTube IFrame API (backdrop)
 - **Testing**: Vitest + React Testing Library
-- **Deploy**: Vercel (frontend, auto on push) + Supabase (edge functions)
+- **Deploy**: Vercel (frontend, GitHub Actions releases) + Supabase (edge functions)
 
 ## Key Features
 1. **AI Nuggets**: Real-time AI-generated facts timed to track playback (Exa → Gemini → validation pipeline)
@@ -114,11 +114,11 @@ Server-side (Supabase edge function secrets):
 - **Animations**: Framer Motion for page transitions and card animations
 
 ## Git Workflow
-- **Branching**: Feature branches off `staging` → PR to `staging` → PR from `staging` to `main`
-- **Branch naming**: `username/feature-name`
+- **Branching**: `main` is the only persistent branch. Feature branches off `main` → PR to `main`
+- **Branch naming**: `username/feature-name` (Codex uses `codex/feature-name`)
 - **Commit messages**: Conventional commits — `feat:`, `fix:`, `chore:`, `refactor:`, `docs:`, `revert:`
-- **PRs always target `staging`**, never `main` directly
-- **Before pushing**: `npm test && npm run build`
+- **PRs target `main`**. CI deploys merged main to staging; production requires GitHub Environment approval. See `docs/releases.md`
+- **Before pushing**: `npm test && npm run test:release && npm run build`
 
 ## Available Scripts
 ```bash
@@ -138,4 +138,4 @@ npm run test:watch   # Vitest watch mode
 - **Route gating**: `ProtectedRoute` and `RootRoute` in `src/App.tsx` gate on `useAuth().session`, NOT localStorage profile. This allows mid-onboarding users (session but no tier yet) to stay on Connect, and cross-device progression since the session follows the user
 - **Demo Mode**: 50+ pre-generated seed files enable zero-latency guest experience
 - **RLS**: Row-Level Security enforces data access at the database level; cache tables are public read-only, profiles are user-owned
-- **Deploy**: Frontend auto-deploys to Vercel on push; Supabase edge functions deploy via Supabase CLI
+- **Deploy**: Feature branches get Vercel previews. Main releases use GitHub Actions → custom staging → approval → separate production build and promotion. Supabase edge functions remain a separate manual deployment; see `docs/releases.md`
