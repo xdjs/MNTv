@@ -698,7 +698,6 @@ Return JSON only, no preamble:
       .filter((n): n is NonNullable<typeof n> => n !== null)
       .slice(0, count);
     console.log(`[artist-updates] Gemini returned ${accepted.length}/${count} facts for ${artistName} (${nuggets.length} candidates)`);
-    if (nuggets.length && !accepted.length) console.warn("[artist-updates] Rejected citation fields", nuggets.map((n: any) => ({ sourceNumber: n?.sourceNumber, hasBody: typeof n?.body === "string" })));
     return accepted;
   } catch (e) {
     console.warn("[artist-updates] Gemini non-JSON output:", text.slice(0, 300), String(e));

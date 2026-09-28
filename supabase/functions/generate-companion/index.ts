@@ -3,6 +3,8 @@ import { verifyFactSources } from "../_shared/verifyFactSources.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
+type CompanionFact = { headline?: string; text?: string; sourceUrl?: string; citation?: unknown; [key: string]: unknown };
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -70,7 +72,7 @@ serve(async (req) => {
 
       // Accumulate nuggets from previous listen tiers
       // Client-supplied claims must be checked on the server before sharing.
-      const checked = await verifyFactSources(prebuiltNuggets.slice(0, 30).map((n: any) => ({ ...n, source: { url: n.sourceUrl } })), {
+      const checked = await verifyFactSources(prebuiltNuggets.slice(0, 30).map((n: CompanionFact) => ({ ...n, source: { url: n.sourceUrl } })), {
         googleKey: Deno.env.get("GOOGLE_AI_API_KEY"), exaKey: Deno.env.get("EXA_API_KEY"),
       });
       if (!checked.length) {
@@ -138,7 +140,7 @@ serve(async (req) => {
 
     if (cached?.content) {
       console.log(`[Companion] Cache hit: ${baseCacheKey}::${cached.listen_count_tier}`);
-      return new Response(JSON.stringify({ ...cached.content, artistSummary: "", nuggets: (cached.content.nuggets ?? []).filter((n: any) => hasFactEvidence(n, { url: n.sourceUrl, citation: n.citation })) }), {
+      return new Response(JSON.stringify({ ...cached.content, artistSummary: "", nuggets: (cached.content.nuggets ?? []).filter((n: CompanionFact) => hasFactEvidence(n, { url: n.sourceUrl, citation: n.citation })) }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

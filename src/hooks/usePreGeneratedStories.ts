@@ -1,4 +1,3 @@
-import { hasFactEvidence } from "../../supabase/functions/_shared/hasFactEvidence";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { usePlayer } from "@/contexts/PlayerContext";
@@ -200,7 +199,7 @@ export function usePreGeneratedStories(
             // a tap would land on a blank Listen page — see the matching
             // generatedAny check in the pre-gen invoke path below.
             const nuggets = r.nuggets as unknown[] | null | undefined;
-            const hasContent = Array.isArray(nuggets) && nuggets.some((n: any) => hasFactEvidence(n, (r.sources as Record<string, unknown>)?.[n.sourceId]));
+            const hasContent = !!preparePreGenCacheEntry({ nuggets, sources: r.sources });
             if (r.status === "ready" && hasContent) {
               // Extract artist::title from track_id to match story.trackKey
               const parts = String(r.track_id).split("::");
