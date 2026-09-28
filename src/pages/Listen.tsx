@@ -1,3 +1,4 @@
+import { resolveCompanionShortId } from "@/lib/resolveCompanionShortId";
 import { useCompanionUpload } from "@/hooks/useCompanionUpload";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { listenHistoryRoute } from "@/lib/listenHistoryRoute";
@@ -664,43 +665,12 @@ export default function Listen() {
     if (error) throw error;
     if (!isCurrent()) return;
 
-    // Create or reuse the QR link only after a successful upload.
-    try {
-      const { data: existing, error: selErr } = await supabase
-        .from("companion_links")
-        .select("short_id")
-        .eq("artist", track.artist)
-        .eq("title", track.title)
-        .maybeSingle();
-
-      if (!isCurrent()) return;
-      if (selErr) console.warn("[Listen] companion_links select error:", selErr);
-
-      let resolvedShortId: string | null = null;
-      if (existing) {
-        resolvedShortId = existing.short_id;
-      } else {
-        const arr = new Uint8Array(6);
-        crypto.getRandomValues(arr);
-        const newId = Array.from(arr, (b) => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"[b % 62]).join("");
-        const { error: insErr } = await supabase.from("companion_links").insert({
-          short_id: newId,
-          artist: track.artist,
-          title: track.title,
-          album: track.album || null,
-        });
-        if (insErr) console.warn("[Listen] companion_links insert error:", insErr);
-        if (!insErr) resolvedShortId = newId;
-      }
-
-      if (isCurrent() && resolvedShortId) {
-        setShortId(resolvedShortId);
-        player.setCompanionShortId(trackKey, resolvedShortId);
-      }
-    } catch (linkErr) {
-      console.warn("[Listen] Short link creation failed:", linkErr);
+    // Link creation is part of successful acceptance; failures remain retryable.
+    const resolvedShortId = await resolveCompanionShortId(supabase, track.artist, track.title, track.album);
+    if (isCurrent()) {
+      setShortId(resolvedShortId);
+      player.setCompanionShortId(trackKey, resolvedShortId);
     }
-
   });
 
   // Intentionally NOT gated on aiLoading — SSE streaming appends nuggets

@@ -39,3 +39,5 @@ Track currentness uses a monotonically increasing generation, so A → B → A c
 QR readiness is derived from acceptance of the exact track/listen-depth/snapshot, not possession of a cached short link. A new listen or pending wave keeps the QR hidden until the current snapshot succeeds; revisiting an already accepted unchanged snapshot restores readiness without another upload.
 
 Accepted snapshots and the attempt cooldown survive Listen remounts in a bounded in-memory page-session cache (100 keys). The acceptance key uses track, tier and listen depth; the fact snapshot independently distinguishes regenerated content. Each upload has a 60-second timeout and abort signal, so a stalled auth/network request cannot block later tracks indefinitely. Every companion entry point, including loading-orchestrator buttons, receives a readiness-gated short ID.
+
+Acceptance also requires a usable short link. Read/insert failures propagate to the scheduler for retry; a concurrent insert is recovered by re-reading the winning link.
