@@ -33,4 +33,5 @@ export function useCompanionUpload(key: string, signature: string, busy: boolean
     }, Math.max(1500, nextAllowed.current - Date.now()));
     return () => clearTimeout(timer);
   }, [key, signature, busy, revision, generation]);
+  return !!key && !!signature && !busy && sent.current.get(key) === signature;
 }

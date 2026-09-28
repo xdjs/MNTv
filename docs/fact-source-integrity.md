@@ -35,3 +35,5 @@ Companion uploads wait for initial and background generation to settle, coalesce
 Both streamed and batch cache writes normalize durations: finite values above 30 seconds and at most six hours are accepted; other inputs use 240 seconds. The streamed persistence helper also enforces this boundary independently.
 
 Track currentness uses a monotonically increasing generation, so A → B → A cannot revive an old request. Cached QR links restore independently of upload deduplication when returning to a track.
+
+QR readiness is derived from acceptance of the exact track/listen-depth/snapshot, not possession of a cached short link. A new listen or pending wave keeps the QR hidden until the current snapshot succeeds; revisiting an already accepted unchanged snapshot restores readiness without another upload.

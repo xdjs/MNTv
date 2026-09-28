@@ -58,3 +58,14 @@ it('keeps an old request stale after navigating A to B to A', async () => {
   rerender({ key: 'B' }); rerender({ key: 'A' }); expect(current()).toBe(false);
   await act(async () => finish()); await act(() => vi.advanceTimersByTimeAsync(65000)); expect(upload).toHaveBeenCalledTimes(2);
 });
+it('restores readiness only for an accepted snapshot at the same listen depth', async () => {
+  vi.useFakeTimers(); const upload = vi.fn().mockResolvedValue(undefined);
+  const { result, rerender } = renderHook(({ key, busy }) => useCompanionUpload(key, '9', busy, upload), { initialProps: { key: 'A-depth1', busy: false } });
+  expect(result.current).toBe(false);
+  await act(() => vi.advanceTimersByTimeAsync(1500)); expect(result.current).toBe(true);
+  rerender({ key: 'B-depth1', busy: false }); expect(result.current).toBe(false);
+  rerender({ key: 'A-depth1', busy: false }); expect(result.current).toBe(true);
+  rerender({ key: 'A-depth2', busy: true }); expect(result.current).toBe(false);
+  rerender({ key: 'A-depth2', busy: false }); expect(result.current).toBe(false);
+  await act(() => vi.advanceTimersByTimeAsync(65000)); expect(result.current).toBe(true);
+});
