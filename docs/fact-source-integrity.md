@@ -23,3 +23,5 @@ Paid companion checks also consume a durable service-only database quota before 
 QR fallback searches canonical recording cache keys with escaped artist/title fields, then the legacy key if no supported canonical row exists. Mixed cache rows are filtered before entering Listen's working state and memory cache, so legacy facts cannot count toward the tier's generation target.
 
 Completed SSE generation persists verified facts with backend privileges before reporting completion, replacing unsupported legacy rows that browser RLS cannot overwrite. Persistence merges supported prior facts and skips writes after a failed prior read. Listen seeds use provider catalog IDs and Apple storefronts; artist-profile routes preserve primary IDs and separate collaborator credits.
+
+Listen never infers an artist ID from a profile display-name map. Artist-profile and artist-update playback routes explicitly carry their selected catalog identity; other routes retain the name-scoped lookup until they carry an explicit ID. Cross-service recording resolution drops the original provider's artist ID.

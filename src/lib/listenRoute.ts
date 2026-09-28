@@ -3,6 +3,7 @@
 
 export interface ListenRouteParams {
   artist: string;
+  artistId?: string;
   title: string;
   album?: string;
   /** Spotify track or Apple song URI, when known. */
@@ -13,6 +14,7 @@ export interface ListenRouteParams {
 
 export function buildListenRoute({
   artist,
+  artistId,
   title,
   album,
   uri,
@@ -22,5 +24,6 @@ export function buildListenRoute({
   const isAppleUser = streamingService === "Apple Music";
   const isSpotifyTrackUri = !!uri && uri.startsWith("spotify:track:");
   const navUri = (isAppleUser ? uri?.startsWith("apple:song:") : isSpotifyTrackUri) ? uri! : "";
-  return `/listen/real::${enc(artist)}::${enc(title)}::${enc(album ?? "")}::${enc(navUri)}`;
+  const identity = artistId && navUri ? `?artistId=${enc(artistId)}` : "";
+  return `/listen/real::${enc(artist)}::${enc(title)}::${enc(album ?? "")}::${enc(navUri)}${identity}`;
 }

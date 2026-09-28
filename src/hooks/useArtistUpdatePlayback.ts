@@ -61,7 +61,7 @@ export function useArtistUpdatePlayback(streamingService?: string, onStarted?: (
           );
         }
         if (!firstTrack) throw new Error("Release tracks unavailable");
-        track = { ...firstTrack, album: target.album || target.title };
+        track = { ...firstTrack, artistId: target.artistId, album: target.album || target.title };
       }
       if (!isActive()) return;
       navigate(buildListenRoute({ ...track, artist, streamingService }));

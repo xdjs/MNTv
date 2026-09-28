@@ -119,14 +119,14 @@ export default function Listen() {
       title: realTrackMeta.title,
       artist: realTrackMeta.artist,
       collaborators,
-      artistId: routeCredits.get("artistId") || ((routeService === "apple") === (profile?.streamingService === "Apple Music") ? profile?.artistIds?.[realTrackMeta.artist] : "") || "",
+      artistId: routeCredits.get("artistId") || "",
       albumId: "",
       album: realTrackMeta.album,
       durationSec: 300,
       coverArtUrl,
       trackNumber: 1,
     };
-  }, [realTrackMeta, trackId, urlArt, profile?.trackImages, profile?.likedTracks, profile?.artistImages, profile?.artistIds, profile?.streamingService, routeCredits, routeService]);
+  }, [realTrackMeta, trackId, urlArt, profile?.trackImages, profile?.likedTracks, profile?.artistImages, routeCredits]);
 
   // ── Playback source resolution ───────────────────────────────────────
   const { hasSpotifyToken } = useSpotifyToken();
