@@ -1,3 +1,4 @@
+import { hasFactEvidence } from "../../supabase/functions/_shared/hasFactEvidence";
 import { useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -207,8 +208,9 @@ export function useBookmarks() {
     }
   }
 
+  const supportedBookmarks = useMemo(() => bookmarks.filter(b => hasFactEvidence(b, b.source)), [bookmarks]);
   return {
-    bookmarks,
+    bookmarks: supportedBookmarks,
     loading: listQuery.isLoading,
     signedIn: isSignedIn,
     isBookmarked,

@@ -15,6 +15,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { artistUpdatesCacheKey as cacheKey } from "../_shared/artistUpdatesCacheKey.ts";
+import { verifyFactSources } from "../_shared/verifyFactSources.ts";
+import { validateArtistFact, type ArtistFactSource } from "../_shared/validateArtistFact.ts";
 import { matchesArtistResearch } from "../_shared/matchesArtistResearch.ts";
 import { selectUpdateArtist } from "../_shared/selectUpdateArtist.ts";
 import { fetchAppleUpdateCatalog } from "../_shared/appleUpdateCatalog.ts";
@@ -76,6 +78,7 @@ interface ArtistUpdate {
   relatedAlbumName?: string;
   source?: {
     type: string;
+    citation?: import("../_shared/hasFactEvidence.ts").FactEvidence;
     title?: string;
     publisher?: string;
     url?: string;
@@ -407,7 +410,7 @@ async function researchArtistOnExa(
   artistName: string,
   apiKey: string,
   identity: Parameters<typeof matchesArtistResearch>[1],
-): Promise<{ snippets: string; citations: { title: string; url: string }[] }> {
+): Promise<{ snippets: string; citations: ArtistFactSource[] }> {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), EXA_TIMEOUT_MS);
   try {
@@ -442,10 +445,17 @@ async function researchArtistOnExa(
       text?: string;
       highlights?: string[];
     }>;
-    const results = candidates.filter((source) => matchesArtistResearch(source, identity));
+    const results = candidates.filter((source) => {
+      if (!source.url || !matchesArtistResearch(source, identity)) return false;
+      try {
+        const url = new URL(source.url);
+        return ["http:", "https:"].includes(url.protocol) &&
+          !["spotify.com", "apple.com"].some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`));
+      } catch { return false; }
+    });
     const citations = results
       .filter((r) => r.url)
-      .map((r) => ({ title: r.title || "", url: r.url! }));
+      .map((r) => ({ title: r.title || "", url: r.url!, text: [(r.text || "").slice(0, 2500), ...(r.highlights ?? [])].join("\n") }));
     const snippets = results
       .map((r, i) => {
         const highlightBlock = r.highlights?.length
@@ -488,11 +498,12 @@ interface FactGenerationContext {
    *  about the artist. Empty string if Exa is unavailable or returned
    *  nothing. Sparse mode skips Exa and ignores this field. */
   researchSnippets?: string;
+  sources: ArtistFactSource[];
 }
 
 async function generateArtistFacts(
   ctx: FactGenerationContext,
-): Promise<{ headline: string; body: string }[]> {
+): Promise<NonNullable<ReturnType<typeof validateArtistFact>>[]> {
   const { artistName, tier, count, sparse, genres, topTracks, researchSnippets } = ctx;
   const apiKey = Deno.env.get("GOOGLE_AI_API_KEY");
   if (!apiKey) {
@@ -621,11 +632,20 @@ Write ${count === 1 ? "ONE nugget" : `${count} DISTINCT nuggets`} about ${artist
     count === 1 ? "It" : "Each"
   } must pass the SWAP TEST — the headline is useless if you could swap in another artist's name and the sentence still works. No release-date recaps; those are covered elsewhere.${multiNuggetAngleLine}
 
+Each nugget must select ONE numbered source from EXA RESEARCH. Its headline
+and body must be supported entirely by that source. Include its sourceNumber
+and a verbatim evidence passage of at least 40 characters. Do not combine
+claims from different pages. If the selected passage does not support the
+entire claim, narrow the claim or return no nugget. Never cite a catalog page
+as evidence for a signing, biography, reception, or recording story.
+
 Return JSON only, no preamble:
 {
   "nuggets": [
     { "headline": "<complete-fact sentence, sentence case, names ${artistName} explicitly>",
-      "body": "<1-3 sentences of context adding who/where/what-happened-next>" }${count > 1 ? ",\n    …" : ""}
+      "body": "<1-3 sentences supported entirely by the selected source>",
+      "sourceNumber": 1,
+      "evidence": "<verbatim passage from that source supporting the entire headline and body>" }${count > 1 ? ",\n    …" : ""}
   ]
 }`;
 
@@ -676,13 +696,9 @@ Return JSON only, no preamble:
     const parsed = JSON.parse(text);
     const nuggets: unknown[] = Array.isArray(parsed?.nuggets) ? parsed.nuggets : [];
     const accepted = nuggets
-      .filter(
-        (n: unknown): n is { headline: string; body: string } =>
-          !!n && typeof (n as { headline?: unknown }).headline === "string" &&
-          typeof (n as { body?: unknown }).body === "string",
-      )
-      .slice(0, count)
-      .map((n) => ({ headline: String(n.headline), body: String(n.body) }));
+      .map((n) => validateArtistFact(n, ctx.sources))
+      .filter((n): n is NonNullable<typeof n> => n !== null)
+      .slice(0, count);
     console.log(`[artist-updates] Gemini returned ${accepted.length}/${count} facts for ${artistName}`);
     return accepted;
   } catch (e) {
@@ -1064,7 +1080,7 @@ serve(async (req) => {
         id: artistInfo.id, name: artistInfo.name, service: apple ? "apple" : "spotify",
         titles: [...topTracks.map((track) => track.name), ...(release ? [release.name] : [])],
       })
-      : { snippets: "", citations: [] as { title: string; url: string }[] };
+      : { snippets: "", citations: [] as ArtistFactSource[] };
 
     // Sparse iff: few/no usable Exa citations AND the artist's name
     // doesn't appear in any snippet body. Mirrors the trigger in
@@ -1083,6 +1099,7 @@ serve(async (req) => {
       genres: artistInfo.genres,
       topTracks: isSparse ? topTracks : undefined,
       researchSnippets: isSparse ? "" : exaResult.snippets,
+      sources: exaResult.citations,
     });
 
     const releaseAgeDays = release ? daysSince(release.release_date) : null;
@@ -1099,12 +1116,13 @@ serve(async (req) => {
       updates.push(buildReleaseUpdate(artistInfo, release));
     }
 
-    facts.forEach((f, i) => {
-      // Round-robin through Exa citations so multiple facts on the same
-      // artist don't all link to the same article (we ask for 1 fact per
-      // artist today but this keeps it correct if FACTS_PER_ARTIST grows).
-      const citation = exaResult.citations[i % Math.max(exaResult.citations.length, 1)];
-      updates.push(buildFactUpdate(artistInfo, f.headline, f.body, i, citation));
+    const verifiedFacts = await verifyFactSources(facts.map(f => ({ headline: f.headline, text: f.body, source: f.citation })), {
+      googleKey: Deno.env.get("GOOGLE_AI_API_KEY"), exaKey: exaApiKey, pages: exaResult.citations,
+    });
+    verifiedFacts.forEach((f, i) => {
+      const update = buildFactUpdate(artistInfo, f.headline, f.text, i, f.source);
+      update.source = { ...update.source!, citation: f.source.citation };
+      updates.push(update);
     });
 
     // Catalog tracks for the "Get into" lane. Appended last so they never

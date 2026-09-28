@@ -1,3 +1,4 @@
+import { hasFactEvidence } from "../../supabase/functions/_shared/hasFactEvidence";
 import { useParams } from "react-router-dom";
 import RemoteImage from "@/components/RemoteImage";
 import { useState, useEffect, useMemo } from "react";
@@ -160,7 +161,7 @@ export default function Companion() {
     const artistImg = artistImage;
     const isReal = (url?: string) => url && !url.includes("dicebear.com");
 
-    return data.nuggets.map((n) => {
+    return data.nuggets.filter(n => hasFactEvidence(n, { url: n.sourceUrl, citation: n.citation })).map((n) => {
       if (n.imageUrl) return n;
       if ((n.category === "history" || n.category === "context") && isReal(artistImg)) {
         return { ...n, imageUrl: artistImg, imageCaption: artistName };

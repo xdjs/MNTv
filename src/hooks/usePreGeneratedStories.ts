@@ -1,3 +1,4 @@
+import { hasFactEvidence } from "../../supabase/functions/_shared/hasFactEvidence";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { usePlayer } from "@/contexts/PlayerContext";
@@ -188,7 +189,7 @@ export function usePreGeneratedStories(
         if (!tierSwitched) {
           const { data: rows } = await supabase
             .from("nugget_cache")
-            .select("track_id, status, nuggets")
+            .select("track_id, status, nuggets, sources")
             .or(likePatterns.map((p) => `track_id.ilike.${p}`).join(","));
 
           if (cancelled) return;
@@ -199,7 +200,7 @@ export function usePreGeneratedStories(
             // a tap would land on a blank Listen page — see the matching
             // generatedAny check in the pre-gen invoke path below.
             const nuggets = r.nuggets as unknown[] | null | undefined;
-            const hasContent = Array.isArray(nuggets) && nuggets.length > 0;
+            const hasContent = Array.isArray(nuggets) && nuggets.some((n: any) => hasFactEvidence(n, (r.sources as Record<string, unknown>)?.[n.sourceId]));
             if (r.status === "ready" && hasContent) {
               // Extract artist::title from track_id to match story.trackKey
               const parts = String(r.track_id).split("::");
@@ -305,7 +306,7 @@ export function usePreGeneratedStories(
             // pre-gen for the same track within the 24h TTL.
             const responseNuggets = (data as { nuggets?: unknown[] } | null)?.nuggets;
             const responseSources = (data as { sources?: Record<string, unknown> } | null)?.sources;
-            const generatedAny = Array.isArray(responseNuggets) && responseNuggets.length > 0;
+            const generatedAny = !!preparePreGenCacheEntry({ nuggets: responseNuggets, sources: responseSources });
             const synthetic = (data as { synthetic?: boolean } | null)?.synthetic === true;
             if (import.meta.env.DEV) console.log(`[Stories] OK after ${Date.now() - t0}ms — ${story.trackKey} (${responseNuggets?.length ?? 0} nuggets${synthetic ? ", synthetic" : ""})`);
 

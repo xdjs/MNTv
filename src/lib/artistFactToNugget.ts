@@ -1,3 +1,4 @@
+import { hasFactEvidence } from "../../supabase/functions/_shared/hasFactEvidence";
 import { artistUpdatesCacheKey } from "../../supabase/functions/_shared/artistUpdatesCacheKey";
 import type { Nugget, Source } from "@/mock/types";
 import type { ArtistUpdate } from "@/hooks/useArtistUpdates";
@@ -23,7 +24,7 @@ export const ARTIST_FACT_ID_PREFIX = "artistfact";
  * function — if the two drift, this silently reads nothing and the
  * feature degrades to "no seed" with no error anywhere.
  */
-export const ARTIST_UPDATES_CACHE_VERSION = "v5";
+export const ARTIST_UPDATES_CACHE_VERSION = "v6";
 
 export function buildArtistUpdatesCacheKey(artistName: string, tier: string, spotifyArtistId?: string): string {
   return artistUpdatesCacheKey(artistName, tier, spotifyArtistId);
@@ -39,7 +40,7 @@ const SEEDED_DURATION_MS = 7000;
  * music, and showing it mid-listen would read as an ad.
  */
 export function isReusableArtistFact(update: ArtistUpdate): boolean {
-  return update.kind === "fact" && !!update.headline?.trim() && !!update.body?.trim();
+  return hasFactEvidence(update, update.source) && update.kind === "fact" && !!update.headline?.trim() && !!update.body?.trim();
 }
 
 /**
@@ -93,6 +94,7 @@ export function artistFactToNugget(
       title: update.source?.title || update.headline,
       publisher: update.source?.publisher || update.artistName,
       url,
+      citation: update.source?.citation,
     },
   };
 }

@@ -1,3 +1,4 @@
+import { evidence } from "./factEvidenceFixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { selectUpdateArtist } from "../../supabase/functions/_shared/selectUpdateArtist";
@@ -11,7 +12,9 @@ vi.mock("@/integrations/supabase/client", () => ({ supabase: { functions: { invo
 const id = "62jLhwXSHpY3qoNybvyemr";
 const wrongId = "5INjqkS1o8h1imAzPqGZBb";
 const profile = { streamingService: "Spotify", topArtists: ["LIL LIL"], artistIds: { "LIL LIL": id } } as unknown as UserProfile;
-const update = { artistId: id, artistName: "LIL LIL", kind: "fact", headline: "Correct artist", body: "Fact" };
+const fact = { artistId: id, artistName: "LIL LIL", kind: "fact", headline: "Correct artist", body: "Fact" };
+
+const update = { ...fact, source: { type: "article", url: "https://example.com/artist", citation: evidence(fact, "https://example.com/artist") } };
 
 beforeEach(() => {
   localStorage.clear(); sessionStorage.clear(); invoke.mockReset();

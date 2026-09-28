@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { hasFactEvidence } from "../../supabase/functions/_shared/hasFactEvidence";
+import type { FactEvidence } from "../../supabase/functions/_shared/hasFactEvidence";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import type { Nugget, Source } from "@/mock/types";
@@ -31,6 +33,7 @@ interface AINuggetData {
   /** Specific track to start with, when the nugget named one. */
   recommendedTrack?: { artist: string; title: string; spotifyTrackUri?: string };
   source: {
+    citation?: FactEvidence;
     type: "youtube" | "article" | "interview";
     title: string;
     publisher: string;
@@ -110,7 +113,7 @@ function makeIds(trackId: string, listenCount: number, index: number) {
 }
 
 function makeSource(id: string, s: AINuggetData["source"]): Source {
-  return { id, type: s.type, title: s.title, publisher: s.publisher, url: s.url, embedId: s.embedId, quoteSnippet: s.quoteSnippet, locator: s.locator };
+  return { id, type: s.type, title: s.title, publisher: s.publisher, url: s.url, embedId: s.embedId, quoteSnippet: s.quoteSnippet, locator: s.locator, citation: s.citation };
 }
 
 export function makeTimestamp(index: number, totalNuggets: number, durationSec: number) {
@@ -285,7 +288,8 @@ async function pollForReadyNuggets(
         if (!isSafeUrl(val.url)) continue;
         srcs.set(key, val);
       }
-      return { nuggets: nuggs, sources: srcs };
+      const supported = nuggs.filter(n => hasFactEvidence(n, srcs.get(n.sourceId)));
+      return supported.length ? { nuggets: supported, sources: srcs } : null;
     }
     // If the row is gone or no longer 'generating', stop waiting.
     if (!data || data.status !== "generating") break;
@@ -453,7 +457,7 @@ export function useAINuggets(
         console.log("[NuggetMemCache] Falling back to regenerateKey=0:", fallbackKey);
       }
     }
-    if (cached) {
+    if (cached && cached.nuggets.some(n => hasFactEvidence(n, cached.sources.get(n.sourceId)))) {
       if (import.meta.env.DEV) console.log("[NuggetMemCache] Serving from in-memory cache:", cacheKey);
       setFromCache(true);
       setNuggets(cached.nuggets);
@@ -545,6 +549,7 @@ export function useAINuggets(
             embedId: n.source.embedId,
             quoteSnippet: n.source.quoteSnippet,
             locator: n.source.locator,
+            citation: n.source.citation,
           };
           newSources.set(sourceId, source);
 
@@ -635,7 +640,7 @@ export function useAINuggets(
           .eq("track_id", dbCacheKey)
           .maybeSingle();
 
-        if (cached?.status === "ready" && (cached.nuggets as Nugget[] | null)?.length) {
+        if (cached?.status === "ready" && (cached.nuggets as Nugget[] | null)?.some(n => hasFactEvidence(n, (cached.sources as Record<string, unknown>)?.[n.sourceId]))) {
           if (import.meta.env.DEV) console.log("[NuggetCache] Serving cached nuggets for", dbCacheKey);
           // Sanitize — older cache entries may have empty headlines that
           // predate the server-side/makeNugget headline guard.
@@ -1204,25 +1209,9 @@ export function useAINuggets(
         } catch (fbErr) {
           console.warn("[useAINuggets] cache fallback lookup threw:", fbErr);
         }
-        // Sparse-track synthetic fallback. SSE produced nothing AND no
-        // DB cache row exists — happens reliably for very-low-popularity
-        // artists where the Validator + source filter strip every
-        // Writer attempt. Better to surface ONE honest catalog-grounded
-        // nugget than leave the user staring at cover art with no
-        // content to read.
-        console.warn(`[useAINuggets] SSE failed and no cache row exists for ${dbCacheKey}; synthesizing catalog fallback`);
-        const synth = makeSparseFallbackNugget(artist, title, trackId, durationSec, coverArtUrlLive);
-        const synthSources = new Map<string, Source>([[synth.source.id, synth.source]]);
-        setNuggets([synth.nugget]);
-        setSources(synthSources);
-        // do NOT write synthetic fallbacks
-        // to the in-memory client cache. Otherwise re-visiting the same
-        // track in the same session would serve the synthetic from memory
-        // forever and never retry the real SSE pipeline. The DB cache
-        // also doesn't get a synthetic write here (no admin key on the
-        // client), so leaving the in-mem cache empty means a future
-        // mount will go through the full pipeline again.
-        setError(null);
+        setNuggets([]);
+        setSources(new Map());
+        setError("No source-supported facts are available yet.");
         return;
       }
     } finally {
@@ -1472,5 +1461,6 @@ export function useAINuggets(
     // eslint-disable-next-line react-hooks/exhaustive-deps -- nuggets/sources read at trigger time, not subscribed
   }, [currentTime, nuggets.length, durationSec, isPlaying, trackId, artist, title, album, tier, fromCache, regenerateKey, listenCount, setNuggetCache]);
 
-  return { nuggets, sources, loading, error, listenCount, artistSummary, fromCache, waveLoading };
+  const supportedNuggets = useMemo(() => nuggets.filter(n => hasFactEvidence(n, sources.get(n.sourceId))), [nuggets, sources]);
+  return { nuggets: supportedNuggets, sources, loading, error, listenCount, artistSummary, fromCache, waveLoading };
 }

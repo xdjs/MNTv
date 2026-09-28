@@ -257,3 +257,18 @@ describe("useBookmarks — signed-out", () => {
     await waitFor(() => expect(toastErrorMock).toHaveBeenCalled());
   });
 });
+
+describe("saved fact evidence", () => {
+  it("withholds legacy and changed saved facts without deleting the stored bookmarks", async () => {
+    const source = { type: "article", url: "https://example.com/report", citation: {
+      version: 1, headline: NUGGET.headline, text: NUGGET.body,
+      url: "https://example.com/report", excerpt: "The retrieved report contains a passage supporting this specific fact.",
+    } };
+    const checked = { id: "checked", ...NUGGET, source };
+    invokeMock.mockResolvedValue({ data: { bookmarks: [checked, { ...checked, id: "legacy", source: null }, { ...checked, id: "changed", body: "An unsupported new claim" }] }, error: null });
+    const { result } = renderHook(() => useBookmarks(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.bookmarks.map(b => b.id)).toEqual(["checked"]);
+    expect(invokeMock.mock.calls.every(c => c[1].body.action === "list")).toBe(true);
+  });
+});

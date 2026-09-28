@@ -1,3 +1,4 @@
+import { evidence } from "./factEvidenceFixture";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { Nugget, Source } from "@/mock/types";
@@ -64,6 +65,7 @@ const NUGGET: Nugget = {
 };
 
 const SOURCE: Source = {
+  citation: evidence(NUGGET, "https://example.com/x"),
   id: "s-1", type: "article", title: "t", publisher: "p", url: "https://example.com/x",
 };
 

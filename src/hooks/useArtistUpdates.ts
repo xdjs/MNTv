@@ -1,3 +1,5 @@
+import { hasFactEvidence } from "../../supabase/functions/_shared/hasFactEvidence";
+import type { FactEvidence } from "../../supabase/functions/_shared/hasFactEvidence";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { readAppleStorefront } from "@/lib/appleStorefront";
@@ -22,6 +24,7 @@ export interface ArtistUpdate {
   headline: string;
   body: string;
   source?: {
+    citation?: FactEvidence;
     type: string;
     title?: string;
     publisher?: string;
@@ -264,7 +267,7 @@ export function useArtistUpdates(
           );
           return;
         }
-        const received = (data?.updates as ArtistUpdate[] | undefined) ?? [];
+        const received = ((data?.updates as ArtistUpdate[] | undefined) ?? []).filter(u => u.kind !== "fact" || hasFactEvidence(u, u.source));
         // Also reject old deployed-backend/cache responses with a different ID.
         const updates = artistId ? received.filter((u) => u.artistId === artistId) : apple ? [] : received;
         setGroups((prev) =>
