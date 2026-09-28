@@ -632,11 +632,8 @@ Return JSON only, no preamble:
   // Generate only from identity-checked research; independent search could
   // reintroduce a namesake. Strip JSON fences before parsing the response.
   //
-  // 40s abort timeout: keeps the worst-case wall time predictable so a
-  // hung Gemini doesn't hold the cache sentinel for the full
-  // STALE_GENERATION_MS (55s) before followers can re-claim. Mirrors
-  // the Promise.race pattern in fetchSpotifyTaste on the client side.
-  const GEMINI_TIMEOUT_MS = 40_000;
+  // Leave room for catalog + Exa calls within the client’s 30-second budget.
+  const GEMINI_TIMEOUT_MS = 15_000;
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), GEMINI_TIMEOUT_MS);
   let res: Response;
@@ -649,7 +646,7 @@ Return JSON only, no preamble:
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: prompt }] }],
 
-          generationConfig: { temperature: 0.7 },
+          generationConfig: { temperature: 0.7, responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } },
         }),
         signal: ctl.signal,
       },
@@ -669,17 +666,6 @@ Return JSON only, no preamble:
     return [];
   }
   const data = await res.json();
-  // Surface grounding usage so we can tell whether a weak fact came
-  // from no search results vs. Gemini ignoring the tool. The metadata
-  // shape: `groundingMetadata.groundingChunks` is an array of pages
-  // the model cited.
-  const groundingChunks = data?.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
-  const searchQueries = data?.candidates?.[0]?.groundingMetadata?.webSearchQueries ?? [];
-  if (groundingChunks.length > 0) {
-    console.log(`[artist-updates] grounded fact for ${artistName} — ${groundingChunks.length} sources, queries: ${JSON.stringify(searchQueries)}`);
-  } else {
-    console.log(`[artist-updates] no grounding for ${artistName} (catalog-only fallback)`);
-  }
   const rawText: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
   const text = rawText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
   if (!text) {
@@ -1167,7 +1153,7 @@ serve(async (req) => {
       // to flip to 'ready'. Without this they'd timeout after 95s and
       // re-claim+re-fail in a thundering loop.
       await evictStaleRow(key);
-      return new Response(JSON.stringify({ updates: [], reason: "compose-failed" }), {
+      return new Response(JSON.stringify({ updates, reason: "no-verified-facts" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

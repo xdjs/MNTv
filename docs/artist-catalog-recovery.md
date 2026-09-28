@@ -176,3 +176,13 @@ sources, except the explicitly changed Apple identity helpers.
 The release checkout excludes the separate Apple sign-in recovery work.
 Staging-to-main also includes the already-staged image retry, dead-component
 cleanup and wave-cache error handling changes; list those in the release PR.
+
+The final shared-backend rollout is authorized and deployed. Empty verified
+research suppresses facts, not the correct artist's catalog songs. Fact
+writing has a 15-second deadline (previously 40 seconds) and bounded thinking
+to leave room inside the frontend's 30-second request limit. The final local
+suite has 647 passing tests; build and Deno checks pass. The Claude review
+workflow fails before review because its GitHub App is not installed on the
+repository. This is recorded as a review infrastructure failure, not a pass.
+Actual Apple account-history authorization and audible playback still need
+user verification on staging before the main release.
