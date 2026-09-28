@@ -76,7 +76,7 @@ and are not represented as passing checks here.
 The automated smoke checks establish that the expected frontend build is served, not that
 real login, streaming, data writes or AI generation work. Those need feature-specific staging
 acceptance. Historical staging-to-main notes in other documents describe the former process;
-this document and the Git Workflow section in `CLAUDE.md` define the current process.
+[AGENTS.md](../AGENTS.md) is the canonical agent guide; this runbook provides the operational details.
 
 ## Failure and rollback
 
