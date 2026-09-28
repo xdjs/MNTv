@@ -25,3 +25,5 @@ QR fallback searches canonical recording cache keys with escaped artist/title fi
 Completed SSE generation persists verified facts with backend privileges before reporting completion, replacing unsupported legacy rows that browser RLS cannot overwrite. Persistence merges supported prior facts and skips writes after a failed prior read. Listen seeds use provider catalog IDs and Apple storefronts; artist-profile routes preserve primary IDs and separate collaborator credits.
 
 Listen never infers an artist ID from a profile display-name map. Artist-profile and artist-update playback routes explicitly carry their selected catalog identity; other routes retain the name-scoped lookup until they carry an explicit ID. Cross-service recording resolution drops the original provider's artist ID.
+
+Listening history preserves the complete query string (including artist ID and all collaborator credits), merging fallback artwork only when no artwork parameter exists. Returning with Previous therefore retains the same catalog identity and research context.

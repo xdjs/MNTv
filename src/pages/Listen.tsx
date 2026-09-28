@@ -1,4 +1,5 @@
 import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { listenHistoryRoute } from "@/lib/listenHistoryRoute";
 import { ensureSupabaseSession } from "@/lib/ensureSupabaseSession";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, Smartphone } from "lucide-react";
@@ -69,9 +70,9 @@ export default function Listen() {
 
   // Read cover art from URL query param (set by Browse demo tiles)
   const urlArt = useMemo(() => {
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(location.search);
     return params.get("art") || "";
-  }, []);
+  }, [location.search]);
 
   const routeCredits = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const routeService = realTrackMeta?.trackUri?.startsWith("apple:") ? "apple" : realTrackMeta?.trackUri?.startsWith("spotify:") ? "spotify" : profile?.streamingService === "Apple Music" ? "apple" : "spotify";
@@ -223,14 +224,13 @@ export default function Listen() {
 
 
   // Push current track to global history (persists across Listen re-mounts)
-  // Include ?art= query param so prev navigation preserves artwork
+  // Preserve catalog identity, collaborator credits and artwork for Prev.
   const player = usePlayer();
   useEffect(() => {
-    const artParam = urlArt ? `?art=${encodeURIComponent(urlArt)}` : "";
-    player.pushTrackHistory(`/listen/${rawTrackId}${artParam}`);
+    player.pushTrackHistory(listenHistoryRoute(location.pathname, location.search, urlArt));
     // Add current track to session history so it won't be picked again by navigateToRelated
     if (track) player.addToSessionHistory(track.artist, track.title);
-  }, [rawTrackId, urlArt, player, track]);
+  }, [location.pathname, location.search, urlArt, player, track]);
 
   // If this track was previously listened to in this session, restore the listen depth.
   // This handles both track completion (onEnded) and returning to a track via prev/browse.
