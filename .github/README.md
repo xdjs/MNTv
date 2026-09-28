@@ -6,4 +6,4 @@ Codex reviews new pull requests and new commits automatically. To request anothe
 
 The obsolete Claude Code Review workflow was removed on 2026-09-28. It depended on a Claude GitHub app that is no longer installed.
 
-Automated review comments do not replace the main branch's required approving review. Keep branch protections and required thread resolution enabled.
+Review and resolve automated findings before merging. Main's required CI checks are `test` and `build`. Production release approval is a separate protected GitHub Environment gate; see [the release guide](../docs/releases.md).

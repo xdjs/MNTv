@@ -55,3 +55,7 @@ supabase/.temp/
 
 # TypeScript incremental build info (machine-generated)
 *.tsbuildinfo
+
+# Generated release evidence
+/public/release.json
+/release-record.json
