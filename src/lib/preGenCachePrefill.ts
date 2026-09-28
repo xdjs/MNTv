@@ -1,3 +1,4 @@
+import { hasFactEvidence } from "../../supabase/functions/_shared/hasFactEvidence";
 import type { Nugget, Source } from "@/mock/types";
 import { buildClientNuggetCacheKey } from "./nuggetCacheKey";
 import { isValidSourceShape } from "./sourceShape";
@@ -69,8 +70,10 @@ export function preparePreGenCacheEntry(
     }
   }
 
+  const supported = validNuggets.filter(n => hasFactEvidence(n, sourcesMap.get(n.sourceId)));
+  if (!supported.length) return null;
   return {
-    nuggets: validNuggets,
+    nuggets: supported,
     sources: sourcesMap,
     listenCount: 1,
   };

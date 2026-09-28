@@ -1,3 +1,4 @@
+import { hasFactEvidence } from "../../../supabase/functions/_shared/hasFactEvidence";
 import { useState, useCallback, useRef, useEffect } from "react";
 import RemoteImage from "@/components/RemoteImage";
 import { motion, AnimatePresence } from "framer-motion";
@@ -23,13 +24,15 @@ const kindLabels: Record<string, string> = {
 };
 
 interface DeepDiveEntry {
+  source?: Source;
   text: string;
   followUp?: string;
 }
 
-export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onClose }: Props) {
+export default function NuggetDeepDive({ nugget, source: originalSource, artist, trackTitle, onClose }: Props) {
   const [entries, setEntries] = useState<DeepDiveEntry[]>([]);
   const [currentView, setCurrentView] = useState<'original' | number>('original');
+  const source = currentView === "original" ? originalSource : entries[currentView]?.source;
   const [loading, setLoading] = useState(false);
   const [focusIndex, setFocusIndex] = useState(0);
 
@@ -130,7 +133,8 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
           title: trackTitle,
           deepDive: true,
           context,
-          sourceTitle: source?.title,
+          sourceUrl: originalSource?.url,
+          sourceTitle: originalSource?.title,
           sourcePublisher: source?.publisher,
           imageCaption: nugget.imageCaption,
           imageQuery: nugget.imageCaption,
@@ -141,8 +145,8 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
       if (data?.deepDive) {
         const newIndex = entries.length;
         setEntries((prev) => [...prev, {
-          text: data.deepDive.text,
-          followUp: data.deepDive.followUp,
+          text: hasFactEvidence(data.deepDive, data.deepDive.source) ? data.deepDive.text : "No additional source-supported detail is available yet.",
+          source: hasFactEvidence(data.deepDive, data.deepDive.source) ? data.deepDive.source : undefined,
         }]);
         setCurrentView(newIndex);
       }
@@ -156,7 +160,7 @@ export default function NuggetDeepDive({ nugget, source, artist, trackTitle, onC
     } finally {
       setLoading(false);
     }
-  }, [nugget, entries, artist, trackTitle, source]);
+  }, [nugget, entries, artist, trackTitle, source, originalSource]);
 
   // Determine current content to display
   const currentContent = currentView === 'original'

@@ -1,5 +1,9 @@
+import { hasFactEvidence } from "../_shared/hasFactEvidence.ts";
+import { verifyFactSources } from "../_shared/verifyFactSources.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+
+type CompanionFact = { headline?: string; text?: string; sourceUrl?: string; citation?: unknown; [key: string]: unknown };
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -67,7 +71,16 @@ serve(async (req) => {
       const externalLinks = nuggetCacheData?.sources?.externalLinks || [];
 
       // Accumulate nuggets from previous listen tiers
-      const allNuggets = [...prebuiltNuggets];
+      // Client-supplied claims must be checked on the server before sharing.
+      const checked = await verifyFactSources(prebuiltNuggets.slice(0, 30).map((n: CompanionFact) => ({ ...n, source: { url: n.sourceUrl } })), {
+        googleKey: Deno.env.get("GOOGLE_AI_API_KEY"), exaKey: Deno.env.get("EXA_API_KEY"),
+      });
+      if (!checked.length) {
+        return new Response(JSON.stringify({ error: "No supported facts could be verified; existing companion content was preserved." }), {
+          status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const allNuggets = checked.map(n => ({ ...n, sourceName: n.source.publisher, citation: n.source.citation }));
       if (listenTier > 1) {
         for (let t = 1; t < listenTier; t++) {
           const prevKey = `${artist}::${title}::${safeTier}::${t}`;
@@ -80,14 +93,14 @@ serve(async (req) => {
           if (prevCached?.content?.nuggets) {
             const existingIds = new Set(allNuggets.map((n: any) => n.id));
             for (const n of prevCached.content.nuggets) {
-              if (!existingIds.has(n.id)) allNuggets.push(n);
+              if (!existingIds.has(n.id) && hasFactEvidence(n, { url: n.sourceUrl, citation: n.citation })) allNuggets.push(n);
             }
           }
         }
       }
 
       const response = {
-        artistSummary,
+        artistSummary: "",
         nuggets: allNuggets,
         externalLinks,
         coverArtUrl: coverArtUrl || undefined,
@@ -127,7 +140,7 @@ serve(async (req) => {
 
     if (cached?.content) {
       console.log(`[Companion] Cache hit: ${baseCacheKey}::${cached.listen_count_tier}`);
-      return new Response(JSON.stringify(cached.content), {
+      return new Response(JSON.stringify({ ...cached.content, artistSummary: "", nuggets: (cached.content.nuggets ?? []).filter((n: CompanionFact) => hasFactEvidence(n, { url: n.sourceUrl, citation: n.citation })) }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -149,21 +162,22 @@ serve(async (req) => {
         artist: "history", track: "track", discovery: "explore",
       };
       const now = Date.now();
-      const companionNuggets = (nuggetData.nuggets as any[]).map((n: any, i: number) => ({
+      const companionNuggets = (nuggetData.nuggets as any[]).filter(n => hasFactEvidence(n, nuggetData.sources?.[n.sourceId] ?? n.source)).map((n: any, i: number) => ({
         id: n.id || `nugget-${i}`,
         timestamp: now - i * 60000,
         headline: n.headline || "",
         text: n.text || "",
         category: kindToCategory[n.kind] || "track",
         listenUnlockLevel: 1,
-        sourceName: n.source?.publisher || "",
-        sourceUrl: n.source?.url || "",
+        sourceName: (nuggetData.sources?.[n.sourceId] ?? n.source)?.publisher || "",
+        sourceUrl: (nuggetData.sources?.[n.sourceId] ?? n.source)?.url || "",
+        citation: (nuggetData.sources?.[n.sourceId] ?? n.source)?.citation,
         imageUrl: n.imageUrl,
         imageCaption: n.imageCaption,
       }));
 
       const response = {
-        artistSummary,
+        artistSummary: "",
         nuggets: companionNuggets,
         externalLinks,
       };

@@ -1,3 +1,4 @@
+import { evidence } from "./factEvidenceFixture";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ArtistUpdate } from "@/hooks/useArtistUpdates";
@@ -23,6 +24,8 @@ const FACT: ArtistUpdate = {
   body: "Alex Sowinski noted Kaytranada, whom the band met on tour.",
   nuggetId: "fact-1",
 };
+
+FACT.source = { type: "article", url: "https://example.com/fact", citation: evidence(FACT, "https://example.com/fact") };
 
 // What the edge function actually builds for Browse's play targets:
 // track name as headline, empty body (artist-updates/index.ts:381).
@@ -98,13 +101,13 @@ describe("useArtistLatestFacts — what reaches Latest Facts", () => {
     expect(result.current.updates).toEqual([]);
   });
 
-  it("keeps every fact when the server sends no tracks", async () => {
+  it("rejects a changed fact reusing another claim’s citation", async () => {
     const second = { ...FACT, nuggetId: "fact-2", headline: "A second fact." };
     invoke.mockResolvedValue({ data: { updates: [FACT, second] }, error: null });
 
     const { result } = renderHook(() => useArtistLatestFacts("BADBADNOTGOOD", "nerd"));
 
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.updates).toHaveLength(2);
+    expect(result.current.updates).toEqual([FACT]);
   });
 });

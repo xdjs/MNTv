@@ -1,3 +1,4 @@
+import { hasFactEvidence } from "../../supabase/functions/_shared/hasFactEvidence";
 import { useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -172,16 +173,17 @@ export function useBookmarks() {
   });
 
   const bookmarks = listQuery.data || [];
+  const supportedBookmarks = useMemo(() => bookmarks.filter(b => hasFactEvidence(b, b.source)), [bookmarks]);
 
   // Natural-key lookup — same headline + track + kind = same bookmark
   // from the user's perspective, even if the DB row has a different UUID.
   const findBookmark = useMemo(
     () =>
       (headline: string, trackId: string, kind: string): Bookmark | undefined =>
-        bookmarks.find(
+        supportedBookmarks.find(
           (b) => b.headline === headline && b.track_id === trackId && b.nugget_kind === kind,
         ),
-    [bookmarks],
+    [supportedBookmarks],
   );
 
   function isBookmarked(headline: string, trackId: string, kind: string): boolean {
@@ -208,7 +210,8 @@ export function useBookmarks() {
   }
 
   return {
-    bookmarks,
+    bookmarks: supportedBookmarks,
+    withheldCount: bookmarks.length - supportedBookmarks.length,
     loading: listQuery.isLoading,
     signedIn: isSignedIn,
     isBookmarked,

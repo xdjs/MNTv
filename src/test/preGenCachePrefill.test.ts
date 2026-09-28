@@ -1,3 +1,4 @@
+import { evidence } from "./factEvidenceFixture";
 import { describe, it, expect } from "vitest";
 import { preparePreGenCacheEntry } from "@/lib/preGenCachePrefill";
 
@@ -8,6 +9,7 @@ import { preparePreGenCacheEntry } from "@/lib/preGenCachePrefill";
 // and unsafe URL schemes the same way the JSONB-read path does.
 
 const validNugget = {
+  sourceId: "src-1",
   id: "nug-1",
   trackId: "spotify:track:abc",
   timestampSec: 5,
@@ -17,6 +19,7 @@ const validNugget = {
 };
 
 const validSource = {
+  citation: evidence(validNugget, "https://example.com/a"),
   id: "src-1",
   type: "catalog",
   title: "Source title",
@@ -41,6 +44,7 @@ describe("preparePreGenCacheEntry", () => {
   it("filters out malformed nuggets but keeps valid ones", () => {
     const entry = preparePreGenCacheEntry({
       nuggets: [validNugget, { id: "missing-fields" }, null, 42],
+      sources: { "src-1": validSource },
     });
     expect(entry).not.toBeNull();
     expect(entry!.nuggets).toHaveLength(1);
@@ -74,7 +78,7 @@ describe("preparePreGenCacheEntry", () => {
         "src-1": { ...validSource, url: "data:text/html,<script>alert(1)</script>" },
       },
     });
-    expect(entry!.sources.size).toBe(0);
+    expect(entry).toBeNull();
   });
 
   it("EXCLUDES sources missing required fields (matches JSONB-read path)", () => {
@@ -99,9 +103,8 @@ describe("preparePreGenCacheEntry", () => {
     expect(entry!.sources.has("src-1")).toBe(true);
   });
 
-  it("returns an empty sourcesMap when sources field is missing", () => {
+  it("withholds facts when sources are missing", () => {
     const entry = preparePreGenCacheEntry({ nuggets: [validNugget] });
-    expect(entry!.sources.size).toBe(0);
-    expect(entry!.nuggets).toHaveLength(1);
+    expect(entry).toBeNull();
   });
 });

@@ -1,3 +1,5 @@
+import { hasFactEvidence } from "../../supabase/functions/_shared/hasFactEvidence";
+import type { FactEvidence } from "../../supabase/functions/_shared/hasFactEvidence";
 /**
  * Seed data for demo tracks — pre-curated nuggets served instantly
  * without hitting the AI generation pipeline.
@@ -16,6 +18,7 @@ interface SeedNuggetData {
   imageUrl?: string;
   imageCaption?: string;
   source: {
+    citation?: FactEvidence;
     type: "youtube" | "article" | "interview";
     title: string;
     publisher: string;
@@ -31,6 +34,7 @@ interface SeedListenFile {
 }
 
 interface SeedCompanionNugget {
+  citation?: FactEvidence;
   id: string;
   text: string;
   category: string;
@@ -148,7 +152,8 @@ export async function getSeedListenNuggets(
   const idx = Math.min(Math.max(listenCount, 1), 3); // 1, 2, or 3
   const fileName = `${slug}-${tier}-listen${idx}.json`;
   const data = await loadSeedJson<SeedListenFile>(fileName);
-  return data?.nuggets ?? null;
+  const supported = data?.nuggets.filter(n => hasFactEvidence(n, n.source));
+  return supported?.length ? supported : null;
 }
 
 /**
@@ -163,5 +168,7 @@ export async function getSeedCompanion(
   if (!slug) return null;
 
   const fileName = `${slug}-${tier}-companion.json`;
-  return loadSeedJson<SeedCompanionFile>(fileName);
+  const data = await loadSeedJson<SeedCompanionFile>(fileName);
+  const nuggets = data?.nuggets.filter(n => hasFactEvidence(n, { url: n.sourceUrl, citation: n.citation }));
+  return nuggets?.length ? { ...data!, nuggets } : null;
 }

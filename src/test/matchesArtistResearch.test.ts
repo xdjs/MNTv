@@ -15,3 +15,9 @@ it("requires exact provider URL identity and rejects lookalike hosts", () => {
   expect(matchesArtistResearch({ text: "LIL LIL", url: `https://open.spotify.com/artist/${identity.id}` }, identity)).toBe(true);
   expect(matchesArtistResearch({ text: "LIL LIL", url: `https://open.spotify.com.evil.test/artist/${identity.id}` }, identity)).toBe(false);
 });
+it("accepts multiple catalog matches for artists whose song titles are short", () => {
+  const doggone = { id: "2VNWt6p905PprUPc78Mfzt", name: "doggone", service: "spotify" as const, titles: ["William", "Unforgiven", "Siberia"] };
+  expect(matchesArtistResearch({ text: 'doggone released "William", "Unforgiven" and "Siberia".' }, doggone)).toBe(true);
+  expect(matchesArtistResearch({ text: 'doggone mentioned William.' }, doggone)).toBe(false);
+  expect(matchesArtistResearch({ text: 'doggone mentioned William, William.' }, { ...doggone, titles: ["William", "William"] })).toBe(false);
+});

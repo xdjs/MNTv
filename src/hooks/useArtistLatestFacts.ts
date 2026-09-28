@@ -1,3 +1,4 @@
+import { hasFactEvidence } from "../../supabase/functions/_shared/hasFactEvidence";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { ArtistUpdate } from "@/hooks/useArtistUpdates";
@@ -59,7 +60,7 @@ export function useArtistLatestFacts(
         // The edge function returns Browse's play targets in the same
         // array. Those have no body, so "Latest Facts" would render
         // them as titles with nothing underneath.
-        setUpdates(next.filter((u) => isReadableUpdate(u) && (artistId ? u.artistId === artistId : service !== "apple")));
+        setUpdates(next.filter((u) => isReadableUpdate(u) && (u.kind !== "fact" || hasFactEvidence(u, u.source)) && (artistId ? u.artistId === artistId : service !== "apple")));
       } catch (e) {
         if (import.meta.env.DEV) {
           console.warn(`[artist-latest-facts] ${artistName} threw:`, e);

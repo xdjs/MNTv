@@ -1,3 +1,4 @@
+import { evidence } from "./factEvidenceFixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { selectUpdateArtist } from "../../supabase/functions/_shared/selectUpdateArtist";
@@ -11,7 +12,9 @@ vi.mock("@/integrations/supabase/client", () => ({ supabase: { functions: { invo
 const id = "62jLhwXSHpY3qoNybvyemr";
 const wrongId = "5INjqkS1o8h1imAzPqGZBb";
 const profile = { streamingService: "Spotify", topArtists: ["LIL LIL"], artistIds: { "LIL LIL": id } } as unknown as UserProfile;
-const update = { artistId: id, artistName: "LIL LIL", kind: "fact", headline: "Correct artist", body: "Fact" };
+const fact = { artistId: id, artistName: "LIL LIL", kind: "fact", headline: "Correct artist", body: "Fact" };
+
+const update = { ...fact, source: { type: "article", url: "https://example.com/artist", citation: evidence(fact, "https://example.com/artist") } };
 
 beforeEach(() => {
   localStorage.clear(); sessionStorage.clear(); invoke.mockReset();
@@ -61,4 +64,17 @@ describe("artist identity", () => {
     expect(invoke.mock.calls[0][1].body).toEqual({ artist: "LIL LIL", tier: "casual", service: "apple", storefront: "us", artistId: "123456" });
     expect(result.current.groups[0].updates).toEqual([]);
   });
+});
+it("allows source verification to finish after the old 30-second deadline", async () => {
+  vi.useFakeTimers();
+  try {
+    let complete!: (value: unknown) => void;
+    invoke.mockReturnValue(new Promise(resolve => { complete = resolve; }));
+    const { result } = renderHook(() => useArtistUpdates(profile, { tier: "casual" }));
+    const { act } = await import("@testing-library/react");
+    await act(async () => { await vi.advanceTimersByTimeAsync(35_000); });
+    expect(result.current.readyCount).toBe(0);
+    await act(async () => { complete({ data: { updates: [update] }, error: null }); });
+    expect(result.current.groups[0].updates).toEqual([update]);
+  } finally { vi.useRealTimers(); }
 });

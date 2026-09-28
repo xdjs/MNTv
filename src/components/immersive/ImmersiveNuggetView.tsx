@@ -1,3 +1,4 @@
+import { hasFactEvidence } from "../../../supabase/functions/_shared/hasFactEvidence";
 import { memo, useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, Heart } from "lucide-react";
@@ -454,7 +455,7 @@ export default function ImmersiveNuggetView({
         body: {
           artist, title: trackTitle, deepDive: true,
           context: `${activeNugget.headline}\n${activeNugget.text}`,
-          sourceTitle: activeSource?.title, sourcePublisher: activeSource?.publisher,
+          sourceUrl: activeSource?.url, sourceTitle: activeSource?.title, sourcePublisher: activeSource?.publisher,
         },
       });
       // Discard if unmounted or track changed during the request
@@ -462,8 +463,8 @@ export default function ImmersiveNuggetView({
       if (prevTrackKeyRef.current !== requestTrackKey) return;
       if (data?.deepDive?.text) {
         deepDiveSessionCount++;
-        setDeepDiveText(data.deepDive.text);
-        setDeepDiveFollowUp(data.deepDive.followUp || null);
+        setDeepDiveText(hasFactEvidence(data.deepDive, data.deepDive.source) ? data.deepDive.text : "No additional source-supported detail is available yet.");
+        setDeepDiveFollowUp(null);
       }
     } catch (e) {
       console.error("[ImmersiveView] Deep dive failed:", e);

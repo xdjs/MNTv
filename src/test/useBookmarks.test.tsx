@@ -1,3 +1,4 @@
+import { evidence } from "./factEvidenceFixture";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -41,7 +42,7 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
 }
 
-const NUGGET = {
+const NUGGET_BASE = {
   trackId: "real::Cherele::KIKI",
   artist: "Cherele",
   title: "KIKI",
@@ -49,6 +50,8 @@ const NUGGET = {
   headline: "Cherele recorded KIKI in late 2024.",
   body: "Full body text.",
 };
+
+const NUGGET = { ...NUGGET_BASE, source: { type: "article", url: "https://example.com/fact", citation: evidence(NUGGET_BASE, "https://example.com/fact") } };
 
 beforeEach(() => {
   invokeMock.mockReset();
@@ -132,7 +135,7 @@ describe("useBookmarks — save flow", () => {
       nugget_kind: NUGGET.kind,
       headline: NUGGET.headline,
       body: NUGGET.body,
-      source: null,
+      source: NUGGET.source,
       image_url: null,
       created_at: "2026-01-01T00:00:00Z",
     };
@@ -256,4 +259,29 @@ describe("useBookmarks — signed-out", () => {
 
     await waitFor(() => expect(toastErrorMock).toHaveBeenCalled());
   });
+});
+
+describe("saved fact evidence", () => {
+  it("withholds legacy and changed saved facts without deleting the stored bookmarks", async () => {
+    const source = { type: "article", url: "https://example.com/report", citation: {
+      version: 1, headline: NUGGET.headline, text: NUGGET.body,
+      url: "https://example.com/report", excerpt: "The retrieved report contains a passage supporting this specific fact.",
+    } };
+    const checked = { id: "checked", ...NUGGET, source };
+    invokeMock.mockResolvedValue({ data: { bookmarks: [checked, { ...checked, id: "legacy", source: null }, { ...checked, id: "changed", body: "An unsupported new claim" }] }, error: null });
+    const { result } = renderHook(() => useBookmarks(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.bookmarks.map(b => b.id)).toEqual(["checked"]);
+    expect(invokeMock.mock.calls.every(c => c[1].body.action === "list")).toBe(true);
+  });
+});
+it("saves new verified evidence instead of toggling a hidden legacy bookmark off", async () => {
+  const legacy = { ...NUGGET, id: "legacy", track_id: NUGGET.trackId, nugget_kind: NUGGET.kind, source: null };
+  invokeMock.mockImplementation(async (_fn, opts) => opts.body.action === "list" ? { data: { bookmarks: [legacy] }, error: null } : { data: { ok: true }, error: null });
+  const { result } = renderHook(() => useBookmarks(), { wrapper });
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  expect(result.current.isBookmarked(NUGGET.headline, NUGGET.trackId, NUGGET.kind)).toBe(false);
+  act(() => result.current.toggle(NUGGET));
+  await waitFor(() => expect(invokeMock.mock.calls.some(c => c[1].body.action === "add")).toBe(true));
+  expect(invokeMock.mock.calls.some(c => c[1].body.action === "remove")).toBe(false);
 });

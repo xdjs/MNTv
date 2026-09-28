@@ -1,3 +1,4 @@
+import { evidence } from "./factEvidenceFixture";
 import { describe, it, expect } from "vitest";
 import {
   artistFactToNugget,
@@ -15,7 +16,7 @@ import type { Nugget } from "@/mock/types";
 const TRACK_ID = "real::Pete%20Rango::crying%20on%20the%20floor";
 
 function update(over: Partial<ArtistUpdate> = {}): ArtistUpdate {
-  return {
+  const result: ArtistUpdate = {
     artistId: "a1",
     artistName: "Pete Rango",
     artistImageUrl: "https://example.com/artist.jpg",
@@ -31,6 +32,8 @@ function update(over: Partial<ArtistUpdate> = {}): ArtistUpdate {
     nuggetId: "fact-1",
     ...over,
   };
+  if (result.source) result.source.citation = evidence(result, result.source.url ?? "");
+  return result;
 }
 
 function nugget(over: Partial<Nugget> = {}): Nugget {
@@ -99,19 +102,16 @@ describe("artistFactToNugget", () => {
 
   // The URL is rendered as a link, and the copy originates from Exa /
   // Gemini — an unsafe scheme would be a navigable XSS vector.
-  it("strips an unsafe source URL but keeps the fact", () => {
+  it("withholds a fact with an unsafe source URL", () => {
     const result = artistFactToNugget(
       update({ source: { type: "article", title: "t", publisher: "p", url: "javascript:alert(1)" } }),
       TRACK_ID,
     )!;
-    expect(result.source.url).toBe("");
-    expect(result.nugget.headline).toBeTruthy();
+    expect(result).toBeNull();
   });
 
-  it("falls back to the artist as publisher when the update has no source", () => {
-    const { source } = artistFactToNugget(update({ source: undefined }), TRACK_ID)!;
-    expect(source.publisher).toBe("Pete Rango");
-    expect(source.url).toBe("");
+  it("withholds a fact without a source", () => {
+    expect(artistFactToNugget(update({ source: undefined }), TRACK_ID)).toBeNull();
   });
 
   it("returns null for a kind that isn't reusable", () => {
@@ -260,17 +260,17 @@ describe("buildArtistUpdatesCacheKey", () => {
   // — `artist::${artistName.trim().toLowerCase()}::${tier}`. Drift here
   // reads nothing and fails silently, with no error anywhere.
   it("matches the edge function's key format exactly", () => {
-    expect(buildArtistUpdatesCacheKey("Radiohead", "nerd")).toBe("artist::radiohead::nerd::v5");
+    expect(buildArtistUpdatesCacheKey("Radiohead", "nerd")).toBe("artist::radiohead::nerd::v6");
   });
 
   it("lowercases and trims like the edge function does", () => {
     expect(buildArtistUpdatesCacheKey("  Pete Rango  ", "casual"))
-      .toBe("artist::pete rango::casual::v5");
+      .toBe("artist::pete rango::casual::v6");
   });
 
   it("scopes by tier", () => {
     expect(buildArtistUpdatesCacheKey("Flozigg", "curious"))
-      .toBe("artist::flozigg::curious::v5");
+      .toBe("artist::flozigg::curious::v6");
   });
 
   // Rows live 7 days, so without a version segment a SHAPE change stays

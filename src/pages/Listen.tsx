@@ -649,6 +649,7 @@ export default function Listen() {
               listenUnlockLevel: listenCount,
               sourceName: source?.publisher || "",
               sourceUrl: source?.url || "",
+              citation: source?.citation,
               imageUrl: n.imageUrl,
               imageCaption: n.imageCaption,
             };
