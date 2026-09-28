@@ -1,3 +1,4 @@
+import { normalizeCacheDuration } from "../_shared/normalizeCacheDuration.ts";
 import { persistStreamedNuggets } from "../_shared/persistStreamedNuggets.ts";
 import { generateVerifiedDeepDive } from "../_shared/generateVerifiedDeepDive.ts";
 import { verifyFactSources } from "../_shared/verifyFactSources.ts";
@@ -2675,7 +2676,7 @@ serve(async (req) => {
     // Default to 240s (avg song) when caller omits — used for cache-side
     // timestamp computation so pre-gen flows (which don't know duration yet)
     // can still produce a valid cached Nugget[] shape.
-    const cacheDurationSec = typeof rawDurationSec === "number" && rawDurationSec > 30 ? rawDurationSec : 240;
+    const cacheDurationSec = normalizeCacheDuration(rawDurationSec);
     const tier: Tier = (rawTier === "casual" || rawTier === "curious" || rawTier === "nerd") ? rawTier : "casual";
 
     // ── Input validation ────────────────────────────────────────────
@@ -3983,7 +3984,7 @@ Return ONLY valid JSON:
 
               const persisted = await persistStreamedNuggets(cacheAdminClient as unknown as Parameters<typeof persistStreamedNuggets>[0], {
                 artist, title, uri: safeSpotifyTrackId ? `spotify:track:${safeSpotifyTrackId}` : safeAppleTrackId ? `apple:song:${safeAppleTrackId}` : "",
-                tier, listenCount: safeListenCount, durationSec: typeof rawDurationSec === "number" ? rawDurationSec : 300,
+                tier, listenCount: safeListenCount, durationSec: cacheDurationSec,
                 nuggets: streamedNuggets, externalLinks: buildExternalLinks(),
               });
               if (!persisted) console.warn("[SSE] Verified facts delivered but server cache persistence failed");

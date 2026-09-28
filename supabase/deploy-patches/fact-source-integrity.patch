@@ -1,6 +1,7 @@
 --- a/supabase/functions/generate-nuggets/index.ts
 +++ b/supabase/functions/generate-nuggets/index.ts
-@@ -1,3 +1,7 @@
+@@ -1,3 +1,8 @@
++import { normalizeCacheDuration } from "../_shared/normalizeCacheDuration.ts";
 +import { persistStreamedNuggets } from "../_shared/persistStreamedNuggets.ts";
 +import { generateVerifiedDeepDive } from "../_shared/generateVerifiedDeepDive.ts";
 +import { verifyFactSources } from "../_shared/verifyFactSources.ts";
@@ -8,7 +9,7 @@
  import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
  import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
  import { getAppleDeveloperToken } from "../_shared/apple-token.ts";
-@@ -476,6 +480,7 @@
+@@ -476,6 +481,7 @@
  
  // ── Exa /answer API ─────────────────────────────────────────────────
  interface ExaCitation {
@@ -16,7 +17,7 @@
    citIndex: number;
    url: string;
    title: string;
-@@ -587,6 +592,7 @@
+@@ -587,6 +593,7 @@
        }
        return {
          citIndex: citIndexStart + i,
@@ -24,7 +25,7 @@
          url: r.url || "",
          title: r.title || "",
          author: r.author || null,
-@@ -599,7 +605,6 @@
+@@ -599,7 +606,6 @@
  
    // Build answer from page text snippets + highlights
    const snippets = results
@@ -32,7 +33,7 @@
      .map((r: any, i: number) => {
        // Truncate each page to keep prompt reasonable
        const text = (r.text || "").slice(0, 5000);
-@@ -2188,7 +2193,7 @@
+@@ -2188,7 +2194,7 @@
          "title": "Source title",
          "publisher": "Real publisher name",
          ${sourceFieldExample}
@@ -41,7 +42,7 @@
        }
      }
    ]
-@@ -2270,7 +2275,7 @@
+@@ -2270,7 +2276,7 @@
          "title": "Source title",
          "publisher": "Real publisher name",
          ${sourceFieldExample}
@@ -50,7 +51,16 @@
        }
      }
    ]
-@@ -2564,79 +2569,11 @@
+@@ -2497,7 +2503,7 @@
+     // Default to 240s (avg song) when caller omits — used for cache-side
+     // timestamp computation so pre-gen flows (which don't know duration yet)
+     // can still produce a valid cached Nugget[] shape.
+-    const cacheDurationSec = typeof rawDurationSec === "number" && rawDurationSec > 30 ? rawDurationSec : 240;
++    const cacheDurationSec = normalizeCacheDuration(rawDurationSec);
+     const tier: Tier = (rawTier === "casual" || rawTier === "curious" || rawTier === "nerd") ? rawTier : "casual";
+ 
+     // ── Input validation ────────────────────────────────────────────
+@@ -2564,79 +2570,11 @@
  
      // ── Deep Dive mode ──────────────────────────────────────────────
      if (deepDive) {
@@ -134,7 +144,7 @@
          headers: { ...corsHeaders, "Content-Type": "application/json" },
        });
      }
-@@ -2762,42 +2699,8 @@
+@@ -2762,42 +2700,8 @@
        const fastNuggetId = `ai-nug-${fastTrackId}-L1-0`;
  
        async function buildSyntheticCacheRow(reasonLog: string) {
@@ -179,7 +189,7 @@
            headers: { ...corsHeaders, "Content-Type": "application/json" },
          });
        }
-@@ -2850,16 +2753,6 @@
+@@ -2850,16 +2754,6 @@
          const cit = firstExaCitations.find((c) => c.citIndex === firstNugget.source.citIndex);
          if (cit) { resolvedUrl = cit.url; resolvedTitle = cit.title || resolvedTitle; resolvedVerified = true; }
        }
@@ -196,7 +206,7 @@
  
        // 4. Source-filter check — same rejection rules as the main path.
        const sType = (firstNugget.source?.type || "").toLowerCase();
-@@ -2875,6 +2768,12 @@
+@@ -2875,6 +2769,12 @@
          console.warn(`[firstNuggetOnly] Rejected hallucinated source for ${artist} - ${title}: type=${sType} pub=${sPub} url=${sUrl || "(empty)"}`);
          return buildSyntheticCacheRow("source rejected");
        }
@@ -209,7 +219,7 @@
  
        // 5. Build cache row. Single nugget at timestamp 0 so the
        //    client's cache-hit reveal lands the moment the song starts.
-@@ -2893,10 +2792,11 @@
+@@ -2893,10 +2793,11 @@
          [fastSourceId]: {
            id: fastSourceId,
            type: sparseFast ? "catalog" : (firstNugget.source?.type || "article"),
@@ -224,7 +234,7 @@
          },
          // Mark the row as a "first-only" partial so Listen knows to fire
          // the full pipeline AFTER tap to fill in the remaining nuggets.
-@@ -2915,7 +2815,7 @@
+@@ -2915,7 +2816,7 @@
        }
  
        console.log(`[firstNuggetOnly] ${artist} - ${title} done in ${Date.now() - t0}ms (sparse=${sparseFast})`);
@@ -233,7 +243,7 @@
          headers: { ...corsHeaders, "Content-Type": "application/json" },
        });
      }
-@@ -3217,7 +3117,7 @@
+@@ -3217,7 +3118,7 @@
        const result = await generateWithGemini(
          artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier, safeTopArtists, safeTopTracks,
          exaPromptContext, exaCitations, imageCandidates, isSparseData, resolvedSpotifyInfo, resolvedLastFmSimilar, resolvedLastFmTags,
@@ -242,7 +252,7 @@
        );
        rawNuggets = result.nuggets;
        groundingChunks = result.groundingChunks;
-@@ -3229,7 +3129,7 @@
+@@ -3229,7 +3130,7 @@
          const result = await generateWithGemini(
            artist, title, album, videos, new Map(), GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier, safeTopArtists, safeTopTracks,
            exaPromptContext, exaCitations, imageCandidates, isSparseData, resolvedSpotifyInfo, resolvedLastFmSimilar, resolvedLastFmTags,
@@ -251,7 +261,7 @@
          );
          rawNuggets = result.nuggets;
          groundingChunks = result.groundingChunks;
-@@ -3451,90 +3351,33 @@
+@@ -3451,90 +3352,33 @@
            result.source.verified = true;
          }
        }
@@ -365,7 +375,7 @@
  
      function buildExternalLinks() {
        const links: { label: string; url: string }[] = [];
-@@ -3676,6 +3519,7 @@
+@@ -3676,6 +3520,7 @@
                // but defIdx keeps advancing, so the next nugget still maps to
                // its correct Exa citation window (artist=0, track=1, discovery=2).
                for (let defIdx = 0; defIdx < nuggetDefs.length; defIdx++) {
@@ -373,7 +383,7 @@
                  const def = nuggetDefs[defIdx];
                  _ts(`writer_${def.kind}`);
                  const allPrevHeadlines = [...prevHeadlines, ...generatedHeadlines];
-@@ -3718,7 +3562,7 @@
+@@ -3718,7 +3563,7 @@
        "title": "Source title",
        "publisher": "Real publisher name",
        "citIndex": "<integer — the [CIT N] index of the research item backing this nugget>",
@@ -382,7 +392,7 @@
      }
    }
  }`;
-@@ -3735,6 +3579,7 @@
+@@ -3735,6 +3580,7 @@
                  let nuggetData: any = null;
                  const WRITER_CALL_TIMEOUT_MS = 30_000;
                  for (let attempt = 0; attempt < 3; attempt++) {
@@ -390,7 +400,7 @@
                    try {
                      // Per-attempt abort guard — a hanging Gemini response
                      // would otherwise hold the SSE connection open until
-@@ -3743,7 +3588,7 @@
+@@ -3743,7 +3589,7 @@
                        method: "POST",
                        headers: { "Content-Type": "application/json" },
                        body: JSON.stringify(callBody),
@@ -399,7 +409,7 @@
                      });
                      if (!res.ok) {
                        if (res.status === 429 && attempt < 2) {
-@@ -3754,6 +3599,7 @@
+@@ -3754,6 +3600,7 @@
                            ? Math.min(retryAfterSec * 1000, 10_000)
                            : 2000 * Math.pow(2, attempt);
                          console.log(`[SSE] 429 for ${def.kind}, retrying in ${Math.round(delayMs)}ms (attempt ${attempt + 1}/3)`);
@@ -407,7 +417,7 @@
                          await new Promise((resolve) => setTimeout(resolve, delayMs));
                          continue;
                        }
-@@ -3830,7 +3676,8 @@
+@@ -3830,7 +3677,8 @@
                  // keeping emitted IDs contiguous even when earlier defs were
                  // skipped. (assembleNugget doesn't read the index today, but any
                  // reader of the emitted nugget should see a coherent position.)
@@ -417,20 +427,20 @@
                  const sourceType = (assembled.source?.type || "").toLowerCase();
                  const publisher = (assembled.source?.publisher || "").toLowerCase();
                  if (
-@@ -3926,6 +3773,12 @@
+@@ -3926,6 +3774,12 @@
                  return;
                }
  
 +              const persisted = await persistStreamedNuggets(cacheAdminClient as unknown as Parameters<typeof persistStreamedNuggets>[0], {
 +                artist, title, uri: safeSpotifyTrackId ? `spotify:track:${safeSpotifyTrackId}` : safeAppleTrackId ? `apple:song:${safeAppleTrackId}` : "",
-+                tier, listenCount: safeListenCount, durationSec: typeof rawDurationSec === "number" ? rawDurationSec : 300,
++                tier, listenCount: safeListenCount, durationSec: cacheDurationSec,
 +                nuggets: streamedNuggets, externalLinks: buildExternalLinks(),
 +              });
 +              if (!persisted) console.warn("[SSE] Verified facts delivered but server cache persistence failed");
                const doneEvent = `data: ${JSON.stringify({ type: "done", artistSummary: sseArtistSummary, externalLinks: buildExternalLinks(), noTrackData })}\n\n`;
                try {
                  streamController.enqueue(encoder.encode(doneEvent));
-@@ -3990,7 +3843,7 @@
+@@ -3990,7 +3844,7 @@
      }
  
      // Step 4: Assemble response using shared helpers
@@ -439,7 +449,7 @@
      const externalLinks = buildExternalLinks();
  
      // ── Fix 4: Post-generation source validation ──────────────────────
-@@ -4151,7 +4004,7 @@
+@@ -4151,7 +4005,7 @@
                  `overwriting an unread row:`, priorErr.message,
                );
              }
@@ -448,7 +458,7 @@
              if (priorNuggets.length > 0) {
                // Drop prior entries this wave supersedes. By id for rows
                // written after wave ids became listen-scoped, and by
-@@ -4191,54 +4044,6 @@
+@@ -4191,54 +4045,6 @@
        } catch (e) {
          console.warn("[NuggetCache] server upsert threw (non-fatal):", e);
        }

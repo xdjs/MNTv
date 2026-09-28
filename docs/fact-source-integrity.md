@@ -27,3 +27,9 @@ Completed SSE generation persists verified facts with backend privileges before 
 Listen never infers an artist ID from a profile display-name map. Artist-profile and artist-update playback routes explicitly carry their selected catalog identity; other routes retain the name-scoped lookup until they carry an explicit ID. Cross-service recording resolution drops the original provider's artist ID.
 
 Listening history preserves the complete query string (including artist ID and all collaborator credits), merging fallback artwork only when no artwork parameter exists. Returning with Previous therefore retains the same catalog identity and research context.
+
+### Final review corrections (2026-09-28)
+
+Companion uploads wait for initial and background generation to settle, coalesce snapshots for 1.5 seconds, and serialize requests. Attempts are spaced at least 65 seconds apart within the mounted Listen page, with at most three attempts per snapshot. Only successful uploads enter the dedupe map; quota failures can retry after the next minute window. Navigating away cancels queued work and prevents old requests from updating the current QR state.
+
+Both streamed and batch cache writes normalize durations: finite values above 30 seconds and at most six hours are accepted; other inputs use 240 seconds. The streamed persistence helper also enforces this boundary independently.
