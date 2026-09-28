@@ -4,7 +4,8 @@ export function matchesArtistResearch(
   identity: { id: string; name: string; service: "apple" | "spotify"; titles: string[] },
 ): boolean {
   const normalize = (value: string) => value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-  const text = normalize([source.title, source.text, ...(source.highlights ?? [])].filter(Boolean).join(" "));
+  const rawText = [source.title, source.text, ...(source.highlights ?? [])].filter(Boolean).join(" ");
+  const text = normalize(rawText);
   const hasPhrase = (phrase: string) => ` ${text} `.includes(` ${normalize(phrase)} `);
   if (!hasPhrase(identity.name)) return false;
   try {
@@ -15,5 +16,6 @@ export function matchesArtistResearch(
   // Require one distinctive title or two separate catalog matches.
   // A single short name such as William cannot establish identity.
   const matches = [...new Set(identity.titles.map(normalize))].filter(title => title !== normalize(identity.name) && title.length >= 6 && hasPhrase(title));
-  return matches.some(title => title.length >= 12) || matches.length >= 2;
+  const quotedTitles = [...rawText.matchAll(/["“‘']([^"”’']+)["”’']/gu)].map(match => normalize(match[1]));
+  return matches.some(title => title.length >= 12) || matches.filter(title => quotedTitles.includes(title)).length >= 2;
 }

@@ -9,3 +9,9 @@ The server stores evidence bound to the exact headline, body and URL. Frontend r
 Native catalog release/song metadata continues to use the streaming provider. Editorial facts cannot borrow those catalog links as evidence. Uncited companion summaries are also withheld. No synthetic facts replace failed research. Fewer cards and an additional bounded verification request are intentional tradeoffs. Story readiness requires supported content.
 
 Release remains staging-first. The shared backend rollout is authorized, but the frontend must await staging acceptance before main. The generate-nuggets deploy guard still applies: apply this change to downloaded live source and preserve its deployed constitution and Apple-token dependencies. Do not deploy the repository's unrelated pending generator work. Browser/signed-in verification remains a separate acceptance step.
+
+### Review hardening (2026-09-28)
+
+Verification shares the standard generation deadline. SSE stops starting writers when its budget expires, preserving the normal partial-result completion path. Each verification network call uses only the remaining budget. Deep dives retrieve the selected document before writing, disable unrelated search, and verify against that same document.
+
+Companion submissions preserve evidence-valid facts from all existing listen tiers when revalidation is partial; writes no longer delete other tiers. Legacy companion content with no supported facts falls through to the nugget cache. Short catalog titles establish research identity only when at least two appear as quoted titles, not incidental prose.

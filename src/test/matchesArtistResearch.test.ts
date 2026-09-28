@@ -21,3 +21,7 @@ it("accepts multiple catalog matches for artists whose song titles are short", (
   expect(matchesArtistResearch({ text: 'doggone mentioned William.' }, doggone)).toBe(false);
   expect(matchesArtistResearch({ text: 'doggone mentioned William, William.' }, { ...doggone, titles: ["William", "William"] })).toBe(false);
 });
+
+it("rejects common catalog words appearing as ordinary prose", () => {
+  expect(matchesArtistResearch({ text: "William will remember tonight forever." }, { id: "id", name: "William", service: "spotify", titles: ["Tonight", "Forever"] })).toBe(false);
+});
