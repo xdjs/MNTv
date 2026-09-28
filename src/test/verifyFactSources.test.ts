@@ -54,3 +54,19 @@ describe("source evidence", () => {
     expect(await verifyFactSources([fact], { googleKey: "test", pages: [page] })).toEqual([]);
   });
 });
+it("does not start verification after the shared deadline", async () => {
+  const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher);
+  expect(await verifyFactSources([fact], { googleKey: "test", pages: [page], deadline: Date.now() - 1 })).toEqual([]);
+  expect(fetcher).not.toHaveBeenCalled();
+});
+it("caps each request to remaining shared time and skips verification when retrieval exhausts it", async () => {
+  const clock = vi.spyOn(Date, "now").mockReturnValue(1000);
+  const timeout = vi.fn(() => new AbortController().signal);
+  vi.stubGlobal("AbortSignal", { timeout });
+  const fetcher = vi.fn().mockImplementation(async () => { clock.mockReturnValue(3000); return new Response(JSON.stringify({ results: [page] })); });
+  vi.stubGlobal("fetch", fetcher);
+  expect(await verifyFactSources([fact], { googleKey: "test", exaKey: "test", deadline: 2500 })).toEqual([]);
+  expect(timeout).toHaveBeenCalledWith(1500);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  clock.mockRestore();
+});

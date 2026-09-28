@@ -1,13 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ handler: null as null | ((r: Request) => Promise<Response>), verify: vi.fn(), upsert: vi.fn(), remove: vi.fn() }));
+import { evidence } from "./factEvidenceFixture";
+const mocks = vi.hoisted(() => ({ handler: null as null | ((r: Request) => Promise<Response>), rows: {} as Record<string, Record<string, unknown>>, verify: vi.fn(), upsert: vi.fn(), remove: vi.fn() }));
 vi.mock("https://deno.land/std@0.168.0/http/server.ts", () => ({ serve: (h: typeof mocks.handler) => { mocks.handler = h; } }));
-vi.mock("https://esm.sh/@supabase/supabase-js@2.49.1", () => ({ createClient: () => ({ from: () => {
-  const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: null }), delete: () => { mocks.remove(); return { in: async () => ({}) }; }, upsert: mocks.upsert };
+vi.mock("https://esm.sh/@supabase/supabase-js@2.49.1", () => ({ createClient: () => ({ from: (table: string) => {
+  let key = "";
+  const q = { select: () => q, eq: (field: string, value: string) => { if (field === "track_key" || field === "track_id") key = value; return q; }, in: () => q, order: () => q, limit: () => q, maybeSingle: async () => ({ data: mocks.rows[`${table}:${key}`] ?? null }), delete: () => { mocks.remove(); return { in: async () => ({}) }; }, upsert: mocks.upsert };
   return q;
 } }) }));
 vi.mock("../../supabase/functions/_shared/verifyFactSources.ts", () => ({ verifyFactSources: mocks.verify }));
 beforeEach(async () => {
-  vi.resetModules(); mocks.verify.mockReset(); mocks.upsert.mockReset(); mocks.remove.mockReset();
+  mocks.rows = {}; vi.resetModules(); mocks.verify.mockReset(); mocks.upsert.mockReset(); mocks.remove.mockReset();
   vi.stubGlobal("Deno", { env: { get: () => "test" } });
   const path = "../../supabase/functions/generate-companion/index.ts";
   await import(path);
@@ -20,4 +22,29 @@ describe("companion evidence writes", () => {
     expect(mocks.remove).not.toHaveBeenCalled();
     expect(mocks.upsert).not.toHaveBeenCalled();
   });
+});
+
+const saved = { id: "saved", headline: "Saved", text: "Verified saved fact", sourceUrl: "https://example.com/source" };
+const supported = { ...saved, citation: evidence(saved, saved.sourceUrl) };
+it("retains same-tier verified facts after partial revalidation", async () => {
+  mocks.rows["companion_cache:Artist::Song::casual::1"] = { content: { nuggets: [supported] } };
+  const fresh = { id: "fresh", headline: "New", text: "New verified fact", sourceUrl: saved.sourceUrl };
+  mocks.verify.mockResolvedValue([{ ...fresh, source: { url: fresh.sourceUrl, citation: evidence(fresh, fresh.sourceUrl) } }]);
+  const response = await mocks.handler!(new Request("https://test", { method: "POST", body: JSON.stringify({ artist: "Artist", title: "Song", prebuiltNuggets: [fresh, saved] }) }));
+  expect((await response.json()).nuggets.map((n: { id: string }) => n.id)).toEqual(["fresh", "saved"]);
+  expect(mocks.remove).not.toHaveBeenCalled();
+});
+it("falls through legacy companion content to supported nugget cache", async () => {
+  mocks.rows["companion_cache:"] = { content: { nuggets: [saved] }, listen_count_tier: 3 };
+  mocks.rows["nugget_cache:Artist::Song::casual"] = { status: "ready", nuggets: [{ ...saved, source: { url: saved.sourceUrl, citation: supported.citation } }] };
+  const response = await mocks.handler!(new Request("https://test", { method: "POST", body: JSON.stringify({ artist: "Artist", title: "Song" }) }));
+  expect((await response.json()).nuggets.map((n: { id: string }) => n.id)).toEqual(["saved"]);
+});
+
+it("updates the highest cached tier so a lower-tier submission remains visible", async () => {
+  mocks.rows["companion_cache:Artist::Song::casual::3"] = { content: { nuggets: [supported] } };
+  mocks.verify.mockResolvedValue([{ ...saved, source: { url: saved.sourceUrl, citation: supported.citation } }]);
+  await mocks.handler!(new Request("https://test", { method: "POST", body: JSON.stringify({ artist: "Artist", title: "Song", listenCount: 1, prebuiltNuggets: [saved] }) }));
+  expect(mocks.upsert.mock.calls[0][0].listen_count_tier).toBe(3);
+  expect(mocks.upsert.mock.calls[0][0].track_key).toBe("Artist::Song::casual::3");
 });

@@ -1,12 +1,13 @@
 --- a/supabase/functions/generate-nuggets/index.ts
 +++ b/supabase/functions/generate-nuggets/index.ts
-@@ -1,3 +1,5 @@
+@@ -1,3 +1,6 @@
++import { generateVerifiedDeepDive } from "../_shared/generateVerifiedDeepDive.ts";
 +import { verifyFactSources } from "../_shared/verifyFactSources.ts";
 +import { hasFactEvidence } from "../_shared/hasFactEvidence.ts";
  import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
  import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
  import { getAppleDeveloperToken } from "../_shared/apple-token.ts";
-@@ -476,6 +478,7 @@
+@@ -476,6 +479,7 @@
  
  // ── Exa /answer API ─────────────────────────────────────────────────
  interface ExaCitation {
@@ -14,7 +15,7 @@
    citIndex: number;
    url: string;
    title: string;
-@@ -587,6 +590,7 @@
+@@ -587,6 +591,7 @@
        }
        return {
          citIndex: citIndexStart + i,
@@ -22,7 +23,7 @@
          url: r.url || "",
          title: r.title || "",
          author: r.author || null,
-@@ -599,7 +603,6 @@
+@@ -599,7 +604,6 @@
  
    // Build answer from page text snippets + highlights
    const snippets = results
@@ -30,7 +31,7 @@
      .map((r: any, i: number) => {
        // Truncate each page to keep prompt reasonable
        const text = (r.text || "").slice(0, 5000);
-@@ -2188,7 +2191,7 @@
+@@ -2188,7 +2192,7 @@
          "title": "Source title",
          "publisher": "Real publisher name",
          ${sourceFieldExample}
@@ -39,7 +40,7 @@
        }
      }
    ]
-@@ -2270,7 +2273,7 @@
+@@ -2270,7 +2274,7 @@
          "title": "Source title",
          "publisher": "Real publisher name",
          ${sourceFieldExample}
@@ -48,21 +49,91 @@
        }
      }
    ]
-@@ -2636,6 +2639,13 @@
-         });
-       }
+@@ -2564,79 +2568,11 @@
  
-+      const requestedSourceUrl = typeof body.sourceUrl === "string" ? body.sourceUrl : "";
-+      const [verifiedDive] = await verifyFactSources([{ headline: "", text: parsed.deepDive?.text, source: { url: requestedSourceUrl } }], {
+     // ── Deep Dive mode ──────────────────────────────────────────────
+     if (deepDive) {
+-      const deepDivePrompt = `You are a music historian having a fascinating conversation about "${title}" by ${artist}.
+-
+-The user has been reading this trivia and wants to go deeper:
+----
+-${context}
+----
+-${safeSourceTitle ? `The original source was: "${safeSourceTitle}" by ${safeSourcePublisher}` : ""}
+-${safeImageCaption ? `An image was shown alongside this nugget: "${safeImageQuery}" with caption "${safeImageCaption}". If relevant, weave in how this visual element connects to the deeper story.` : ""}
+-
+-Continue this thread of discovery. Provide ONE more paragraph of 2-3 sentences MAX (under 80 words total) that goes deeper — reveal connections, context, or implications that make this even more interesting. Be concise and punchy — this is for a TV screen. Think about WHY this matters, HOW it connects to broader music history, or WHAT it reveals about the creative process.
+-
+-Be conversational but authoritative. Channel the spirit of a music nerd who can't stop sharing fascinating connections.
+-
+-End with a brief "followUp" — a one-sentence teaser about what could be explored next.
+-
+-Return ONLY valid JSON:
+-{
+-  "deepDive": {
+-    "text": "Your deeper exploration paragraph here",
+-    "followUp": "One-sentence teaser for the next exploration"
+-  }
+-}`;
+-
+-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GOOGLE_AI_API_KEY}`;
+-      const res = await fetch(geminiUrl, {
+-        method: "POST",
+-        headers: { "Content-Type": "application/json" },
+-        body: JSON.stringify({
+-          contents: [{ role: "user", parts: [{ text: deepDivePrompt }] }],
+-          tools: [{ google_search: {} }],
+-          generationConfig: { temperature: 1.0 },
+-        }),
++      const result = await generateVerifiedDeepDive({
++        artist, title, context, sourceUrl: typeof body.sourceUrl === "string" ? body.sourceUrl : "",
 +        googleKey: GOOGLE_AI_API_KEY, exaKey: Deno.env.get("EXA_API_KEY"),
-+      });
-+      parsed = { deepDive: verifiedDive
-+        ? { text: verifiedDive.text, followUp: "", source: verifiedDive.source }
-+        : { text: "No additional source-supported detail is available yet.", followUp: "" } };
-       return new Response(JSON.stringify(parsed), {
+       });
+-
+-      if (!res.ok) {
+-        const errText = await res.text();
+-        console.error("Deep dive Gemini error:", res.status, errText);
+-        throw new Error(`Gemini API error: ${res.status}`);
+-      }
+-
+-      const data = await res.json();
+-      const candidate = data.candidates?.[0];
+-      const text = candidate?.content?.parts?.[0]?.text || "";
+-
+-      if (!text.trim()) {
+-        console.error("Deep dive returned empty. Candidate:", JSON.stringify(candidate));
+-        return new Response(JSON.stringify({
+-          deepDive: {
+-            text: "This topic is fascinating but I couldn't dig deeper right now. Try again in a moment.",
+-            followUp: "There's always more to discover."
+-          }
+-        }), {
+-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+-        });
+-      }
+-
+-      let parsed;
+-      try {
+-        const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+-        parsed = JSON.parse(cleaned);
+-      } catch {
+-        console.error("Failed to parse deep dive:", text.slice(0, 500));
+-        return new Response(JSON.stringify({
+-          deepDive: {
+-            text: "Couldn't process that exploration. Try again in a moment.",
+-            followUp: "There's always more to discover."
+-          }
+-        }), {
+-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+-        });
+-      }
+-
+-      return new Response(JSON.stringify(parsed), {
++      return new Response(JSON.stringify({ deepDive: result }), {
          headers: { ...corsHeaders, "Content-Type": "application/json" },
        });
-@@ -2762,42 +2772,8 @@
+     }
+@@ -2762,42 +2698,8 @@
        const fastNuggetId = `ai-nug-${fastTrackId}-L1-0`;
  
        async function buildSyntheticCacheRow(reasonLog: string) {
@@ -107,7 +178,7 @@
            headers: { ...corsHeaders, "Content-Type": "application/json" },
          });
        }
-@@ -2850,16 +2826,6 @@
+@@ -2850,16 +2752,6 @@
          const cit = firstExaCitations.find((c) => c.citIndex === firstNugget.source.citIndex);
          if (cit) { resolvedUrl = cit.url; resolvedTitle = cit.title || resolvedTitle; resolvedVerified = true; }
        }
@@ -124,7 +195,7 @@
  
        // 4. Source-filter check — same rejection rules as the main path.
        const sType = (firstNugget.source?.type || "").toLowerCase();
-@@ -2875,6 +2841,12 @@
+@@ -2875,6 +2767,12 @@
          console.warn(`[firstNuggetOnly] Rejected hallucinated source for ${artist} - ${title}: type=${sType} pub=${sPub} url=${sUrl || "(empty)"}`);
          return buildSyntheticCacheRow("source rejected");
        }
@@ -137,7 +208,7 @@
  
        // 5. Build cache row. Single nugget at timestamp 0 so the
        //    client's cache-hit reveal lands the moment the song starts.
-@@ -2893,10 +2865,11 @@
+@@ -2893,10 +2791,11 @@
          [fastSourceId]: {
            id: fastSourceId,
            type: sparseFast ? "catalog" : (firstNugget.source?.type || "article"),
@@ -152,7 +223,7 @@
          },
          // Mark the row as a "first-only" partial so Listen knows to fire
          // the full pipeline AFTER tap to fill in the remaining nuggets.
-@@ -2915,7 +2888,7 @@
+@@ -2915,7 +2814,7 @@
        }
  
        console.log(`[firstNuggetOnly] ${artist} - ${title} done in ${Date.now() - t0}ms (sparse=${sparseFast})`);
@@ -161,7 +232,7 @@
          headers: { ...corsHeaders, "Content-Type": "application/json" },
        });
      }
-@@ -3217,7 +3190,7 @@
+@@ -3217,7 +3116,7 @@
        const result = await generateWithGemini(
          artist, title, album, videos, transcripts, GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier, safeTopArtists, safeTopTracks,
          exaPromptContext, exaCitations, imageCandidates, isSparseData, resolvedSpotifyInfo, resolvedLastFmSimilar, resolvedLastFmTags,
@@ -170,7 +241,7 @@
        );
        rawNuggets = result.nuggets;
        groundingChunks = result.groundingChunks;
-@@ -3229,7 +3202,7 @@
+@@ -3229,7 +3128,7 @@
          const result = await generateWithGemini(
            artist, title, album, videos, new Map(), GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier, safeTopArtists, safeTopTracks,
            exaPromptContext, exaCitations, imageCandidates, isSparseData, resolvedSpotifyInfo, resolvedLastFmSimilar, resolvedLastFmTags,
@@ -179,7 +250,7 @@
          );
          rawNuggets = result.nuggets;
          groundingChunks = result.groundingChunks;
-@@ -3451,90 +3424,32 @@
+@@ -3451,90 +3350,33 @@
            result.source.verified = true;
          }
        }
@@ -283,6 +354,7 @@
      }
 +
 +    const citationOptions = {
++      deadline: functionStartTime + FUNCTION_TIMEOUT_MS,
 +      googleKey: GOOGLE_AI_API_KEY, exaKey: Deno.env.get("EXA_API_KEY"),
 +      pages: [
 +        ...(exaCitations ?? []).filter(c => c.text).map(c => ({ url: c.url, title: c.title, text: c.text! })),
@@ -292,7 +364,15 @@
  
      function buildExternalLinks() {
        const links: { label: string; url: string }[] = [];
-@@ -3718,7 +3633,7 @@
+@@ -3676,6 +3518,7 @@
+               // but defIdx keeps advancing, so the next nugget still maps to
+               // its correct Exa citation window (artist=0, track=1, discovery=2).
+               for (let defIdx = 0; defIdx < nuggetDefs.length; defIdx++) {
++                if (Date.now() >= citationOptions.deadline - 1000) break;
+                 const def = nuggetDefs[defIdx];
+                 _ts(`writer_${def.kind}`);
+                 const allPrevHeadlines = [...prevHeadlines, ...generatedHeadlines];
+@@ -3718,7 +3561,7 @@
        "title": "Source title",
        "publisher": "Real publisher name",
        "citIndex": "<integer — the [CIT N] index of the research item backing this nugget>",
@@ -301,7 +381,32 @@
      }
    }
  }`;
-@@ -3830,7 +3745,8 @@
+@@ -3735,6 +3578,7 @@
+                 let nuggetData: any = null;
+                 const WRITER_CALL_TIMEOUT_MS = 30_000;
+                 for (let attempt = 0; attempt < 3; attempt++) {
++                  if (Date.now() >= citationOptions.deadline - 1000) break;
+                   try {
+                     // Per-attempt abort guard — a hanging Gemini response
+                     // would otherwise hold the SSE connection open until
+@@ -3743,7 +3587,7 @@
+                       method: "POST",
+                       headers: { "Content-Type": "application/json" },
+                       body: JSON.stringify(callBody),
+-                      signal: AbortSignal.timeout(WRITER_CALL_TIMEOUT_MS),
++                      signal: AbortSignal.timeout(Math.max(1, Math.min(WRITER_CALL_TIMEOUT_MS, citationOptions.deadline - Date.now()))),
+                     });
+                     if (!res.ok) {
+                       if (res.status === 429 && attempt < 2) {
+@@ -3754,6 +3598,7 @@
+                           ? Math.min(retryAfterSec * 1000, 10_000)
+                           : 2000 * Math.pow(2, attempt);
+                         console.log(`[SSE] 429 for ${def.kind}, retrying in ${Math.round(delayMs)}ms (attempt ${attempt + 1}/3)`);
++                        if (Date.now() + delayMs >= citationOptions.deadline - 1000) break;
+                         await new Promise((resolve) => setTimeout(resolve, delayMs));
+                         continue;
+                       }
+@@ -3830,7 +3675,8 @@
                  // keeping emitted IDs contiguous even when earlier defs were
                  // skipped. (assembleNugget doesn't read the index today, but any
                  // reader of the emitted nugget should see a coherent position.)
@@ -311,7 +416,7 @@
                  const sourceType = (assembled.source?.type || "").toLowerCase();
                  const publisher = (assembled.source?.publisher || "").toLowerCase();
                  if (
-@@ -3990,7 +3906,7 @@
+@@ -3990,7 +3836,7 @@
      }
  
      // Step 4: Assemble response using shared helpers
@@ -320,7 +425,7 @@
      const externalLinks = buildExternalLinks();
  
      // ── Fix 4: Post-generation source validation ──────────────────────
-@@ -4151,7 +4067,7 @@
+@@ -4151,7 +3997,7 @@
                  `overwriting an unread row:`, priorErr.message,
                );
              }
@@ -329,7 +434,7 @@
              if (priorNuggets.length > 0) {
                // Drop prior entries this wave supersedes. By id for rows
                // written after wave ids became listen-scoped, and by
-@@ -4191,54 +4107,6 @@
+@@ -4191,54 +4037,6 @@
        } catch (e) {
          console.warn("[NuggetCache] server upsert threw (non-fatal):", e);
        }

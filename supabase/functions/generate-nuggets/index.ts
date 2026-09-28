@@ -1,3 +1,4 @@
+import { generateVerifiedDeepDive } from "../_shared/generateVerifiedDeepDive.ts";
 import { verifyFactSources } from "../_shared/verifyFactSources.ts";
 import { hasFactEvidence } from "../_shared/hasFactEvidence.ts";
 // ⚠ DEPLOY GUARD: Do NOT run `supabase functions deploy generate-nuggets`
@@ -2740,86 +2741,11 @@ serve(async (req) => {
 
     // ── Deep Dive mode ──────────────────────────────────────────────
     if (deepDive) {
-      const deepDivePrompt = `You are a music historian having a fascinating conversation about "${title}" by ${artist}.
-
-The user has been reading this trivia and wants to go deeper:
----
-${context}
----
-${safeSourceTitle ? `The original source was: "${safeSourceTitle}" by ${safeSourcePublisher}` : ""}
-${safeImageCaption ? `An image was shown alongside this nugget: "${safeImageQuery}" with caption "${safeImageCaption}". If relevant, weave in how this visual element connects to the deeper story.` : ""}
-
-Continue this thread of discovery. Provide ONE more paragraph of 2-3 sentences MAX (under 80 words total) that goes deeper — reveal connections, context, or implications that make this even more interesting. Be concise and punchy — this is for a TV screen. Think about WHY this matters, HOW it connects to broader music history, or WHAT it reveals about the creative process.
-
-Be conversational but authoritative. Channel the spirit of a music nerd who can't stop sharing fascinating connections.
-
-End with a brief "followUp" — a one-sentence teaser about what could be explored next.
-
-Return ONLY valid JSON:
-{
-  "deepDive": {
-    "text": "Your deeper exploration paragraph here",
-    "followUp": "One-sentence teaser for the next exploration"
-  }
-}`;
-
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GOOGLE_AI_API_KEY}`;
-      const res = await fetch(geminiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: deepDivePrompt }] }],
-          tools: [{ google_search: {} }],
-          generationConfig: { temperature: 1.0 },
-        }),
-      });
-
-      if (!res.ok) {
-        const errText = await res.text();
-        console.error("Deep dive Gemini error:", res.status, errText);
-        throw new Error(`Gemini API error: ${res.status}`);
-      }
-
-      const data = await res.json();
-      const candidate = data.candidates?.[0];
-      const text = candidate?.content?.parts?.[0]?.text || "";
-
-      if (!text.trim()) {
-        console.error("Deep dive returned empty. Candidate:", JSON.stringify(candidate));
-        return new Response(JSON.stringify({
-          deepDive: {
-            text: "This topic is fascinating but I couldn't dig deeper right now. Try again in a moment.",
-            followUp: "There's always more to discover."
-          }
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      let parsed;
-      try {
-        const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-        parsed = JSON.parse(cleaned);
-      } catch {
-        console.error("Failed to parse deep dive:", text.slice(0, 500));
-        return new Response(JSON.stringify({
-          deepDive: {
-            text: "Couldn't process that exploration. Try again in a moment.",
-            followUp: "There's always more to discover."
-          }
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const requestedSourceUrl = typeof body.sourceUrl === "string" ? body.sourceUrl : "";
-      const [verifiedDive] = await verifyFactSources([{ headline: "", text: parsed.deepDive?.text, source: { url: requestedSourceUrl } }], {
+      const result = await generateVerifiedDeepDive({
+        artist, title, context, sourceUrl: typeof body.sourceUrl === "string" ? body.sourceUrl : "",
         googleKey: GOOGLE_AI_API_KEY, exaKey: Deno.env.get("EXA_API_KEY"),
       });
-      parsed = { deepDive: verifiedDive
-        ? { text: verifiedDive.text, followUp: "", source: verifiedDive.source }
-        : { text: "No additional source-supported detail is available yet.", followUp: "" } };
-      return new Response(JSON.stringify(parsed), {
+      return new Response(JSON.stringify({ deepDive: result }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -3618,6 +3544,7 @@ Do not invent URLs. Do not invent publishers. Do not invent quotes.`;
     }
 
     const citationOptions = {
+      deadline: functionStartTime + FUNCTION_TIMEOUT_MS,
       googleKey: GOOGLE_AI_API_KEY, exaKey: Deno.env.get("EXA_API_KEY"),
       pages: [
         ...(exaCitations ?? []).filter(c => c.text).map(c => ({ url: c.url, title: c.title, text: c.text! })),
@@ -3765,6 +3692,7 @@ Do not invent URLs. Do not invent publishers. Do not invent years or quotes.`;
               // but defIdx keeps advancing, so the next nugget still maps to
               // its correct Exa citation window (artist=0, track=1, discovery=2).
               for (let defIdx = 0; defIdx < nuggetDefs.length; defIdx++) {
+                if (Date.now() >= citationOptions.deadline - 1000) break;
                 const def = nuggetDefs[defIdx];
                 _ts(`writer_${def.kind}`);
                 const allPrevHeadlines = [...prevHeadlines, ...generatedHeadlines];
@@ -3824,6 +3752,7 @@ Return ONLY valid JSON:
                 let nuggetData: any = null;
                 const WRITER_CALL_TIMEOUT_MS = 30_000;
                 for (let attempt = 0; attempt < 3; attempt++) {
+                  if (Date.now() >= citationOptions.deadline - 1000) break;
                   try {
                     // Per-attempt abort guard — a hanging Gemini response
                     // would otherwise hold the SSE connection open until
@@ -3832,7 +3761,7 @@ Return ONLY valid JSON:
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify(callBody),
-                      signal: AbortSignal.timeout(WRITER_CALL_TIMEOUT_MS),
+                      signal: AbortSignal.timeout(Math.max(1, Math.min(WRITER_CALL_TIMEOUT_MS, citationOptions.deadline - Date.now()))),
                     });
                     if (!res.ok) {
                       if (res.status === 429 && attempt < 2) {
@@ -3843,6 +3772,7 @@ Return ONLY valid JSON:
                           ? Math.min(retryAfterSec * 1000, 10_000)
                           : 2000 * Math.pow(2, attempt);
                         console.log(`[SSE] 429 for ${def.kind}, retrying in ${Math.round(delayMs)}ms (attempt ${attempt + 1}/3)`);
+                        if (Date.now() + delayMs >= citationOptions.deadline - 1000) break;
                         await new Promise((resolve) => setTimeout(resolve, delayMs));
                         continue;
                       }

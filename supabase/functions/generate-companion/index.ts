@@ -80,9 +80,11 @@ serve(async (req) => {
           status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      let cacheTier = listenTier;
       const allNuggets = checked.map(n => ({ ...n, sourceName: n.source.publisher, citation: n.source.citation }));
-      if (listenTier > 1) {
-        for (let t = 1; t < listenTier; t++) {
+      {
+        // Preserve supported content even when only part of a submission revalidates.
+        for (let t = 1; t <= 3; t++) {
           const prevKey = `${artist}::${title}::${safeTier}::${t}`;
           const { data: prevCached } = await supabase
             .from("companion_cache")
@@ -91,9 +93,10 @@ serve(async (req) => {
             .eq("listen_count_tier", t)
             .maybeSingle();
           if (prevCached?.content?.nuggets) {
+            cacheTier = Math.max(cacheTier, t);
             const existingIds = new Set(allNuggets.map((n: any) => n.id));
             for (const n of prevCached.content.nuggets) {
-              if (!existingIds.has(n.id) && hasFactEvidence(n, { url: n.sourceUrl, citation: n.citation })) allNuggets.push(n);
+              if (!existingIds.has(n.id) && hasFactEvidence(n, { url: n.sourceUrl, citation: n.citation })) { allNuggets.push(n); existingIds.add(n.id); }
             }
           }
         }
@@ -107,14 +110,10 @@ serve(async (req) => {
         artistImage: artistImage || undefined,
       };
 
-      const cacheKey = `${artist}::${title}::${safeTier}::${listenTier}`;
-      // Clear stale entries and write fresh
-      const baseCacheKey = `${artist}::${title}::${safeTier}`;
-      await supabase.from("companion_cache").delete().in("track_key", [
-        `${baseCacheKey}::1`, `${baseCacheKey}::2`, `${baseCacheKey}::3`,
-      ]);
+      const cacheKey = `${artist}::${title}::${safeTier}::${cacheTier}`;
+      // Keep other tiers intact; an interrupted write must not erase the cache.
       await supabase.from("companion_cache").upsert(
-        { track_key: cacheKey, listen_count_tier: listenTier, content: response },
+        { track_key: cacheKey, listen_count_tier: cacheTier, content: response },
         { onConflict: "track_key,listen_count_tier" }
       );
 
@@ -138,9 +137,10 @@ serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
-    if (cached?.content) {
+    const supportedCached = (cached?.content?.nuggets ?? []).filter((n: CompanionFact) => hasFactEvidence(n, { url: n.sourceUrl, citation: n.citation }));
+    if (cached?.content && supportedCached.length) {
       console.log(`[Companion] Cache hit: ${baseCacheKey}::${cached.listen_count_tier}`);
-      return new Response(JSON.stringify({ ...cached.content, artistSummary: "", nuggets: (cached.content.nuggets ?? []).filter((n: CompanionFact) => hasFactEvidence(n, { url: n.sourceUrl, citation: n.citation })) }), {
+      return new Response(JSON.stringify({ ...cached.content, artistSummary: "", nuggets: supportedCached }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
