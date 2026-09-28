@@ -12,6 +12,8 @@ export function matchesArtistResearch(
     if (identity.service === "spotify" && url.hostname === "open.spotify.com" && url.pathname === `/artist/${identity.id}`) return true;
     if (identity.service === "apple" && url.hostname === "music.apple.com" && url.pathname.includes("/artist/") && url.pathname.split("/").at(-1) === identity.id) return true;
   } catch { /* A textual catalog match can still identify the source. */ }
-  // Short/generic song names are weak evidence; require a distinctive title.
-  return identity.titles.some((title) => normalize(title).length >= 12 && normalize(title) !== normalize(identity.name) && hasPhrase(title));
+  // Require one distinctive title or two separate catalog matches.
+  // A single short name such as William cannot establish identity.
+  const matches = [...new Set(identity.titles.map(normalize))].filter(title => title !== normalize(identity.name) && title.length >= 6 && hasPhrase(title));
+  return matches.some(title => title.length >= 12) || matches.length >= 2;
 }

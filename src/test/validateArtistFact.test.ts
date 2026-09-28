@@ -9,11 +9,11 @@ const fact = { headline: "doggone signed with Primary Talent", body: evidence, s
 it("links the fact to its selected supporting article, not the first result", () => {
   expect(validateArtistFact(fact, sources)?.citation.url).toBe(sources[1].url);
 });
-it("rejects evidence taken from a different source", () => {
+it("rejects a selected catalog source", () => {
   expect(validateArtistFact({ ...fact, sourceNumber: 1 }, sources)).toBeNull();
 });
-it("rejects invented evidence, missing attribution and invalid source numbers", () => {
-  expect(validateArtistFact({ ...fact, evidence: "This artist signed with a totally different agency in 2020." }, sources)).toBeNull();
+it("rejects missing attribution, missing source text and invalid source numbers", () => {
+  expect(validateArtistFact(fact, sources.map(s => ({ ...s, text: "" })))).toBeNull();
   expect(validateArtistFact({ headline: fact.headline, body: fact.body }, sources)).toBeNull();
   expect(validateArtistFact({ ...fact, sourceNumber: 9 }, sources)).toBeNull();
 });

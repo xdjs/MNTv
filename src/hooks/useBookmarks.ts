@@ -211,6 +211,7 @@ export function useBookmarks() {
   const supportedBookmarks = useMemo(() => bookmarks.filter(b => hasFactEvidence(b, b.source)), [bookmarks]);
   return {
     bookmarks: supportedBookmarks,
+    withheldCount: bookmarks.length - supportedBookmarks.length,
     loading: listQuery.isLoading,
     signedIn: isSignedIn,
     isBookmarked,

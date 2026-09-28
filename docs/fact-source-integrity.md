@@ -2,7 +2,7 @@
 
 As of 2026-09-28, generated editorial facts must cite a retrieved document that supports the entire displayed headline and body. A catalog URL, reachable link, publisher name, or matching hostname is not evidence for an editorial claim.
 
-The artist generator selects a numbered research document and supplies an exact supporting passage. Both artist and listening generators run a separate support check against that document. The checker must accept the whole claim and return a verbatim passage found in the retrieved text. Missing sources, unsupported details, invalid quotations, unavailable verification and timeouts withhold the fact. This reduces citation errors; model-based support checks cannot guarantee factual truth or source reliability.
+The artist generator selects a numbered research document. Both artist and listening generators run a separate support check against that document. The checker must accept the whole claim and return a verbatim passage found in the retrieved text. Missing sources, unsupported details, invalid quotations, unavailable verification and timeouts withhold the fact. This reduces citation errors; model-based support checks cannot guarantee factual truth or source reliability.
 
 The server stores evidence bound to the exact headline, body and URL. Frontend reads require that binding in Browse, artist profiles, listening, artist-fact reuse, demo seeds, pre-generation, bookmarks and QR companion views. Deep dives are checked against their selected source before display. Companion writes recheck client-submitted text on the server. Legacy unverified facts are withheld, not silently grandfathered in; saved records remain in storage. Invalid listening caches trigger fresh generation. Artist caches use the v6 namespace.
 

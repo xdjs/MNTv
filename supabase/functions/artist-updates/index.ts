@@ -430,7 +430,7 @@ async function researchArtistOnExa(
           highlights: { numSentences: 3, highlightsPerUrl: 2 },
         },
         includeText: [artistName],
-        excludeDomains: ["facebook.com", "instagram.com", "tiktok.com"],
+        excludeDomains: ["facebook.com", "instagram.com", "tiktok.com", "spotify.com", "apple.com"],
       }),
       signal: ctl.signal,
     });
@@ -633,9 +633,8 @@ Write ${count === 1 ? "ONE nugget" : `${count} DISTINCT nuggets`} about ${artist
   } must pass the SWAP TEST — the headline is useless if you could swap in another artist's name and the sentence still works. No release-date recaps; those are covered elsewhere.${multiNuggetAngleLine}
 
 Each nugget must select ONE numbered source from EXA RESEARCH. Its headline
-and body must be supported entirely by that source. Include its sourceNumber
-and a verbatim evidence passage of at least 40 characters. Do not combine
-claims from different pages. If the selected passage does not support the
+and body must be supported entirely by that source. Include its sourceNumber.
+Do not combine claims from different pages. If the selected source does not support the
 entire claim, narrow the claim or return no nugget. Never cite a catalog page
 as evidence for a signing, biography, reception, or recording story.
 
@@ -644,8 +643,7 @@ Return JSON only, no preamble:
   "nuggets": [
     { "headline": "<complete-fact sentence, sentence case, names ${artistName} explicitly>",
       "body": "<1-3 sentences supported entirely by the selected source>",
-      "sourceNumber": 1,
-      "evidence": "<verbatim passage from that source supporting the entire headline and body>" }${count > 1 ? ",\n    …" : ""}
+      "sourceNumber": 1 }${count > 1 ? ",\n    …" : ""}
   ]
 }`;
 
@@ -699,7 +697,8 @@ Return JSON only, no preamble:
       .map((n) => validateArtistFact(n, ctx.sources))
       .filter((n): n is NonNullable<typeof n> => n !== null)
       .slice(0, count);
-    console.log(`[artist-updates] Gemini returned ${accepted.length}/${count} facts for ${artistName}`);
+    console.log(`[artist-updates] Gemini returned ${accepted.length}/${count} facts for ${artistName} (${nuggets.length} candidates)`);
+    if (nuggets.length && !accepted.length) console.warn("[artist-updates] Rejected citation fields", nuggets.map((n: any) => ({ sourceNumber: n?.sourceNumber, hasBody: typeof n?.body === "string" })));
     return accepted;
   } catch (e) {
     console.warn("[artist-updates] Gemini non-JSON output:", text.slice(0, 300), String(e));
@@ -771,7 +770,7 @@ const POLL_INTERVAL_CAP_MS = 8_000;
 //      an empty catalog). Those rows are incorrect, not merely stale, so they
 //      must be invalidated rather than left to age out over 7 days.
 //
-// v5 — identity-scoped, research-validated keys are shared with the client through
+// v6 — identity-scoped, source-evidence-validated keys are shared with the client through
 // _shared/artistUpdatesCacheKey.ts. Legacy name-only rows are not reused.
 
 type CacheState =

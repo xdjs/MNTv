@@ -30,8 +30,7 @@ export function buildArtistUpdatesCacheKey(artistName: string, tier: string, spo
   return artistUpdatesCacheKey(artistName, tier, spotifyArtistId);
 }
 
-/** Matches makeSparseFallbackNugget so a seeded fact is indistinguishable
- *  from a normal opening nugget. */
+/** Keep reused artist facts on screen for a normal opening interval. */
 const SEEDED_DURATION_MS = 7000;
 
 /**
@@ -64,8 +63,7 @@ export function artistFactToNugget(
 
   // The publisher/title are Exa-derived and the URL is rendered as a
   // link, so it gets the same scheme guard the rest of the app applies.
-  // An unsafe or missing URL degrades to no link rather than dropping
-  // the fact — the copy is still worth reading.
+  // Missing/unsafe URLs have already been rejected by the evidence gate.
   const rawUrl = update.source?.url;
   const url = isSafeUrl(rawUrl) ? rawUrl! : "";
 

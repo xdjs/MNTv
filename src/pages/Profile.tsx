@@ -47,7 +47,7 @@ function sourceUrlOf(bm: Bookmark): string | null {
 
 export default function Profile() {
   const { profile } = useUserProfile();
-  const { bookmarks, loading, signedIn, toggle } = useBookmarks();
+  const { bookmarks, withheldCount, loading, signedIn, toggle } = useBookmarks();
   const navigate = useNavigate();
   // Transient per-row UI state for the share button's "Copied!" confirmation.
   // Keyed by bookmark id.
@@ -159,6 +159,10 @@ export default function Profile() {
             <div className="text-sm text-white/60 py-8 text-center">
               Sign in to Spotify or Apple Music to save and see your bookmarks.
             </div>
+          )}
+
+          {!loading && signedIn && withheldCount > 0 && (
+            <p className="text-sm text-white/50 mb-6">Some older saved facts are hidden because their sources haven’t been verified. Your saves are kept.</p>
           )}
 
           {!loading && signedIn && bookmarks.length === 0 && (

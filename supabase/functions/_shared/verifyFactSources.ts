@@ -7,7 +7,7 @@ type Page = { url: string; title?: string; text: string };
  * it never substitutes another page or treats a working URL as verification. */
 export async function verifyFactSources<T extends Fact>(facts: T[], options: {
   googleKey?: string; exaKey?: string; pages?: Page[];
-}): Promise<Array<T & { source: NonNullable<T["source"]> & { citation: FactEvidence } }>> {
+}): Promise<Array<T & { source: NonNullable<T["source"]> & { citation: FactEvidence; title?: string; publisher?: string; verified: boolean } }>> {
   if (!options.googleKey) return [];
   const eligible = facts.filter((fact) => {
     if (!fact || typeof fact.text !== "string" || !fact.text.trim() || fact.text.length > 6000 || typeof fact.source?.url !== "string") return false;
@@ -28,6 +28,7 @@ export async function verifyFactSources<T extends Fact>(facts: T[], options: {
         body: JSON.stringify({ ids: missing, text: { maxCharacters: 10000 }, livecrawl: "fallback" }),
         signal: AbortSignal.timeout(12000),
       });
+      if (!res.ok) console.warn(`[FactEvidence] Source retrieval failed: ${res.status}`);
       if (res.ok) {
         const data = await res.json();
         for (const page of data.results ?? []) {
@@ -45,16 +46,18 @@ export async function verifyFactSources<T extends Fact>(facts: T[], options: {
         generationConfig: { temperature: 0, responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } },
       }),
     });
-    if (!res.ok) return [];
+    if (!res.ok) { console.warn(`[FactEvidence] Support check failed: ${res.status}`); return []; }
     const data = await res.json();
     const parsed = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
     const normalize = (s: string) => s.normalize("NFKC").replace(/\s+/g, " ").trim();
-    return candidates.flatMap((fact, index) => {
+    const accepted = candidates.flatMap((fact, index) => {
       const check = Array.isArray(parsed.checks) ? parsed.checks.find((c: { index?: number }) => c.index === index) : undefined;
       const page = pages.get(fact.source!.url!)!;
       if (check?.supported !== true || typeof check.excerpt !== "string" || normalize(check.excerpt).length < 40 || !normalize(page.text).includes(normalize(check.excerpt))) return [];
       const citation: FactEvidence = { version: 1, headline: fact.headline ?? "", text: fact.text!, url: fact.source!.url!, excerpt: check.excerpt };
       return [{ ...fact, source: { ...fact.source!, title: page.title || fact.source!.title, publisher: new URL(page.url).hostname.replace(/^www\./, ""), verified: true, citation } }];
     });
-  } catch { return []; }
+    console.log(`[FactEvidence] Supported ${accepted.length}/${candidates.length} facts from retrieved documents`);
+    return accepted;
+  } catch (error) { console.warn(`[FactEvidence] Withheld facts after ${error instanceof Error ? error.name : "verification failure"}`); return []; }
 }
