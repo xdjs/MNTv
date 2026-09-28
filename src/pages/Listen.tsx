@@ -666,7 +666,7 @@ export default function Listen() {
     if (!isCurrent()) return;
 
     // Link creation is part of successful acceptance; failures remain retryable.
-    const resolvedShortId = await resolveCompanionShortId(supabase, track.artist, track.title, track.album);
+    const resolvedShortId = await resolveCompanionShortId(supabase as unknown as Parameters<typeof resolveCompanionShortId>[0], track.artist, track.title, track.album);
     if (isCurrent()) {
       setShortId(resolvedShortId);
       player.setCompanionShortId(trackKey, resolvedShortId);
