@@ -106,7 +106,7 @@ describe("artist-page release playback", () => {
   it("plays a resolved song directly from the collapsed card", async () => {
     renderAt("", [{ ...RELEASE, relatedTrackTitle: "Opening Song", relatedTrackUri: "spotify:track:first" }]);
     fireEvent.click(screen.getByRole("button", { name: "Play Opening Song by Loathe" }));
-    expect(navigateMock).toHaveBeenCalledWith("/listen/real::Loathe::Opening%20Song::A%20Stranger%20To%20You::spotify%3Atrack%3Afirst");
+    expect(navigateMock).toHaveBeenCalledWith("/listen/real::Loathe::Opening%20Song::A%20Stranger%20To%20You::spotify%3Atrack%3Afirst?artistId=a1");
     expect(dialog()).toBeNull();
     expect(playbackMocks.invoke).not.toHaveBeenCalled();
   });
@@ -116,7 +116,7 @@ describe("artist-page release playback", () => {
     renderAt("", [RELEASE]);
     fireEvent.click(screen.getByText(RELEASE.headline));
     fireEvent.click(within(dialog()!).getByRole("button", { name: "Play A Stranger To You by Loathe" }));
-    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/listen/real::Loathe::Opening%20Song::A%20Stranger%20To%20You::spotify%3Atrack%3Afirst"));
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/listen/real::Loathe::Opening%20Song::A%20Stranger%20To%20You::spotify%3Atrack%3Afirst?artistId=a1"));
     expect(playbackMocks.invoke).toHaveBeenCalledWith("spotify-album", { body: { albumId: "album123", service: "spotify" } });
     expect(dialog()).toBeNull();
   });
@@ -138,7 +138,7 @@ describe("artist-page release playback", () => {
     playbackMocks.invoke.mockResolvedValue({ data: { tracks: [{ title: "Opening Song", uri: "apple:song:456" }] }, error: null });
     renderAt("", [{ ...RELEASE, relatedTrackUri: "apple:album:123" }]);
     fireEvent.click(screen.getByRole("button", { name: "Play A Stranger To You by Loathe" }));
-    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/listen/real::Loathe::Opening%20Song::A%20Stranger%20To%20You::apple%3Asong%3A456"));
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/listen/real::Loathe::Opening%20Song::A%20Stranger%20To%20You::apple%3Asong%3A456?artistId=a1"));
     expect(playbackMocks.invoke).toHaveBeenCalledWith("spotify-album", { body: { albumId: "123", service: "apple", storefront: "us" } });
   });
 
@@ -161,7 +161,7 @@ it("uses search only for a song from the advertised release when album details f
   });
   renderAt("", [RELEASE]);
   fireEvent.click(screen.getByRole("button", { name: "Play A Stranger To You by Loathe" }));
-  await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/listen/real::Loathe::Release%20Song::A%20Stranger%20To%20You::spotify%3Atrack%3Aright"));
+  await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/listen/real::Loathe::Release%20Song::A%20Stranger%20To%20You::spotify%3Atrack%3Aright?artistId=a1"));
 });
 
 
