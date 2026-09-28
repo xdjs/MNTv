@@ -1,4 +1,8 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { resolveCompanionShortId } from "@/lib/resolveCompanionShortId";
+import { useCompanionUpload } from "@/hooks/useCompanionUpload";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { listenHistoryRoute } from "@/lib/listenHistoryRoute";
+import { ensureSupabaseSession } from "@/lib/ensureSupabaseSession";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, Smartphone } from "lucide-react";
 // mock/tracks kept as reference — no longer imported for runtime use
@@ -22,7 +26,7 @@ import { getSeedCompanion, getDemoTrackById, getDemoTrackUri } from "@/data/seed
 import { useSpotifyToken } from "@/hooks/useSpotifyToken";
 import { usePlayer } from "@/contexts/PlayerContext";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
-import { withAppleStorefront } from "@/lib/appleStorefront";
+import { withAppleStorefront, readAppleStorefront } from "@/lib/appleStorefront";
 import { isNuggetOnScreen } from "@/lib/nuggetVisibility";
 import { pickNextTrack, type SpotifyTrackResult } from "@/lib/skipCascade";
 import { useTierAccent } from "@/hooks/useTierAccent";
@@ -36,6 +40,7 @@ export default function Listen() {
   const params = useParams();
   const rawTrackId = params["*"] || "";
   const navigate = useNavigate();
+  const location = useLocation();
 
   const { profile, saveProfile } = useUserProfile();
 
@@ -67,10 +72,12 @@ export default function Listen() {
 
   // Read cover art from URL query param (set by Browse demo tiles)
   const urlArt = useMemo(() => {
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(location.search);
     return params.get("art") || "";
-  }, []);
+  }, [location.search]);
 
+  const routeCredits = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const routeService = realTrackMeta?.trackUri?.startsWith("apple:") ? "apple" : realTrackMeta?.trackUri?.startsWith("spotify:") ? "spotify" : profile?.streamingService === "Apple Music" ? "apple" : "spotify";
   const track = useMemo(() => {
     if (!realTrackMeta) return null;
     // Try URL query param first (demo tiles pass ?art=), then profile, then DiceBear
@@ -83,7 +90,8 @@ export default function Listen() {
     // collab tracks (e.g. "Better" by Ty Symph, Pete Rango) loses
     // the secondary research target and falls back to thin content
     // grounded only in the primary artist.
-    let collaborators: string[] | undefined;
+    let collaborators: string[] | undefined = routeCredits.getAll("collaborator");
+    if (!collaborators.length) collaborators = undefined;
     const titleLower = realTrackMeta.title.toLowerCase();
     const artistLower = realTrackMeta.artist.toLowerCase();
     if (profile?.trackImages) {
@@ -93,7 +101,7 @@ export default function Listen() {
           t.artist.toLowerCase() === artistLower
       );
       if (match?.imageUrl) coverArtUrl = coverArtUrl || match.imageUrl;
-      if (match?.collaborators?.length) collaborators = match.collaborators;
+      if (!collaborators && match?.collaborators?.length) collaborators = match.collaborators;
     }
     if (!collaborators && profile?.likedTracks) {
       const liked = profile.likedTracks.find(
@@ -114,14 +122,14 @@ export default function Listen() {
       title: realTrackMeta.title,
       artist: realTrackMeta.artist,
       collaborators,
-      artistId: "",
+      artistId: routeCredits.get("artistId") || "",
       albumId: "",
       album: realTrackMeta.album,
       durationSec: 300,
       coverArtUrl,
       trackNumber: 1,
     };
-  }, [realTrackMeta, trackId, urlArt, profile?.trackImages, profile?.likedTracks, profile?.artistImages]);
+  }, [realTrackMeta, trackId, urlArt, profile?.trackImages, profile?.likedTracks, profile?.artistImages, routeCredits]);
 
   // ── Playback source resolution ───────────────────────────────────────
   const { hasSpotifyToken } = useSpotifyToken();
@@ -218,14 +226,13 @@ export default function Listen() {
 
 
   // Push current track to global history (persists across Listen re-mounts)
-  // Include ?art= query param so prev navigation preserves artwork
+  // Preserve catalog identity, collaborator credits and artwork for Prev.
   const player = usePlayer();
   useEffect(() => {
-    const artParam = urlArt ? `?art=${encodeURIComponent(urlArt)}` : "";
-    player.pushTrackHistory(`/listen/${rawTrackId}${artParam}`);
+    player.pushTrackHistory(listenHistoryRoute(location.pathname, location.search, urlArt));
     // Add current track to session history so it won't be picked again by navigateToRelated
     if (track) player.addToSessionHistory(track.artist, track.title);
-  }, [rawTrackId, urlArt, player, track]);
+  }, [location.pathname, location.search, urlArt, player, track]);
 
   // If this track was previously listened to in this session, restore the listen depth.
   // This handles both track completion (onEnded) and returning to a track via prev/browse.
@@ -560,6 +567,7 @@ export default function Listen() {
     profile?.topArtists,
     profile?.topTracks,
     track?.collaborators,
+    { id: track?.artistId || undefined, service: routeService, storefront: readAppleStorefront() },
   );
 
   // Log AI nugget errors for debugging
@@ -568,163 +576,102 @@ export default function Listen() {
   }, [aiError]);
 
   // Pre-generate companion content so QR code only shows when ready
-  const [companionReady, setCompanionReady] = useState(false);
   const [shortId, setShortId] = useState<string | null>(null);
   // Reset companion readiness when track changes OR when listen depth changes
   // (regenerateKey bumps on each new listen). Without this, the QR code stays
   // visible with a stale listen= URL while the new companion pre-gen is in flight,
   // causing the companion page to fetch the previous listen's cached data.
   useEffect(() => {
-    setCompanionReady(false);
     setShortId(null);
   }, [rawTrackId, regenerateKey]);
 
-  // Per-trackKey count of nuggets last uploaded to companion_cache.
-  // Used to dedupe — we re-upload only when the count grows. Lives at
-  // module-instance scope so it survives effect re-runs but not Listen
-  // remounts (which is fine — a remount means a new session and a
-  // potentially new shortId anyway).
-  const lastCompanionUploadCountRef = useRef<Map<string, number>>(new Map());
-
+  const companionTrackKey = track ? `${track.artist}::${track.title}` : "";
+  const getCompanionShortId = player.getCompanionShortId;
+  // Restoring an existing QR link must not depend on whether an upload is due.
   useEffect(() => {
-    if (aiLoading || aiNuggets.length === 0 || !track) return;
-    const trackKey = `${track.artist}::${track.title}`;
-
-    // Restore cached shortId immediately if we have one — but DON'T
-    // early-return. The previous version bailed here, which meant the
-    // companion content was frozen at whatever nugget count existed
-    // on the first run (typically just the pre-gen nugget). Wave-2
-    // nuggets that landed later never made it to companion_cache, so
-    // the QR-code companion page only ever showed the original bland
-    // first nugget. Now we keep going to re-upload the latest nugget
-    // set to companion_cache (the shortId stays the same).
-    const cachedSid = player.getCompanionShortId(trackKey);
+    if (!companionTrackKey) return;
+    const cachedSid = getCompanionShortId(companionTrackKey);
     if (cachedSid) {
       setShortId(cachedSid);
-      setCompanionReady(true);
+    }
+  }, [rawTrackId, regenerateKey, companionTrackKey, getCompanionShortId]);
+
+  const companionUploadKey = track ? JSON.stringify([rawTrackId, tier, listenCount]) : "";
+  const companionSnapshot = aiNuggets.length ? JSON.stringify([aiNuggets, [...aiSources]]) : "";
+  const companionReady = useCompanionUpload(companionUploadKey, companionSnapshot, aiLoading || waveLoading, async (isCurrent, signal) => {
+    if (!track) return;
+    const trackKey = `${track.artist}::${track.title}`;
+
+    // Build prebuilt nuggets for the companion page.
+    // Both demo (seed) and AI tracks go through the edge function — direct
+    // DB writes from the client are blocked by RLS (service_role only).
+    const seedCompanion = await getSeedCompanion(track.artist, track.title, tier);
+
+    let prebuiltNuggets: any[];
+    if (seedCompanion) {
+      // Demo tracks: use seed companion data, filter by listen depth
+      const filteredNuggets = seedCompanion.nuggets.filter(
+        (n) => n.listenUnlockLevel <= listenCount
+      );
+      player.appendCompanionNuggets(trackKey, filteredNuggets);
+      prebuiltNuggets = player.getCompanionNuggets(trackKey);
+      console.log("[SeedCompanion] Sending", prebuiltNuggets.length, "accumulated nuggets for", trackKey);
+    } else {
+      // AI tracks: transform listen page nuggets to companion format
+      const kindToCategory: Record<string, string> = {
+        artist: "history",
+        track: "track",
+        context: "context",
+        discovery: "explore",
+      };
+      const now = Date.now();
+      const transformed = aiNuggets.map((n, i) => {
+        const source = aiSources.get(n.sourceId);
+        return {
+          id: n.id,
+          timestamp: now - i * 60000,
+          headline: n.headline || "",
+          text: n.text,
+          category: kindToCategory[n.kind] || "track",
+          listenUnlockLevel: listenCount,
+          sourceName: source?.publisher || "",
+          sourceUrl: source?.url || "",
+          citation: source?.citation,
+          imageUrl: n.imageUrl,
+          imageCaption: n.imageCaption,
+        };
+      });
+      player.appendCompanionNuggets(trackKey, transformed);
+      prebuiltNuggets = player.getCompanionNuggets(trackKey);
     }
 
-    // Length-based debounce: skip the regen if the nugget count hasn't
-    // grown since the last upload to companion. Initial SSE streams
-    // one nugget at a time and would otherwise fire 4-5 redundant
-    // edge-function calls per fresh generation.
-    const lastSent = lastCompanionUploadCountRef.current.get(trackKey) ?? 0;
-    if (aiNuggets.length === lastSent) return;
-    lastCompanionUploadCountRef.current.set(trackKey, aiNuggets.length);
+    // Route through edge function (has service_role for DB writes)
+    // The upload scheduler handles quota-aware retries.
+    const companionBody = {
+      artist: track.artist,
+      title: track.title,
+      album: track.album,
+      listenCount,
+      tier,
+      prebuiltNuggets,
+      coverArtUrl: effectiveCoverArt || undefined,
+      artistImage: artistImageUrl || effectiveCoverArt || undefined,
+      artistSummary,
+    };
+    const companionSession = await ensureSupabaseSession();
+    if (!isCurrent()) return;
+    const companionHeaders = { Authorization: `Bearer ${companionSession.access_token}` };
+    const { error } = await supabase.functions.invoke("generate-companion", { body: companionBody, headers: companionHeaders, signal });
+    if (error) throw error;
+    if (!isCurrent()) return;
 
-    let cancelled = false;
-    (async () => {
-      try {
-        // Build prebuilt nuggets for the companion page.
-        // Both demo (seed) and AI tracks go through the edge function — direct
-        // DB writes from the client are blocked by RLS (service_role only).
-        const seedCompanion = await getSeedCompanion(track.artist, track.title, tier);
-
-        let prebuiltNuggets: any[];
-        if (seedCompanion) {
-          // Demo tracks: use seed companion data, filter by listen depth
-          const filteredNuggets = seedCompanion.nuggets.filter(
-            (n) => n.listenUnlockLevel <= listenCount
-          );
-          player.appendCompanionNuggets(trackKey, filteredNuggets);
-          prebuiltNuggets = player.getCompanionNuggets(trackKey);
-          console.log("[SeedCompanion] Sending", prebuiltNuggets.length, "accumulated nuggets for", trackKey);
-        } else {
-          // AI tracks: transform listen page nuggets to companion format
-          const kindToCategory: Record<string, string> = {
-            artist: "history",
-            track: "track",
-            context: "context",
-            discovery: "explore",
-          };
-          const now = Date.now();
-          const transformed = aiNuggets.map((n, i) => {
-            const source = aiSources.get(n.sourceId);
-            return {
-              id: n.id,
-              timestamp: now - i * 60000,
-              headline: n.headline || "",
-              text: n.text,
-              category: kindToCategory[n.kind] || "track",
-              listenUnlockLevel: listenCount,
-              sourceName: source?.publisher || "",
-              sourceUrl: source?.url || "",
-              imageUrl: n.imageUrl,
-              imageCaption: n.imageCaption,
-            };
-          });
-          player.appendCompanionNuggets(trackKey, transformed);
-          prebuiltNuggets = player.getCompanionNuggets(trackKey);
-        }
-
-        // Route through edge function (has service_role for DB writes)
-        // Retry once on failure after a short delay.
-        const companionBody = {
-          artist: track.artist,
-          title: track.title,
-          album: track.album,
-          listenCount,
-          tier,
-          prebuiltNuggets,
-          coverArtUrl: effectiveCoverArt || undefined,
-          artistImage: artistImageUrl || effectiveCoverArt || undefined,
-          artistSummary,
-        };
-        let { error } = await supabase.functions.invoke("generate-companion", { body: companionBody });
-        if (error && !cancelled) {
-          console.warn("[Listen] Companion pre-gen failed, retrying in 3s:", error);
-          await new Promise((r) => setTimeout(r, 3000));
-          if (cancelled) return;
-          ({ error } = await supabase.functions.invoke("generate-companion", { body: companionBody }));
-        }
-        if (cancelled) return;
-        if (error) console.warn("[Listen] Companion pre-gen retry also failed:", error);
-
-        // Create or reuse a short URL for the QR code (even if pre-gen failed,
-        // the companion page will generate on demand)
-        try {
-          const { data: existing, error: selErr } = await supabase
-            .from("companion_links")
-            .select("short_id")
-            .eq("artist", track.artist)
-            .eq("title", track.title)
-            .maybeSingle();
-
-          if (cancelled) return;
-          if (selErr) console.warn("[Listen] companion_links select error:", selErr);
-
-          let resolvedShortId: string | null = null;
-          if (existing) {
-            resolvedShortId = existing.short_id;
-          } else {
-            const arr = new Uint8Array(6);
-            crypto.getRandomValues(arr);
-            const newId = Array.from(arr, (b) => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"[b % 62]).join("");
-            const { error: insErr } = await supabase.from("companion_links").insert({
-              short_id: newId,
-              artist: track.artist,
-              title: track.title,
-              album: track.album || null,
-            });
-            if (insErr) console.warn("[Listen] companion_links insert error:", insErr);
-            if (!insErr) resolvedShortId = newId;
-          }
-
-          if (!cancelled && resolvedShortId) {
-            setShortId(resolvedShortId);
-            player.setCompanionShortId(trackKey, resolvedShortId);
-          }
-        } catch (linkErr) {
-          console.warn("[Listen] Short link creation failed:", linkErr);
-        }
-
-        if (!cancelled) setCompanionReady(true);
-      } catch {
-        // Companion pre-gen failed — QR just won't show
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [aiLoading, aiNuggets, aiSources, track?.artist, track?.title, tier, listenCount]);
+    // Link creation is part of successful acceptance; failures remain retryable.
+    const resolvedShortId = await resolveCompanionShortId(supabase as unknown as Parameters<typeof resolveCompanionShortId>[0], track.artist, track.title, track.album);
+    if (isCurrent()) {
+      setShortId(resolvedShortId);
+      player.setCompanionShortId(trackKey, resolvedShortId);
+    }
+  });
 
   // Intentionally NOT gated on aiLoading — SSE streaming appends nuggets
   // one at a time, and each append triggers a downstream re-render.
@@ -1399,14 +1346,14 @@ export default function Listen() {
             waveLoading={waveLoading}
               aiError={aiError}
               hasNuggets={nuggetOnScreen}
-              shortId={shortId}
+              shortId={companionReady ? shortId : null}
               trackId={trackId}
               tier={tier}
               listenCount={listenCount}
               focusZone={focusZone}
               topFocusIndex={topFocusIndex}
               onCompanionClick={() => {
-                if (shortId) {
+                if (companionReady && shortId) {
                   window.open(`${window.location.origin}/c/${shortId}?tier=${tier}&listen=${listenCount}`, "_blank");
                 }
               }}
@@ -1791,14 +1738,14 @@ export default function Listen() {
             waveLoading={waveLoading}
             aiError={aiError}
             hasNuggets={nuggetOnScreen}
-            shortId={shortId}
+            shortId={companionReady ? shortId : null}
             trackId={trackId}
             tier={tier}
             listenCount={listenCount}
             focusZone={focusZone}
             topFocusIndex={topFocusIndex}
             onCompanionClick={() => {
-              if (shortId) {
+              if (companionReady && shortId) {
                 window.open(`${window.location.origin}/c/${shortId}?tier=${tier}&listen=${listenCount}`, "_blank");
               }
             }}

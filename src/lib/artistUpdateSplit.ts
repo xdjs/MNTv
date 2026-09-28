@@ -10,6 +10,7 @@ import type { ArtistUpdate } from "@/hooks/useArtistUpdates";
 
 /** A track the user can start playing from the Browse row. */
 export interface PlayableTrack {
+  artistId?: string;
   title: string;
   album: string;
   /** Spotify track URI when known. Absent for Apple users and for
@@ -42,6 +43,7 @@ function toPlayableTrack(update: ArtistUpdate): PlayableTrack | null {
   if (!update.relatedTrackTitle) return null;
   return {
     title: update.relatedTrackTitle,
+    ...(update.artistId ? { artistId: update.artistId } : {}),
     album: update.relatedAlbumName ?? "",
     uri: update.relatedTrackUri,
     // For release/collab kinds this field holds the album cover, not an
@@ -94,37 +96,15 @@ export function splitArtistUpdates(
   return { facts, tracks };
 }
 
-/**
- * A release update whose URI is album-level rather than track-level.
- *
- * The server resolves a release's first track with a follow-up call, and
- * when that fails it falls back to the ALBUM's uri and name together
- * (artist-updates: `release.firstTrackUri ?? release.uri`). The result
- * looks like a track but isn't: the route ends up carrying an album name
- * in the title slot and no playable URI, so Listen searches the catalog
- * for a track that doesn't exist and playback never starts.
- */
-function isAlbumLevelFallback(update: ArtistUpdate): boolean {
-  return !!update.relatedTrackUri?.startsWith("spotify:album:");
-}
-
-/**
- * What should this card play?
- *
- * Prefers the update's own track, but skips it when the server fell back
- * to album-level metadata — a real catalog track is a better bet than a
- * title we know won't resolve. Returning null is meaningful: the caller
- * must render no play control at all rather than a dead one.
- */
+/** Prefer the card's own release. Album URIs are resolved by the playback
+ * hook to a song from that album, never replaced with another artist track. */
 export function resolvePlayTarget(
   update: ArtistUpdate,
   tracks: readonly PlayableTrack[],
 ): PlayableTrack | null {
   const own = toPlayableTrack(update);
-  if (own && !isAlbumLevelFallback(update)) return own;
-
-  const playableCatalogTrack = tracks.find((t) => t.uri?.startsWith("spotify:track:"));
-  // `own` still beats nothing — Listen can resolve by {artist, title} for
-  // Apple users and for tracks we simply have no URI for.
-  return playableCatalogTrack ?? own ?? tracks[0] ?? null;
+  if (own) return own;
+  // A release without enough identifying data must not play another release.
+  if (update.kind === "new-release" || update.kind === "collab") return null;
+  return tracks.find((t) => t.uri?.startsWith("spotify:track:")) ?? tracks[0] ?? null;
 }

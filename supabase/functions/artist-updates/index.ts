@@ -14,6 +14,14 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { artistUpdatesCacheKey as cacheKey } from "../_shared/artistUpdatesCacheKey.ts";
+import { verifyFactSources } from "../_shared/verifyFactSources.ts";
+import { validateArtistFact, type ArtistFactSource } from "../_shared/validateArtistFact.ts";
+import { matchesArtistResearch } from "../_shared/matchesArtistResearch.ts";
+import { selectUpdateArtist } from "../_shared/selectUpdateArtist.ts";
+import { fetchAppleUpdateCatalog } from "../_shared/appleUpdateCatalog.ts";
+import { getAppleDeveloperToken } from "../_shared/apple-token.ts";
+import { isAppleService, safeStorefront } from "../_shared/apple-utils.ts";
 import { getSpotifyAppToken } from "../_shared/spotify-token.ts";
 import {
   CONSTITUTION_PREAMBLE,
@@ -70,6 +78,7 @@ interface ArtistUpdate {
   relatedAlbumName?: string;
   source?: {
     type: string;
+    citation?: import("../_shared/hasFactEvidence.ts").FactEvidence;
     title?: string;
     publisher?: string;
     url?: string;
@@ -106,7 +115,7 @@ interface SpotifyReleaseItem {
   release_date: string;
   uri: string;
   artists: { id: string; name: string }[];
-  external_urls?: { spotify: string };
+  external_urls?: { spotify?: string; apple?: string };
   images?: { url: string }[];
   // Populated by fetchRecentRelease's secondary call to /albums/:id/tracks.
   // Present iff the call succeeded; client navigates to the artist page as
@@ -146,13 +155,20 @@ const cacheAdminClient = SUPABASE_ADMIN_KEY
 async function searchArtist(
   token: string,
   name: string,
+  spotifyArtistId?: string,
 ): Promise<SpotifyArtistSearchResult | null> {
-  // limit=5, not 1. Spotify hosts DUPLICATE artist entities for the same
-  // name, and the first hit is not reliably the real one. Verified with
-  // lamboverrice: search returns "Lamboverrice" (1 follower, empty
-  // catalog) ahead of "lamboverrice" (20 followers, the actual artist),
-  // so taking [0] queried a dud and every catalog lookup came back empty
-  // — no top tracks, no albums, no play targets on their cards.
+  if (spotifyArtistId) {
+    const direct = await fetch(`https://api.spotify.com/v1/artists/${spotifyArtistId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (direct.ok) {
+      const artist = await direct.json() as SpotifyArtistSearchResult;
+      if (artist.id === spotifyArtistId) return artist;
+    }
+    // Search can recover a restricted direct lookup, but only the same ID.
+  }
+  // Names are not unique. Fetch several candidates for exact-ID recovery,
+  // or require a single exact-name identity when no saved ID is available.
   const url = `https://api.spotify.com/v1/search?type=artist&limit=5&q=${encodeURIComponent(
     name,
   )}`;
@@ -162,19 +178,7 @@ async function searchArtist(
   const items = (data?.artists?.items ?? []) as SpotifyArtistSearchResult[];
   if (items.length === 0) return null;
 
-  // Require a close match, as before — Spotify returns unrelated artists
-  // for sparse names (the same lamboverrice search also surfaces
-  // "Lambo4oe" and "VonOff1700").
-  const wanted = name.trim().toLowerCase();
-  const exact = items.filter((a) => String(a.name).trim().toLowerCase() === wanted);
-  if (exact.length === 0) return null;
-
-  // Among genuine duplicates, prefer the one people actually follow.
-  // Followers beats popularity here: popularity is 0 for both entities of
-  // a small artist, while followers still separates the real one from a
-  // stub.
-  exact.sort((a, b) => (b.followers?.total ?? 0) - (a.followers?.total ?? 0));
-  return exact[0];
+  return selectUpdateArtist(items, name, spotifyArtistId);
 }
 
 async function fetchArtistTopTracks(
@@ -336,8 +340,7 @@ function buildReleaseUpdate(
     (artist.images?.[0]?.url) ??
     "";
   // Prefer the album's first track URI for navigation; fall back to the
-  // album URI (which won't actually play, but at least the client can
-  // detect the missing track signal and route to the artist page).
+  // album URI, which the client resolves to a song when Play is tapped.
   const navUri = release.firstTrackUri ?? release.uri;
   const navTitle = release.firstTrackName ?? release.name;
   return {
@@ -348,10 +351,10 @@ function buildReleaseUpdate(
     headline,
     body,
     source: {
-      type: "spotify",
+      type: release.uri.startsWith("apple:") ? "apple" : "spotify",
       title: release.name,
-      publisher: "Spotify",
-      url: release.external_urls?.spotify,
+      publisher: release.uri.startsWith("apple:") ? "Apple Music" : "Spotify",
+      url: release.external_urls?.apple ?? release.external_urls?.spotify,
     },
     relatedTrackUri: navUri,
     relatedTrackTitle: navTitle,
@@ -406,7 +409,8 @@ const EXA_TIMEOUT_MS = 8_000;
 async function researchArtistOnExa(
   artistName: string,
   apiKey: string,
-): Promise<{ snippets: string; citations: { title: string; url: string }[] }> {
+  identity: Parameters<typeof matchesArtistResearch>[1],
+): Promise<{ snippets: string; citations: ArtistFactSource[] }> {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), EXA_TIMEOUT_MS);
   try {
@@ -417,7 +421,7 @@ async function researchArtistOnExa(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        query: `${artistName} interview production credits collaborators backstory`,
+        query: `${artistName} "${identity.titles[0] ?? ""}" interview production credits collaborators backstory`,
         type: "auto",
         numResults: 4,
         livecrawl: "fallback",
@@ -426,7 +430,7 @@ async function researchArtistOnExa(
           highlights: { numSentences: 3, highlightsPerUrl: 2 },
         },
         includeText: [artistName],
-        excludeDomains: ["facebook.com", "instagram.com", "tiktok.com"],
+        excludeDomains: ["facebook.com", "instagram.com", "tiktok.com", "spotify.com", "apple.com"],
       }),
       signal: ctl.signal,
     });
@@ -435,15 +439,23 @@ async function researchArtistOnExa(
       return { snippets: "", citations: [] };
     }
     const data = await res.json();
-    const results = (data?.results ?? []) as Array<{
+    const candidates = (data?.results ?? []) as Array<{
       title?: string;
       url?: string;
       text?: string;
       highlights?: string[];
     }>;
+    const results = candidates.filter((source) => {
+      if (!source.url || !matchesArtistResearch(source, identity)) return false;
+      try {
+        const url = new URL(source.url);
+        return ["http:", "https:"].includes(url.protocol) &&
+          !["spotify.com", "apple.com"].some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`));
+      } catch { return false; }
+    });
     const citations = results
       .filter((r) => r.url)
-      .map((r) => ({ title: r.title || "", url: r.url! }));
+      .map((r) => ({ title: r.title || "", url: r.url!, text: [(r.text || "").slice(0, 2500), ...(r.highlights ?? [])].join("\n") }));
     const snippets = results
       .map((r, i) => {
         const highlightBlock = r.highlights?.length
@@ -486,11 +498,12 @@ interface FactGenerationContext {
    *  about the artist. Empty string if Exa is unavailable or returned
    *  nothing. Sparse mode skips Exa and ignores this field. */
   researchSnippets?: string;
+  sources: ArtistFactSource[];
 }
 
 async function generateArtistFacts(
   ctx: FactGenerationContext,
-): Promise<{ headline: string; body: string }[]> {
+): Promise<NonNullable<ReturnType<typeof validateArtistFact>>[]> {
   const { artistName, tier, count, sparse, genres, topTracks, researchSnippets } = ctx;
   const apiKey = Deno.env.get("GOOGLE_AI_API_KEY");
   if (!apiKey) {
@@ -601,11 +614,10 @@ ${writerRules}
 
 ${tierGuidance}${sparseGroundingBlock}${exaResearchBlock}
 
-You also have Google Search available as a tool. USE IT to verify or
-extend the Exa research above — interviews, production credits, label
-history, scene context, recent press. Cross-check any specific name /
-year / venue / song title before committing to it. Only fall back to
-the catalog data above if both Exa and Google Search are empty.
+Use only the identity-checked research above. Do not introduce facts from
+training memory or additional searches: the same name may belong to a
+completely different artist. Return no nuggets if the supplied sources do
+not support a fact about this artist's verified catalog.
 
 ARTIST NAME LOCK: refer to the artist as "${artistName}" throughout —
 that's their public/stage name and how the audience knows them.
@@ -620,28 +632,26 @@ Write ${count === 1 ? "ONE nugget" : `${count} DISTINCT nuggets`} about ${artist
     count === 1 ? "It" : "Each"
   } must pass the SWAP TEST — the headline is useless if you could swap in another artist's name and the sentence still works. No release-date recaps; those are covered elsewhere.${multiNuggetAngleLine}
 
+Each nugget must select ONE numbered source from EXA RESEARCH. Its headline
+and body must be supported entirely by that source. Include its sourceNumber.
+Do not combine claims from different pages. If the selected source does not support the
+entire claim, narrow the claim or return no nugget. Never cite a catalog page
+as evidence for a signing, biography, reception, or recording story.
+
 Return JSON only, no preamble:
 {
   "nuggets": [
     { "headline": "<complete-fact sentence, sentence case, names ${artistName} explicitly>",
-      "body": "<1-3 sentences of context adding who/where/what-happened-next>" }${count > 1 ? ",\n    …" : ""}
+      "body": "<1-3 sentences supported entirely by the selected source>",
+      "sourceNumber": 1 }${count > 1 ? ",\n    …" : ""}
   ]
 }`;
 
-  // Use `gemini-2.5-flash` with Google Search grounding enabled. The
-  // model autonomously decides whether to search; grounded responses
-  // come back with `groundingMetadata` we could surface as citations
-  // (future). For now we just use the grounded text.
+  // Generate only from identity-checked research; independent search could
+  // reintroduce a namesake. Strip JSON fences before parsing the response.
   //
-  // `responseMimeType` is intentionally NOT set — incompatible with
-  // grounding tools. The response sometimes comes wrapped in a
-  // ```json fence which we strip before JSON.parse.
-  //
-  // 40s abort timeout: keeps the worst-case wall time predictable so a
-  // hung Gemini doesn't hold the cache sentinel for the full
-  // STALE_GENERATION_MS (55s) before followers can re-claim. Mirrors
-  // the Promise.race pattern in fetchSpotifyTaste on the client side.
-  const GEMINI_TIMEOUT_MS = 40_000;
+  // Leave room for catalog + Exa calls within the client’s 30-second budget.
+  const GEMINI_TIMEOUT_MS = 15_000;
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), GEMINI_TIMEOUT_MS);
   let res: Response;
@@ -653,8 +663,8 @@ Return JSON only, no preamble:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: prompt }] }],
-          tools: [{ googleSearch: {} }],
-          generationConfig: { temperature: 0.7 },
+
+          generationConfig: { temperature: 0.7, responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } },
         }),
         signal: ctl.signal,
       },
@@ -674,17 +684,6 @@ Return JSON only, no preamble:
     return [];
   }
   const data = await res.json();
-  // Surface grounding usage so we can tell whether a weak fact came
-  // from no search results vs. Gemini ignoring the tool. The metadata
-  // shape: `groundingMetadata.groundingChunks` is an array of pages
-  // the model cited.
-  const groundingChunks = data?.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
-  const searchQueries = data?.candidates?.[0]?.groundingMetadata?.webSearchQueries ?? [];
-  if (groundingChunks.length > 0) {
-    console.log(`[artist-updates] grounded fact for ${artistName} — ${groundingChunks.length} sources, queries: ${JSON.stringify(searchQueries)}`);
-  } else {
-    console.log(`[artist-updates] no grounding for ${artistName} (catalog-only fallback)`);
-  }
   const rawText: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
   const text = rawText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
   if (!text) {
@@ -693,16 +692,12 @@ Return JSON only, no preamble:
   }
   try {
     const parsed = JSON.parse(text);
-    const nuggets = Array.isArray(parsed?.nuggets) ? parsed.nuggets : [];
+    const nuggets: unknown[] = Array.isArray(parsed?.nuggets) ? parsed.nuggets : [];
     const accepted = nuggets
-      .filter(
-        (n: unknown): n is { headline: string; body: string } =>
-          !!n && typeof (n as { headline?: unknown }).headline === "string" &&
-          typeof (n as { body?: unknown }).body === "string",
-      )
-      .slice(0, count)
-      .map((n) => ({ headline: String(n.headline), body: String(n.body) }));
-    console.log(`[artist-updates] Gemini returned ${accepted.length}/${count} facts for ${artistName}`);
+      .map((n) => validateArtistFact(n, ctx.sources))
+      .filter((n): n is NonNullable<typeof n> => n !== null)
+      .slice(0, count);
+    console.log(`[artist-updates] Gemini returned ${accepted.length}/${count} facts for ${artistName} (${nuggets.length} candidates)`);
     return accepted;
   } catch (e) {
     console.warn("[artist-updates] Gemini non-JSON output:", text.slice(0, 300), String(e));
@@ -774,15 +769,8 @@ const POLL_INTERVAL_CAP_MS = 8_000;
 //      an empty catalog). Those rows are incorrect, not merely stale, so they
 //      must be invalidated rather than left to age out over 7 days.
 //
-// MUST stay in sync with buildArtistUpdatesCacheKey in
-// src/lib/artistFactToNugget.ts, which reads these rows from the client.
-const CACHE_VERSION = "v3";
-
-function cacheKey(artistName: string, tier: string): string {
-  // Normalized (lowercased + trimmed) so whitespace / case variations
-  // land on the same cache row.
-  return `artist::${artistName.trim().toLowerCase()}::${tier}::${CACHE_VERSION}`;
-}
+// v6 — identity-scoped, source-evidence-validated keys are shared with the client through
+// _shared/artistUpdatesCacheKey.ts. Legacy name-only rows are not reused.
 
 type CacheState =
   | { kind: "ready"; updates: ArtistUpdate[] }
@@ -925,7 +913,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  let body: { artist?: string; tier?: string };
+  let body: { artist?: string; tier?: string; spotifyArtistId?: string; artistId?: string; service?: string; storefront?: string };
   try {
     body = await req.json();
   } catch {
@@ -951,7 +939,21 @@ serve(async (req) => {
     });
   }
 
-  const key = cacheKey(artist, tier);
+  const apple = isAppleService(body.service);
+  const storefront = safeStorefront(body.storefront);
+  const spotifyArtistId = apple ? undefined : body.spotifyArtistId;
+  if (apple && body.artistId !== undefined && (typeof body.artistId !== "string" || !/^\d+$/.test(body.artistId))) {
+    return new Response(JSON.stringify({ error: "invalid Apple artist ID" }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  if (spotifyArtistId !== undefined &&
+      (typeof spotifyArtistId !== "string" || !/^[a-zA-Z0-9]{22}$/.test(spotifyArtistId))) {
+    return new Response(JSON.stringify({ error: "invalid Spotify artist ID" }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  const key = cacheKey(artist, tier, apple ? body.artistId : spotifyArtistId, apple ? "apple" : "spotify", storefront);
 
   // 1. Cache state machine — picks one of:
   //    - ready  → return cached
@@ -1007,24 +1009,27 @@ serve(async (req) => {
     console.warn(`[artist-updates] ${artist} — lost claim AND poll failed; generating anyway`);
   }
 
-  // 2. Resolve artist on Spotify.
+  // 2. Resolve the artist in the listener’s catalog.
   let token: string;
+  let appleCatalog: Awaited<ReturnType<typeof fetchAppleUpdateCatalog>> = null;
+  let artistInfo: SpotifyArtistSearchResult | null;
   try {
-    token = await getSpotifyAppToken();
+    token = apple ? await getAppleDeveloperToken() : await getSpotifyAppToken();
+    if (apple) appleCatalog = await fetchAppleUpdateCatalog(token, storefront, body.artistId);
+    artistInfo = apple ? appleCatalog?.artist ?? null : await searchArtist(token, artist, spotifyArtistId);
   } catch (e) {
-    console.error("[artist-updates] Spotify token unavailable:", e);
+    console.error("[artist-updates] Catalog unavailable:", e);
     // Release the sentinel — followers shouldn't poll forever on a
-    // transient Spotify-token failure.
+    // transient catalog failure.
     await evictStaleRow(key);
-    return new Response(JSON.stringify({ error: "spotify unavailable" }), {
+    return new Response(JSON.stringify({ error: "catalog unavailable" }), {
       status: 502,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  const artistInfo = await searchArtist(token, artist);
   if (!artistInfo) {
-    // Release the sentinel — this artist is unresolvable on Spotify, no
+    // Release the sentinel — this catalog identity is unavailable, no
     // amount of polling will produce a ready row. Followers should give
     // up immediately on the next poll cycle.
     await evictStaleRow(key);
@@ -1064,13 +1069,16 @@ serve(async (req) => {
     //    (citation count + body-text mention). Top-tracks always
     //    fetched too — cheap call, and the sparse-mode prompt needs
     //    them as catalog grounding when we DO fall through.
-    const [release, topTracks, exaResult] = await Promise.all([
-      fetchRecentRelease(token, artistInfo.id),
-      fetchArtistTopTracks(token, artistInfo.id),
-      exaApiKey
-        ? researchArtistOnExa(artistInfo.name, exaApiKey)
-        : Promise.resolve({ snippets: "", citations: [] as { title: string; url: string }[] }),
+    const [release, topTracks] = await Promise.all([
+      apple ? Promise.resolve(appleCatalog?.release ?? null) : fetchRecentRelease(token, artistInfo.id),
+      apple ? Promise.resolve(appleCatalog?.tracks ?? []) : fetchArtistTopTracks(token, artistInfo.id),
     ]);
+    const exaResult = exaApiKey
+      ? await researchArtistOnExa(artistInfo.name, exaApiKey, {
+        id: artistInfo.id, name: artistInfo.name, service: apple ? "apple" : "spotify",
+        titles: [...topTracks.map((track) => track.name), ...(release ? [release.name] : [])],
+      })
+      : { snippets: "", citations: [] as ArtistFactSource[] };
 
     // Sparse iff: few/no usable Exa citations AND the artist's name
     // doesn't appear in any snippet body. Mirrors the trigger in
@@ -1081,7 +1089,7 @@ serve(async (req) => {
       exaResult.snippets.toLowerCase().includes(artistInfo.name.toLowerCase());
     const isSparse = exaResult.citations.length <= 1 && !artistMentionedInBody;
 
-    const facts = await generateArtistFacts({
+    const facts = exaResult.citations.length === 0 ? [] : await generateArtistFacts({
       artistName: artistInfo.name,
       tier,
       count: FACTS_PER_ARTIST,
@@ -1089,6 +1097,7 @@ serve(async (req) => {
       genres: artistInfo.genres,
       topTracks: isSparse ? topTracks : undefined,
       researchSnippets: isSparse ? "" : exaResult.snippets,
+      sources: exaResult.citations,
     });
 
     const releaseAgeDays = release ? daysSince(release.release_date) : null;
@@ -1105,12 +1114,13 @@ serve(async (req) => {
       updates.push(buildReleaseUpdate(artistInfo, release));
     }
 
-    facts.forEach((f, i) => {
-      // Round-robin through Exa citations so multiple facts on the same
-      // artist don't all link to the same article (we ask for 1 fact per
-      // artist today but this keeps it correct if FACTS_PER_ARTIST grows).
-      const citation = exaResult.citations[i % Math.max(exaResult.citations.length, 1)];
-      updates.push(buildFactUpdate(artistInfo, f.headline, f.body, i, citation));
+    const verifiedFacts = await verifyFactSources(facts.map(f => ({ headline: f.headline, text: f.body, source: f.citation })), {
+      googleKey: Deno.env.get("GOOGLE_AI_API_KEY"), exaKey: exaApiKey, pages: exaResult.citations,
+    });
+    verifiedFacts.forEach((f, i) => {
+      const update = buildFactUpdate(artistInfo, f.headline, f.text, i, f.source);
+      update.source = { ...update.source!, citation: f.source.citation };
+      updates.push(update);
     });
 
     // Catalog tracks for the "Get into" lane. Appended last so they never
@@ -1134,7 +1144,7 @@ serve(async (req) => {
     // source came back empty.
     const catalogTracks = topTracks.length > 0
       ? topTracks
-      : await fetchAlbumTracksFallback(token, artistInfo.id, TRACKS_PER_ARTIST + 1);
+      : apple ? [] : await fetchAlbumTracksFallback(token, artistInfo.id, TRACKS_PER_ARTIST + 1);
     if (topTracks.length === 0) {
       console.log(
         `[artist-updates] ${artistInfo.name} — no top-tracks, album fallback yielded ${catalogTracks.length}`,
@@ -1159,7 +1169,7 @@ serve(async (req) => {
       // to flip to 'ready'. Without this they'd timeout after 95s and
       // re-claim+re-fail in a thundering loop.
       await evictStaleRow(key);
-      return new Response(JSON.stringify({ updates: [], reason: "compose-failed" }), {
+      return new Response(JSON.stringify({ updates, reason: "no-verified-facts" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

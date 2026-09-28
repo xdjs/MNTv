@@ -1,5 +1,9 @@
+import { hasFactEvidence } from "../_shared/hasFactEvidence.ts";
+import { verifyFactSources } from "../_shared/verifyFactSources.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+
+type CompanionFact = { headline?: string; text?: string; sourceUrl?: string; citation?: unknown; [key: string]: unknown };
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,6 +50,21 @@ serve(async (req) => {
     // If prebuiltNuggets provided (from Listen.tsx), write them to companion_cache
     // and return immediately. This is the "pre-gen" path.
     if (Array.isArray(prebuiltNuggets) && prebuiltNuggets.length > 0) {
+      // Public QR reads remain anonymous; paid verification requires a real
+      // Supabase user session (including the Apple/guest anonymous user).
+      const token = req.headers.get("authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1];
+      if (!token) return new Response(JSON.stringify({ error: "A session is required to submit companion facts." }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+      const { data: authData, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !authData.user) return new Response(JSON.stringify({ error: "Invalid session." }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+      const { data: quotaAllowed, error: quotaError } = await supabase.rpc("consume_companion_verification_quota", { caller_id: authData.user.id });
+      if (quotaError || quotaAllowed !== true) return new Response(JSON.stringify({ error: quotaError ? "Verification is temporarily unavailable." : "Verification limit reached. Try again later." }), {
+        status: quotaError ? 503 : 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" },
+      });
       const listenTier = Math.min(Math.max(listenCount, 1), 3);
 
       // Read nugget_cache for artistSummary and externalLinks
@@ -67,9 +86,20 @@ serve(async (req) => {
       const externalLinks = nuggetCacheData?.sources?.externalLinks || [];
 
       // Accumulate nuggets from previous listen tiers
-      const allNuggets = [...prebuiltNuggets];
-      if (listenTier > 1) {
-        for (let t = 1; t < listenTier; t++) {
+      // Client-supplied claims must be checked on the server before sharing.
+      const checked = await verifyFactSources(prebuiltNuggets.filter((n: CompanionFact) => n && typeof n.text === "string" && n.text.length <= 2000).slice(-9).map((n: CompanionFact) => ({ ...n, source: { url: n.sourceUrl } })), {
+        googleKey: Deno.env.get("GOOGLE_AI_API_KEY"), exaKey: Deno.env.get("EXA_API_KEY"), maxDocumentCharacters: 4000,
+      });
+      if (!checked.length) {
+        return new Response(JSON.stringify({ error: "No supported facts could be verified; existing companion content was preserved." }), {
+          status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      let cacheTier = listenTier;
+      const allNuggets = checked.map(n => ({ ...n, sourceName: n.source.publisher, citation: n.source.citation }));
+      {
+        // Preserve supported content even when only part of a submission revalidates.
+        for (let t = 1; t <= 3; t++) {
           const prevKey = `${artist}::${title}::${safeTier}::${t}`;
           const { data: prevCached } = await supabase
             .from("companion_cache")
@@ -78,30 +108,27 @@ serve(async (req) => {
             .eq("listen_count_tier", t)
             .maybeSingle();
           if (prevCached?.content?.nuggets) {
+            cacheTier = Math.max(cacheTier, t);
             const existingIds = new Set(allNuggets.map((n: any) => n.id));
             for (const n of prevCached.content.nuggets) {
-              if (!existingIds.has(n.id)) allNuggets.push(n);
+              if (!existingIds.has(n.id) && hasFactEvidence(n, { url: n.sourceUrl, citation: n.citation })) { allNuggets.push(n); existingIds.add(n.id); }
             }
           }
         }
       }
 
       const response = {
-        artistSummary,
+        artistSummary: "",
         nuggets: allNuggets,
         externalLinks,
         coverArtUrl: coverArtUrl || undefined,
         artistImage: artistImage || undefined,
       };
 
-      const cacheKey = `${artist}::${title}::${safeTier}::${listenTier}`;
-      // Clear stale entries and write fresh
-      const baseCacheKey = `${artist}::${title}::${safeTier}`;
-      await supabase.from("companion_cache").delete().in("track_key", [
-        `${baseCacheKey}::1`, `${baseCacheKey}::2`, `${baseCacheKey}::3`,
-      ]);
+      const cacheKey = `${artist}::${title}::${safeTier}::${cacheTier}`;
+      // Keep other tiers intact; an interrupted write must not erase the cache.
       await supabase.from("companion_cache").upsert(
-        { track_key: cacheKey, listen_count_tier: listenTier, content: response },
+        { track_key: cacheKey, listen_count_tier: cacheTier, content: response },
         { onConflict: "track_key,listen_count_tier" }
       );
 
@@ -125,20 +152,35 @@ serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
-    if (cached?.content) {
+    const supportedCached = (cached?.content?.nuggets ?? []).filter((n: CompanionFact) => hasFactEvidence(n, { url: n.sourceUrl, citation: n.citation }));
+    if (cached?.content && supportedCached.length) {
       console.log(`[Companion] Cache hit: ${baseCacheKey}::${cached.listen_count_tier}`);
-      return new Response(JSON.stringify(cached.content), {
+      return new Response(JSON.stringify({ ...cached.content, artistSummary: "", nuggets: supportedCached }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     // No companion cache — try reading from nugget_cache directly
     const dbCacheKey = `${artist}::${title}::${safeTier}`;
-    const { data: nuggetData } = await supabase
+    // Old short links contain artist/title but no provider URI. Match the
+    // canonical recording-key layout with escaped literal artist/title fields.
+    const escapeLike = (value: string) => value.replace(/[\\%_]/g, "\\$&");
+    const { data: canonicalRows } = await supabase
       .from("nugget_cache")
       .select("nuggets, sources, status")
-      .eq("track_id", dbCacheKey)
-      .maybeSingle();
+      .like("track_id", `real::${escapeLike(artist)}::${escapeLike(title)}::::%::${safeTier}`)
+      .eq("status", "ready")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    let nuggetData = (canonicalRows ?? []).find(row => Array.isArray(row.nuggets) && row.nuggets.some((n: any) => hasFactEvidence(n, row.sources?.[n.sourceId] ?? n.source)));
+    if (!nuggetData) {
+      const { data: legacyData } = await supabase
+        .from("nugget_cache")
+        .select("nuggets, sources, status")
+        .eq("track_id", dbCacheKey)
+        .maybeSingle();
+      nuggetData = legacyData ?? undefined;
+    }
 
     if (nuggetData?.status === "ready" && nuggetData.nuggets?.length) {
       const artistSummary = nuggetData.sources?.artistSummary || "";
@@ -149,21 +191,22 @@ serve(async (req) => {
         artist: "history", track: "track", discovery: "explore",
       };
       const now = Date.now();
-      const companionNuggets = (nuggetData.nuggets as any[]).map((n: any, i: number) => ({
+      const companionNuggets = (nuggetData.nuggets as any[]).filter(n => hasFactEvidence(n, nuggetData.sources?.[n.sourceId] ?? n.source)).map((n: any, i: number) => ({
         id: n.id || `nugget-${i}`,
         timestamp: now - i * 60000,
         headline: n.headline || "",
         text: n.text || "",
         category: kindToCategory[n.kind] || "track",
         listenUnlockLevel: 1,
-        sourceName: n.source?.publisher || "",
-        sourceUrl: n.source?.url || "",
+        sourceName: (nuggetData.sources?.[n.sourceId] ?? n.source)?.publisher || "",
+        sourceUrl: (nuggetData.sources?.[n.sourceId] ?? n.source)?.url || "",
+        citation: (nuggetData.sources?.[n.sourceId] ?? n.source)?.citation,
         imageUrl: n.imageUrl,
         imageCaption: n.imageCaption,
       }));
 
       const response = {
-        artistSummary,
+        artistSummary: "",
         nuggets: companionNuggets,
         externalLinks,
       };

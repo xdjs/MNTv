@@ -1,9 +1,32 @@
-// ⚠ DEPLOY GUARD: This file contains in-progress prompt-quality work
-// (Task #28 — banned phrase lists, catalog-source allowlist, collaborator
-// context). Do NOT run `supabase functions deploy generate-nuggets`
-// from this branch. The deployed v57 (May 9) is the production cut;
-// the changes here ship in a separate dedicated PR once the new
-// prompts have been validated against Pete's 50-example test set.
+import { normalizeCacheDuration } from "../_shared/normalizeCacheDuration.ts";
+import { persistStreamedNuggets } from "../_shared/persistStreamedNuggets.ts";
+import { generateVerifiedDeepDive } from "../_shared/generateVerifiedDeepDive.ts";
+import { verifyFactSources } from "../_shared/verifyFactSources.ts";
+import { hasFactEvidence } from "../_shared/hasFactEvidence.ts";
+// ⚠ DEPLOY GUARD: Do NOT run `supabase functions deploy generate-nuggets`
+// from this branch.
+//
+// Production is v60 (Aug 8): the v57 cut plus TWO changes, both in this
+// file's cache-write block — the server-side nugget_cache merge, and
+// failing loudly rather than silently overwriting when the prior row
+// cannot be read. The exact deployed source is recorded on branch
+// `deploy/wave-merge-on-v57`.
+//
+// This file still holds work that has NOT shipped and must not:
+//   • prompt-quality work (Task #28 — banned phrase lists, catalog-source
+//     allowlist, collaborator context), unvalidated against Pete's
+//     50-example test set
+//   • rotation / liked-tracks cascade, PR #82 round 3, recommendedArtist
+//   • 13 unvalidated Constitution rules in ./constitution.ts
+//
+// Deploying from here ships all of that. It also uploads the function's
+// whole IMPORT GRAPH — constitution.ts and _shared/apple-token.ts, not
+// just index.ts — which is how v58 leaked those Constitution rules to
+// production for about a minute on Aug 4: only index.ts had been
+// reverted to the production cut. If you ever need to deploy a targeted
+// fix, diff EVERY file in that graph against the deployed cut, not just
+// the one you changed. (Files in the folder that nothing imports, like
+// index.pre-exa-backup.ts, are not uploaded.)
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getAppleDeveloperToken } from "../_shared/apple-token.ts";
@@ -482,6 +505,7 @@ async function fetchLastFmArtistTags(artistName: string): Promise<string[]> {
 
 // ── Exa /answer API ─────────────────────────────────────────────────
 interface ExaCitation {
+  text?: string;
   citIndex: number;
   url: string;
   title: string;
@@ -593,6 +617,7 @@ async function searchExaPages(
       }
       return {
         citIndex: citIndexStart + i,
+        text: [(r.text || "").slice(0, 5000), ...(r.highlights || [])].join("\n"),
         url: r.url || "",
         title: r.title || "",
         author: r.author || null,
@@ -605,7 +630,6 @@ async function searchExaPages(
 
   // Build answer from page text snippets + highlights
   const snippets = results
-    .filter((r: any) => r.text || r.highlights?.length)
     .map((r: any, i: number) => {
       // Truncate each page to keep prompt reasonable
       const text = (r.text || "").slice(0, 5000);
@@ -2334,7 +2358,7 @@ Return ONLY valid JSON:
         "title": "Source title",
         "publisher": "Real publisher name",
         ${sourceFieldExample}
-        "quoteSnippet": "Key quote or paraphrase"
+        "quoteSnippet": "Verbatim passage supporting the entire headline and body from the selected citation"
       }
     }
   ]
@@ -2416,7 +2440,7 @@ Return ONLY valid JSON:
         "title": "Source title",
         "publisher": "Real publisher name",
         ${sourceFieldExample}
-        "quoteSnippet": "Key quote or paraphrase"
+        "quoteSnippet": "Verbatim passage supporting the entire headline and body from the selected citation"
       }
     }
   ]
@@ -2652,7 +2676,7 @@ serve(async (req) => {
     // Default to 240s (avg song) when caller omits — used for cache-side
     // timestamp computation so pre-gen flows (which don't know duration yet)
     // can still produce a valid cached Nugget[] shape.
-    const cacheDurationSec = typeof rawDurationSec === "number" && rawDurationSec > 30 ? rawDurationSec : 240;
+    const cacheDurationSec = normalizeCacheDuration(rawDurationSec);
     const tier: Tier = (rawTier === "casual" || rawTier === "curious" || rawTier === "nerd") ? rawTier : "casual";
 
     // ── Input validation ────────────────────────────────────────────
@@ -2719,79 +2743,11 @@ serve(async (req) => {
 
     // ── Deep Dive mode ──────────────────────────────────────────────
     if (deepDive) {
-      const deepDivePrompt = `You are a music historian having a fascinating conversation about "${title}" by ${artist}.
-
-The user has been reading this trivia and wants to go deeper:
----
-${context}
----
-${safeSourceTitle ? `The original source was: "${safeSourceTitle}" by ${safeSourcePublisher}` : ""}
-${safeImageCaption ? `An image was shown alongside this nugget: "${safeImageQuery}" with caption "${safeImageCaption}". If relevant, weave in how this visual element connects to the deeper story.` : ""}
-
-Continue this thread of discovery. Provide ONE more paragraph of 2-3 sentences MAX (under 80 words total) that goes deeper — reveal connections, context, or implications that make this even more interesting. Be concise and punchy — this is for a TV screen. Think about WHY this matters, HOW it connects to broader music history, or WHAT it reveals about the creative process.
-
-Be conversational but authoritative. Channel the spirit of a music nerd who can't stop sharing fascinating connections.
-
-End with a brief "followUp" — a one-sentence teaser about what could be explored next.
-
-Return ONLY valid JSON:
-{
-  "deepDive": {
-    "text": "Your deeper exploration paragraph here",
-    "followUp": "One-sentence teaser for the next exploration"
-  }
-}`;
-
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GOOGLE_AI_API_KEY}`;
-      const res = await fetch(geminiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: deepDivePrompt }] }],
-          tools: [{ google_search: {} }],
-          generationConfig: { temperature: 1.0 },
-        }),
+      const result = await generateVerifiedDeepDive({
+        artist, title, context, sourceUrl: typeof body.sourceUrl === "string" ? body.sourceUrl : "",
+        googleKey: GOOGLE_AI_API_KEY, exaKey: Deno.env.get("EXA_API_KEY"),
       });
-
-      if (!res.ok) {
-        const errText = await res.text();
-        console.error("Deep dive Gemini error:", res.status, errText);
-        throw new Error(`Gemini API error: ${res.status}`);
-      }
-
-      const data = await res.json();
-      const candidate = data.candidates?.[0];
-      const text = candidate?.content?.parts?.[0]?.text || "";
-
-      if (!text.trim()) {
-        console.error("Deep dive returned empty. Candidate:", JSON.stringify(candidate));
-        return new Response(JSON.stringify({
-          deepDive: {
-            text: "This topic is fascinating but I couldn't dig deeper right now. Try again in a moment.",
-            followUp: "There's always more to discover."
-          }
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      let parsed;
-      try {
-        const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-        parsed = JSON.parse(cleaned);
-      } catch {
-        console.error("Failed to parse deep dive:", text.slice(0, 500));
-        return new Response(JSON.stringify({
-          deepDive: {
-            text: "Couldn't process that exploration. Try again in a moment.",
-            followUp: "There's always more to discover."
-          }
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      return new Response(JSON.stringify(parsed), {
+      return new Response(JSON.stringify({ deepDive: result }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -2917,42 +2873,8 @@ Do not invent URLs. Do not invent publishers. Do not invent quotes.`;
       const fastNuggetId = `ai-nug-${fastTrackId}-L1-0`;
 
       async function buildSyntheticCacheRow(reasonLog: string) {
-        const synthNugget = {
-          id: fastNuggetId, trackId: fastTrackId, timestampSec: 0, durationMs: 7000,
-          headline: `"${title}" by ${artist}`,
-          text: `One of your under-the-radar picks. There's not much press out there for this one yet, so we're letting the music do the talking — give it a real listen and we'll layer in the story as more sources surface.`,
-          kind: "track" as const,
-          listenFor: false,
-          sourceId: fastSourceId,
-        };
-        const synthSources: Record<string, unknown> = {
-          [fastSourceId]: {
-            id: fastSourceId,
-            type: "catalog",
-            title,
-            publisher: "MusicNerd",
-            url: "",
-            verified: false,
-          },
-          _firstNuggetOnly: true,
-          _synthetic: true,
-        };
-        // AWAIT the upsert before returning. Earlier this was fire-and-
-        // forget for "perceived speed" but it created a race: client
-        // got the success response, marked the story ready (pink ring),
-        // then tapped — and Listen read the cache row before the write
-        // landed, hitting a miss and falling through to cold SSE. The
-        // synchronous-write trade is ~50-150ms of extra wall time for
-        // the guarantee that "pink ring → row exists".
-        if (cacheAdminClient) {
-          const { error } = await cacheAdminClient.from("nugget_cache").upsert(
-            { track_id: fastDbCacheKey, nuggets: [synthNugget], sources: synthSources, status: "ready" },
-            { onConflict: "track_id" },
-          );
-          if (error) console.warn(`[firstNuggetOnly] synthetic cache upsert failed for ${fastDbCacheKey}:`, error);
-        }
-        console.log(`[firstNuggetOnly] ${artist} - ${title} → synthetic (${reasonLog})`);
-        return new Response(JSON.stringify({ nuggets: [synthNugget], partial: true, synthetic: true }), {
+        console.warn(`[firstNuggetOnly] No supported fact: ${reasonLog}`);
+        return new Response(JSON.stringify({ nuggets: [], sources: {}, partial: true }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -3005,16 +2927,6 @@ Do not invent URLs. Do not invent publishers. Do not invent quotes.`;
         const cit = firstExaCitations.find((c) => c.citIndex === firstNugget.source.citIndex);
         if (cit) { resolvedUrl = cit.url; resolvedTitle = cit.title || resolvedTitle; resolvedVerified = true; }
       }
-      if (!resolvedUrl && firstExaCitations.length) {
-        const pubLower = (firstNugget.source?.publisher || "").toLowerCase();
-        const titleLower = (firstNugget.source?.title || "").toLowerCase();
-        const m = firstExaCitations.find((c) =>
-          (pubLower && c.title.toLowerCase().includes(pubLower)) ||
-          (pubLower && c.url.toLowerCase().includes(pubLower)) ||
-          (titleLower && c.title.toLowerCase().includes(titleLower))
-        );
-        if (m) { resolvedUrl = m.url; resolvedTitle = m.title || resolvedTitle; resolvedVerified = true; }
-      }
 
       // 4. Source-filter check — same rejection rules as the main path.
       const sType = (firstNugget.source?.type || "").toLowerCase();
@@ -3031,6 +2943,12 @@ Do not invent URLs. Do not invent publishers. Do not invent quotes.`;
         console.warn(`[firstNuggetOnly] Rejected hallucinated source for ${artist} - ${title}: type=${sType} pub=${sPub} url=${sUrl || "(empty)"}`);
         return buildSyntheticCacheRow("source rejected");
       }
+
+      const [verifiedFirst] = await verifyFactSources([{ ...firstNugget, source: { ...firstNugget.source, url: resolvedUrl } }], {
+        googleKey: GOOGLE_AI_API_KEY, exaKey: Deno.env.get("EXA_API_KEY"),
+        pages: firstExaCitations.filter(c => c.text).map(c => ({ url: c.url, title: c.title, text: c.text! })),
+      });
+      if (!verifiedFirst) return buildSyntheticCacheRow("no supporting source");
 
       // 5. Build cache row. Single nugget at timestamp 0 so the
       //    client's cache-hit reveal lands the moment the song starts.
@@ -3049,10 +2967,11 @@ Do not invent URLs. Do not invent publishers. Do not invent quotes.`;
         [fastSourceId]: {
           id: fastSourceId,
           type: sparseFast ? "catalog" : (firstNugget.source?.type || "article"),
-          title: resolvedTitle || firstNugget.source?.title || "",
-          publisher: firstNugget.source?.publisher || (sparseFast ? "MusicNerd" : ""),
+          title: verifiedFirst.source.title || "",
+          publisher: verifiedFirst.source.publisher || "",
           url: resolvedUrl,
-          verified: resolvedVerified,
+          verified: true,
+          citation: verifiedFirst.source.citation,
         },
         // Mark the row as a "first-only" partial so Listen knows to fire
         // the full pipeline AFTER tap to fill in the remaining nuggets.
@@ -3071,7 +2990,7 @@ Do not invent URLs. Do not invent publishers. Do not invent quotes.`;
       }
 
       console.log(`[firstNuggetOnly] ${artist} - ${title} done in ${Date.now() - t0}ms (sparse=${sparseFast})`);
-      return new Response(JSON.stringify({ nuggets: cacheNuggets, partial: true }), {
+      return new Response(JSON.stringify({ nuggets: cacheNuggets, sources: cacheSources, partial: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -3385,7 +3304,7 @@ Do not invent URLs. Do not invent publishers. Do not invent quotes.`;
         const result = await generateWithGemini(
           artist, title, album, videos, new Map(), GOOGLE_AI_API_KEY, safeListenCount, safePreviousNuggets, tier, safeTopArtists, safeTopTracks,
           exaPromptContext, exaCitations, imageCandidates, isSparseData, resolvedSpotifyInfo, resolvedLastFmSimilar, resolvedLastFmTags,
-          trackSearchSkipped, discoverySearchSkipped, _tracker
+          trackSearchSkipped, discoverySearchSkipped, { ts: _ts, te: _te }
         );
         rawNuggets = result.nuggets;
         groundingChunks = result.groundingChunks;
@@ -3607,90 +3526,33 @@ Do not invent URLs. Do not invent publishers. Do not invent quotes.`;
           result.source.verified = true;
         }
       }
-      // Fallback: Gemini didn't use citIndex
-      if (!result.source.url && exaCitations?.length) {
-        const pubLower = (source.publisher || "").toLowerCase();
-        const titleLower = (source.title || "").toLowerCase();
-        const match = exaCitations.find((c) =>
-          (pubLower && c.title.toLowerCase().includes(pubLower)) ||
-          (pubLower && c.url.toLowerCase().includes(pubLower)) ||
-          (titleLower && c.title.toLowerCase().includes(titleLower))
-        );
-        if (match) {
-          result.source.url = match.url;
-          result.source.title = match.title;
-          result.source.verified = true;
-        }
+      // A model URL is usable only if it exactly identifies a retrieved source.
+      // Publisher/hostname/name similarity must never choose a citation.
+      if (!result.source.url && source.sourceUrl) {
+        const exact = exaCitations?.find(c => c.url === source.sourceUrl);
+        const grounded = realChunks.find((c: any) => c.web?.uri === source.sourceUrl);
+        if (exact) { result.source.url = exact.url; result.source.title = exact.title; }
+        else if (grounded) { result.source.url = grounded.web.uri; result.source.title = grounded.web.title; }
       }
-      // YouTube sources
-      if (source.type === "youtube" && source.videoIndex != null) {
+      if (source.type === "youtube" && Number.isInteger(source.videoIndex)) {
         const video = videos[source.videoIndex];
-        if (video) {
-          result.source.embedId = video.videoId;
+        if (video && transcripts.get(video.videoId)) {
           result.source.url = `https://www.youtube.com/watch?v=${video.videoId}`;
-          result.source.verified = true;
+          result.source.embedId = video.videoId;
         }
       }
-      // Grounding chunk resolution — try to find a real URL from Gemini's
-      // grounding metadata, falling back to a Google search link.
-      if (!result.source.url) {
-        // Step 1: Match by hostname from Gemini's sourceUrl hint
-        const geminiUrl = source.sourceUrl || "";
-        let geminiHost = "";
-        try { if (geminiUrl) geminiHost = new URL(geminiUrl).hostname; } catch {}
-
-        if (geminiHost) {
-          const match = realChunks.find((chunk: any) => {
-            try { return new URL(chunk.web.uri).hostname === geminiHost; }
-            catch { return false; }
-          });
-          if (match) {
-            result.source.url = match.web.uri;
-            if (match.web.title) result.source.title = match.web.title;
-            result.source.verified = true;
-          }
-        }
-
-        // Step 2: Match grounding chunks by publisher + artist relevance
-        if (!result.source.url && realChunks.length > 0) {
-          const artistLower = artist.toLowerCase();
-          const pubLower = (source.publisher || "").toLowerCase();
-
-          const relevantChunk = realChunks.find((chunk: any) => {
-            const ct = (chunk?.web?.title || "").toLowerCase();
-            const cu = (chunk?.web?.uri || "").toLowerCase();
-            return pubLower
-              && (ct.includes(pubLower) || cu.includes(pubLower))
-              && (wordBoundaryMatch(ct, artistLower) || wordBoundaryMatch(cu, artistLower));
-          }) || realChunks.find((chunk: any) => {
-            const ct = (chunk?.web?.title || "").toLowerCase();
-            const cu = (chunk?.web?.uri || "").toLowerCase();
-            return wordBoundaryMatch(ct, artistLower) || wordBoundaryMatch(cu, artistLower);
-          });
-
-          if (relevantChunk) {
-            result.source.url = relevantChunk.web.uri;
-            if (relevantChunk.web.title) result.source.title = relevantChunk.web.title;
-            result.source.verified = true;
-          }
-        }
-
-        // No URL was resolved from grounding chunks or curated citations.
-        // Historical behavior: fall back to a Google search URL with the
-        // claimed source title — but the user cannot verify a fabricated
-        // citation that way (Pete: "I clicked View Source and it just took
-        // me to Google search"), and worse, the Google-fallback nugget
-        // sometimes carries a fully fabricated specific (named publication,
-        // year, quote) that the validator missed. Instead: leave url empty
-        // and mark the nugget unverified so the post-source filter can drop
-        // it — except in the sparse-allow path which intentionally tolerates
-        // unverified sources for artists with genuinely thin coverage.
-        if (!result.source.url) {
-          result.source.verified = false;
-        }
-      }
+      result.source.verified = false; // Only document verification below can set this.
       return result;
     }
+
+    const citationOptions = {
+      deadline: functionStartTime + FUNCTION_TIMEOUT_MS,
+      googleKey: GOOGLE_AI_API_KEY, exaKey: Deno.env.get("EXA_API_KEY"),
+      pages: [
+        ...(exaCitations ?? []).filter(c => c.text).map(c => ({ url: c.url, title: c.title, text: c.text! })),
+        ...videos.filter(v => transcripts.has(v.videoId)).map(v => ({ url: `https://www.youtube.com/watch?v=${v.videoId}`, title: v.title, text: transcripts.get(v.videoId)! })),
+      ],
+    };
 
     function buildExternalLinks() {
       const links: { label: string; url: string }[] = [];
@@ -3832,6 +3694,7 @@ Do not invent URLs. Do not invent publishers. Do not invent years or quotes.`;
               // but defIdx keeps advancing, so the next nugget still maps to
               // its correct Exa citation window (artist=0, track=1, discovery=2).
               for (let defIdx = 0; defIdx < nuggetDefs.length; defIdx++) {
+                if (Date.now() >= citationOptions.deadline - 1000) break;
                 const def = nuggetDefs[defIdx];
                 _ts(`writer_${def.kind}`);
                 const allPrevHeadlines = [...prevHeadlines, ...generatedHeadlines];
@@ -3874,7 +3737,7 @@ Return ONLY valid JSON:
       "title": "Source title",
       "publisher": "Real publisher name",
       "citIndex": "<integer — the [CIT N] index of the research item backing this nugget>",
-      "quoteSnippet": "Key quote or paraphrase"
+      "quoteSnippet": "Verbatim passage supporting the entire headline and body from the selected citation"
     }
   }
 }`;
@@ -3891,6 +3754,7 @@ Return ONLY valid JSON:
                 let nuggetData: any = null;
                 const WRITER_CALL_TIMEOUT_MS = 30_000;
                 for (let attempt = 0; attempt < 3; attempt++) {
+                  if (Date.now() >= citationOptions.deadline - 1000) break;
                   try {
                     // Per-attempt abort guard — a hanging Gemini response
                     // would otherwise hold the SSE connection open until
@@ -3899,7 +3763,7 @@ Return ONLY valid JSON:
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify(callBody),
-                      signal: AbortSignal.timeout(WRITER_CALL_TIMEOUT_MS),
+                      signal: AbortSignal.timeout(Math.max(1, Math.min(WRITER_CALL_TIMEOUT_MS, citationOptions.deadline - Date.now()))),
                     });
                     if (!res.ok) {
                       if (res.status === 429 && attempt < 2) {
@@ -3910,6 +3774,7 @@ Return ONLY valid JSON:
                           ? Math.min(retryAfterSec * 1000, 10_000)
                           : 2000 * Math.pow(2, attempt);
                         console.log(`[SSE] 429 for ${def.kind}, retrying in ${Math.round(delayMs)}ms (attempt ${attempt + 1}/3)`);
+                        if (Date.now() + delayMs >= citationOptions.deadline - 1000) break;
                         await new Promise((resolve) => setTimeout(resolve, delayMs));
                         continue;
                       }
@@ -3986,7 +3851,8 @@ Return ONLY valid JSON:
                 // keeping emitted IDs contiguous even when earlier defs were
                 // skipped. (assembleNugget doesn't read the index today, but any
                 // reader of the emitted nugget should see a coherent position.)
-                const assembled = assembleNugget(nuggetData, streamedIndex);
+                const [assembled] = await verifyFactSources([assembleNugget(nuggetData, streamedIndex)], citationOptions);
+                if (!assembled) continue;
 
                 // ── Recommendation passthrough ──
                 // Discovery nuggets name an artist (and often a starting
@@ -4116,6 +3982,12 @@ Return ONLY valid JSON:
                 return;
               }
 
+              const persisted = await persistStreamedNuggets(cacheAdminClient as unknown as Parameters<typeof persistStreamedNuggets>[0], {
+                artist, title, uri: safeSpotifyTrackId ? `spotify:track:${safeSpotifyTrackId}` : safeAppleTrackId ? `apple:song:${safeAppleTrackId}` : "",
+                tier, listenCount: safeListenCount, durationSec: cacheDurationSec,
+                nuggets: streamedNuggets, externalLinks: buildExternalLinks(),
+              });
+              if (!persisted) console.warn("[SSE] Verified facts delivered but server cache persistence failed");
               const doneEvent = `data: ${JSON.stringify({ type: "done", artistSummary: sseArtistSummary, externalLinks: buildExternalLinks(), noTrackData })}\n\n`;
               try {
                 streamController.enqueue(encoder.encode(doneEvent));
@@ -4180,7 +4052,7 @@ Return ONLY valid JSON:
     }
 
     // Step 4: Assemble response using shared helpers
-    const nuggets = rawNuggets.map((n, i) => assembleNugget(n, i));
+    const nuggets = await verifyFactSources(rawNuggets.map((n, i) => assembleNugget(n, i)), citationOptions);
     const externalLinks = buildExternalLinks();
 
     // ── Fix 4: Post-generation source validation ──────────────────────
@@ -4282,8 +4154,8 @@ Return ONLY valid JSON:
         const denom = Math.max(validatedNuggets.length - 1, 1);
         const spacing = usable / denom;
         const cacheNuggets = validatedNuggets.map((n: any, i: number) => {
-          const sourceId = `ai-src-${trackId}-L1-${i}`;
-          const nuggetId = `ai-nug-${trackId}-L1-${i}`;
+          const sourceId = `ai-src-${trackId}-L${safeListenCount}-${i}`;
+          const nuggetId = `ai-nug-${trackId}-L${safeListenCount}-${i}`;
           const ts = Math.min(Math.floor(earlyStart + spacing * i), cacheDurationSec - 10);
           return {
             id: nuggetId, trackId, timestampSec: ts, durationMs: 7000,
@@ -4294,7 +4166,7 @@ Return ONLY valid JSON:
         });
         const cacheSources: Record<string, unknown> = {};
         validatedNuggets.forEach((n: any, i: number) => {
-          const sourceId = `ai-src-${trackId}-L1-${i}`;
+          const sourceId = `ai-src-${trackId}-L${safeListenCount}-${i}`;
           cacheSources[sourceId] = { id: sourceId, ...n.source };
         });
         cacheSources.artistSummary = artistSummary;
@@ -4303,132 +4175,83 @@ Return ONLY valid JSON:
         if (!cacheAdminClient) {
           console.warn("[NuggetCache] server upsert skipped — no admin key configured");
         } else {
-          const { error: cacheErr } = await cacheAdminClient.from("nugget_cache").upsert(
-            { track_id: dbCacheKey, nuggets: cacheNuggets, sources: cacheSources, status: "ready" },
-            { onConflict: "track_id" },
-          );
-          if (cacheErr) {
-            console.warn(`[NuggetCache] server upsert failed (non-fatal):`, cacheErr.message);
-          } else {
-            console.log(`[NuggetCache] server upserted ${cacheNuggets.length} nuggets for ${dbCacheKey.slice(0, 80)}`);
+          // A wave call (listen 2+) generates only that wave's angles, so
+          // the response is a DELTA, not the whole set. Overwriting the
+          // row with it drops everything earlier waves produced, and a
+          // later first-time listener gets whichever wave happened to run
+          // last instead of the track's full depth.
+          //
+          // The client used to repair this by writing the accumulated set
+          // itself. nugget_cache RLS now forbids client writes to a ready
+          // row, so the merge belongs here, where the admin key is.
+          let mergedNuggets = cacheNuggets;
+          let mergedSources = cacheSources;
+          let priorReadFailed = false;
+          if (safeListenCount > 1) {
+            const { data: prior, error: priorErr } = await cacheAdminClient
+              .from("nugget_cache")
+              .select("nuggets, sources")
+              .eq("track_id", dbCacheKey)
+              .maybeSingle();
+            // A failed read is NOT the same as "no prior row". Treating it
+            // as one would merge against nothing and write this wave's
+            // delta over whatever is there — silently reinstating the
+            // exact overwrite this merge exists to prevent, with nothing
+            // in the logs to show for it.
+            //
+            // So: say so loudly, and skip the write entirely. The row we
+            // cannot read may hold every earlier wave; leaving it intact
+            // costs this wave's contribution to the cache, while
+            // overwriting could destroy all of them. The listener in
+            // front of us is unaffected either way — they already have
+            // these nuggets in memory — and the next listen retries.
+            if (priorErr) {
+              priorReadFailed = true;
+              console.warn(
+                `[NuggetCache] prior-row read failed for ${dbCacheKey.slice(0, 80)} ` +
+                `(listen ${safeListenCount}) — skipping the write rather than ` +
+                `overwriting an unread row:`, priorErr.message,
+              );
+            }
+            const priorNuggets: any[] = Array.isArray(prior?.nuggets) ? prior.nuggets.filter((n: any) => hasFactEvidence(n, prior.sources?.[n.sourceId] ?? n.source)) : [];
+            if (priorNuggets.length > 0) {
+              // Drop prior entries this wave supersedes. By id for rows
+              // written after wave ids became listen-scoped, and by
+              // headline for older rows where every wave was written as
+              // "L1" — without that, those legacy rows would merge into
+              // visible duplicates.
+              const ids = new Set(cacheNuggets.map((n: any) => n.id));
+              const heads = new Set(
+                cacheNuggets.map((n: any) => String(n.headline ?? "").trim().toLowerCase()),
+              );
+              mergedNuggets = [
+                ...priorNuggets.filter((n: any) =>
+                  !ids.has(n?.id) && !heads.has(String(n?.headline ?? "").trim().toLowerCase())),
+                ...cacheNuggets,
+              ];
+              const priorSources = prior?.sources && typeof prior.sources === "object"
+                ? prior.sources as Record<string, unknown>
+                : {};
+              mergedSources = { ...priorSources, ...cacheSources };
+            }
+          }
+
+          // priorReadFailed means we already warned and are deliberately
+          // writing nothing — see the read above.
+          if (!priorReadFailed) {
+            const { error: cacheErr } = await cacheAdminClient.from("nugget_cache").upsert(
+              { track_id: dbCacheKey, nuggets: mergedNuggets, sources: mergedSources, status: "ready" },
+              { onConflict: "track_id" },
+            );
+            if (cacheErr) {
+              console.warn(`[NuggetCache] server upsert failed (non-fatal):`, cacheErr.message);
+            } else {
+              console.log(`[NuggetCache] server upserted ${mergedNuggets.length} nuggets (listen ${safeListenCount}, +${cacheNuggets.length} this wave) for ${dbCacheKey.slice(0, 80)}`);
+            }
           }
         }
       } catch (e) {
         console.warn("[NuggetCache] server upsert threw (non-fatal):", e);
-      }
-    } else {
-      // Synthetic catalog-grounded fallback. Validator stripped every
-      // Writer attempt — happens reliably for very-low-popularity
-      // artists where Exa returns no journalism and the source filter
-      // rejects anything Gemini fabricates. Write tier-scaled synthetic
-      // nuggets so the user has the expected count to scroll through
-      // (Pete: "I clicked on Ty Symph's story, it displayed 1 nugget,
-      // but it never showed any more nuggets" — was happening because
-      // we wrote 1 synthetic for nerd-tier user expecting 9).
-      try {
-        const tierCount = fallbackTier === "nerd" ? 9 : fallbackTier === "curious" ? 6 : 3;
-        const earlyStart = 0;
-        const endBuffer = 15;
-        const usable = Math.max(cacheDurationSec - earlyStart - endBuffer, 30);
-        const denom = Math.max(tierCount - 1, 1);
-        const spacing = usable / denom;
-
-        // Catalog-grounded angles. Honest copy that doesn't fabricate
-        // specifics. Cycles through the angles to fill the tier count
-        // so a nerd-tier user sees varied content even when AI fails.
-        const synthAngles = [
-          {
-            kind: "artist" as const,
-            headline: `"${title}" sits in ${artist}'s catalog`,
-            text: `${artist} is one of the artists you keep coming back to. Press play and let this one breathe — we'll layer in the deeper story as press and credits surface.`,
-          },
-          {
-            kind: "track" as const,
-            headline: `Listen for the texture on "${title}"`,
-            text: `Independent releases like this one don't always have a paper trail yet. Use this listen to notice the production choices firsthand: the rhythm, the space between sounds, the vocal phrasing.`,
-          },
-          {
-            kind: "discovery" as const,
-            headline: `If you like ${artist}, lean into this one`,
-            text: `${artist} is the kind of artist whose catalog rewards repeat listens. We don't have a deep brief on this track yet, but the song speaks for itself — give it room.`,
-          },
-          {
-            kind: "artist" as const,
-            headline: `${artist} is operating outside the press cycle`,
-            text: `Smaller releases stay below journalism's radar — that's not a flaw, that's where new sounds get to develop. You're hearing this one early.`,
-          },
-          {
-            kind: "track" as const,
-            headline: `Ride out "${title}" — there's craft underneath`,
-            text: `Even without a press kit, you can hear the choices: the mix, the arrangement, the way the artist is sitting in the pocket. Listen close.`,
-          },
-          {
-            kind: "discovery" as const,
-            headline: `Make a mental bookmark`,
-            text: `Tracks like this one get rediscovered later. We'll keep researching as new sources land — for now, sit with the song.`,
-          },
-          {
-            kind: "artist" as const,
-            headline: `Independent artists, real talent`,
-            text: `${artist} doesn't need press validation to make this work. The track's the credential.`,
-          },
-          {
-            kind: "track" as const,
-            headline: `Production pays attention here`,
-            text: `Listen for what the producer is doing with the low end and the silence — those are usually the tells.`,
-          },
-          {
-            kind: "discovery" as const,
-            headline: `Add this to your repeat playlists`,
-            text: `Songs like "${title}" often grow on you. We'll add depth as more sources surface; the song is the foundation.`,
-          },
-        ];
-
-        const synthNuggets = [];
-        const synthSources: Record<string, unknown> = { _synthetic: true };
-        for (let i = 0; i < tierCount; i++) {
-          const angle = synthAngles[i % synthAngles.length];
-          const sourceId = `ai-src-${fallbackTrackId}-L1-${i}`;
-          const nuggetId = `ai-nug-${fallbackTrackId}-L1-${i}`;
-          const ts = Math.min(Math.floor(earlyStart + spacing * i), cacheDurationSec - 10);
-          synthNuggets.push({
-            id: nuggetId,
-            trackId: fallbackTrackId,
-            timestampSec: ts,
-            durationMs: 7000,
-            headline: angle.headline,
-            text: angle.text,
-            kind: angle.kind,
-            listenFor: false,
-            sourceId,
-          });
-          synthSources[sourceId] = {
-            id: sourceId,
-            type: "catalog",
-            title,
-            publisher: "MusicNerd",
-            url: "",
-            verified: false,
-          };
-        }
-        if (cacheAdminClient) {
-          const { error: synthErr } = await cacheAdminClient.from("nugget_cache").upsert(
-            { track_id: fallbackDbCacheKey, nuggets: synthNuggets, sources: synthSources, status: "ready" },
-            { onConflict: "track_id" },
-          );
-          if (synthErr) {
-            console.warn(`[NuggetCache] synthetic upsert failed for ${fallbackDbCacheKey}:`, synthErr.message);
-          } else {
-            console.log(`[NuggetCache] ${tierCount} synthetic catalog nuggets written for ${fallbackDbCacheKey.slice(0, 80)}`);
-          }
-        }
-        // Return the synthetic nuggets to the client too so usePreGeneratedStories
-        // sees a non-empty nuggets array and marks the story ready.
-        return new Response(JSON.stringify({ nuggets: synthNuggets, artistSummary: "", externalLinks: [], synthetic: true }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      } catch (e) {
-        console.warn("[NuggetCache] synthetic fallback threw:", e);
       }
     }
 

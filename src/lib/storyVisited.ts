@@ -1,7 +1,8 @@
 // Visited-stories tracking. Single source of truth for "the user has
-// tapped this story recently." Both StoriesContext (cascade pool
-// exclusion) and StoriesRail (display filter — visited stories
-// disappear) read from here so they stay in sync.
+// tapped this story recently." StoriesContext reads it to exclude
+// already-seen tracks from the cascade pool. It also fed the display
+// filter on the since-removed StoriesRail, which is why the API still
+// returns a map rather than a bare predicate.
 //
 // Storage: localStorage with 7d TTL. Entries older than the TTL are
 // pruned on read. Per-device (no DB roundtrip needed for the rail to
@@ -42,7 +43,7 @@ export function isVisited(trackKey: string, m?: VisitedMap): boolean {
 }
 
 /** Mark a story visited and persist. Returns the updated map for callers
- *  that hold reactive state (e.g. StoriesRail). */
+ *  that hold reactive state. */
 export function markVisited(trackKey: string, m?: VisitedMap): VisitedMap {
   const next = new Map(m ?? readVisited());
   next.set(trackKey, Date.now());

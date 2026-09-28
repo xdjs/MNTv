@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, waitFor, act } from "@testing-library/react";
+import { render, waitFor, act, screen } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 
 // Mock supabase BEFORE importing ArtistProfile so the component picks up
@@ -12,6 +12,9 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 vi.mock("@/hooks/useMusicNerdState", () => ({
   useUserProfile: () => ({ profile: null, saveProfile: vi.fn(), clearProfile: vi.fn() }),
+}));
+vi.mock("@/hooks/useArtistLatestFacts", () => ({
+  useArtistLatestFacts: () => ({ updates: [], loading: false }),
 }));
 vi.mock("@/hooks/useArtistImage", () => ({
   useArtistImage: () => null,
@@ -26,13 +29,14 @@ function fakeArtistResponse(id: string, name: string) {
   return {
     data: {
       found: true,
+      tracksSource: undefined as string | undefined,
       artist: { id, name, imageUrl: "", genres: [], followers: 0 },
       topTracks: [],
       albums: [],
       relatedArtists: [],
     },
     error: null,
-  } as any;
+  };
 }
 
 function renderAt(path: string) {
@@ -71,6 +75,7 @@ describe("ArtistProfile catalog routing", () => {
       body: {
         service: "apple",
         artistId: "123456789",
+        artistName: "Radiohead",
         storefront: "us",
       },
     });
@@ -86,6 +91,7 @@ describe("ArtistProfile catalog routing", () => {
       body: {
         service: "spotify",
         artistId: "4Z8W4fKeB5YxbusRsdQVPb",
+        artistName: "Radiohead",
       },
     });
   });
@@ -101,4 +107,26 @@ describe("ArtistProfile catalog routing", () => {
     await act(async () => {});
     expect(invoke).not.toHaveBeenCalled();
   });
+});
+
+it("distinguishes service failure from an artist missing from the catalog", async () => {
+  invoke.mockResolvedValueOnce({ data: null, error: new Error("Service unavailable") } as Awaited<ReturnType<typeof supabase.functions.invoke>>);
+  renderAt("/artist/real::Tame%20Impala");
+  expect(await screen.findByText("Spotify artist data is temporarily unavailable. Please try again.")).toBeInTheDocument();
+  expect(screen.queryByText("Couldn't find this artist on Spotify.")).not.toBeInTheDocument();
+});
+it("preserves the genuine not-found message", async () => {
+  invoke.mockResolvedValueOnce({ data: { found: false }, error: null } as Awaited<ReturnType<typeof supabase.functions.invoke>>);
+  renderAt("/artist/real::Unknown");
+  expect(await screen.findByText("Couldn't find this artist on Spotify.")).toBeInTheDocument();
+});
+it("renders fallback songs without describing them as Spotify's popular ranking", async () => {
+  const response = fakeArtistResponse("artist", "Dame Atlas");
+  response.data.tracksSource = "search";
+  response.data.topTracks = [{ title: "Test Song", artist: "Dame Atlas", album: "Album", uri: "spotify:track:test", imageUrl: "", durationMs: 200000 }];
+  invoke.mockResolvedValueOnce(response);
+  renderAt("/artist/real::Dame%20Atlas");
+  expect(await screen.findByText("Test Song")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Songs" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Popular" })).not.toBeInTheDocument();
 });

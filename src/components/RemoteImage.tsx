@@ -50,9 +50,31 @@ interface RemoteImageProps {
 }
 
 const RETRY_DELAY_MS = 700;
+/** Spread added to the backoff so images that failed together don't all
+ *  retry on the same tick. */
+const RETRY_JITTER_MS = 300;
 /** Underscore-prefixed so it cannot collide with a real query param if
  *  this component is ever pointed at something other than Spotify. */
 const RETRY_PARAM = "_retry=1";
+
+/**
+ * Whether appending a cache-buster to this URL is safe.
+ *
+ * Cache-busting matters because the browser will otherwise replay its
+ * cached failure instead of making a real second request. But this
+ * component is no longer Spotify-only — ReadingOverlay and
+ * NuggetDeepDive point it at Exa-derived `Source.thumbnailUrl`, which
+ * can be any host. A signed URL's signature usually covers the query
+ * string, so appending to one turns a transient failure into a
+ * guaranteed 403.
+ *
+ * Spotify's i.scdn.co URLs are bare paths, so they still get a real
+ * cache-busted retry. Anything already carrying params is retried by
+ * remounting instead — see the retry scheduler.
+ */
+function canCacheBust(src: string): boolean {
+  return !src.includes("?");
+}
 
 export default function RemoteImage({
   src,
@@ -67,6 +89,10 @@ export default function RemoteImage({
   // Cache-busted retry URL. Kept in state so the retry is a real second
   // request rather than the browser replaying its cached failure.
   const [attemptSrc, setAttemptSrc] = useState(src ?? undefined);
+  // Bumped to force a fresh <img> element when the URL itself cannot be
+  // changed. Keying the element on this is what makes the remount a real
+  // request rather than a no-op re-render.
+  const [reloadNonce, setReloadNonce] = useState(0);
   const retriedRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -87,6 +113,7 @@ export default function RemoteImage({
     }
     setFailed(false);
     setAttemptSrc(src ?? undefined);
+    setReloadNonce(0);
     retriedRef.current = false;
   }, [src]);
 
@@ -95,14 +122,35 @@ export default function RemoteImage({
   }, []);
 
   const handleError = useCallback(() => {
-    if (!src) { setFailed(true); return; }
+    // No `!src` guard needed — the component returns the fallback before
+    // rendering an <img>, so onError is never attached without one.
     if (retriedRef.current) { setFailed(true); return; }
     retriedRef.current = true;
     // Backoff before retrying: an immediate retry rejoins the same burst
-    // that caused the throttle in the first place.
+    // that caused the throttle in the first place. Jittered because a
+    // batch of images tends to fail together — a fixed delay would
+    // reconvene them into a second synchronised burst against the CDN
+    // that just throttled them, which is the failure this component
+    // exists to avoid.
     timerRef.current = setTimeout(() => {
-      setAttemptSrc(`${src}${src.includes("?") ? "&" : "?"}${RETRY_PARAM}`);
-    }, RETRY_DELAY_MS);
+      if (canCacheBust(src!)) {
+        setAttemptSrc(`${src}?${RETRY_PARAM}`);
+        return;
+      }
+      // The URL can't be cache-busted without risking its signature, and
+      // re-setting the same src is not a retry: React bails on an
+      // identical state value, the src attribute never changes, and the
+      // browser issues no request. The first version of this shipped
+      // exactly that — so onError never fired again, `failed` was never
+      // reached, and a signed URL sat as a broken <img> forever instead
+      // of falling back. Worse than the naive cache-bust it replaced,
+      // which at least reached the fallback.
+      //
+      // Remounting is a real second attempt that leaves the URL intact.
+      // Whatever the outcome, the new element resolves — it loads, or it
+      // errors and this handler takes the `failed` branch.
+      setReloadNonce((n) => n + 1);
+    }, RETRY_DELAY_MS + Math.random() * RETRY_JITTER_MS);
   }, [src]);
 
   if (!src || failed) return <>{fallback}</>;
@@ -120,7 +168,18 @@ export default function RemoteImage({
   // Deferral survives the morph — a card that animates into a modal is
   // still offscreen artwork until it is scrolled to, and it was the
   // bulk of the original burst.
-  if (layoutId) return <motion.img layoutId={layoutId} {...imgProps} />;
+  // Keyed on the nonce ALONE, deliberately. Including attemptSrc would
+  // remount on every ordinary image swap, and that is both unnecessary
+  // and harmful: the browser already refetches when the src attribute
+  // changes, so React reusing the node is the correct behaviour, and
+  // remounting a motion.img mid-morph can restart the shared-layout
+  // transition it is part of. ArtistRow's heroImg recomputes repeatedly
+  // as facts stream in, so that path is hit constantly.
+  //
+  // The nonce only moves for the signed-URL retry — the one case where
+  // attemptSrc is deliberately unchanged and a fresh element is the only
+  // way to make a second request happen.
+  if (layoutId) return <motion.img key={reloadNonce} layoutId={layoutId} {...imgProps} />;
 
-  return <img {...imgProps} />;
+  return <img key={reloadNonce} {...imgProps} />;
 }

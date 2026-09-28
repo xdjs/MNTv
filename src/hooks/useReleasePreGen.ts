@@ -68,13 +68,7 @@ export function useReleasePreGen(
 
       const spotifyTrackId = target.uri.match(/spotify:track:([a-zA-Z0-9]{22})/)?.[1];
       const appleTrackId = target.uri.match(/apple:song:(\d+)/)?.[1];
-      // The artist-updates pipeline returns Spotify URIs even for Apple
-      // users (it uses Spotify search server-side). For Apple-Music
-      // listening sessions tapping the card, Listen will find no
-      // matching cache row at the apple:song:… key, then run a fresh
-      // SSE pipeline. That's acceptable degradation; the Spotify-keyed
-      // cache row stays warm for any Spotify user who later taps the
-      // same release.
+      // Pre-generate only resolved songs; album-only targets resolve on play.
       if (!spotifyTrackId && !appleTrackId) continue;
 
       // Full pipeline pre-gen (no firstNuggetOnly). Diverges from the

@@ -1,3 +1,5 @@
+import { hasFactEvidence } from "../../supabase/functions/_shared/hasFactEvidence";
+import { artistUpdatesCacheKey } from "../../supabase/functions/_shared/artistUpdatesCacheKey";
 import type { Nugget, Source } from "@/mock/types";
 import type { ArtistUpdate } from "@/hooks/useArtistUpdates";
 import { isSafeUrl } from "./urlSafety";
@@ -22,14 +24,13 @@ export const ARTIST_FACT_ID_PREFIX = "artistfact";
  * function — if the two drift, this silently reads nothing and the
  * feature degrades to "no seed" with no error anywhere.
  */
-export const ARTIST_UPDATES_CACHE_VERSION = "v3";
+export const ARTIST_UPDATES_CACHE_VERSION = "v6";
 
-export function buildArtistUpdatesCacheKey(artistName: string, tier: string): string {
-  return `artist::${artistName.trim().toLowerCase()}::${tier}::${ARTIST_UPDATES_CACHE_VERSION}`;
+export function buildArtistUpdatesCacheKey(artistName: string, tier: string, spotifyArtistId?: string): string {
+  return artistUpdatesCacheKey(artistName, tier, spotifyArtistId);
 }
 
-/** Matches makeSparseFallbackNugget so a seeded fact is indistinguishable
- *  from a normal opening nugget. */
+/** Keep reused artist facts on screen for a normal opening interval. */
 const SEEDED_DURATION_MS = 7000;
 
 /**
@@ -38,7 +39,7 @@ const SEEDED_DURATION_MS = 7000;
  * music, and showing it mid-listen would read as an ad.
  */
 export function isReusableArtistFact(update: ArtistUpdate): boolean {
-  return update.kind === "fact" && !!update.headline?.trim() && !!update.body?.trim();
+  return hasFactEvidence(update, update.source) && update.kind === "fact" && !!update.headline?.trim() && !!update.body?.trim();
 }
 
 /**
@@ -62,8 +63,7 @@ export function artistFactToNugget(
 
   // The publisher/title are Exa-derived and the URL is rendered as a
   // link, so it gets the same scheme guard the rest of the app applies.
-  // An unsafe or missing URL degrades to no link rather than dropping
-  // the fact — the copy is still worth reading.
+  // Missing/unsafe URLs have already been rejected by the evidence gate.
   const rawUrl = update.source?.url;
   const url = isSafeUrl(rawUrl) ? rawUrl! : "";
 
@@ -92,6 +92,7 @@ export function artistFactToNugget(
       title: update.source?.title || update.headline,
       publisher: update.source?.publisher || update.artistName,
       url,
+      citation: update.source?.citation,
     },
   };
 }

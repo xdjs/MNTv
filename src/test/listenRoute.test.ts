@@ -65,3 +65,7 @@ describe("buildListenRoute", () => {
     expect(route).toBe("/listen/real::A::B::::");
   });
 });
+it("preserves an explicit artist ID only for the selected service's exact recording", () => {
+  expect(buildListenRoute({ artist: "LIL LIL", artistId: "selected-id", title: "Song", uri: "spotify:track:exact", streamingService: "Spotify" })).toContain("?artistId=selected-id");
+  expect(buildListenRoute({ artist: "LIL LIL", artistId: "spotify-id", title: "Song", uri: "spotify:track:exact", streamingService: "Apple Music" })).not.toContain("artistId");
+});

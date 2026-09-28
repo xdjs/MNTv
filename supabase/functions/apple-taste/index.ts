@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getAppleDeveloperToken } from "../_shared/apple-token.ts";
 import {
   appleGet,
+  enrichAppleListeningArtists,
   buildUniqueAppleTracks,
   rankAppleArtists,
   safeStorefront,
@@ -81,13 +82,12 @@ serve(async (req) => {
       });
     }
 
-    // Storefront is passed through to the response as `country` only.
+    // Storefront scopes the catalog lookup that enriches artist identities.
     // Apple's /me/history/* and /me/recent/* endpoints don't take a
     // storefront path segment — they're user-scoped and Apple resolves
     // the user's storefront from the MUT. The client already has the
     // storefront from MusicKit.getInstance().storefrontCountryCode and
-    // we echo it back for consistency with spotify-taste's `country`
-    // field rather than to influence the Apple requests below.
+    // we also echo it back as spotify-taste-compatible `country`.
     const storefront = safeStorefront(rawStorefront);
     const devToken = await getAppleDeveloperToken();
 
@@ -121,9 +121,10 @@ serve(async (req) => {
     const recentItems: AppleResource[] = recent?.data || [];
     const rotationItems: AppleResource[] = rotation?.data || [];
 
+    const enriched = await enrichAppleListeningArtists([...recentItems, ...rotationItems], devToken, storefront);
     const { topArtists, artistImages, artistIds } = rankAppleArtists(
-      recentItems,
-      rotationItems,
+      enriched.slice(0, recentItems.length),
+      enriched.slice(recentItems.length),
     );
 
     const uniqueTracks = buildUniqueAppleTracks(recentItems);

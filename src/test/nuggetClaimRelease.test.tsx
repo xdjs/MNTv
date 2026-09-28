@@ -1,3 +1,4 @@
+import { evidence } from "./factEvidenceFixture";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 
@@ -33,6 +34,7 @@ vi.mock("@/data/seedNuggets", () => ({
 }));
 
 /** Every nugget_cache write the hook attempts, in order. */
+let cachedFallback: unknown = null;
 const dbOps: { op: string; key?: string }[] = [];
 
 vi.mock("@/integrations/supabase/client", () => {
@@ -43,7 +45,7 @@ vi.mock("@/integrations/supabase/client", () => {
     let deleting = false;
     const q: Record<string, unknown> = {
       select: () => q,
-      maybeSingle: async () => ({ data: null }),
+      maybeSingle: async () => ({ data: cachedFallback }),
       insert: async () => { dbOps.push({ op: "insert" }); return { error: null }; },
       delete: () => { deleting = true; return q; },
       eq: (_col: string, val: string) => {
@@ -51,6 +53,7 @@ vi.mock("@/integrations/supabase/client", () => {
           dbOps.push({ op: "delete", key: val });
           return Promise.resolve({ error: null });
         }
+        dbOps.push({ op: "read", key: val });
         return q;
       },
     };
@@ -83,6 +86,8 @@ let reachedSse: Promise<void>;
 const realFetch = global.fetch;
 
 beforeEach(() => {
+  setNuggetCache.mockClear();
+  cachedFallback = null;
   dbOps.length = 0;
   getNuggetCache.mockReturnValue(null);
 
@@ -147,4 +152,32 @@ describe("generation claims are released when the run does not finish", () => {
     await waitFor(() => expect(released()).toBe(true));
     expect(dbOps.filter((o) => o.op === "delete")).toHaveLength(1);
   });
+});
+
+it("reports failure when the fallback cache contains only unverified legacy facts", async () => {
+  global.fetch = vi.fn(async () => {
+    cachedFallback = { status: "ready", nuggets: [{ id: "legacy", trackId: TRACK, timestampSec: 0, headline: "Old claim", text: "Old body", sourceId: "s" }], sources: { s: { id: "s", type: "article", title: "Source", publisher: "Publisher", url: "https://example.com" } } };
+    throw new Error("generation unavailable");
+  }) as typeof fetch;
+  const { result } = renderHookForTrack();
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  expect(result.current.nuggets).toEqual([]);
+  expect(result.current.error).toBe("No source-supported facts are available yet.");
+});
+
+it("stores only supported facts from a mixed ready row in the working cache", async () => {
+  const fact = { id: "supported", trackId: TRACK, timestampSec: 0, durationMs: 7000, headline: "Supported", text: "Supported body", sourceId: "s" };
+  const source = { id: "s", type: "article", title: "Source", publisher: "Publisher", url: "https://example.com", citation: evidence(fact, "https://example.com") };
+  cachedFallback = { status: "ready", nuggets: [fact, { ...fact, id: "legacy", text: "Unsupported body" }], sources: { s: source } };
+  const { result } = renderHookForTrack();
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  expect(setNuggetCache.mock.calls.at(-1)?.[1].nuggets).toHaveLength(1);
+});
+it.each([
+  [{ id: "spotify-id", service: "spotify" as const }, "artist::spotify::spotify-id::curious::v6"],
+  [{ id: "123456", service: "apple" as const, storefront: "gb" }, "artist::apple::gb::123456::curious::v6"],
+])("reads warmed artist facts using catalog identity %j", async (identity, key) => {
+  renderHook(() => useAINuggets(TRACK, "Turnover", "Humming", undefined, 200, 0, undefined, undefined, "curious", undefined, undefined, undefined, identity));
+  await reachedSse;
+  expect(dbOps.some(op => op.op === "read" && op.key === key)).toBe(true);
 });

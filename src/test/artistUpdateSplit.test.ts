@@ -34,6 +34,7 @@ describe("splitArtistUpdates", () => {
     expect(tracks).toEqual([
       {
         title: "Will Kill",
+        artistId: "a1",
         album: "ACT I",
         uri: "spotify:track:abc",
         imageUrl: "https://example.com/a.jpg",
@@ -92,6 +93,7 @@ describe("splitArtistUpdates", () => {
     expect(tracks).toEqual([
       {
         title: "Loose End",
+        artistId: "a1",
         album: "ACT I",
         uri: "spotify:track:def",
         imageUrl: "https://example.com/cover.jpg",
@@ -180,8 +182,8 @@ describe("resolvePlayTarget", () => {
   // started. When the server can't resolve a release's first track it
   // falls back to the ALBUM's uri and name together, so the card offers
   // an album name as if it were a track — Listen then searches for a
-  // track that doesn't exist. Prefer a real catalog track instead.
-  it("skips an album-level release target in favour of a real track", () => {
+  // track that doesn't exist. The playback hook now resolves the album first.
+  it("keeps the advertised album instead of substituting an unrelated song", () => {
     const albumFallback = update({
       kind: "new-release",
       relatedTrackTitle: "video radio",
@@ -191,7 +193,7 @@ describe("resolvePlayTarget", () => {
     const catalogTracks: PlayableTrack[] = [
       { title: "Real Song", album: "LP", uri: "spotify:track:real" },
     ];
-    expect(resolvePlayTarget(albumFallback, catalogTracks)?.uri).toBe("spotify:track:real");
+    expect(resolvePlayTarget(albumFallback, catalogTracks)?.uri).toBe("spotify:album:xyz");
   });
 
   it("still offers the album-level target when no real track exists", () => {
@@ -200,7 +202,7 @@ describe("resolvePlayTarget", () => {
       relatedTrackTitle: "video radio",
       relatedTrackUri: "spotify:album:xyz",
     });
-    // Better than nothing: Listen can still try to resolve by name.
+    // The playback hook resolves this album to its first playable track.
     expect(resolvePlayTarget(albumFallback, [])?.title).toBe("video radio");
   });
 

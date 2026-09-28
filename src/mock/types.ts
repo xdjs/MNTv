@@ -1,3 +1,4 @@
+import type { FactEvidence } from "../../supabase/functions/_shared/hasFactEvidence";
 // NOTE: Despite the "mock" directory name, these are the canonical shared
 // type definitions used across the entire codebase (15+ files). Moving to
 // @/types would be a larger rename — tracked for a future cleanup pass.
@@ -44,6 +45,7 @@ export type Source = {
   locator?: string;
   quoteSnippet?: string;
   verified?: boolean;
+  citation?: FactEvidence;
 };
 
 export type Nugget = {
@@ -84,6 +86,7 @@ export type AnimationStyle = "A" | "B" | "C";
 // ── RAG / Companion system types ──────────────────────────────────────────────
 
 export interface CompanionNugget {
+  citation?: FactEvidence;
   id: string;
   timestamp: number; // ms epoch — used for reverse-chronological sorting
   text: string;
