@@ -1,6 +1,8 @@
+import { edgeFunctionName } from "@/lib/edgeFunctionName";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { ArtistUpdate } from "@/hooks/useArtistUpdates";
+import { readAppleStorefront } from "@/lib/appleStorefront";
 import { isReadableUpdate } from "@/lib/artistUpdateKind";
 
 /**
@@ -25,7 +27,10 @@ import { isReadableUpdate } from "@/lib/artistUpdateKind";
 export function useArtistLatestFacts(
   artistName: string | null,
   tier: "casual" | "curious" | "nerd",
+  artistId?: string,
+  service: "apple" | "spotify" = "spotify",
 ): { updates: ArtistUpdate[]; loading: boolean } {
+  const storefront = service === "apple" ? readAppleStorefront() : "";
   const [updates, setUpdates] = useState<ArtistUpdate[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -36,11 +41,12 @@ export function useArtistLatestFacts(
       return;
     }
     let cancelled = false;
+    setUpdates([]);
     setLoading(true);
     (async () => {
       try {
-        const { data, error } = await supabase.functions.invoke("artist-updates", {
-          body: { artist: artistName, tier },
+        const { data, error } = await supabase.functions.invoke(edgeFunctionName("artist-updates"), {
+          body: { artist: artistName, tier, ...(service === "apple" ? { service, storefront, artistId } : artistId ? { spotifyArtistId: artistId } : {}) },
         });
         if (cancelled) return;
         if (error) {
@@ -54,7 +60,7 @@ export function useArtistLatestFacts(
         // The edge function returns Browse's play targets in the same
         // array. Those have no body, so "Latest Facts" would render
         // them as titles with nothing underneath.
-        setUpdates(next.filter(isReadableUpdate));
+        setUpdates(next.filter((u) => isReadableUpdate(u) && (artistId ? u.artistId === artistId : service !== "apple")));
       } catch (e) {
         if (import.meta.env.DEV) {
           console.warn(`[artist-latest-facts] ${artistName} threw:`, e);
@@ -65,7 +71,7 @@ export function useArtistLatestFacts(
       }
     })();
     return () => { cancelled = true; };
-  }, [artistName, tier]);
+  }, [artistName, tier, artistId, service, storefront]);
 
   return { updates, loading };
 }

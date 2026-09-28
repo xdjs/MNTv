@@ -14,6 +14,11 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { artistUpdatesCacheKey as cacheKey } from "../_shared/artistUpdatesCacheKey.ts";
+import { selectUpdateArtist } from "../_shared/selectUpdateArtist.ts";
+import { fetchAppleUpdateCatalog } from "../_shared/appleUpdateCatalog.ts";
+import { getAppleDeveloperToken } from "../_shared/apple-token.ts";
+import { isAppleService, safeStorefront } from "../_shared/apple-utils.ts";
 import { getSpotifyAppToken } from "../_shared/spotify-token.ts";
 import {
   CONSTITUTION_PREAMBLE,
@@ -106,7 +111,7 @@ interface SpotifyReleaseItem {
   release_date: string;
   uri: string;
   artists: { id: string; name: string }[];
-  external_urls?: { spotify: string };
+  external_urls?: { spotify?: string; apple?: string };
   images?: { url: string }[];
   // Populated by fetchRecentRelease's secondary call to /albums/:id/tracks.
   // Present iff the call succeeded; client navigates to the artist page as
@@ -146,13 +151,20 @@ const cacheAdminClient = SUPABASE_ADMIN_KEY
 async function searchArtist(
   token: string,
   name: string,
+  spotifyArtistId?: string,
 ): Promise<SpotifyArtistSearchResult | null> {
-  // limit=5, not 1. Spotify hosts DUPLICATE artist entities for the same
-  // name, and the first hit is not reliably the real one. Verified with
-  // lamboverrice: search returns "Lamboverrice" (1 follower, empty
-  // catalog) ahead of "lamboverrice" (20 followers, the actual artist),
-  // so taking [0] queried a dud and every catalog lookup came back empty
-  // — no top tracks, no albums, no play targets on their cards.
+  if (spotifyArtistId) {
+    const direct = await fetch(`https://api.spotify.com/v1/artists/${spotifyArtistId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (direct.ok) {
+      const artist = await direct.json() as SpotifyArtistSearchResult;
+      if (artist.id === spotifyArtistId) return artist;
+    }
+    // Search can recover a restricted direct lookup, but only the same ID.
+  }
+  // Names are not unique. Fetch several candidates for exact-ID recovery,
+  // or require a single exact-name identity when no saved ID is available.
   const url = `https://api.spotify.com/v1/search?type=artist&limit=5&q=${encodeURIComponent(
     name,
   )}`;
@@ -162,19 +174,7 @@ async function searchArtist(
   const items = (data?.artists?.items ?? []) as SpotifyArtistSearchResult[];
   if (items.length === 0) return null;
 
-  // Require a close match, as before — Spotify returns unrelated artists
-  // for sparse names (the same lamboverrice search also surfaces
-  // "Lambo4oe" and "VonOff1700").
-  const wanted = name.trim().toLowerCase();
-  const exact = items.filter((a) => String(a.name).trim().toLowerCase() === wanted);
-  if (exact.length === 0) return null;
-
-  // Among genuine duplicates, prefer the one people actually follow.
-  // Followers beats popularity here: popularity is 0 for both entities of
-  // a small artist, while followers still separates the real one from a
-  // stub.
-  exact.sort((a, b) => (b.followers?.total ?? 0) - (a.followers?.total ?? 0));
-  return exact[0];
+  return selectUpdateArtist(items, name, spotifyArtistId);
 }
 
 async function fetchArtistTopTracks(
@@ -336,8 +336,7 @@ function buildReleaseUpdate(
     (artist.images?.[0]?.url) ??
     "";
   // Prefer the album's first track URI for navigation; fall back to the
-  // album URI (which won't actually play, but at least the client can
-  // detect the missing track signal and route to the artist page).
+  // album URI, which the client resolves to a song when Play is tapped.
   const navUri = release.firstTrackUri ?? release.uri;
   const navTitle = release.firstTrackName ?? release.name;
   return {
@@ -348,10 +347,10 @@ function buildReleaseUpdate(
     headline,
     body,
     source: {
-      type: "spotify",
+      type: release.uri.startsWith("apple:") ? "apple" : "spotify",
       title: release.name,
-      publisher: "Spotify",
-      url: release.external_urls?.spotify,
+      publisher: release.uri.startsWith("apple:") ? "Apple Music" : "Spotify",
+      url: release.external_urls?.apple ?? release.external_urls?.spotify,
     },
     relatedTrackUri: navUri,
     relatedTrackTitle: navTitle,
@@ -693,7 +692,7 @@ Return JSON only, no preamble:
   }
   try {
     const parsed = JSON.parse(text);
-    const nuggets = Array.isArray(parsed?.nuggets) ? parsed.nuggets : [];
+    const nuggets: unknown[] = Array.isArray(parsed?.nuggets) ? parsed.nuggets : [];
     const accepted = nuggets
       .filter(
         (n: unknown): n is { headline: string; body: string } =>
@@ -774,15 +773,8 @@ const POLL_INTERVAL_CAP_MS = 8_000;
 //      an empty catalog). Those rows are incorrect, not merely stale, so they
 //      must be invalidated rather than left to age out over 7 days.
 //
-// MUST stay in sync with buildArtistUpdatesCacheKey in
-// src/lib/artistFactToNugget.ts, which reads these rows from the client.
-const CACHE_VERSION = "v3";
-
-function cacheKey(artistName: string, tier: string): string {
-  // Normalized (lowercased + trimmed) so whitespace / case variations
-  // land on the same cache row.
-  return `artist::${artistName.trim().toLowerCase()}::${tier}::${CACHE_VERSION}`;
-}
+// v4 — identity-scoped keys are shared with the client through
+// _shared/artistUpdatesCacheKey.ts. Legacy name-only rows are not reused.
 
 type CacheState =
   | { kind: "ready"; updates: ArtistUpdate[] }
@@ -925,7 +917,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  let body: { artist?: string; tier?: string };
+  let body: { artist?: string; tier?: string; spotifyArtistId?: string; artistId?: string; service?: string; storefront?: string };
   try {
     body = await req.json();
   } catch {
@@ -951,7 +943,22 @@ serve(async (req) => {
     });
   }
 
-  const key = cacheKey(artist, tier);
+  const apple = isAppleService(body.service);
+  const storefront = safeStorefront(body.storefront);
+  const spotifyArtistId = apple ? undefined : body.spotifyArtistId;
+  if (apple && body.artistId !== undefined && (typeof body.artistId !== "string" || !/^\d+$/.test(body.artistId))) {
+    return new Response(JSON.stringify({ error: "invalid Apple artist ID" }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  if (spotifyArtistId !== undefined &&
+      (typeof spotifyArtistId !== "string" || !/^[a-zA-Z0-9]{22}$/.test(spotifyArtistId))) {
+    return new Response(JSON.stringify({ error: "invalid Spotify artist ID" }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  const namespace = Deno.env.get("MNTV_FUNCTION_CHANNEL") === "staging" ? "staging::" : "";
+  const key = namespace + cacheKey(artist, tier, apple ? body.artistId : spotifyArtistId, apple ? "apple" : "spotify", storefront);
 
   // 1. Cache state machine — picks one of:
   //    - ready  → return cached
@@ -1007,24 +1014,27 @@ serve(async (req) => {
     console.warn(`[artist-updates] ${artist} — lost claim AND poll failed; generating anyway`);
   }
 
-  // 2. Resolve artist on Spotify.
+  // 2. Resolve the artist in the listener’s catalog.
   let token: string;
+  let appleCatalog: Awaited<ReturnType<typeof fetchAppleUpdateCatalog>> = null;
+  let artistInfo: SpotifyArtistSearchResult | null;
   try {
-    token = await getSpotifyAppToken();
+    token = apple ? await getAppleDeveloperToken() : await getSpotifyAppToken();
+    if (apple) appleCatalog = await fetchAppleUpdateCatalog(token, storefront, body.artistId);
+    artistInfo = apple ? appleCatalog?.artist ?? null : await searchArtist(token, artist, spotifyArtistId);
   } catch (e) {
-    console.error("[artist-updates] Spotify token unavailable:", e);
+    console.error("[artist-updates] Catalog unavailable:", e);
     // Release the sentinel — followers shouldn't poll forever on a
-    // transient Spotify-token failure.
+    // transient catalog failure.
     await evictStaleRow(key);
-    return new Response(JSON.stringify({ error: "spotify unavailable" }), {
+    return new Response(JSON.stringify({ error: "catalog unavailable" }), {
       status: 502,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  const artistInfo = await searchArtist(token, artist);
   if (!artistInfo) {
-    // Release the sentinel — this artist is unresolvable on Spotify, no
+    // Release the sentinel — this catalog identity is unavailable, no
     // amount of polling will produce a ready row. Followers should give
     // up immediately on the next poll cycle.
     await evictStaleRow(key);
@@ -1065,8 +1075,8 @@ serve(async (req) => {
     //    fetched too — cheap call, and the sparse-mode prompt needs
     //    them as catalog grounding when we DO fall through.
     const [release, topTracks, exaResult] = await Promise.all([
-      fetchRecentRelease(token, artistInfo.id),
-      fetchArtistTopTracks(token, artistInfo.id),
+      apple ? Promise.resolve(appleCatalog?.release ?? null) : fetchRecentRelease(token, artistInfo.id),
+      apple ? Promise.resolve(appleCatalog?.tracks ?? []) : fetchArtistTopTracks(token, artistInfo.id),
       exaApiKey
         ? researchArtistOnExa(artistInfo.name, exaApiKey)
         : Promise.resolve({ snippets: "", citations: [] as { title: string; url: string }[] }),
@@ -1134,7 +1144,7 @@ serve(async (req) => {
     // source came back empty.
     const catalogTracks = topTracks.length > 0
       ? topTracks
-      : await fetchAlbumTracksFallback(token, artistInfo.id, TRACKS_PER_ARTIST + 1);
+      : apple ? [] : await fetchAlbumTracksFallback(token, artistInfo.id, TRACKS_PER_ARTIST + 1);
     if (topTracks.length === 0) {
       console.log(
         `[artist-updates] ${artistInfo.name} — no top-tracks, album fallback yielded ${catalogTracks.length}`,

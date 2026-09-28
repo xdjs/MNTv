@@ -1,11 +1,11 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Loader2, X, ExternalLink, Play } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { ArtistUpdate, ArtistUpdateGroup } from "@/hooks/useArtistUpdates";
 import { splitArtistUpdates, resolvePlayTarget, type PlayableTrack } from "@/lib/artistUpdateSplit";
-import { buildListenRoute } from "@/lib/listenRoute";
-import { serviceParamFromProfile, withAppleStorefront } from "@/lib/appleStorefront";
+import { useArtistUpdatePlayback } from "@/hooks/useArtistUpdatePlayback";
+import { serviceParamFromProfile } from "@/lib/appleStorefront";
 import { getArtistUpdateKindMeta } from "@/lib/artistUpdateKind";
 import { isSafeUrl } from "@/lib/urlSafety";
 import RemoteImage from "@/components/RemoteImage";
@@ -59,7 +59,6 @@ function ArtistUpdatesSectionInner({
   // readyCount/groups update from useArtistUpdatesContext).
   const modalOnClose = useCallback(() => setExpandedKey(null), []);
 
-  if (groups.length === 0) return null;
 
   const showProgress = totalCount > 0 && readyCount < totalCount;
 
@@ -93,25 +92,14 @@ function ArtistUpdatesSectionInner({
     // `isSpotifyPrefix` and fall through to the mock-artist lookup,
     // which surfaces as "Artist not found." for every Spotify-real
     // artist card.
-    const path = withAppleStorefront(
-      `/artist/${activeService}::${id}::${encodeURIComponent(update.artistName)}?nugget=${encodeURIComponent(update.nuggetId ?? "")}`,
-      profile?.streamingService,
-    );
+    const path = `/artist/${activeService}::${id}::${encodeURIComponent(update.artistName)}?nugget=${encodeURIComponent(update.nuggetId ?? "")}`;
     navigate(path);
   }, [profile?.streamingService, activeService, artistIds, navigate]);
 
   // Playback always goes straight to Listen — from a card's play control
   // or the expanded card's Play button. No expand step in between: the
   // user already said what they want.
-  const playTrack = useCallback((artistName: string, track: PlayableTrack) => {
-    navigate(buildListenRoute({
-      artist: artistName,
-      title: track.title,
-      album: track.album,
-      uri: track.uri,
-      streamingService: profile?.streamingService,
-    }));
-  }, [navigate, profile?.streamingService]);
+  const { playTrack, pending, error } = useArtistUpdatePlayback(profile?.streamingService, modalOnClose);
 
   // The expanded card needs the same play target its tile had, so
   // opening a fact never becomes a dead end. Resolved from the owning
@@ -146,6 +134,8 @@ function ArtistUpdatesSectionInner({
     openArtistAtNugget(expandedUpdate);
   }, [expandedUpdate, openArtistAtNugget]);
 
+  if (groups.length === 0) return null;
+
   return (
     <section className="mb-6 md:mb-10">
       <div className="px-4 md:px-10 mb-3 flex items-center gap-2">
@@ -165,19 +155,26 @@ function ArtistUpdatesSectionInner({
           // Hide rows that finished with zero updates — don't clutter
           // Browse with an empty "SOMEONE" label for an artist we
           // couldn't resolve on Spotify.
-          if (group.updates !== null && group.updates.length === 0) return null;
+          if (group.updates !== null && group.updates.length === 0 && !artistIds[group.artistName]) return null;
 
           return (
             <ArtistRow
               key={group.artistName}
               group={group}
+              artistHref={artistIds[group.artistName]
+                ? `/artist/${activeService}::${artistIds[group.artistName]}::${encodeURIComponent(group.artistName)}`
+                : activeService === "spotify" && group.updates?.[0]?.artistId
+                  ? `/artist/spotify::${group.updates[0].artistId}::${encodeURIComponent(group.artistName)}`
+                  : `/artist/real::${encodeURIComponent(group.artistName)}`}
               onExpand={(u) => setExpandedKey(cardKey(u))}
               onPlay={playTrack}
+              playPending={pending}
             />
           );
         })}
       </div>
 
+      {error && !expandedUpdate && <p role="alert" className="px-4 md:px-10 text-sm text-red-300">{error}</p>}
       <AnimatePresence>
         {expandedUpdate && (
           <ExpandedUpdateModalMemoized
@@ -186,6 +183,8 @@ function ArtistUpdatesSectionInner({
             onClose={modalOnClose}
             onOpen={modalOnOpen}
             playTarget={expandedPlayTarget}
+            playPending={pending}
+            playError={error}
             onPlay={expandedPlayTarget ? modalOnPlay : undefined}
             canOpenArtist={expandedCanOpenArtist}
           />
@@ -218,12 +217,14 @@ export function cardKey(u: ArtistUpdate): string {
 // ── Per-artist row ────────────────────────────────────────────────────
 
 interface ArtistRowProps {
+  artistHref: string;
   group: ArtistUpdateGroup;
   onExpand: (u: ArtistUpdate) => void;
   onPlay: (artistName: string, track: PlayableTrack) => void;
+  playPending?: boolean;
 }
 
-function ArtistRow({ group, onExpand, onPlay }: ArtistRowProps) {
+function ArtistRow({ artistHref, group, onExpand, onPlay, playPending }: ArtistRowProps) {
   const loading = group.updates === null;
   const updates = group.updates ?? [];
   // Two lanes: cards to read, tracks to play. The split rules live in
@@ -240,7 +241,8 @@ function ArtistRow({ group, onExpand, onPlay }: ArtistRowProps) {
 
   return (
     <div>
-      <div className="px-4 md:px-10 mb-3 flex items-center gap-3">
+      <Link to={artistHref} aria-label={`Open ${group.artistName} profile`}
+        className="px-4 md:px-10 mb-3 flex w-fit items-center gap-3 rounded-lg hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
         <RemoteImage
           src={heroImg}
           alt={`${group.artistName} avatar`}
@@ -252,7 +254,10 @@ function ArtistRow({ group, onExpand, onPlay }: ArtistRowProps) {
         <span className="text-lg md:text-xl font-black text-white tracking-tight">
           {group.artistName}
         </span>
-      </div>
+      </Link>
+      {!loading && facts.length === 0 && (
+        <p className="px-4 md:px-10 text-sm text-white/50">No updates available.</p>
+      )}
       <div
         className="flex gap-3 overflow-x-auto px-4 md:px-10 pb-2 scrollbar-hide"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
@@ -272,6 +277,7 @@ function ArtistRow({ group, onExpand, onPlay }: ArtistRowProps) {
                   update={u}
                   onClick={() => onExpand(u)}
                   playTarget={target}
+                  playPending={playPending}
                   onPlay={target ? () => onPlay(u.artistName, target) : undefined}
                 />
               );
@@ -297,13 +303,15 @@ interface UpdateCardProps {
   /** Omitted when there is nothing to play — the control is then not
    *  rendered at all rather than rendered inert. */
   onPlay?: () => void;
+  playPending?: boolean;
+
 }
 
 // Image-backed for every kind. Tap morphs into ExpandedUpdateModal
 // via Framer Motion layoutId — no immediate navigation. Exported so
 // ArtistProfile's Latest Facts section can reuse the exact same card
 // + modal pattern that Browse uses.
-export function UpdateCard({ update, layoutId, onClick, sizeClass = "shrink-0 w-[280px] md:w-[320px] h-44 md:h-48", pulsing = false, playTarget = null, onPlay }: UpdateCardProps) {
+export function UpdateCard({ update, layoutId, onClick, sizeClass = "shrink-0 w-[280px] md:w-[320px] h-44 md:h-48", pulsing = false, playTarget = null, onPlay, playPending = false }: UpdateCardProps) {
   const { kindLabel, KindIcon } = getArtistUpdateKindMeta(update.kind);
   const { chipClass } = kindStyle(update.kind);
   const img = update.artistImageUrl;
@@ -362,6 +370,8 @@ export function UpdateCard({ update, layoutId, onClick, sizeClass = "shrink-0 w-
       <button
         type="button"
         onClick={onPlay}
+        disabled={playPending}
+        aria-busy={playPending}
         aria-label={`Play ${playTarget!.title} by ${update.artistName}`}
         className="absolute top-2 right-2 z-10 flex items-center justify-center w-11 h-11 rounded-full bg-black/50 backdrop-blur-sm ring-1 ring-white/25 active:scale-95 transition-transform"
       >
@@ -381,10 +391,12 @@ interface ExpandedUpdateModalProps {
   onOpen: () => void;
   playTarget?: PlayableTrack | null;
   onPlay?: () => void;
+  playPending?: boolean;
+  playError?: string | null;
   canOpenArtist?: boolean;
 }
 
-function ExpandedUpdateModal({ update, layoutId, onClose, onOpen, playTarget = null, onPlay, canOpenArtist = true }: ExpandedUpdateModalProps) {
+function ExpandedUpdateModal({ update, layoutId, onClose, onOpen, playTarget = null, onPlay, playPending = false, playError, canOpenArtist = true }: ExpandedUpdateModalProps) {
   const { kindLabel, KindIcon } = getArtistUpdateKindMeta(update.kind);
   const { chipClass } = kindStyle(update.kind);
   const img = update.artistImageUrl;
@@ -483,6 +495,8 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen, playTarget = n
               </p>
             )}
 
+            {playError && <p role="alert" className="text-sm text-red-300 mb-3">{playError}</p>}
+
             {/* One weight per action. Three filled pills gave every
                 control the same emphasis and wrapped into a ragged
                 two-row block; the labels also restated the headline
@@ -497,10 +511,12 @@ function ExpandedUpdateModal({ update, layoutId, onClose, onOpen, playTarget = n
                 // whole promise: which track, by whom.
                 <button
                   onClick={onPlay}
+                  disabled={playPending}
+                  aria-busy={playPending}
                   aria-label={`Play ${playTarget.title} by ${update.artistName}`}
                   className="shrink-0 flex items-center justify-center w-12 h-12 rounded-full bg-white text-black hover:bg-white/90 active:scale-95 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                 >
-                  <Play className="w-4 h-4 ml-[2px]" fill="currentColor" />
+                  {playPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 ml-[2px]" fill="currentColor" />}
                 </button>
               )}
               <div className="flex flex-col items-start gap-1.5 min-w-0">

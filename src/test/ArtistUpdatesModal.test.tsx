@@ -109,3 +109,16 @@ describe("Browse expanded card — leaving it", () => {
     expect(navigateMock).not.toHaveBeenCalled();
   });
 });
+
+it("links the Lately artist header directly to the saved artist ID, before updates load", () => {
+  render(<MemoryRouter><ArtistUpdatesSection
+    groups={[{ artistName: "LIL LIL", updates: null }]}
+    profile={{ streamingService: "Spotify" } as never}
+    artistIds={{ "LIL LIL": "62jLhwXSHpY3qoNybvyemr" }}
+    totalCount={1} readyCount={0}
+  /></MemoryRouter>);
+  expect(screen.getByRole("link", { name: "Open LIL LIL profile" })).toHaveAttribute(
+    "href", "/artist/spotify::62jLhwXSHpY3qoNybvyemr::LIL%20LIL",
+  );
+  expect(dialog()).toBeNull();
+});
