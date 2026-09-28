@@ -15,3 +15,5 @@ Release remains staging-first. The shared backend rollout is authorized, but the
 Verification shares the standard generation deadline. SSE stops starting writers when its budget expires, preserving the normal partial-result completion path. Each verification network call uses only the remaining budget. Deep dives retrieve the selected document before writing, disable unrelated search, and verify against that same document.
 
 Companion submissions preserve evidence-valid facts from all existing listen tiers when revalidation is partial; writes no longer delete other tiers. Legacy companion content with no supported facts falls through to the nugget cache. Short catalog titles establish research identity only when at least two appear as quoted titles, not incidental prose.
+
+Companion QR cache reads remain public. Submissions that trigger paid verification require a Supabase user token validated by Auth, not merely the public API key. Spotify sessions and Apple/guest anonymous user sessions are accepted. Listen ensures a session before submitting; failed authentication performs no source/model requests or cache writes.

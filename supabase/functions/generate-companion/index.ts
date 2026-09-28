@@ -50,6 +50,16 @@ serve(async (req) => {
     // If prebuiltNuggets provided (from Listen.tsx), write them to companion_cache
     // and return immediately. This is the "pre-gen" path.
     if (Array.isArray(prebuiltNuggets) && prebuiltNuggets.length > 0) {
+      // Public QR reads remain anonymous; paid verification requires a real
+      // Supabase user session (including the Apple/guest anonymous user).
+      const token = req.headers.get("authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1];
+      if (!token) return new Response(JSON.stringify({ error: "A session is required to submit companion facts." }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+      const { data: authData, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !authData.user) return new Response(JSON.stringify({ error: "Invalid session." }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
       const listenTier = Math.min(Math.max(listenCount, 1), 3);
 
       // Read nugget_cache for artistSummary and externalLinks
