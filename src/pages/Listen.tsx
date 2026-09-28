@@ -595,9 +595,9 @@ export default function Listen() {
     }
   }, [rawTrackId, regenerateKey, companionTrackKey, getCompanionShortId]);
 
-  const companionUploadKey = track ? JSON.stringify([rawTrackId, tier, listenCount, regenerateKey]) : "";
+  const companionUploadKey = track ? JSON.stringify([rawTrackId, tier, listenCount]) : "";
   const companionSnapshot = aiNuggets.length ? JSON.stringify([aiNuggets, [...aiSources]]) : "";
-  const companionReady = useCompanionUpload(companionUploadKey, companionSnapshot, aiLoading || waveLoading, async (isCurrent) => {
+  const companionReady = useCompanionUpload(companionUploadKey, companionSnapshot, aiLoading || waveLoading, async (isCurrent, signal) => {
     if (!track) return;
     const trackKey = `${track.artist}::${track.title}`;
 
@@ -660,7 +660,7 @@ export default function Listen() {
     const companionSession = await ensureSupabaseSession();
     if (!isCurrent()) return;
     const companionHeaders = { Authorization: `Bearer ${companionSession.access_token}` };
-    const { error } = await supabase.functions.invoke("generate-companion", { body: companionBody, headers: companionHeaders });
+    const { error } = await supabase.functions.invoke("generate-companion", { body: companionBody, headers: companionHeaders, signal });
     if (error) throw error;
     if (!isCurrent()) return;
 
@@ -1376,14 +1376,14 @@ export default function Listen() {
             waveLoading={waveLoading}
               aiError={aiError}
               hasNuggets={nuggetOnScreen}
-              shortId={shortId}
+              shortId={companionReady ? shortId : null}
               trackId={trackId}
               tier={tier}
               listenCount={listenCount}
               focusZone={focusZone}
               topFocusIndex={topFocusIndex}
               onCompanionClick={() => {
-                if (shortId) {
+                if (companionReady && shortId) {
                   window.open(`${window.location.origin}/c/${shortId}?tier=${tier}&listen=${listenCount}`, "_blank");
                 }
               }}
@@ -1768,14 +1768,14 @@ export default function Listen() {
             waveLoading={waveLoading}
             aiError={aiError}
             hasNuggets={nuggetOnScreen}
-            shortId={shortId}
+            shortId={companionReady ? shortId : null}
             trackId={trackId}
             tier={tier}
             listenCount={listenCount}
             focusZone={focusZone}
             topFocusIndex={topFocusIndex}
             onCompanionClick={() => {
-              if (shortId) {
+              if (companionReady && shortId) {
                 window.open(`${window.location.origin}/c/${shortId}?tier=${tier}&listen=${listenCount}`, "_blank");
               }
             }}
