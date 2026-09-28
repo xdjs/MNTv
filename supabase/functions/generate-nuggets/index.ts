@@ -1,3 +1,4 @@
+import { persistStreamedNuggets } from "../_shared/persistStreamedNuggets.ts";
 import { generateVerifiedDeepDive } from "../_shared/generateVerifiedDeepDive.ts";
 import { verifyFactSources } from "../_shared/verifyFactSources.ts";
 import { hasFactEvidence } from "../_shared/hasFactEvidence.ts";
@@ -3980,6 +3981,12 @@ Return ONLY valid JSON:
                 return;
               }
 
+              const persisted = await persistStreamedNuggets(cacheAdminClient as unknown as Parameters<typeof persistStreamedNuggets>[0], {
+                artist, title, uri: safeSpotifyTrackId ? `spotify:track:${safeSpotifyTrackId}` : safeAppleTrackId ? `apple:song:${safeAppleTrackId}` : "",
+                tier, listenCount: safeListenCount, durationSec: typeof rawDurationSec === "number" ? rawDurationSec : 300,
+                nuggets: streamedNuggets, externalLinks: buildExternalLinks(),
+              });
+              if (!persisted) console.warn("[SSE] Verified facts delivered but server cache persistence failed");
               const doneEvent = `data: ${JSON.stringify({ type: "done", artistSummary: sseArtistSummary, externalLinks: buildExternalLinks(), noTrackData })}\n\n`;
               try {
                 streamController.enqueue(encoder.encode(doneEvent));

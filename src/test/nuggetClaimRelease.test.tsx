@@ -53,6 +53,7 @@ vi.mock("@/integrations/supabase/client", () => {
           dbOps.push({ op: "delete", key: val });
           return Promise.resolve({ error: null });
         }
+        dbOps.push({ op: "read", key: val });
         return q;
       },
     };
@@ -171,4 +172,12 @@ it("stores only supported facts from a mixed ready row in the working cache", as
   const { result } = renderHookForTrack();
   await waitFor(() => expect(result.current.loading).toBe(false));
   expect(setNuggetCache.mock.calls.at(-1)?.[1].nuggets).toHaveLength(1);
+});
+it.each([
+  [{ id: "spotify-id", service: "spotify" as const }, "artist::spotify::spotify-id::curious::v6"],
+  [{ id: "123456", service: "apple" as const, storefront: "gb" }, "artist::apple::gb::123456::curious::v6"],
+])("reads warmed artist facts using catalog identity %j", async (identity, key) => {
+  renderHook(() => useAINuggets(TRACK, "Turnover", "Humming", undefined, 200, 0, undefined, undefined, "curious", undefined, undefined, undefined, identity));
+  await reachedSse;
+  expect(dbOps.some(op => op.op === "read" && op.key === key)).toBe(true);
 });

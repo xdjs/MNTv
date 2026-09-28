@@ -1,3 +1,4 @@
+import { artistTrackListenHref } from "@/lib/artistTrackListenHref";
 import { useParams, useNavigate } from "react-router-dom";
 import RemoteImage from "@/components/RemoteImage";
 import { ArrowLeft, Loader2 } from "lucide-react";
@@ -25,6 +26,8 @@ type Service = "spotify" | "apple";
 // ── Types for real (Spotify) artist data ─────────────────────────────
 
 interface RealTrack {
+  artistId?: string;
+  collaborators?: string[];
   title: string;
   artist: string;
   album: string;
@@ -247,6 +250,8 @@ function RealArtistProfile({
     id: `real-track-${i}`,
     title: t.title,
     artist: t.artist,
+    artistId: t.artistId,
+    collaborators: t.collaborators,
     album: t.album,
     imageUrl: t.imageUrl,
     uri: t.uri,
@@ -330,7 +335,7 @@ interface RealInnerProps {
   tracksLabel: string;
   tracksUnavailable?: boolean;
   artist: RealArtistData["artist"];
-  trackTiles: { id: string; title: string; artist: string; album: string; imageUrl: string; uri: string; durationMs: number }[];
+  trackTiles: { artistId?: string; collaborators?: string[]; id: string; title: string; artist: string; album: string; imageUrl: string; uri: string; durationMs: number }[];
   albumTiles: { id: string; imageUrl: string; title: string; subtitle: string; href: string }[];
   relatedTiles: { id: string; imageUrl: string; title: string; subtitle: string; href: string }[];
 }
@@ -426,7 +431,7 @@ function RealArtistProfileInner({ service, artist, trackTiles, tracksLabel, trac
         } else if (zone === 'tracks') {
           const t = trackTiles[colIndex];
           if (t) {
-            const href = `/listen/real::${encodeURIComponent(t.artist)}::${encodeURIComponent(t.title)}::${encodeURIComponent(t.album)}::${encodeURIComponent(t.uri)}`;
+            const href = artistTrackListenHref(t, artist);
             navigate(href);
           }
         } else if (typeof zone === 'number') {
@@ -515,7 +520,7 @@ function RealArtistProfileInner({ service, artist, trackTiles, tracksLabel, trac
                 key={t.id}
                 ref={(el) => { trackRefs.current[i] = el; }}
                 onClick={() => {
-                  const href = `/listen/real::${encodeURIComponent(t.artist)}::${encodeURIComponent(t.title)}::${encodeURIComponent(t.album)}::${encodeURIComponent(t.uri)}`;
+                  const href = artistTrackListenHref(t, artist);
                   navigate(href);
                 }}
                 className={`flex w-full items-center gap-4 rounded-xl p-3 transition-all hover:bg-foreground/5 text-left ${

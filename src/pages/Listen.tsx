@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ensureSupabaseSession } from "@/lib/ensureSupabaseSession";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, Smartphone } from "lucide-react";
@@ -23,7 +23,7 @@ import { getSeedCompanion, getDemoTrackById, getDemoTrackUri } from "@/data/seed
 import { useSpotifyToken } from "@/hooks/useSpotifyToken";
 import { usePlayer } from "@/contexts/PlayerContext";
 import { useUserProfile } from "@/hooks/useMusicNerdState";
-import { withAppleStorefront } from "@/lib/appleStorefront";
+import { withAppleStorefront, readAppleStorefront } from "@/lib/appleStorefront";
 import { isNuggetOnScreen } from "@/lib/nuggetVisibility";
 import { pickNextTrack, type SpotifyTrackResult } from "@/lib/skipCascade";
 import { useTierAccent } from "@/hooks/useTierAccent";
@@ -37,6 +37,7 @@ export default function Listen() {
   const params = useParams();
   const rawTrackId = params["*"] || "";
   const navigate = useNavigate();
+  const location = useLocation();
 
   const { profile, saveProfile } = useUserProfile();
 
@@ -72,6 +73,8 @@ export default function Listen() {
     return params.get("art") || "";
   }, []);
 
+  const routeCredits = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const routeService = realTrackMeta?.trackUri?.startsWith("apple:") ? "apple" : realTrackMeta?.trackUri?.startsWith("spotify:") ? "spotify" : profile?.streamingService === "Apple Music" ? "apple" : "spotify";
   const track = useMemo(() => {
     if (!realTrackMeta) return null;
     // Try URL query param first (demo tiles pass ?art=), then profile, then DiceBear
@@ -84,7 +87,8 @@ export default function Listen() {
     // collab tracks (e.g. "Better" by Ty Symph, Pete Rango) loses
     // the secondary research target and falls back to thin content
     // grounded only in the primary artist.
-    let collaborators: string[] | undefined;
+    let collaborators: string[] | undefined = routeCredits.getAll("collaborator");
+    if (!collaborators.length) collaborators = undefined;
     const titleLower = realTrackMeta.title.toLowerCase();
     const artistLower = realTrackMeta.artist.toLowerCase();
     if (profile?.trackImages) {
@@ -94,7 +98,7 @@ export default function Listen() {
           t.artist.toLowerCase() === artistLower
       );
       if (match?.imageUrl) coverArtUrl = coverArtUrl || match.imageUrl;
-      if (match?.collaborators?.length) collaborators = match.collaborators;
+      if (!collaborators && match?.collaborators?.length) collaborators = match.collaborators;
     }
     if (!collaborators && profile?.likedTracks) {
       const liked = profile.likedTracks.find(
@@ -115,14 +119,14 @@ export default function Listen() {
       title: realTrackMeta.title,
       artist: realTrackMeta.artist,
       collaborators,
-      artistId: "",
+      artistId: routeCredits.get("artistId") || ((routeService === "apple") === (profile?.streamingService === "Apple Music") ? profile?.artistIds?.[realTrackMeta.artist] : "") || "",
       albumId: "",
       album: realTrackMeta.album,
       durationSec: 300,
       coverArtUrl,
       trackNumber: 1,
     };
-  }, [realTrackMeta, trackId, urlArt, profile?.trackImages, profile?.likedTracks, profile?.artistImages]);
+  }, [realTrackMeta, trackId, urlArt, profile?.trackImages, profile?.likedTracks, profile?.artistImages, profile?.artistIds, profile?.streamingService, routeCredits, routeService]);
 
   // ── Playback source resolution ───────────────────────────────────────
   const { hasSpotifyToken } = useSpotifyToken();
@@ -561,6 +565,7 @@ export default function Listen() {
     profile?.topArtists,
     profile?.topTracks,
     track?.collaborators,
+    { id: track?.artistId || undefined, service: routeService, storefront: readAppleStorefront() },
   );
 
   // Log AI nugget errors for debugging
