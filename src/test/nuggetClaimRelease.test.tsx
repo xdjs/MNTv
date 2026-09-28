@@ -1,3 +1,4 @@
+import { evidence } from "./factEvidenceFixture";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 
@@ -84,6 +85,7 @@ let reachedSse: Promise<void>;
 const realFetch = global.fetch;
 
 beforeEach(() => {
+  setNuggetCache.mockClear();
   cachedFallback = null;
   dbOps.length = 0;
   getNuggetCache.mockReturnValue(null);
@@ -160,4 +162,13 @@ it("reports failure when the fallback cache contains only unverified legacy fact
   await waitFor(() => expect(result.current.loading).toBe(false));
   expect(result.current.nuggets).toEqual([]);
   expect(result.current.error).toBe("No source-supported facts are available yet.");
+});
+
+it("stores only supported facts from a mixed ready row in the working cache", async () => {
+  const fact = { id: "supported", trackId: TRACK, timestampSec: 0, durationMs: 7000, headline: "Supported", text: "Supported body", sourceId: "s" };
+  const source = { id: "s", type: "article", title: "Source", publisher: "Publisher", url: "https://example.com", citation: evidence(fact, "https://example.com") };
+  cachedFallback = { status: "ready", nuggets: [fact, { ...fact, id: "legacy", text: "Unsupported body" }], sources: { s: source } };
+  const { result } = renderHookForTrack();
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  expect(setNuggetCache.mock.calls.at(-1)?.[1].nuggets).toHaveLength(1);
 });

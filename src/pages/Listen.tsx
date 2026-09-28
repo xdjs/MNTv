@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
+import { ensureSupabaseSession } from "@/lib/ensureSupabaseSession";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, Smartphone } from "lucide-react";
 // mock/tracks kept as reference — no longer imported for runtime use
@@ -671,12 +672,15 @@ export default function Listen() {
           artistImage: artistImageUrl || effectiveCoverArt || undefined,
           artistSummary,
         };
-        let { error } = await supabase.functions.invoke("generate-companion", { body: companionBody });
+        const companionSession = await ensureSupabaseSession();
+        if (cancelled) return;
+        const companionHeaders = { Authorization: `Bearer ${companionSession.access_token}` };
+        let { error } = await supabase.functions.invoke("generate-companion", { body: companionBody, headers: companionHeaders });
         if (error && !cancelled) {
           console.warn("[Listen] Companion pre-gen failed, retrying in 3s:", error);
           await new Promise((r) => setTimeout(r, 3000));
           if (cancelled) return;
-          ({ error } = await supabase.functions.invoke("generate-companion", { body: companionBody }));
+          ({ error } = await supabase.functions.invoke("generate-companion", { body: companionBody, headers: companionHeaders }));
         }
         if (cancelled) return;
         if (error) console.warn("[Listen] Companion pre-gen retry also failed:", error);

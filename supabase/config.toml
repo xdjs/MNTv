@@ -25,6 +25,7 @@ project_id = "ofuayztvadxtacmsevxk"
 [functions.generate-nuggets]
 verify_jwt = false
 
+# Public QR reads; the paid submission branch validates the user token via Auth.
 [functions.generate-companion]
 verify_jwt = false
 

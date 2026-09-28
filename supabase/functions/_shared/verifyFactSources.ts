@@ -6,8 +6,9 @@ type Page = { url: string; title?: string; text: string };
 /** Verify support against the exact cited document. Failure withholds the fact;
  * it never substitutes another page or treats a working URL as verification. */
 export async function verifyFactSources<T extends Fact>(facts: T[], options: {
-  googleKey?: string; exaKey?: string; pages?: Page[]; deadline?: number;
+  googleKey?: string; exaKey?: string; pages?: Page[]; deadline?: number; maxDocumentCharacters?: number;
 }): Promise<Array<T & { source: NonNullable<T["source"]> & { citation: FactEvidence; title?: string; publisher?: string; verified: boolean } }>> {
+  const documentLimit = Math.max(40, Math.min(10000, options.maxDocumentCharacters ?? 10000));
   const remaining = () => Math.min(12000, (options.deadline ?? Infinity) - Date.now());
   if (!options.googleKey || remaining() <= 0) return [];
   const eligible = facts.filter((fact) => {
@@ -26,7 +27,7 @@ export async function verifyFactSources<T extends Fact>(facts: T[], options: {
     if (missing.length && options.exaKey) {
       const res = await fetch("https://api.exa.ai/contents", {
         method: "POST", headers: { "x-api-key": options.exaKey, "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: missing, text: { maxCharacters: 10000 }, livecrawl: "fallback" }),
+        body: JSON.stringify({ ids: missing, text: { maxCharacters: documentLimit }, livecrawl: "fallback" }),
         signal: AbortSignal.timeout(Math.max(1, remaining())),
       });
       if (!res.ok) console.warn(`[FactEvidence] Source retrieval failed: ${res.status}`);
@@ -40,7 +41,7 @@ export async function verifyFactSources<T extends Fact>(facts: T[], options: {
     if (remaining() <= 0) return [];
     const candidates = eligible.filter(f => pages.has(f.source!.url!));
     if (!candidates.length) return [];
-    const inputs = candidates.map((f, index) => ({ index, headline: f.headline ?? "", text: f.text, document: pages.get(f.source!.url!)!.text.slice(0, 10000) }));
+    const inputs = candidates.map((f, index) => ({ index, headline: f.headline ?? "", text: f.text, document: pages.get(f.source!.url!)!.text.slice(0, documentLimit) }));
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${options.googleKey}`, {
       method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(Math.max(1, remaining())),
       body: JSON.stringify({
