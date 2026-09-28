@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { Loader2 } from "lucide-react";
+import { useUserProfile } from "@/hooks/useMusicNerdState";
+import { useArtistUpdatePlayback } from "@/hooks/useArtistUpdatePlayback";
+import { resolvePlayTarget } from "@/lib/artistUpdateSplit";
 import type { ArtistUpdate } from "@/hooks/useArtistUpdates";
 import {
   UpdateCard,
@@ -45,7 +48,7 @@ function prefersReducedMotion(): boolean {
 export default function LatestFactsSection({ updates, loading, artistName }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
   const targetNuggetId = searchParams.get("nugget");
-  const navigate = useNavigate();
+  const { profile } = useUserProfile();
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [pulseKey, setPulseKey] = useState<string | null>(null);
   // Card nodes by layoutId, so the deep-link can scroll to the referenced
@@ -107,24 +110,16 @@ export default function LatestFactsSection({ updates, loading, artistName }: Pro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetNuggetId, updates.length]);
 
-  const modalOnClose = useCallback(() => setExpandedKey(null), []);
+  const closeExpanded = useCallback(() => setExpandedKey(null), []);
 
-  // Modal's "Open / Listen" CTA. Release / collab cards in this
-  // section route to /listen for the related track; pure fact cards
-  // are a no-op (already on the artist profile) so the modal just
-  // closes.
-  const modalOnOpen = useCallback(() => {
-    if (!expandedUpdate) return;
-    setExpandedKey(null);
-    const u = expandedUpdate;
-    if ((u.kind === "new-release" || u.kind === "collab") && u.relatedTrackTitle) {
-      const album = u.relatedAlbumName ?? "";
-      const navUri = u.relatedTrackUri?.startsWith("spotify:track:") ? u.relatedTrackUri : "";
-      navigate(
-        `/listen/real::${encodeURIComponent(u.artistName)}::${encodeURIComponent(u.relatedTrackTitle)}::${encodeURIComponent(album)}::${encodeURIComponent(navUri)}`,
-      );
+  const { playTrack, pending, error, cancel } = useArtistUpdatePlayback(profile?.streamingService, closeExpanded);
+  const modalOnClose = useCallback(() => { cancel(); closeExpanded(); }, [cancel, closeExpanded]);
+  const expandedPlayTarget = expandedUpdate ? resolvePlayTarget(expandedUpdate, []) : null;
+  const modalOnPlay = useCallback(() => {
+    if (expandedUpdate && expandedPlayTarget) {
+      void playTrack(expandedUpdate.artistName, expandedPlayTarget);
     }
-  }, [expandedUpdate, navigate]);
+  }, [expandedUpdate, expandedPlayTarget, playTrack]);
 
   if (!loading && updates.length === 0) {
     // Quiet fallback — don't render an empty section header on
@@ -151,19 +146,25 @@ export default function LatestFactsSection({ updates, loading, artistName }: Pro
           ? Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
           : updates.map((u) => {
               const key = layoutIdFor(u);
+              const playTarget = resolvePlayTarget(u, []);
               return (
                 <div key={key} ref={(el) => { cardRefs.current[key] = el; }}>
                   <UpdateCard
                     layoutId={key}
                     update={u}
-                    onClick={() => setExpandedKey(key)}
+                    onClick={() => { cancel(); setExpandedKey(key); }}
                     sizeClass="w-full h-44 md:h-48"
                     pulsing={pulseKey === key}
+                    playTarget={playTarget}
+                    onPlay={playTarget ? () => void playTrack(u.artistName, playTarget) : undefined}
+                    playPending={pending}
                   />
                 </div>
               );
             })}
       </div>
+
+      {error && !expandedUpdate && <p role="alert" className="text-sm text-red-300 mt-3">{error}</p>}
 
       <AnimatePresence>
         {expandedUpdate && (
@@ -171,7 +172,12 @@ export default function LatestFactsSection({ updates, loading, artistName }: Pro
             update={expandedUpdate}
             layoutId={layoutIdFor(expandedUpdate)}
             onClose={modalOnClose}
-            onOpen={modalOnOpen}
+            onOpen={modalOnClose}
+            canOpenArtist={false}
+            playTarget={expandedPlayTarget}
+            onPlay={expandedPlayTarget ? modalOnPlay : undefined}
+            playPending={pending}
+            playError={error}
           />
         )}
       </AnimatePresence>

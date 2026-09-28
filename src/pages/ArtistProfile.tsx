@@ -51,6 +51,8 @@ interface RealRelatedArtist {
 
 interface RealArtistData {
   found: boolean;
+  tracksSource?: "top-tracks" | "search" | "albums";
+  tracksUnavailable?: boolean;
   artist: {
     id: string;
     name: string;
@@ -196,6 +198,7 @@ function RealArtistProfile({
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setData(null);
 
     // The edge function takes `artistId` for direct lookups and falls
     // back to `artistName` search. `service` routes to the Spotify or
@@ -204,7 +207,7 @@ function RealArtistProfile({
     // Apple users so non-US catalogs return region-correct results.
     const baseBody: Record<string, string> = { service };
     if (catalogId) baseBody.artistId = catalogId;
-    else baseBody.artistName = artistName;
+    if (artistName) baseBody.artistName = artistName;
     const body = withAppleStorefront(baseBody, service);
 
     supabase.functions
@@ -213,7 +216,9 @@ function RealArtistProfile({
         if (cancelled) return;
         if (e || !d?.found || !d?.artist) {
           const label = service === "apple" ? "Apple Music" : "Spotify";
-          setError(`Couldn't find this artist on ${label}.`);
+          setError(!e && d?.found === false
+            ? `Couldn't find this artist on ${label}.`
+            : `${label} artist data is temporarily unavailable. Please try again.`);
           setLoading(false);
           return;
         }
@@ -309,6 +314,9 @@ function RealArtistProfile({
     <RealArtistProfileInner
       artist={artist}
       trackTiles={trackTiles}
+      service={service}
+      tracksLabel={data?.tracksSource && data.tracksSource !== "top-tracks" ? "Songs" : "Popular"}
+      tracksUnavailable={data?.tracksUnavailable}
       albumTiles={albumTiles}
       relatedTiles={relatedTiles}
     />
@@ -318,13 +326,16 @@ function RealArtistProfile({
 // ── Real artist inner (with keyboard nav) ────────────────────────────
 
 interface RealInnerProps {
+  service: Service;
+  tracksLabel: string;
+  tracksUnavailable?: boolean;
   artist: RealArtistData["artist"];
   trackTiles: { id: string; title: string; artist: string; album: string; imageUrl: string; uri: string; durationMs: number }[];
   albumTiles: { id: string; imageUrl: string; title: string; subtitle: string; href: string }[];
   relatedTiles: { id: string; imageUrl: string; title: string; subtitle: string; href: string }[];
 }
 
-function RealArtistProfileInner({ artist, trackTiles, albumTiles, relatedTiles }: RealInnerProps) {
+function RealArtistProfileInner({ service, artist, trackTiles, tracksLabel, tracksUnavailable, albumTiles, relatedTiles }: RealInnerProps) {
   const navigate = useNavigate();
   const heroImage = useArtistImage(artist.name, artist.imageUrl);
   const trackRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -338,6 +349,8 @@ function RealArtistProfileInner({ artist, trackTiles, albumTiles, relatedTiles }
   const { updates: latestUpdates, loading: latestLoading } = useArtistLatestFacts(
     artist.name,
     latestTier,
+    artist.id,
+    service,
   );
 
   const tileRows = useMemo(() => {
@@ -494,7 +507,7 @@ function RealArtistProfileInner({ artist, trackTiles, albumTiles, relatedTiles }
       {trackTiles.length > 0 && (
         <section className="px-4 md:px-10 pb-6 md:pb-8 mb-4">
           <h2 className="text-lg font-bold text-foreground/90 mb-4" style={{ fontFamily: "'Nunito Sans', sans-serif" }}>
-            Popular
+            {tracksLabel}
           </h2>
           <div className="space-y-1">
             {trackTiles.map((t, i) => (
@@ -527,6 +540,12 @@ function RealArtistProfileInner({ artist, trackTiles, albumTiles, relatedTiles }
             ))}
           </div>
         </section>
+      )}
+
+      {tracksUnavailable && trackTiles.length === 0 && (
+        <p className="px-4 md:px-10 pb-6 text-sm text-muted-foreground">
+          Songs are temporarily unavailable. Please try again.
+        </p>
       )}
 
       {/* Tile rows */}

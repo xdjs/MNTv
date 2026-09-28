@@ -194,6 +194,7 @@ function normalizeRecommendations(data: any) {
       title: t.name,
       artist: t.artists?.[0]?.name || "Unknown",
       album: t.album?.name || "",
+      albumUri: t.album?.id ? `spotify:album:${t.album.id}` : "",
       imageUrl: t.album?.images?.[0]?.url || t.album?.images?.[1]?.url || "",
       uri: t.uri || "",
     }));
@@ -214,6 +215,7 @@ function normalize(data: any) {
       title: t.name,
       artist: t.artists?.[0]?.name || "Unknown",
       album: t.album?.name || "",
+      albumUri: t.album?.id ? `spotify:album:${t.album.id}` : "",
       imageUrl: t.album?.images?.[0]?.url || t.album?.images?.[1]?.url || "",
       uri: t.uri || "",
     }));

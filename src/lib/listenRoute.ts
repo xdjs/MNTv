@@ -1,23 +1,13 @@
-// Builds the `/listen/real::…` route used to start playback.
-//
-// The service-aware URI rule is the reason this is a shared function
-// rather than inline string building. Spotify users want the track URI
-// baked into the route so Listen plays immediately instead of paying a
-// catalog search round trip. Apple Music users must NOT receive it —
-// handing Listen a `spotify:track:` URI locks it onto something Apple
-// can't play, so the slot is left empty and Listen's findCatalogUri
-// effect resolves the Apple equivalent from {artist, title}.
-//
-// Getting that backwards is silent: Spotify users just get a slower
-// transition, Apple users get a track that never plays.
+// Build playback routes with exact song IDs for the listener’s service.
+// Cross-service URIs are omitted so Listen can resolve a playable equivalent.
 
 export interface ListenRouteParams {
   artist: string;
   title: string;
   album?: string;
-  /** Spotify track URI, when known. */
+  /** Spotify track or Apple song URI, when known. */
   uri?: string;
-  /** `profile.streamingService` — "Apple Music" suppresses the URI. */
+  /** Selects which service’s song URIs can be passed to playback. */
   streamingService?: string | null;
 }
 
@@ -31,6 +21,6 @@ export function buildListenRoute({
   const enc = encodeURIComponent;
   const isAppleUser = streamingService === "Apple Music";
   const isSpotifyTrackUri = !!uri && uri.startsWith("spotify:track:");
-  const navUri = !isAppleUser && isSpotifyTrackUri ? uri! : "";
+  const navUri = (isAppleUser ? uri?.startsWith("apple:song:") : isSpotifyTrackUri) ? uri! : "";
   return `/listen/real::${enc(artist)}::${enc(title)}::${enc(album ?? "")}::${enc(navUri)}`;
 }

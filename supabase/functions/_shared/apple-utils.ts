@@ -203,73 +203,62 @@ type AppleListeningAttributes = {
   artwork?: AppleArtwork;
 };
 
-/** Rank artists by weighted frequency across recent plays and heavy
- *  rotation. +1 per recent play, +3 per heavy-rotation hit. Returns the
- *  top `maxArtists` names plus the image/id maps keyed by artist name.
- *
- *  NOTE: all three maps are keyed on the raw `artistName` string, so
- *  unrelated artists who happen to share a name (e.g. two acts called
- *  "Nirvana") have their scores merged and the first image wins.
- *  Apple's catalog IDs in `artistIds` would disambiguate but Apple's
- *  heavy-rotation almost never returns `artists`-typed resources, so
- *  that map is usually empty. Acceptable for a top-N taste signal;
- *  don't use this for authoritative artist identity.
- *
- *  This is pure: it takes parsed Apple resource arrays and returns plain
- *  objects. Apple-taste calls it; unit tests cover it directly from
- *  Vitest without Deno globals. */
+/** Attach artists through the catalog song/album IDs returned by history.
+ * No name search: unavailable and library-only resources stay unresolved. */
+export async function enrichAppleListeningArtists(items: AppleResource[], token: string, storefront: string): Promise<AppleResource[]> {
+  const resolved = new Map<string, AppleResource>();
+  await Promise.all(["songs", "albums"].map(async (type) => {
+    const ids = [...new Set(items.filter((r) => r.type === type && r.id && /^\d+$/.test(r.id)).map((r) => r.id!))];
+    for (let offset = 0; offset < ids.length; offset += 100) {
+      const result = await appleGet<{ data?: AppleResource[] }>(
+        `/catalog/${storefront}/${type}?ids=${ids.slice(offset, offset + 100).join(",")}&include=artists`, token,
+      );
+      for (const resource of result?.data ?? []) resolved.set(`${type}:${resource.id}`, resource);
+    }
+  }));
+  return items.map((r) => resolved.get(`${r.type}:${r.id}`) ?? r);
+}
+
+/** Rank actual artist identities. The legacy profile maps allow one ID per
+ * display name: if names collide, retain the highest-ranked identity rather
+ * than combining their listening counts or mixing their images. */
 export function rankAppleArtists(
-  recentItems: AppleResource[],
-  rotationItems: AppleResource[],
-  maxArtists = 20,
+  recentItems: AppleResource[], rotationItems: AppleResource[], maxArtists = 20,
 ): ArtistRankSummary {
-  const artistCounts: Record<string, number> = {};
+  const ranked = new Map<string, { name: string; id?: string; image: string; score: number }>();
+  function add(item: AppleResource, weight: number) {
+    const attrs = item.attributes as AppleListeningAttributes | undefined;
+    const linked = (item.relationships?.artists as { data?: AppleResource[] } | undefined)?.data ?? [];
+    const artists = item.type === "artists" ? [item] : linked;
+    const candidates = artists.filter((a) => a.id && typeof a.attributes?.name === "string");
+    if (!candidates.length) {
+      const name = attrs?.artistName;
+      if (!name) return;
+      const key = `unresolved:${name}`;
+      const previous = ranked.get(key);
+      ranked.set(key, { name, image: previous?.image || resolveArtworkUrl(attrs?.artwork), score: (previous?.score ?? 0) + weight });
+      return;
+    }
+    for (const artist of candidates) {
+      const name = artist.attributes!.name as string;
+      const previous = ranked.get(artist.id!);
+      ranked.set(artist.id!, { name, id: artist.id, score: (previous?.score ?? 0) + weight,
+        image: previous?.image || resolveArtworkUrl(artist.attributes?.artwork as AppleArtwork) || resolveArtworkUrl(attrs?.artwork) });
+    }
+  }
+  recentItems.forEach((item) => add(item, 1));
+  rotationItems.filter((item) => item.type && ROTATION_ARTIST_TYPES.has(item.type)).forEach((item) => add(item, 3));
+  const topArtists: string[] = [];
   const artistImages: Record<string, string> = {};
   const artistIds: Record<string, string> = {};
-
-  // Recent plays: +1 per occurrence
-  for (const song of recentItems) {
-    const attrs = song.attributes as AppleListeningAttributes | undefined;
-    const name = attrs?.artistName;
-    if (!name) continue;
-    artistCounts[name] = (artistCounts[name] || 0) + 1;
-    if (!artistImages[name]) {
-      const art = resolveArtworkUrl(attrs?.artwork);
-      if (art) artistImages[name] = art;
-    }
+  const knownNames = new Set([...ranked.values()].filter((a) => a.id).map((a) => a.name));
+  for (const artist of [...ranked.values()].sort((a, b) => b.score - a.score)) {
+    if (topArtists.includes(artist.name) || (!artist.id && knownNames.has(artist.name))) continue;
+    topArtists.push(artist.name);
+    if (artist.image) artistImages[artist.name] = artist.image;
+    if (artist.id) artistIds[artist.name] = artist.id;
+    if (topArtists.length >= maxArtists) break;
   }
-
-  // Heavy rotation: +3 per occurrence — ranks an artist higher than a
-  // long tail of one-off plays. When the resource itself is an artist,
-  // capture its catalog id directly.
-  //
-  // In practice Apple's /me/history/heavy-rotation almost never returns
-  // `artists`-typed resources — it's mostly albums — so artistIds tends
-  // to stay empty. Downstream callers should not rely on it being
-  // populated; it's best-effort for the rare case where Apple does
-  // surface an artist directly.
-  for (const item of rotationItems) {
-    if (!item.type || !ROTATION_ARTIST_TYPES.has(item.type)) continue;
-    const attrs = item.attributes as AppleListeningAttributes | undefined;
-    // For albums, prefer artistName; for artists, attrs.name IS the artist name.
-    const name = attrs?.artistName
-      || (item.type === "artists" ? attrs?.name : undefined);
-    if (!name) continue;
-    artistCounts[name] = (artistCounts[name] || 0) + 3;
-    if (!artistImages[name]) {
-      const art = resolveArtworkUrl(attrs?.artwork);
-      if (art) artistImages[name] = art;
-    }
-    if (item.type === "artists" && item.id && !artistIds[name]) {
-      artistIds[name] = item.id;
-    }
-  }
-
-  const topArtists = Object.entries(artistCounts)
-    .sort(([, ac], [, bc]) => bc - ac)
-    .map(([name]) => name)
-    .slice(0, maxArtists);
-
   return { topArtists, artistImages, artistIds };
 }
 
