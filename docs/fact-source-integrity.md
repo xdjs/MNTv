@@ -41,3 +41,9 @@ QR readiness is derived from acceptance of the exact track/listen-depth/snapshot
 Accepted snapshots and the attempt cooldown survive Listen remounts in a bounded in-memory page-session cache (100 keys). The acceptance key uses track, tier and listen depth; the fact snapshot independently distinguishes regenerated content. Each upload has a 60-second timeout and abort signal, so a stalled auth/network request cannot block later tracks indefinitely. Every companion entry point, including loading-orchestrator buttons, receives a readiness-gated short ID.
 
 Acceptance also requires a usable short link. Read/insert failures propagate to the scheduler for retry; a concurrent insert is recovered by re-reading the winning link.
+
+### Post-release verification boundary fixes (2026-09-28)
+
+Deep dives and companion submissions share the existing durable `consume_companion_verification_quota` budget: validated Supabase user sessions (OAuth or anonymous), 3/minute and 30/hour per user, 30/minute and 300/hour project-wide. The service-only RPC is consumed before any source retrieval or model call. Missing/invalid sessions return 401, exhausted quota returns 429, and unavailable quota storage fails closed with 503. Public companion cache reads stay unauthenticated and free of provider calls. Deep-dive entry points establish a Supabase session and send its bearer token explicitly. No database migration is needed.
+
+Companion submissions return 503 when the cache upsert fails, rather than reporting success. The client scheduler can then retry without marking unsaved facts accepted or exposing them through the QR link. Existing rows are never deleted.

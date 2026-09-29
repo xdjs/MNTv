@@ -1,3 +1,4 @@
+import { authorizePaidVerification } from "../_shared/authorizePaidVerification.ts";
 import { hasFactEvidence } from "../_shared/hasFactEvidence.ts";
 import { verifyFactSources } from "../_shared/verifyFactSources.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -52,19 +53,8 @@ serve(async (req) => {
     if (Array.isArray(prebuiltNuggets) && prebuiltNuggets.length > 0) {
       // Public QR reads remain anonymous; paid verification requires a real
       // Supabase user session (including the Apple/guest anonymous user).
-      const token = req.headers.get("authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1];
-      if (!token) return new Response(JSON.stringify({ error: "A session is required to submit companion facts." }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-      const { data: authData, error: authError } = await supabase.auth.getUser(token);
-      if (authError || !authData.user) return new Response(JSON.stringify({ error: "Invalid session." }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-      const { data: quotaAllowed, error: quotaError } = await supabase.rpc("consume_companion_verification_quota", { caller_id: authData.user.id });
-      if (quotaError || quotaAllowed !== true) return new Response(JSON.stringify({ error: quotaError ? "Verification is temporarily unavailable." : "Verification limit reached. Try again later." }), {
-        status: quotaError ? 503 : 429,
-        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" },
-      });
+      const denied = await authorizePaidVerification(req, supabase as unknown as Parameters<typeof authorizePaidVerification>[1], corsHeaders);
+      if (denied) return denied;
       const listenTier = Math.min(Math.max(listenCount, 1), 3);
 
       // Read nugget_cache for artistSummary and externalLinks
@@ -127,10 +117,17 @@ serve(async (req) => {
 
       const cacheKey = `${artist}::${title}::${safeTier}::${cacheTier}`;
       // Keep other tiers intact; an interrupted write must not erase the cache.
-      await supabase.from("companion_cache").upsert(
+      const { error: writeError } = await supabase.from("companion_cache").upsert(
         { track_key: cacheKey, listen_count_tier: cacheTier, content: response },
         { onConflict: "track_key,listen_count_tier" }
       );
+
+      if (writeError) {
+        console.error("[Companion] Cache write failed:", writeError.message);
+        return new Response(JSON.stringify({ error: "Companion content could not be saved. Please retry." }), {
+          status: 503, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" },
+        });
+      }
 
       console.log(`[Companion] Wrote ${allNuggets.length} nuggets to cache: ${cacheKey}`);
 

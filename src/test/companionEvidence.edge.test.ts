@@ -9,7 +9,7 @@ vi.mock("https://esm.sh/@supabase/supabase-js@2.49.1", () => ({ createClient: ()
 } }) }));
 vi.mock("../../supabase/functions/_shared/verifyFactSources.ts", () => ({ verifyFactSources: mocks.verify }));
 beforeEach(async () => {
-  mocks.rows = {}; mocks.rpc.mockReset(); mocks.rpc.mockResolvedValue({ data: true, error: null }); mocks.getUser.mockReset(); mocks.getUser.mockResolvedValue({ data: { user: { id: "user" } }, error: null }); vi.resetModules(); mocks.verify.mockReset(); mocks.upsert.mockReset(); mocks.remove.mockReset();
+  mocks.rows = {}; mocks.rpc.mockReset(); mocks.rpc.mockResolvedValue({ data: true, error: null }); mocks.getUser.mockReset(); mocks.getUser.mockResolvedValue({ data: { user: { id: "user" } }, error: null }); vi.resetModules(); mocks.verify.mockReset(); mocks.upsert.mockReset().mockResolvedValue({ error: null }); mocks.remove.mockReset();
   vi.stubGlobal("Deno", { env: { get: () => "test" } });
   const path = "../../supabase/functions/generate-companion/index.ts";
   await import(path);
@@ -92,4 +92,12 @@ it("escapes wildcard characters in canonical artist/title lookups", async () => 
   mocks.rows[String.raw`nugget_cache:real::Artist\_100\%::Song::::%::casual`] = [{ status: "ready", nuggets: [{ ...saved, source: { url: saved.sourceUrl, citation: supported.citation } }] }];
   const response = await mocks.handler!(new Request("https://test", { method: "POST", body: JSON.stringify({ artist: "Artist_100%", title: "Song" }) }));
   expect((await response.json()).nuggets).toHaveLength(1);
+});
+it('returns a retryable error when verified companion persistence fails', async () => {
+  mocks.verify.mockResolvedValue([{ ...saved, source: { url: saved.sourceUrl, citation: supported.citation } }]);
+  mocks.upsert.mockResolvedValue({ error: { message: 'database write failed' } });
+  const response = await mocks.handler!(new Request('https://test', { method: 'POST', headers: { Authorization: 'Bearer session' }, body: JSON.stringify({ artist: 'Artist', title: 'Song', prebuiltNuggets: [saved] }) }));
+  expect(response.status).toBe(503);
+  expect(await response.json()).not.toHaveProperty('nuggets');
+  expect(mocks.remove).not.toHaveBeenCalled();
 });

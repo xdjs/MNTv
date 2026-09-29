@@ -1,3 +1,4 @@
+import { authorizePaidVerification } from "../_shared/authorizePaidVerification.ts";
 import { normalizeCacheDuration } from "../_shared/normalizeCacheDuration.ts";
 import { persistStreamedNuggets } from "../_shared/persistStreamedNuggets.ts";
 import { generateVerifiedDeepDive } from "../_shared/generateVerifiedDeepDive.ts";
@@ -2743,6 +2744,8 @@ serve(async (req) => {
 
     // ── Deep Dive mode ──────────────────────────────────────────────
     if (deepDive) {
+      const denied = await authorizePaidVerification(req, cacheAdminClient as unknown as Parameters<typeof authorizePaidVerification>[1], corsHeaders);
+      if (denied) return denied;
       const result = await generateVerifiedDeepDive({
         artist, title, context, sourceUrl: typeof body.sourceUrl === "string" ? body.sourceUrl : "",
         googleKey: GOOGLE_AI_API_KEY, exaKey: Deno.env.get("EXA_API_KEY"),
