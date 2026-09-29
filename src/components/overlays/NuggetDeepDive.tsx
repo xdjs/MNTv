@@ -1,3 +1,4 @@
+import { ensureSupabaseSession } from "@/lib/ensureSupabaseSession";
 import { hasFactEvidence } from "../../../supabase/functions/_shared/hasFactEvidence";
 import { useState, useCallback, useRef, useEffect } from "react";
 import RemoteImage from "@/components/RemoteImage";
@@ -127,7 +128,9 @@ export default function NuggetDeepDive({ nugget, source: originalSource, artist,
         ...entries.map((e) => e.text),
       ].join("\n\n");
 
+      const session = await ensureSupabaseSession();
       const { data, error } = await supabase.functions.invoke("generate-nuggets", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
         body: {
           artist,
           title: trackTitle,

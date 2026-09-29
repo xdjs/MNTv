@@ -1,3 +1,4 @@
+import { ensureSupabaseSession } from "@/lib/ensureSupabaseSession";
 import { hasFactEvidence } from "../../../supabase/functions/_shared/hasFactEvidence";
 import { memo, useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -451,13 +452,16 @@ export default function ImmersiveNuggetView({
     setDeepDiveLoading(true);
     const requestTrackKey = `${trackTitle}::${artist}`;
     try {
-      const { data } = await supabase.functions.invoke("generate-nuggets", {
+      const session = await ensureSupabaseSession();
+      const { data, error } = await supabase.functions.invoke("generate-nuggets", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
         body: {
           artist, title: trackTitle, deepDive: true,
           context: `${activeNugget.headline}\n${activeNugget.text}`,
           sourceUrl: activeSource?.url, sourceTitle: activeSource?.title, sourcePublisher: activeSource?.publisher,
         },
       });
+      if (error) throw error;
       // Discard if unmounted or track changed during the request
       if (!mountedRef.current) return;
       if (prevTrackKeyRef.current !== requestTrackKey) return;
