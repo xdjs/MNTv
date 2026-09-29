@@ -76,7 +76,7 @@ and are not represented as passing checks here.
 The automated smoke checks establish that the expected frontend build is served, not that
 real login, streaming, data writes or AI generation work. Those need feature-specific staging
 acceptance. Historical staging-to-main notes in other documents describe the former process;
-this document and the Git Workflow section in `CLAUDE.md` define the current process.
+[AGENTS.md](../AGENTS.md) is the canonical agent guide; this runbook provides the operational details.
 
 ## Failure and rollback
 
@@ -89,9 +89,10 @@ can re-enable automatic domain assignment. Verify that setting remains disabled 
 
 Before this transition, production was deployment `dpl_7NMqd5LfgPdGAcyKfDc1nN51Jf6h`
 at SHA `c184b9c7c182a1b8fd5848294a3bc08d3e2cfeac`. The legacy staging branch was at
-`c6b6f69b99891fb71168f3f8cbcacbfd92e9466f`, fully reachable from main. Preserve its history
-with annotated tag `archive/staging-2026-09-28` before retiring the remote branch, after the
-new staging pipeline is verified. Do not delete unrelated feature or backup branches.
+`c6b6f69b99891fb71168f3f8cbcacbfd92e9466f`, fully reachable from main. Its history is preserved
+in the pushed annotated tag `archive/staging-2026-09-28`, which resolves to that SHA. The remote
+`staging` branch was retired on September 28, 2026, after the new staging pipeline was verified.
+Do not recreate it for routine development or delete unrelated feature or backup branches.
 
 ## Local verification
 
