@@ -489,7 +489,7 @@ function ConnectInner({ redirectUrl, oauthFailed = false }: { redirectUrl: strin
                         Your last Spotify sign-in didn't complete.
                       </p>
                       <p className="mt-1 text-xs text-amber-200/80 leading-relaxed">
-                        This usually means your browser blocked the session cookie. Try again — and if it keeps failing, open this page in a private/incognito window or check that third-party cookies are enabled for musicnerd.xyz.
+                        This usually means your browser blocked the session cookie. Try again — and if it keeps failing, open this page in a private/incognito window or check that third-party cookies are enabled for musicnerd.net.
                       </p>
                     </div>
                   )}

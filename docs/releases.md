@@ -1,3 +1,14 @@
+# Domain migration — October 5, 2026
+
+Tracking: [MusicNerdWeb#1427](https://github.com/xdjs/MusicNerdWeb/issues/1427).
+The production and staging TV hosts move to `mntv.musicnerd.net` and
+`staging.mntv.musicnerd.net`. Old `.xyz` hosts redirect permanently to their
+matching destinations, preserving paths and queries. Before switching, add the
+new `/preparing` return URLs to Supabase Auth, verify sign-in and the existing
+backend, and coordinate the staging domain assignment with this release change.
+The custom staging environment must still have exactly one domain. No other
+release may be in flight during the switch. Production approval remains required.
+
 # Main-only releases
 
 `main` is the only persistent development branch. Create short-lived branches from current
@@ -18,7 +29,7 @@ and its JavaScript entry asset instead of MusicNerdWeb's server-side `/api/healt
    the frontend configuration. The release runner verifies deployment project, SHA,
    environment and Ready state, then checks `/release.json`, `/`, and the referenced
    JavaScript entry on the immutable deployment URL. It verifies that
-   `staging.mntv.musicnerd.xyz` points to this deployment and records the evidence.
+   `staging.mntv.musicnerd.net` points to this deployment and records the evidence.
 3. `production-release` waits for approval in the protected GitHub Environment.
    Any one of `clt`, `p3t3rango`, or `sweetmantech` can approve, including the initiator.
    Admin bypass is disabled. Review the staging URL and release artifact, and verify
@@ -28,7 +39,7 @@ and its JavaScript entry asset instead of MusicNerdWeb's server-side `/api/healt
    Automatic production domain assignment must remain disabled. It smoke-tests the
    immutable candidate, rechecks main, then promotes it through Vercel's API.
 5. The job succeeds only after both the production project target and
-   `mntv.musicnerd.xyz` point to the candidate. Deployment records are retained as Actions
+   `mntv.musicnerd.net` point to the candidate. Deployment records are retained as Actions
    artifacts for 90 days and linked in the job summary.
 
 Vite embeds public variables at build time. Never promote a staging/preview build directly
@@ -44,7 +55,7 @@ becomes Ready; failed smoke checks can leave a bad staging site but block produc
 - Build command: unset or `npm run build`; Node.js 24 (matching `.nvmrc`).
 - Auto-assign Custom Production Domains: **disabled**.
 - `vercel.json` disables Git auto-deployment for `main`; other branches retain previews.
-- Custom environment `staging`: no branch matcher, only `staging.mntv.musicnerd.xyz` attached.
+- Custom environment `staging`: no branch matcher, only `staging.mntv.musicnerd.net` attached.
   Its frontend variables were copied from the existing Preview configuration.
 - GitHub Environments `staging-release` and `production-release`: only branch `main` allowed.
   Production uses the reviewers above; staging has no approval wait.
